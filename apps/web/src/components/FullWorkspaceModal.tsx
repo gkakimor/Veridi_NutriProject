@@ -26,6 +26,25 @@ interface FullWorkspaceModalProps {
 const pilha: object[] = [];
 
 /**
+ * O que continua clicável atrás de um modal de workspace.
+ *
+ * Decisão do PO: a navegação lateral é SAÍDA legítima de um cadastro em
+ * andamento — o modal cobria o workspace e deixava a sidebar inerte, então
+ * quem abriu "Novo projeto" e quis ir para Pedidos não tinha como, e fechar o
+ * modal era o único caminho. Sair dali agora passa pela guarda de alterações
+ * não salvas, que pergunta quando há o que perder.
+ *
+ * O masthead continua protegido por inteiro: a busca global do topo não é
+ * saída de navegação, é outra ação, e disparar uma consulta de lote por baixo
+ * de um cadastro aberto não ajuda ninguém.
+ *
+ * Os dois fundos acompanham a sidebar porque são o jeito de FECHAR o que ela
+ * abriu — o drawer do celular e a espiada do trilho compacto. Inertes, o menu
+ * abriria e não teria como sair dele a não ser navegando.
+ */
+const SAIDAS_DE_NAVEGACAO = "#sidebar, .sidebar-backdrop, .sidebar-peek-backdrop";
+
+/**
  * Modal fullscreen dentro do workspace — padrao oficial de CRUD (Itens,
  * Fornecedores, Clientes, Produtos). Comeca abaixo da topbar, ocupa o
  * espaco do workspace, mantem topbar/sidebar visiveis, body rolavel,
@@ -63,7 +82,7 @@ export function FullWorkspaceModal({
 
   // `aria-modal` sozinho não esconde a tela de trás de quem navega por
   // elementos: o fundo precisa ficar inerte de verdade.
-  useInertBackground(true, dialog);
+  useInertBackground(true, dialog, SAIDAS_DE_NAVEGACAO);
 
   useEffect(() => {
     if (!open) return;

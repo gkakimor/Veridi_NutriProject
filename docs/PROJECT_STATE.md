@@ -1189,6 +1189,47 @@ títulos, trilhas e ajuda com os nomes do menu, e a Qualidade registrando e
 ativando revisão. Seguem no BACKLOG, sem posição na fila: NAV-TWO-SEARCHES-01,
 NAV-TEMPLATE-WORDING-01 e HELP-FORMULACAO-WORDCAP-01.
 
+## Alterações não salvas têm guarda (UNSAVED-CHANGES-FOUNDATION-01, 2026-09-11)
+
+Sair de uma tela com trabalho não salvo apagava o trabalho sem dizer nada:
+com "Novo projeto" aberto, clicar em Pedidos no menu trocava a tela por baixo
+do modal. Agora existe UMA guarda para o ERP inteiro.
+
+`BrowserRouter` + `Routes` virou `createBrowserRouter` +
+`createRoutesFromElements` + `RouterProvider` — troca de mecanismo, sem
+`loader`/`action` e **sem mudar um endereço sequer** (as 109 rotas estão
+travadas em `app/rotas-do-app.test.ts`). É o que faz `useBlocker` existir:
+ele segura a navegação depois do clique, com o destino original em mãos.
+
+`UnsavedChangesProvider` (rota de layout sem `path`, uma vez só) +
+`useUnsavedChangesGuard({ isDirty, substantivo })` +
+`UnsavedChangesDialog`. O hook recebe um BOOLEANO, nunca o formulário: cada
+tela já sabe dizer se tem pendência, e a foundation não reimplementa essa
+comparação. Várias fontes na mesma tela (formulário + subformulário) dão UMA
+pergunta. Bloqueia troca de TELA; mudança só de query string na mesma rota
+não é saída. `confirmarDescarte()` cobre o que o router não vê — Cancelar, ✕
+e Esc — pelo MESMO diálogo; `liberarGuarda()` cobre o instante depois de
+salvar e a saída deliberada para cadastrar no contexto, onde o rascunho vai
+junto e volta. `beforeunload` existe exatamente enquanto há pendência (F5,
+fechar aba), com o diálogo do navegador.
+
+**Decisão do PO:** com um modal de workspace aberto a **sidebar** deixou de
+ser inerte — ela é saída legítima de navegação, e o cadastro era beco sem
+saída. O **masthead continua protegido**: a busca global do topo não é saída.
+
+Primeiro corte adotado em quatro telas, sempre reusando o que a tela já
+tinha: Projeto novo/editar (baseline do formulário; abrir e os defaults não
+contam; salvar limpa antes de navegar), Condições do Orçamento
+(`condicoesAlteradas`, sem tocar nas linhas que gravam no blur), Formulação
+(rascunho × gravado **mais** ajuste por aplicar; o falso positivo da página
+recém-carregada, de `gravado.current` vazio, foi fechado) e Perfil de
+Produção (assinatura já existente). As outras 44 telas ficam para
+UNSAVED-CHANGES-WAVE-01.
+
+Achado corrigido na rodada: `onClose` recriado a cada render remontava o
+efeito de foco/trap do `FullWorkspaceModal` a cada tecla e o campo ficava só
+com a primeira letra — `useCallback` obrigatório em quem passa `onClose`.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

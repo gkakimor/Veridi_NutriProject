@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import type {
   FormulationActivationImpactDTO,
   FormulationCalculationMode,
@@ -1186,6 +1187,26 @@ export function FormulationVersionPage() {
     }
   }
 
+  /*
+   * O que a guarda de saída considera perdível nesta tela.
+   *
+   * São as duas pendências que a própria tela já conhece: o rascunho diferente
+   * do gravado e o painel de ajustes configurado sem "Aplicar ajustes" — a
+   * mesma dupla que prende salvar e ativar. Uma terceira comparação aqui
+   * divergiria das outras no primeiro campo novo.
+   *
+   * A trava do carregamento não é detalhe: `gravado.current` começa vazio, e
+   * até a primeira leitura chegar QUALQUER serialização difere dele. A página
+   * recém-aberta, sem ninguém ter digitado nada, se declararia alterada e
+   * perguntaria antes de deixar sair.
+   */
+  const carregada = !loading && version !== null;
+  const { liberarGuarda } = useUnsavedChangesGuard({
+    isDirty: carregada && (temAlteracaoPendente() || ajustePendente() !== undefined),
+    substantivo: "formulação",
+    genero: "a",
+  });
+
   if (loading) {
     return (
       <div className="page__header">
@@ -1520,14 +1541,18 @@ export function FormulationVersionPage() {
                           onSearch={(termo) => buscarItens(row, termo)}
                           canCreate
                           createLabel="Novo item de estoque"
+                          /* Sair para cadastrar o item NÃO é descartar: o
+                             rascunho vai junto e volta aplicado na linha. */
                           onCreateNew={() =>
-                            origem.goCreate({
-                              route: "/cadastros/itens/novo",
-                              fieldKey: "itemId",
-                              entityType: "item",
-                              // Qual linha pediu — o item volta para ela.
-                              context: { rowKey: row.key },
-                            })
+                            liberarGuarda(() =>
+                              origem.goCreate({
+                                route: "/cadastros/itens/novo",
+                                fieldKey: "itemId",
+                                entityType: "item",
+                                // Qual linha pediu — o item volta para ela.
+                                context: { rowKey: row.key },
+                              }),
+                            )
                           }
                         />
                       ) : (

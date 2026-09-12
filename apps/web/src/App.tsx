@@ -1,4 +1,11 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import {
+  createBrowserRouter,
+  createRoutesFromElements,
+  Outlet,
+  Route,
+  RouterProvider,
+} from "react-router-dom";
+import { UnsavedChangesProvider } from "./app/UnsavedChangesProvider";
 import { AppShell } from "./app/AppShell";
 import { AuthProvider, useAuth } from "./app/AuthProvider";
 import { LoginPage } from "./pages/LoginPage";
@@ -132,6 +139,237 @@ import {
 } from "./pages/reports/BillingReports";
 
 /**
+ * Raiz da árvore de rotas: a guarda de alterações não salvas, uma vez só.
+ *
+ * Rota de layout SEM `path` — não acrescenta segmento nenhum, então nenhum
+ * endereço muda. Está acima do `AppShell` de propósito: as telas de impressão
+ * ficam fora do shell e continuam sob a mesma guarda.
+ */
+function RaizComGuarda() {
+  return (
+    <UnsavedChangesProvider>
+      <Outlet />
+    </UnsavedChangesProvider>
+  );
+}
+
+/**
+ * O router do app.
+ *
+ * `createBrowserRouter` e não `BrowserRouter`: a guarda de alterações não
+ * salvas usa `useBlocker`, que só existe em router de dados. As rotas são as
+ * mesmas, escritas em JSX como sempre foram — `createRoutesFromElements` é
+ * quem traduz. Nenhum `loader`/`action` foi introduzido: carregar dados
+ * continua sendo trabalho de cada tela.
+ */
+const router = createBrowserRouter(
+  createRoutesFromElements(
+    <Route element={<RaizComGuarda />}>
+      {/* Rotas de impressão: fora do AppShell — sem topbar/sidebar. */}
+      <Route path="/estoque/lotes/:id/etiqueta" element={<LotLabelPrintPage />} />
+      <Route path="/comercial/amostras/:id/etiqueta" element={<SampleLabelPrintPage />} />
+      {/* Folhas operacionais (FO-xx): documento de papel, fora do AppShell. */}
+      {/* Relatórios: a impressão nasce em rota dedicada, nunca da tela. */}
+      <Route path="/print/relatorios/R-06" element={<ProductionTraceabilityPrintPage />} />
+      <Route path="/print/relatorios/R-14" element={<OrderOperationPrintPage />} />
+      <Route path="/print/relatorios/:reportCode" element={<ReportPrintPage />} />
+      <Route path="/print/estrutura-custos/:id" element={<IndustrialCostPrintPage />} />
+      <Route path="/print/calculo-custo/:id" element={<CostCalculationPrintPage />} />
+      <Route path="/print/cmv/:productId" element={<CmvPrintPage />} />
+      <Route path="/print/custo-producao/:id" element={<ProductionCostPrintPage />} />
+      <Route path="/print/precificacao/:id" element={<PricingPrintPage />} />
+      <Route path="/print/contagem-fisica" element={<InventoryCountSheetPage />} />
+      <Route path="/print/posicao-estoque" element={<InventoryPositionSheetPage />} />
+      <Route path="/print/qualidade-pendencias" element={<QualityPendingSheetPage />} />
+      <Route path="/print/producao-picking/:id" element={<ProductionPickingSheetPage />} />
+      <Route path="/print/expedicao-separacao/:id" element={<ShipmentPickingSheetPage />} />
+      <Route path="/estoque/lotes/:id/rastreabilidade/imprimir" element={<LotTraceabilityPrintPage />} />
+      <Route path="/comercial/pedidos/:id/imprimir" element={<CustomerOrderPrintPage />} />
+      <Route path="/comercial/orcamentos/:id/imprimir" element={<QuotePrintPage />} />
+      <Route path="/compras/ordens/:id/imprimir" element={<PurchaseOrderPrintPage />} />
+      <Route path="/compras/recebimentos/:id/imprimir" element={<ReceiptPrintPage />} />
+      <Route path="/producao/ordens/:id/imprimir" element={<ProductionOrderPrintPage />} />
+      <Route
+        path="/producao/ordens/:id/receita/imprimir"
+        element={<RecipeSheetPrintPage />}
+      />
+      <Route path="/comercial/expedicoes/:id/imprimir" element={<ShipmentPrintPage />} />
+      <Route path="/comercial/faturamento/:id/imprimir" element={<BillingPrintPage />} />
+
+      <Route element={<AppShell />}>
+        <Route index element={<DashboardPage />} />
+        <Route path="/cadastros/itens" element={<ItemsPage />} />
+        <Route path="/cadastros/itens/novo" element={<ItemCreatePage />} />
+        <Route path="/cadastros/fornecedores" element={<SuppliersPage />} />
+        {/* Rota antes da listagem não é necessária: `/novo` é estático e o
+            router casa segmento estático antes de dinâmico. Fica junto da
+            lista para quem lê o arquivo achar as duas de uma vez. */}
+        <Route path="/cadastros/fornecedores/novo" element={<SupplierCreatePage />} />
+        <Route path="/cadastros/clientes" element={<CustomersPage />} />
+        <Route path="/cadastros/clientes/novo" element={<CustomerCreatePage />} />
+        <Route path="/cadastros/produtos" element={<ProductsPage />} />
+        <Route path="/cadastros/produtos/novo" element={<ProductCreatePage />} />
+
+        {/*
+          CONSULTA DO CLIENTE — leitura sob o contexto do Cliente.
+
+          A árvore vive em `pages/customer-consultation/routes` porque o
+          teste de navegação monta exatamente ela. As rotas operacionais
+          acima continuam exatamente como estavam.
+        */}
+        {consultationRoutes}
+        <Route path="/produtos/:productId/custos" element={<IndustrialCostPage />} />
+        <Route path="/produtos/:productId/cmv" element={<ProductCmvPage />} />
+        <Route path="/calculos-custo/:id" element={<CostCalculationPage />} />
+        <Route path="/compras/ordens" element={<PurchaseOrdersPage />} />
+        <Route path="/compras/ordens/nova" element={<PurchaseOrderPage />} />
+        <Route path="/compras/ordens/:id" element={<PurchaseOrderPage />} />
+        <Route path="/compras/recebimentos" element={<ReceiptsPage />} />
+        <Route path="/compras/recebimentos/novo" element={<ReceivePurchaseOrderPage />} />
+        <Route
+          path="/compras/recebimentos/material-do-cliente"
+          element={<ReceiveCustomerMaterialPage />}
+        />
+        <Route path="/compras/recebimentos/:id" element={<ReceiptDetailPage />} />
+        <Route path="/estoque" element={<InventoryOverviewPage />} />
+        <Route path="/estoque/movimentacoes" element={<InventoryMovementsPage />} />
+        <Route path="/estoque/inventario" element={<StockCountPage />} />
+        <Route
+          path="/estoque/materiais-de-clientes"
+          element={<CustomerMaterialsPage />}
+        />
+        <Route path="/estoque/lotes" element={<LotsPage />} />
+        <Route path="/estoque/lotes/escanear" element={<LotScanPage />} />
+        <Route path="/estoque/lotes/:id" element={<LotDetailPage />} />
+        <Route path="/estoque/:itemId" element={<InventoryItemDetailPage />} />
+        <Route path="/qualidade/documentos" element={<CoaQueuePage />} />
+        <Route path="/producao/formulacoes" element={<FormulationsPage />} />
+        <Route
+          path="/producao/templates-formulacao"
+          element={<FormulationTemplatesPage />}
+        />
+        <Route
+          path="/producao/templates-formulacao/:templateId"
+          element={<FormulationTemplateDetailPage />}
+        />
+        <Route path="/producao/formulacoes/:productId" element={<FormulationDetailPage />} />
+        <Route
+          path="/producao/formulacoes/:productId/versoes/:versionId"
+          element={<FormulationVersionPage />}
+        />
+        <Route path="/producao/ordens" element={<ProductionOrdersPage />} />
+        <Route path="/producao/ordens/nova" element={<ProductionOrderPage />} />
+        <Route path="/producao/ordens/:id" element={<ProductionOrderPage />} />
+        <Route path="/producao/ordens/:id/receita" element={<RecipeSheetPage />} />
+        <Route path="/producao/picking" element={<PickingConsumptionPage />} />
+        {/* Planejamento → Perfis de Produção. A entrada no menu chega com a
+            nova navegação (NAVIGATION-SIDEBAR-01); a rota já funciona. */}
+        <Route path="/planejamento/perfis-producao" element={<ProductionProfilesPage />} />
+        <Route
+          path="/planejamento/perfis-producao/:profileId"
+          element={<ProductionProfileDetailPage />}
+        />
+        <Route path="/administracao/usuarios" element={<UsersPage />} />
+        <Route
+          path="/administracao/documentos"
+          element={<ControlledDocumentsPage />}
+        />
+        <Route path="/producao/produto-acabado" element={<FinishedGoodsPage />} />
+        <Route path="/comercial/projetos" element={<ProjectsPage />} />
+        <Route path="/comercial/projetos/:id" element={<ProjectDetailPage />} />
+        <Route path="/compras/item-fornecedor" element={<SupplierItemsPage />} />
+        <Route path="/comercial/amostras" element={<SamplesPage />} />
+        <Route path="/comercial/amostras/:id" element={<SampleDetailPage />} />
+        <Route path="/comercial/pedidos" element={<CustomerOrdersPage />} />
+        <Route path="/comercial/pedidos/novo" element={<CustomerOrderPage />} />
+        <Route path="/comercial/pedidos/:id" element={<CustomerOrderPage />} />
+        <Route path="/comercial/expedicoes" element={<ShipmentsPage />} />
+        <Route path="/comercial/expedicoes/:id" element={<ShipmentPage />} />
+        <Route path="/comercial/faturamento" element={<BillingsPage />} />
+        <Route path="/comercial/faturamento/:id" element={<BillingPage />} />
+
+        {/* Gestão → Relatórios (R-01…R-17), todos somente leitura. */}
+        <Route
+          path="/gestao/recursos-industriais"
+          element={<IndustrialResourcesPage />}
+        />
+        {/* `/novo` antes de `:id`: segmento estático ganha do dinâmico no
+            router, mas deixar na ordem certa poupa a próxima pessoa de
+            conferir isso. */}
+        <Route
+          path="/gestao/recursos-industriais/novo"
+          element={<IndustrialResourceCreatePage />}
+        />
+        <Route
+          path="/gestao/recursos-industriais/:id"
+          element={<IndustrialResourceDetailPage />}
+        />
+        <Route path="/gestao/templates-estrutura" element={<CostTemplatesPage />} />
+        <Route
+          path="/gestao/templates-estrutura/:templateId"
+          element={<CostTemplateDetailPage />}
+        />
+        <Route path="/gestao/politicas-precificacao" element={<PricingPoliciesPage />} />
+        <Route
+          path="/gestao/politicas-precificacao/:policyId"
+          element={<PricingPolicyDetailPage />}
+        />
+        <Route path="/gestao/precificacao" element={<PricingListPage />} />
+        <Route path="/gestao/precificacao/:pricingId" element={<PricingPage />} />
+        <Route path="/relatorios" element={<ReportsHubPage />} />
+        <Route
+          path="/relatorios/custos/industrial-por-produto"
+          element={<IndustrialCostByProductReportPage />}
+        />
+        <Route
+          path="/relatorios/custos/precificacao-por-produto"
+          element={<PricingByProductReportPage />}
+        />
+        <Route
+          path="/relatorios/comercial/orcamento-precificacao"
+          element={<QuotePricingAuditReportPage />}
+        />
+        <Route path="/relatorios/estoque/posicao" element={<InventoryPositionReportPage />} />
+        <Route path="/relatorios/estoque/vencimentos" element={<ExpiryReportPage />} />
+        <Route path="/relatorios/estoque/movimentacoes" element={<MovementsReportPage />} />
+        <Route path="/relatorios/producao/necessidades" element={<RequirementsReportPage />} />
+        <Route path="/relatorios/producao/planejado-realizado" element={<PlannedActualReportPage />} />
+        <Route path="/relatorios/producao/rastreabilidade" element={<ProductionTraceabilityReportPage />} />
+        <Route path="/relatorios/producao/consumo" element={<ConsumptionReportPage />} />
+        <Route path="/relatorios/compras/ordens" element={<PurchaseOrdersReportPage />} />
+        <Route path="/relatorios/compras/recebimentos" element={<ReceiptsReportPage />} />
+        <Route path="/relatorios/compras/em-compra" element={<OnOrderReportPage />} />
+        <Route path="/relatorios/compras/atrasadas" element={<LatePurchaseOrdersReportPage />} />
+        <Route path="/relatorios/comercial/pedidos" element={<CustomerOrdersReportPage />} />
+        <Route path="/relatorios/comercial/atendimento" element={<FulfillmentReportPage />} />
+        <Route path="/relatorios/comercial/pedido-operacao" element={<OrderOperationReportPage />} />
+        <Route path="/relatorios/faturamento/periodo" element={<BillingPeriodReportPage />} />
+        <Route path="/relatorios/faturamento/pendentes" element={<AwaitingBillingReportPage />} />
+        <Route
+          path="/relatorios/faturamento/pedido-entregue-faturado"
+          element={<OrderDeliveredBilledReportPage />}
+        />
+
+        {navItems
+          .filter((item) => !item.implemented)
+          .map((item) => (
+            <Route
+              key={item.path}
+              path={item.path}
+              element={<PlaceholderPage title={item.label} />}
+            />
+          ))}
+
+        {/* Endereço desconhecido não vira Dashboard em silêncio: redirecionar
+            escondia o erro e, com `replace`, apagava do histórico o endereço
+            que a pessoa realmente pediu. */}
+        <Route path="*" element={<NotFoundPage />} />
+      </Route>
+    </Route>
+  ),
+);
+
+/**
  * Sem sessão o app inteiro é a tela de Login — inclusive as rotas de
  * impressão, que também consomem a API autenticada.
  */
@@ -147,212 +385,7 @@ function AuthenticatedApp() {
   }
   if (!user) return <LoginPage />;
 
-  return (
-    <BrowserRouter>
-      <Routes>
-        {/* Rotas de impressão: fora do AppShell — sem topbar/sidebar. */}
-        <Route path="/estoque/lotes/:id/etiqueta" element={<LotLabelPrintPage />} />
-        <Route path="/comercial/amostras/:id/etiqueta" element={<SampleLabelPrintPage />} />
-        {/* Folhas operacionais (FO-xx): documento de papel, fora do AppShell. */}
-        {/* Relatórios: a impressão nasce em rota dedicada, nunca da tela. */}
-        <Route path="/print/relatorios/R-06" element={<ProductionTraceabilityPrintPage />} />
-        <Route path="/print/relatorios/R-14" element={<OrderOperationPrintPage />} />
-        <Route path="/print/relatorios/:reportCode" element={<ReportPrintPage />} />
-        <Route path="/print/estrutura-custos/:id" element={<IndustrialCostPrintPage />} />
-        <Route path="/print/calculo-custo/:id" element={<CostCalculationPrintPage />} />
-        <Route path="/print/cmv/:productId" element={<CmvPrintPage />} />
-        <Route path="/print/custo-producao/:id" element={<ProductionCostPrintPage />} />
-        <Route path="/print/precificacao/:id" element={<PricingPrintPage />} />
-        <Route path="/print/contagem-fisica" element={<InventoryCountSheetPage />} />
-        <Route path="/print/posicao-estoque" element={<InventoryPositionSheetPage />} />
-        <Route path="/print/qualidade-pendencias" element={<QualityPendingSheetPage />} />
-        <Route path="/print/producao-picking/:id" element={<ProductionPickingSheetPage />} />
-        <Route path="/print/expedicao-separacao/:id" element={<ShipmentPickingSheetPage />} />
-        <Route path="/estoque/lotes/:id/rastreabilidade/imprimir" element={<LotTraceabilityPrintPage />} />
-        <Route path="/comercial/pedidos/:id/imprimir" element={<CustomerOrderPrintPage />} />
-        <Route path="/comercial/orcamentos/:id/imprimir" element={<QuotePrintPage />} />
-        <Route path="/compras/ordens/:id/imprimir" element={<PurchaseOrderPrintPage />} />
-        <Route path="/compras/recebimentos/:id/imprimir" element={<ReceiptPrintPage />} />
-        <Route path="/producao/ordens/:id/imprimir" element={<ProductionOrderPrintPage />} />
-        <Route
-          path="/producao/ordens/:id/receita/imprimir"
-          element={<RecipeSheetPrintPage />}
-        />
-        <Route path="/comercial/expedicoes/:id/imprimir" element={<ShipmentPrintPage />} />
-        <Route path="/comercial/faturamento/:id/imprimir" element={<BillingPrintPage />} />
-
-        <Route element={<AppShell />}>
-          <Route index element={<DashboardPage />} />
-          <Route path="/cadastros/itens" element={<ItemsPage />} />
-          <Route path="/cadastros/itens/novo" element={<ItemCreatePage />} />
-          <Route path="/cadastros/fornecedores" element={<SuppliersPage />} />
-          {/* Rota antes da listagem não é necessária: `/novo` é estático e o
-              router casa segmento estático antes de dinâmico. Fica junto da
-              lista para quem lê o arquivo achar as duas de uma vez. */}
-          <Route path="/cadastros/fornecedores/novo" element={<SupplierCreatePage />} />
-          <Route path="/cadastros/clientes" element={<CustomersPage />} />
-          <Route path="/cadastros/clientes/novo" element={<CustomerCreatePage />} />
-          <Route path="/cadastros/produtos" element={<ProductsPage />} />
-          <Route path="/cadastros/produtos/novo" element={<ProductCreatePage />} />
-
-          {/*
-            CONSULTA DO CLIENTE — leitura sob o contexto do Cliente.
-
-            A árvore vive em `pages/customer-consultation/routes` porque o
-            teste de navegação monta exatamente ela. As rotas operacionais
-            acima continuam exatamente como estavam.
-          */}
-          {consultationRoutes}
-          <Route path="/produtos/:productId/custos" element={<IndustrialCostPage />} />
-          <Route path="/produtos/:productId/cmv" element={<ProductCmvPage />} />
-          <Route path="/calculos-custo/:id" element={<CostCalculationPage />} />
-          <Route path="/compras/ordens" element={<PurchaseOrdersPage />} />
-          <Route path="/compras/ordens/nova" element={<PurchaseOrderPage />} />
-          <Route path="/compras/ordens/:id" element={<PurchaseOrderPage />} />
-          <Route path="/compras/recebimentos" element={<ReceiptsPage />} />
-          <Route path="/compras/recebimentos/novo" element={<ReceivePurchaseOrderPage />} />
-          <Route
-            path="/compras/recebimentos/material-do-cliente"
-            element={<ReceiveCustomerMaterialPage />}
-          />
-          <Route path="/compras/recebimentos/:id" element={<ReceiptDetailPage />} />
-          <Route path="/estoque" element={<InventoryOverviewPage />} />
-          <Route path="/estoque/movimentacoes" element={<InventoryMovementsPage />} />
-          <Route path="/estoque/inventario" element={<StockCountPage />} />
-          <Route
-            path="/estoque/materiais-de-clientes"
-            element={<CustomerMaterialsPage />}
-          />
-          <Route path="/estoque/lotes" element={<LotsPage />} />
-          <Route path="/estoque/lotes/escanear" element={<LotScanPage />} />
-          <Route path="/estoque/lotes/:id" element={<LotDetailPage />} />
-          <Route path="/estoque/:itemId" element={<InventoryItemDetailPage />} />
-          <Route path="/qualidade/documentos" element={<CoaQueuePage />} />
-          <Route path="/producao/formulacoes" element={<FormulationsPage />} />
-          <Route
-            path="/producao/templates-formulacao"
-            element={<FormulationTemplatesPage />}
-          />
-          <Route
-            path="/producao/templates-formulacao/:templateId"
-            element={<FormulationTemplateDetailPage />}
-          />
-          <Route path="/producao/formulacoes/:productId" element={<FormulationDetailPage />} />
-          <Route
-            path="/producao/formulacoes/:productId/versoes/:versionId"
-            element={<FormulationVersionPage />}
-          />
-          <Route path="/producao/ordens" element={<ProductionOrdersPage />} />
-          <Route path="/producao/ordens/nova" element={<ProductionOrderPage />} />
-          <Route path="/producao/ordens/:id" element={<ProductionOrderPage />} />
-          <Route path="/producao/ordens/:id/receita" element={<RecipeSheetPage />} />
-          <Route path="/producao/picking" element={<PickingConsumptionPage />} />
-          {/* Planejamento → Perfis de Produção. A entrada no menu chega com a
-              nova navegação (NAVIGATION-SIDEBAR-01); a rota já funciona. */}
-          <Route path="/planejamento/perfis-producao" element={<ProductionProfilesPage />} />
-          <Route
-            path="/planejamento/perfis-producao/:profileId"
-            element={<ProductionProfileDetailPage />}
-          />
-          <Route path="/administracao/usuarios" element={<UsersPage />} />
-          <Route
-            path="/administracao/documentos"
-            element={<ControlledDocumentsPage />}
-          />
-          <Route path="/producao/produto-acabado" element={<FinishedGoodsPage />} />
-          <Route path="/comercial/projetos" element={<ProjectsPage />} />
-          <Route path="/comercial/projetos/:id" element={<ProjectDetailPage />} />
-          <Route path="/compras/item-fornecedor" element={<SupplierItemsPage />} />
-          <Route path="/comercial/amostras" element={<SamplesPage />} />
-          <Route path="/comercial/amostras/:id" element={<SampleDetailPage />} />
-          <Route path="/comercial/pedidos" element={<CustomerOrdersPage />} />
-          <Route path="/comercial/pedidos/novo" element={<CustomerOrderPage />} />
-          <Route path="/comercial/pedidos/:id" element={<CustomerOrderPage />} />
-          <Route path="/comercial/expedicoes" element={<ShipmentsPage />} />
-          <Route path="/comercial/expedicoes/:id" element={<ShipmentPage />} />
-          <Route path="/comercial/faturamento" element={<BillingsPage />} />
-          <Route path="/comercial/faturamento/:id" element={<BillingPage />} />
-
-          {/* Gestão → Relatórios (R-01…R-17), todos somente leitura. */}
-          <Route
-            path="/gestao/recursos-industriais"
-            element={<IndustrialResourcesPage />}
-          />
-          {/* `/novo` antes de `:id`: segmento estático ganha do dinâmico no
-              router, mas deixar na ordem certa poupa a próxima pessoa de
-              conferir isso. */}
-          <Route
-            path="/gestao/recursos-industriais/novo"
-            element={<IndustrialResourceCreatePage />}
-          />
-          <Route
-            path="/gestao/recursos-industriais/:id"
-            element={<IndustrialResourceDetailPage />}
-          />
-          <Route path="/gestao/templates-estrutura" element={<CostTemplatesPage />} />
-          <Route
-            path="/gestao/templates-estrutura/:templateId"
-            element={<CostTemplateDetailPage />}
-          />
-          <Route path="/gestao/politicas-precificacao" element={<PricingPoliciesPage />} />
-          <Route
-            path="/gestao/politicas-precificacao/:policyId"
-            element={<PricingPolicyDetailPage />}
-          />
-          <Route path="/gestao/precificacao" element={<PricingListPage />} />
-          <Route path="/gestao/precificacao/:pricingId" element={<PricingPage />} />
-          <Route path="/relatorios" element={<ReportsHubPage />} />
-          <Route
-            path="/relatorios/custos/industrial-por-produto"
-            element={<IndustrialCostByProductReportPage />}
-          />
-          <Route
-            path="/relatorios/custos/precificacao-por-produto"
-            element={<PricingByProductReportPage />}
-          />
-          <Route
-            path="/relatorios/comercial/orcamento-precificacao"
-            element={<QuotePricingAuditReportPage />}
-          />
-          <Route path="/relatorios/estoque/posicao" element={<InventoryPositionReportPage />} />
-          <Route path="/relatorios/estoque/vencimentos" element={<ExpiryReportPage />} />
-          <Route path="/relatorios/estoque/movimentacoes" element={<MovementsReportPage />} />
-          <Route path="/relatorios/producao/necessidades" element={<RequirementsReportPage />} />
-          <Route path="/relatorios/producao/planejado-realizado" element={<PlannedActualReportPage />} />
-          <Route path="/relatorios/producao/rastreabilidade" element={<ProductionTraceabilityReportPage />} />
-          <Route path="/relatorios/producao/consumo" element={<ConsumptionReportPage />} />
-          <Route path="/relatorios/compras/ordens" element={<PurchaseOrdersReportPage />} />
-          <Route path="/relatorios/compras/recebimentos" element={<ReceiptsReportPage />} />
-          <Route path="/relatorios/compras/em-compra" element={<OnOrderReportPage />} />
-          <Route path="/relatorios/compras/atrasadas" element={<LatePurchaseOrdersReportPage />} />
-          <Route path="/relatorios/comercial/pedidos" element={<CustomerOrdersReportPage />} />
-          <Route path="/relatorios/comercial/atendimento" element={<FulfillmentReportPage />} />
-          <Route path="/relatorios/comercial/pedido-operacao" element={<OrderOperationReportPage />} />
-          <Route path="/relatorios/faturamento/periodo" element={<BillingPeriodReportPage />} />
-          <Route path="/relatorios/faturamento/pendentes" element={<AwaitingBillingReportPage />} />
-          <Route
-            path="/relatorios/faturamento/pedido-entregue-faturado"
-            element={<OrderDeliveredBilledReportPage />}
-          />
-
-          {navItems
-            .filter((item) => !item.implemented)
-            .map((item) => (
-              <Route
-                key={item.path}
-                path={item.path}
-                element={<PlaceholderPage title={item.label} />}
-              />
-            ))}
-
-          {/* Endereço desconhecido não vira Dashboard em silêncio: redirecionar
-              escondia o erro e, com `replace`, apagava do histórico o endereço
-              que a pessoa realmente pediu. */}
-          <Route path="*" element={<NotFoundPage />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
-  );
+  return <RouterProvider router={router} />;
 }
 
 export function App() {

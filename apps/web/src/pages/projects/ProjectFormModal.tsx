@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import type { CustomerDTO, ProjectDTO } from "@veridi/shared";
 import {
   DOSAGE_FORMS,
@@ -55,6 +56,17 @@ function initialState(project: ProjectDTO | null): FormState {
   };
 }
 
+/**
+ * Dois formulários com o mesmo conteúdo.
+ *
+ * Todo campo do `FormState` é texto, então comparar valor a valor responde
+ * "há alteração?" sem serializar nada e sem instrumentar cada `onChange` —
+ * que é o jeito que esquece o campo acrescentado na semana seguinte.
+ */
+function mesmoFormulario(a: FormState, b: FormState): boolean {
+  return (Object.keys(a) as (keyof FormState)[]).every((chave) => a[chave] === b[chave]);
+}
+
 type ChaveInteira = "dosesPerPackage" | "shelfLifeMonths";
 
 /**
@@ -105,6 +117,37 @@ export function ProjectFormModal({
   const [channels, setChannels] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * O formulário como ele estava ao abrir — a referência da comparação.
+   *
+   * Criar parte do formulário em branco com os defaults da tela; editar parte
+   * dos valores que vieram do servidor. Nos dois casos ABRIR não é alterar:
+   * data de hoje preenchida sozinha e select em "—" não podem virar pergunta
+   * de descarte, senão a guarda vira ruído e a pessoa aprende a ignorá-la.
+   *
+   * Vira o que acabou de ser gravado depois de um salvamento: o que está na
+   * tela passou a ser o que está no servidor.
+   */
+  const baseline = useRef<FormState | null>(null);
+  if (baseline.current === null) baseline.current = form;
+
+  const isDirty = !mesmoFormulario(baseline.current, form);
+  const { confirmarDescarte, liberarGuarda } = useUnsavedChangesGuard({
+    isDirty,
+    substantivo: "projeto",
+  });
+
+  /**
+   * Cancelar, ✕ e Esc: o router não vê nada disso — a guarda vê.
+   *
+   * Memorizado porque vai para `onClose` do `FullWorkspaceModal`, e é
+   * dependência do efeito que instala foco, trap e Escape lá dentro. Recriado
+   * a cada render, o efeito se desmontava e remontava a CADA tecla digitada,
+   * devolvendo o foco ao diálogo no meio da palavra — o campo ficava com a
+   * primeira letra e o resto sumia.
+   */
+  const fechar = useCallback(() => confirmarDescarte(onClose), [confirmarDescarte, onClose]);
 
   /**
    * Cadastro de cliente na TELA OFICIAL, sem perder o projeto.
@@ -204,7 +247,15 @@ export function ProjectFormModal({
       const saved = project
         ? await updateProject(project.id, payload)
         : await createProject(payload);
-      onSaved(saved);
+      /*
+       * A pendência morre ANTES da navegação, não depois.
+       *
+       * `onSaved` fecha o modal e vai para a ficha do projeto, tudo na mesma
+       * função — o estado desta renderização ainda diz "alterado", e a guarda
+       * perguntaria se a pessoa quer descartar o que ela acabou de gravar.
+       */
+      baseline.current = form;
+      liberarGuarda(() => onSaved(saved));
     } catch (err) {
       if (err instanceof ApiValidationError) {
         setError(err.issues.map((issue) => issue.message).join("; "));
@@ -223,10 +274,10 @@ export function ProjectFormModal({
       crumbActive="Projetos"
       title={project ? project.name : "Novo projeto"}
       {...(project ? { codeChip: project.code } : {})}
-      onClose={onClose}
+      onClose={fechar}
       footer={
         <>
-          <button type="button" className="btn btn--ghost" onClick={onClose}>
+          <button type="button" className="btn btn--ghost" onClick={fechar}>
             Cancelar
           </button>
           <button
@@ -269,12 +320,17 @@ options={customers.map((customer) => ({
             }))}
             canCreate
             createLabel="Novo cliente"
+            /* Sair para cadastrar o cliente NÃO é descartar: o rascunho vai
+               junto e volta aplicado. Perguntar aqui seria a guarda avisando
+               de uma perda que não acontece. */
             onCreateNew={() =>
-              origem.goCreate({
-                route: "/cadastros/clientes/novo",
-                fieldKey: "customerId",
-                entityType: "customer",
-              })
+              liberarGuarda(() =>
+                origem.goCreate({
+                  route: "/cadastros/clientes/novo",
+                  fieldKey: "customerId",
+                  entityType: "customer",
+                }),
+              )
             }
           />
         </div>
