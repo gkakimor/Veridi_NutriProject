@@ -32,6 +32,18 @@ import { campo, workbookObrigatorio } from "./review-package.js";
 import type { PacoteRevisao, RegistroRevisado } from "./review-package.js";
 import { lerFornecedoresRevisados, resolverFornecedorDaOferta } from "./supplier-review.js";
 import type { LeituraDeFornecedores } from "./supplier-review.js";
+import {
+  lerClientesRevisados,
+  lerItensRevisados,
+  lerProdutosRevisados,
+  numeroRevisado,
+} from "./master-data-review.js";
+import type {
+  ClienteRevisado,
+  ItemRevisado,
+  LeituraRevisada,
+  ProdutoRevisado,
+} from "./master-data-review.js";
 import type { Overrides } from "./overrides.js";
 
 /**
@@ -153,6 +165,9 @@ export interface ReviewSummary {
     unchanged: number;
     withAddress: number;
   };
+  customers: { approved: number; excluded: number };
+  items: { approved: number; excluded: number };
+  products: { approved: number; excluded: number };
   supplierItems: { approved: number; excluded: number; orphan: number };
   /** `true` quando a leitura do pacote produziu finding BLOCKING. */
   blocked: boolean;
@@ -172,10 +187,26 @@ export interface PipelineContext {
   review?: PacoteRevisao | null;
 }
 
-/** Workbooks que esta versão do bridge consome de verdade. */
+/**
+ * Workbooks cuja revisão o pipeline consome de verdade.
+ *
+ * O 06 fica de fora de propósito: usa ACEITA/REJEITADA, é referência de
+ * mercado e nunca vira custo — fluxo próprio, não decisão de carga.
+ */
+export const WORKBOOK_CLIENTES = "01_CLIENTES";
 export const WORKBOOK_FORNECEDORES = "02_FORNECEDORES";
+export const WORKBOOK_MATERIAS_PRIMAS = "03_MATERIAS_PRIMAS";
+export const WORKBOOK_EMBALAGENS = "04_EMBALAGENS_INSUMOS";
+export const WORKBOOK_PRODUTOS = "05_PRODUTOS_ACABADOS";
 export const WORKBOOK_OFERTAS = "07_FORNECEDOR_ITENS_PRECOS";
-export const WORKBOOKS_DO_ESCOPO: readonly string[] = [WORKBOOK_FORNECEDORES, WORKBOOK_OFERTAS];
+export const WORKBOOKS_DO_ESCOPO: readonly string[] = [
+  WORKBOOK_CLIENTES,
+  WORKBOOK_FORNECEDORES,
+  WORKBOOK_MATERIAS_PRIMAS,
+  WORKBOOK_EMBALAGENS,
+  WORKBOOK_PRODUTOS,
+  WORKBOOK_OFERTAS,
+];
 
 /**
  * HOMOLOGACAO do workbook → `SupplierItemQualificationStatus`.
@@ -198,16 +229,17 @@ function isPlanned(id: string): boolean {
   return id.startsWith("plan:");
 }
 
-/** Número revisado no workbook. Vazio vira `null`; texto ilegível também. */
-function decimalRevisado(registro: RegistroRevisado, coluna: string): Prisma.Decimal | null {
-  const valor = campo(registro, coluna);
-  if (valor === null) return null;
-  try {
-    const numero = new Prisma.Decimal(valor.replace(",", "."));
-    return numero.isFinite() ? numero : null;
-  } catch {
-    return null;
-  }
+/**
+ * `ITEM-LEG-` + o código da planilha em 4 dígitos — a mesma chave que o
+ * tooling do pacote escreve para matéria-prima e embalagem.
+ */
+export function chaveDoItem(codigoPlanilha: string): string {
+  return `ITEM-LEG-${codigoPlanilha.padStart(4, "0")}`;
+}
+
+/** O código legado corresponde a um item que a Veridi tirou da carga? */
+function chaveDoItemLegado(codigoPlanilha: string, revisao: LeituraRevisada<ItemRevisado>): boolean {
+  return revisao.excluidos.has(chaveDoItem(codigoPlanilha));
 }
 
 export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult> {
@@ -353,7 +385,57 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
   }
 
   /* ── 3. Clientes ───────────────────────────────────────── */
+  /*
+   * Com revisão, o 01 devolvido é a autoridade. O mapa por `externalCode`
+   * continua sendo preenchido porque é por ele que formulações, projetos e
+   * amostras — que não têm workbook — encontram o cliente; o mapa por
+   * CHAVE_MIGRACAO é o que liga um workbook ao outro.
+   */
   const customerIdByExternal = new Map<string, string>();
+  const customerIdByKey = new Map<string, string>();
+  let customerReview: LeituraRevisada<ClienteRevisado> | null = null;
+
+  if (review) {
+    customerReview = lerClientesRevisados(workbookObrigatorio(review, WORKBOOK_CLIENTES), findings);
+    for (const chave of customerReview.excluidos) {
+      findings.add("CUSTOMER_REVIEW_NOT_IMPORTED", "Customer", chave, "marcado NAO_IMPORTAR na revisao");
+      domains.customers.skipped += 1;
+    }
+    for (const customer of customerReview.aprovados) {
+      const data = {
+        legalName: customer.legalName,
+        tradeName: customer.tradeName,
+        cnpj: customer.cnpj,
+        taxProfile: customer.taxProfile as never,
+        email: customer.email,
+        phone: customer.phone,
+        zipCode: customer.zipCode,
+        street: customer.street,
+        number: customer.number,
+        complement: customer.complement,
+        district: customer.district,
+        city: customer.city,
+        state: customer.state,
+        notes: customer.notes,
+        active: customer.active,
+      };
+      const existing = await prisma.customer.findFirst({ where: { externalCode: customer.externalCode } });
+      if (existing) {
+        if (write) await prisma.customer.update({ where: { id: existing.id }, data });
+        domains.customers.updated += 1;
+        customerIdByExternal.set(customer.externalCode, existing.id);
+        customerIdByKey.set(customer.key, existing.id);
+        continue;
+      }
+      const code = await nextCode("customer_code_seq", "CLI", customer.externalCode);
+      const id = write
+        ? (await prisma.customer.create({ data: { ...data, code, externalCode: customer.externalCode } })).id
+        : plannedId("customer", customer.externalCode);
+      customerIdByExternal.set(customer.externalCode, id);
+      customerIdByKey.set(customer.key, id);
+      domains.customers.created += 1;
+    }
+  } else {
   for (const customer of mapCustomers(findings)) {
     const data = {
       legalName: customer.legalName,
@@ -394,12 +476,80 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
     customerIdByExternal.set(customer.externalCode, id);
     domains.customers.created += 1;
   }
+  }
 
   /* ── 4. Itens ──────────────────────────────────────────── */
+  /*
+   * 03 e 04 são o mesmo domínio (`Item`) em dois arquivos, e a coluna TIPO é
+   * que decide qual é qual. Os dois workbooks entram no mesmo mapa.
+   */
   const items = mapItems(findings);
   const itemIdByExternal = new Map<string, string>();
+  const itemIdByKey = new Map<string, string>();
   const itemByExternalCode = new Map(items.map((item) => [item.externalCode, item]));
+  const itemUnitByExternal = new Map<string, string>();
+  let itemReview: LeituraRevisada<ItemRevisado> | null = null;
 
+  if (review) {
+    // Catálogo real de unidades: unidade revisada é conferida contra o que
+    // existe no banco, nunca criada a partir de texto do Excel.
+    const unidadesValidas = new Set(
+      (await prisma.unitOfMeasure.findMany({ select: { code: true } })).map((unidade) => unidade.code),
+    );
+    const lidos: ItemRevisado[] = [];
+    const excluidos = new Set<string>();
+    let bloqueado = false;
+    for (const nome of [WORKBOOK_MATERIAS_PRIMAS, WORKBOOK_EMBALAGENS]) {
+      const leitura = lerItensRevisados(workbookObrigatorio(review, nome), unidadesValidas, findings);
+      lidos.push(...leitura.aprovados);
+      for (const chave of leitura.excluidos) excluidos.add(chave);
+      bloqueado = bloqueado || leitura.bloqueado;
+    }
+    itemReview = { aprovados: lidos, excluidos, bloqueado };
+
+    for (const chave of excluidos) {
+      findings.add("ITEM_REVIEW_NOT_IMPORTED", "Item", chave, "marcado NAO_IMPORTAR na revisao");
+      domains.items.skipped += 1;
+    }
+    for (const item of lidos) {
+      const data = {
+        name: item.name,
+        type: item.type,
+        unitCode: item.unitCode,
+        sourceName: item.sourceName,
+        declaredNutrient: item.declaredNutrient,
+        family: item.family as never,
+        defaultPurityPercent: item.defaultPurityPercent,
+        packagingSubtype: item.packagingSubtype as never,
+        controlsLot: item.controlsLot,
+        controlsExpiry: item.controlsExpiry,
+        requiresQualityRelease: item.requiresQualityRelease,
+        requiresCoa: item.requiresCoa,
+        externalBarcode: item.externalBarcode,
+        active: item.active,
+      };
+      itemUnitByExternal.set(item.externalCode, item.unitCode);
+      const existing = await prisma.item.findFirst({ where: { externalCode: item.externalCode } });
+      if (existing) {
+        if (write) await prisma.item.update({ where: { id: existing.id }, data });
+        domains.items.updated += 1;
+        itemIdByExternal.set(item.externalCode, existing.id);
+        itemIdByKey.set(item.key, existing.id);
+        continue;
+      }
+      const code = await nextCode(
+        ITEM_CODE_SEQUENCE[item.type].sequence,
+        ITEM_CODE_SEQUENCE[item.type].prefix,
+        item.externalCode,
+      );
+      const id = write
+        ? (await prisma.item.create({ data: { ...data, code, externalCode: item.externalCode } })).id
+        : plannedId("item", item.externalCode);
+      itemIdByExternal.set(item.externalCode, id);
+      itemIdByKey.set(item.key, id);
+      domains.items.created += 1;
+    }
+  } else {
   for (const item of items) {
     const data = {
       name: item.name,
@@ -440,6 +590,7 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
     itemIdByExternal.set(item.externalCode, id);
     domains.items.created += 1;
   }
+  }
 
   /* ── 5. Produtos + item de produto acabado ─────────────── */
   const formulationRows = readFormulationRows(findings);
@@ -451,7 +602,140 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
     string,
     { id: string; finishedItemId: string; customerId: string | null }
   >();
+  let productReview: LeituraRevisada<ProdutoRevisado> | null = null;
 
+  if (review) {
+    const unidadesValidas = new Set(
+      (await prisma.unitOfMeasure.findMany({ select: { code: true } })).map((unidade) => unidade.code),
+    );
+    productReview = lerProdutosRevisados(
+      workbookObrigatorio(review, WORKBOOK_PRODUTOS),
+      unidadesValidas,
+      findings,
+    );
+    for (const chave of productReview.excluidos) {
+      // Produto e item de produto acabado são uma decisão só no workbook:
+      // excluir o produto exclui o par inteiro, sem cascata inventada.
+      findings.add(
+        "PRODUCT_REVIEW_NOT_IMPORTED",
+        "Product",
+        chave,
+        "marcado NAO_IMPORTAR na revisao — nem o produto nem o item de produto acabado sao criados",
+      );
+      domains.products.skipped += 1;
+      domains.finishedProductItems.skipped += 1;
+    }
+
+    for (const product of productReview.aprovados) {
+      if (customerReview?.excluidos.has(product.customerKey)) {
+        findings.add(
+          "PRODUCT_REVIEW_CUSTOMER_NOT_IMPORTED",
+          "Product",
+          `${product.key} → ${product.customerKey}`,
+          "produto aprovado aponta para cliente marcado NAO_IMPORTAR",
+        );
+        domains.products.skipped += 1;
+        continue;
+      }
+      const customerId = customerIdByKey.get(product.customerKey) ?? null;
+      if (!customerId) {
+        findings.add(
+          "PRODUCT_REVIEW_CUSTOMER_KEY_UNKNOWN",
+          "Product",
+          `${product.key} → ${product.customerKey}`,
+          "CHAVE_CLIENTE sem cliente aprovado no workbook de clientes",
+        );
+        domains.products.skipped += 1;
+        continue;
+      }
+
+      const existing = await prisma.product.findFirst({ where: { externalCode: product.externalCode } });
+      const dadosProduto = {
+        name: product.name,
+        dosageForm: product.dosageForm as never,
+        presentationType: product.presentationType as never,
+        capsulesPerDose: product.capsulesPerDose,
+        doseAmount: product.doseAmount,
+        doseUomCode: product.doseUomCode,
+        dosesPerPackage: product.dosesPerPackage,
+        unitsPerShippingBox: product.unitsPerShippingBox,
+        targetAgeGroup: product.targetAgeGroup as never,
+        shelfLifeMonths: product.shelfLifeMonths,
+        minimumBatchQuantity: product.minimumBatchQuantity,
+        notes: product.notes,
+        active: product.active,
+      };
+      const dadosItemPA = {
+        name: product.name,
+        unitCode: product.finishedUnitCode,
+        requiresCoa: product.finishedRequiresCoa,
+        active: product.active,
+      };
+
+      if (existing?.finishedProductItemId) {
+        if (write) {
+          await prisma.product.update({
+            where: { id: existing.id },
+            data: { ...dadosProduto, customerId },
+          });
+          await prisma.item.update({
+            where: { id: existing.finishedProductItemId },
+            data: dadosItemPA,
+          });
+        }
+        domains.products.updated += 1;
+        domains.finishedProductItems.updated += 1;
+        productByExternal.set(product.externalCode, {
+          id: existing.id,
+          finishedItemId: existing.finishedProductItemId,
+          customerId,
+        });
+        itemIdByKey.set(product.finishedItemKey, existing.finishedProductItemId);
+        continue;
+      }
+
+      // Produto acabado real precisa do próprio Item físico (1:1).
+      const finishedCode = await nextCode(
+        ITEM_CODE_SEQUENCE.FINISHED_PRODUCT.sequence,
+        ITEM_CODE_SEQUENCE.FINISHED_PRODUCT.prefix,
+        product.externalCode,
+      );
+      const finishedItemId = write
+        ? (
+            await prisma.item.create({
+              data: {
+                ...dadosItemPA,
+                code: finishedCode,
+                type: "FINISHED_PRODUCT",
+                controlsLot: true,
+                controlsExpiry: true,
+                requiresQualityRelease: true,
+              },
+            })
+          ).id
+        : plannedId("finished-item", product.externalCode);
+      domains.finishedProductItems.created += 1;
+
+      const productCode = await nextCode("product_code_seq", "PROD", product.externalCode);
+      const productId = write
+        ? (
+            await prisma.product.create({
+              data: {
+                ...dadosProduto,
+                code: productCode,
+                externalCode: product.externalCode,
+                finishedProductItemId: finishedItemId,
+                ...(isPlanned(customerId) ? {} : { customerId }),
+              },
+            })
+          ).id
+        : plannedId("product", product.externalCode);
+
+      domains.products.created += 1;
+      productByExternal.set(product.externalCode, { id: productId, finishedItemId, customerId });
+      itemIdByKey.set(product.finishedItemKey, finishedItemId);
+    }
+  } else {
   for (const product of products) {
     const existing = await prisma.product.findFirst({
       where: { externalCode: product.externalCode },
@@ -517,6 +801,7 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
       customerId,
     });
   }
+  }
 
   /* ── 6. Formulações ────────────────────────────────────── */
   const formulationDetail = { perDose: 0, fixedBasis: 0, withoutUsableRows: 0 };
@@ -561,6 +846,21 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
     for (const row of group.rows) {
       const mapped = itemByExternalCode.get(row.itemCode);
       const itemId = itemIdByExternal.get(row.itemCode);
+      /*
+       * Sem revisão, item que o corpus não resolve continua sendo salto mudo:
+       * é linha de formulação legada sem cadastro, e isso já sai como finding
+       * na etapa dos itens. Com revisão é outra coisa — a fórmula de um
+       * produto aprovado está pedindo um item que a Veridi tirou da carga, e
+       * isso ninguém pode resolver adivinhando um item parecido.
+       */
+      if (itemReview && !itemId && chaveDoItemLegado(row.itemCode, itemReview)) {
+        findings.add(
+          "FORMULATION_ITEM_NOT_IMPORTED",
+          "Formulation",
+          `${group.productCode} → ${row.itemCode}`,
+          "formula de produto aprovado usa item marcado NAO_IMPORTAR na revisao",
+        );
+      }
       if (!mapped || !itemId || usedItems.has(itemId)) continue;
       if (!row.legacyTotal || row.legacyTotal.lessThanOrEqualTo(0)) continue;
 
@@ -706,11 +1006,18 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
     const first = group.rows[0]!;
     const customerId = customerIdByExternal.get(group.customerExternalCode) ?? null;
     if (!customerId) {
+      const excluidoNaRevisao =
+        customerReview !== null &&
+        [...customerReview.excluidos].some(
+          (chave) => chave === `CLI-LEG-${group.customerExternalCode.padStart(4, "0")}`,
+        );
       findings.add(
-        "PROJECT_CUSTOMER_UNRESOLVED",
+        excluidoNaRevisao ? "PROJECT_CUSTOMER_NOT_IMPORTED" : "PROJECT_CUSTOMER_UNRESOLVED",
         "Project",
         group.key,
-        "cliente do projeto nao encontrado na base — projeto nao importado",
+        excluidoNaRevisao
+          ? "cliente do projeto foi marcado NAO_IMPORTAR na revisao — projeto nao importado"
+          : "cliente do projeto nao encontrado na base — projeto nao importado",
       );
       domains.projects.skipped += 1;
       continue;
@@ -991,9 +1298,57 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
       supplierId = supplierIdByName.get(supplierKey) ?? null;
     }
 
-    // Resolução do item: código legado direto ou override humano. Nunca
-    // criar Item a partir de uma linha de preço — preço isolado não é
-    // fonte suficiente para master data.
+    /*
+     * Resolução do item.
+     *
+     * Com revisão, vem da CHAVE_ITEM do 07 e o arquivo de override humano
+     * sai de cena: quem decide qual item é aquele preço é o workbook, e
+     * manter as duas fontes seria manter duas verdades.
+     */
+    let itemIdRevisado: string | null = null;
+    if (revisaoDaOferta) {
+      const chaveItem = campo(revisaoDaOferta, "CHAVE_ITEM");
+      if (!chaveItem) {
+        findings.add(
+          "SUPPLIER_ITEM_ITEM_KEY_UNKNOWN",
+          "SupplierItem",
+          revisaoDaOferta.chave,
+          "oferta aprovada sem CHAVE_ITEM",
+        );
+        domains.supplierItems.skipped += 1;
+        domains.supplierItemOffers.skipped += 1;
+        continue;
+      }
+      if (itemReview?.excluidos.has(chaveItem)) {
+        findings.add(
+          "SUPPLIER_ITEM_ITEM_NOT_IMPORTED",
+          "SupplierItem",
+          `${revisaoDaOferta.chave} → ${chaveItem}`,
+          "oferta aprovada aponta para item marcado NAO_IMPORTAR",
+        );
+        relacaoStats.orphan += 1;
+        domains.supplierItems.skipped += 1;
+        domains.supplierItemOffers.skipped += 1;
+        continue;
+      }
+      itemIdRevisado = itemIdByKey.get(chaveItem) ?? null;
+      if (!itemIdRevisado) {
+        findings.add(
+          "SUPPLIER_ITEM_ITEM_KEY_UNKNOWN",
+          "SupplierItem",
+          `${revisaoDaOferta.chave} → ${chaveItem}`,
+          "CHAVE_ITEM sem item aprovado nos workbooks de itens",
+        );
+        relacaoStats.orphan += 1;
+        domains.supplierItems.skipped += 1;
+        domains.supplierItemOffers.skipped += 1;
+        continue;
+      }
+    }
+
+    // Sem revisão: código legado direto ou override humano. Nunca criar Item
+    // a partir de uma linha de preço — preço isolado não é fonte suficiente
+    // para master data.
     const override = overrides.items.get(row.itemExternalCode);
     let item = dbItemByExternal.get(row.itemExternalCode) ?? null;
 
@@ -1024,7 +1379,7 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
       );
     }
 
-    if (!item) {
+    if (!item && !itemIdRevisado) {
       findings.add(
         "SUPPLIER_ITEM_ITEM_UNRESOLVED",
         "SupplierItem",
@@ -1054,15 +1409,16 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
       continue;
     }
 
-    const pairKey = `${item.id}::${supplierId}`;
+    const itemIdDaRelacao = itemIdRevisado ?? item!.id;
+    const pairKey = `${itemIdDaRelacao}::${supplierId}`;
     let supplierItemId = supplierItemIdByPair.get(pairKey);
 
     if (!supplierItemId) {
       const existing =
-        isPlanned(supplierId) || isPlanned(item.id)
+        isPlanned(supplierId) || isPlanned(itemIdDaRelacao)
           ? null
           : await prisma.supplierItem.findUnique({
-              where: { supplierId_itemId: { supplierId, itemId: item.id } },
+              where: { supplierId_itemId: { supplierId, itemId: itemIdDaRelacao } },
             });
 
       if (existing) {
@@ -1098,7 +1454,7 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
           ? (
               await prisma.supplierItem.create({
                 data: {
-                  itemId: item.id,
+                  itemId: itemIdDaRelacao,
                   supplierId,
                   ...relacao,
                   createdByNameSnapshot: ACTOR,
@@ -1155,7 +1511,7 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
     let offerNotes: string | null = row.sourceName;
 
     if (revisaoDaOferta) {
-      const precoRevisado = decimalRevisado(revisaoDaOferta, "PRECO");
+      const precoRevisado = numeroRevisado(revisaoDaOferta, "PRECO") ?? null;
       const unidadeRevisada = campo(revisaoDaOferta, "UNIDADE_DO_PRECO");
       if (!precoRevisado || !unidadeRevisada) {
         findings.add(
@@ -1169,7 +1525,7 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
       }
       unitPrice = precoRevisado;
       priceUomCode = unidadeRevisada;
-      moqQuantity = decimalRevisado(revisaoDaOferta, "PEDIDO_MINIMO");
+      moqQuantity = numeroRevisado(revisaoDaOferta, "PEDIDO_MINIMO") ?? null;
       moqUomCode = moqQuantity ? campo(revisaoDaOferta, "UNIDADE_PEDIDO_MINIMO") : null;
       if (moqQuantity && !moqUomCode) {
         findings.add(
@@ -1197,7 +1553,7 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
       const uomOverride = overrides.priceUoms.get(sourceKey);
       // O corpus só traz preço por quilo (header `preco_brl_kg`).
       priceUomCode = "kg";
-      const itemIsMass = MASS_UOM_CODES.has(item.unitCode);
+      const itemIsMass = MASS_UOM_CODES.has(item!.unitCode);
       if (!itemIsMass) {
         if (uomOverride?.action === "IGNORE_PRICE") {
           domains.supplierItemOffers.skipped += 1;
@@ -1218,13 +1574,13 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
             "SUPPLIER_PRICE_UOM_INCOMPATIBLE",
             "SupplierItemOffer",
             referencia,
-            `preco por kg em item na unidade ${item.unitCode} — oferta nao criada`,
+            `preco por kg em item na unidade ${item!.unitCode} — oferta nao criada`,
           );
           templates.incompatiblePriceUom.push({
             sourceKey,
             legacyItemCode: row.itemExternalCode,
-            itemCode: item.code,
-            itemUom: item.unitCode,
+            itemCode: item!.code,
+            itemUom: item!.unitCode,
             sourcePriceUom: "kg",
           });
           domains.supplierItemOffers.skipped += 1;
@@ -1244,23 +1600,23 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
 
       // Número puro assume a unidade do item — transformação conhecida e
       // aceita porque a oferta legada nunca vira preço vigente.
-      const moqUom = parsedMoq ? (parsedMoq.uomCode ?? item.unitCode) : null;
+      const moqUom = parsedMoq ? (parsedMoq.uomCode ?? item!.unitCode) : null;
       if (parsedMoq && parsedMoq.uomCode === null) {
         findings.add(
           "MOQ_ASSUMED_ITEM_UOM",
           "SupplierItemOffer",
           referencia,
-          `pedido minimo "${row.rawMinimumOrder}" interpretado como ${parsedMoq.quantity.toString()} ${item.unitCode}`,
+          `pedido minimo "${row.rawMinimumOrder}" interpretado como ${parsedMoq.quantity.toString()} ${item!.unitCode}`,
         );
       }
       const moqCompatible =
-        moqUom !== null && MASS_UOM_CODES.has(moqUom) === MASS_UOM_CODES.has(item.unitCode);
+        moqUom !== null && MASS_UOM_CODES.has(moqUom) === MASS_UOM_CODES.has(item!.unitCode);
       if (parsedMoq && !moqCompatible) {
         findings.add(
           "SUPPLIER_MOQ_UOM_INCOMPATIBLE",
           "SupplierItemOffer",
           referencia,
-          `pedido minimo "${row.rawMinimumOrder}" incompativel com a unidade do item (${item.unitCode}) — oferta sem MOQ`,
+          `pedido minimo "${row.rawMinimumOrder}" incompativel com a unidade do item (${item!.unitCode}) — oferta sem MOQ`,
         );
       }
       if (parsedMoq && moqCompatible) {
@@ -1410,8 +1766,25 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
             unchanged: supplierStats.unchanged,
             withAddress: supplierStats.withAddress,
           },
+          customers: {
+            approved: customerReview?.aprovados.length ?? 0,
+            excluded: customerReview?.excluidos.size ?? 0,
+          },
+          items: {
+            approved: itemReview?.aprovados.length ?? 0,
+            excluded: itemReview?.excluidos.size ?? 0,
+          },
+          products: {
+            approved: productReview?.aprovados.length ?? 0,
+            excluded: productReview?.excluidos.size ?? 0,
+          },
           supplierItems: relacaoStats,
-          blocked: supplierReview?.bloqueado ?? false,
+          blocked: Boolean(
+            supplierReview?.bloqueado ||
+              customerReview?.bloqueado ||
+              itemReview?.bloqueado ||
+              productReview?.bloqueado,
+          ),
         }
       : null,
     findings,
