@@ -1779,9 +1779,12 @@ Paginação: as quatro já paginavam no banco com total do `count`; nenhum corte
 nas listas. Cortes achados fora do escopo, sem correção:
 `ReceivePurchaseOrderPage.tsx` (Receber OC junta duas listas de 100) e
 `CommercialReports.tsx` R-14 (`listCustomerOrders({ pageSize: 100 })`, para
-REPORTS-PAGINATION-01). Achado de dado: a Sugestão de Compra grava
-`orderDate: new Date()` (instante) numa coluna de data civil — a OC gerada entre
-21h e 23h59 de São Paulo cai no dia seguinte do filtro.
+REPORTS-PAGINATION-01). O achado de dado da rodada — Sugestão de Compra gravando
+`orderDate: new Date()` — foi corrigido logo depois, em
+PURCHASE-SUGGESTION-BUSINESS-DATE-01: a OC gerada grava
+`marcadorDeHojeComercial()` (§81, "hoje implícito é o dia comercial"), e a OC
+manual abre o campo em `hojeComercial()` em vez do dia UTC. Seed e demo de dev
+foram junto. Sem backfill: OCs antigas ficam como estão.
 
 **Próximo:** UX-ACTIONS-FEEDBACK-WAVE-02.
 

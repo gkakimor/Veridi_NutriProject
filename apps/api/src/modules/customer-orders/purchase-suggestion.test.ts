@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
@@ -698,6 +698,110 @@ describe("Sugestão de Compra — geração de OC DRAFT", () => {
     });
     expect(response.statusCode).toBe(400);
     expect(response.json().error).toBe("order_not_in_fulfillment");
+
+    await app.close();
+  });
+});
+
+/**
+ * PURCHASE-SUGGESTION-BUSINESS-DATE-01 — a data do pedido da OC gerada é o
+ * DIA COMERCIAL.
+ *
+ * `PurchaseOrder.orderDate` é data civil: a OC manual grava a meia-noite UTC
+ * do dia escolhido, e a lista, a ficha, o CSV e o filtro por período leem
+ * esse marcador. A geração pela Sugestão gravava `new Date()` — um instante.
+ * Às 22:30 de São Paulo o instante já é o dia UTC seguinte, e a OC nascia
+ * "amanhã" no filtro e nos relatórios.
+ *
+ * Só o relógio (`Date`) é falso, e só durante a geração: o resto da fixture
+ * roda no tempo real.
+ */
+describe("Sugestão de Compra — data do pedido é o dia comercial", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function pedidoEmAtendimento(app: App) {
+    const rawMaterial = await createRawMaterial();
+    const { product } = await createProductWithFormulation(app, [
+      { itemId: rawMaterial.id, quantity: "10", unitCode: "kg" },
+    ]);
+    const customer = await createCustomer();
+    const order = await createConfirmedOrder(app, customer.id, [
+      { productId: product.id, orderedQuantity: "1" },
+    ]);
+    await applyPlan(app, order.id, [
+      { customerOrderLineId: order.lines[0].id, reserveQuantity: "0", produceQuantity: "1" },
+    ]);
+    return { orderId: order.id as string, itemId: rawMaterial.id };
+  }
+
+  /** Gera a OC com o relógio parado em `instante` e devolve o que ficou gravado. */
+  async function gerarOcEm(app: App, instante: string) {
+    const { orderId, itemId } = await pedidoEmAtendimento(app);
+    const supplier = await createSupplier();
+
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(instante));
+    const response = await app.inject({
+      method: "POST",
+      url: `/customer-orders/${orderId}/purchase-drafts`,
+      payload: { lines: [{ itemId, supplierId: supplier.id, quantity: "15" }] },
+    });
+    vi.useRealTimers();
+    expect(response.statusCode, response.body).toBe(201);
+
+    const poId = response.json().linkedPurchaseOrders[0].id as string;
+    const po = (await app.inject({ method: "GET", url: `/purchase-orders/${poId}` })).json();
+    const gravada = await getPrisma().purchaseOrder.findUniqueOrThrow({ where: { id: poId } });
+    return { supplierId: supplier.id, code: po.code as string, orderDate: po.orderDate as string, gravada };
+  }
+
+  async function codigosNoPeriodo(app: App, supplierId: string, dia: string) {
+    const resposta = await app.inject({
+      method: "GET",
+      url: `/purchase-orders?supplierId=${supplierId}&dateFrom=${dia}&dateTo=${dia}&pageSize=100`,
+    });
+    expect(resposta.statusCode, resposta.body).toBe(200);
+    return (resposta.json().purchaseOrders as { code: string }[]).map((po) => po.code);
+  }
+
+  it("A · 01:30 UTC (22:30 do dia anterior em São Paulo) grava o dia ANTERIOR", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const oc = await gerarOcEm(app, "2026-09-12T01:30:00.000Z");
+    expect(oc.orderDate).toBe("2026-09-11T00:00:00.000Z");
+
+    // O filtro do dia comercial acha a OC; o dia UTC seguinte, não.
+    expect(await codigosNoPeriodo(app, oc.supplierId, "2026-09-11")).toEqual([oc.code]);
+    expect(await codigosNoPeriodo(app, oc.supplierId, "2026-09-12")).toEqual([]);
+
+    await app.close();
+  });
+
+  it("B · horário diurno grava o dia comercial esperado", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    // 12:00 de 11/09 em São Paulo.
+    const oc = await gerarOcEm(app, "2026-09-11T15:00:00.000Z");
+    expect(oc.orderDate).toBe("2026-09-11T00:00:00.000Z");
+    expect(await codigosNoPeriodo(app, oc.supplierId, "2026-09-11")).toEqual([oc.code]);
+
+    await app.close();
+  });
+
+  it("C · o valor persistido é o marcador da data civil, não o carimbo do instante", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const oc = await gerarOcEm(app, "2026-09-12T01:30:00.000Z");
+    // Direto do banco, sem passar pelo DTO.
+    expect(oc.gravada.orderDate.toISOString()).toBe("2026-09-11T00:00:00.000Z");
+    expect(oc.gravada.orderDate.toISOString()).not.toBe("2026-09-12T01:30:00.000Z");
+    expect(oc.gravada.orderDate.getUTCHours()).toBe(0);
+    expect(oc.gravada.orderDate.getUTCMinutes()).toBe(0);
 
     await app.close();
   });

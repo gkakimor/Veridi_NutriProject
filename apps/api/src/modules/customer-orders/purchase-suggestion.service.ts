@@ -11,6 +11,7 @@ import type {
 } from "@veridi/shared";
 import { DEFAULT_OFFER_CURRENCY, PURCHASE_ORDER_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { marcadorDeHojeComercial } from "../../lib/business-day.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { getAvailableByItems, getConsumedByReservationLines, getOnOrderByItems, getReservedByItems } from "../../lib/inventory-ledger.js";
 import {
@@ -591,6 +592,16 @@ export async function generatePurchaseDrafts(
 
     const units = await tx.unitOfMeasure.findMany();
 
+    /*
+     * A data do pedido é DATA CIVIL: o marcador (meia-noite UTC) do dia
+     * comercial de hoje, igual ao que a OC manual grava a partir do
+     * `<input type="date">`. Era `new Date()` — um instante —, e a OC gerada
+     * entre 21:00 e 23:59 de São Paulo virava o dia UTC seguinte na lista, no
+     * filtro por período e nos relatórios. Uma data para todas as OCs desta
+     * geração.
+     */
+    const dataDoPedido = marcadorDeHojeComercial();
+
     for (const [supplierId, lines] of linesBySupplier) {
       const supplier = await assertSupplierActiveInTx(tx, supplierId);
 
@@ -612,7 +623,7 @@ export async function generatePurchaseDrafts(
       await createDraftPurchaseOrderInTx(tx, {
         code: purchaseOrderCodes.get(supplierId)!,
         supplier,
-        orderDate: new Date(),
+        orderDate: dataDoPedido,
         customerOrderId,
         lines: validatedLines,
       });

@@ -20,6 +20,7 @@ import {
   PURCHASE_ORDER_STATUS_LABELS,
   SUPPLIER_ITEM_QUALIFICATION_LABELS,
   calcularTotaisOrdemCompra,
+  hojeComercial,
 } from "@veridi/shared";
 import {
   cancelPurchaseOrder,
@@ -215,7 +216,11 @@ export function PurchaseOrderPage() {
   const [notFound, setNotFound] = useState(false);
 
   const [supplierId, setSupplierId] = useState("");
-  const [orderDate, setOrderDate] = useState(() => new Date().toISOString().slice(0, 10));
+  /*
+   * Nova OC abre na data de HOJE da operação. `new Date().toISOString()` é o
+   * dia UTC: entre 21:00 e 23:59 de São Paulo o campo já vinha com amanhã.
+   */
+  const [orderDate, setOrderDate] = useState(() => hojeComercial());
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<LineRow[]>([]);
