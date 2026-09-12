@@ -104,7 +104,23 @@ export function PricingPolicyDetailPage() {
 
   const [policy, setPolicy] = useState<PricingPolicyDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  /*
+   * A ação em curso pelo nome, não um booleano.
+   *
+   * O booleano desabilitava os três botões — certo — mas não sabia dizer qual
+   * deles está gravando, e "Salvando…" aparecia no botão errado. Com o nome
+   * em mãos, só o botão clicado troca de rótulo.
+   */
+  const [acaoEmCurso, setAcaoEmCurso] = useState<string | null>(null);
+  const saving = acaoEmCurso !== null;
+  /*
+   * O que a última ação gravou, no bloco que a disparou.
+   *
+   * Um estado só: salvar de novo substitui a frase, nunca empilha aviso. E
+   * cada bloco mostra o seu — "Rascunho salvo." não pode ser lido como
+   * "Versão ativada.".
+   */
+  const [feito, setFeito] = useState<{ bloco: string; texto: string } | null>(null);
   const [nome, setNome] = useState("");
   const [descricao, setDescricao] = useState("");
   const [linhas, setLinhas] = useState<LinhaFaixa[]>([]);
@@ -167,16 +183,24 @@ export function PricingPolicyDetailPage() {
 
   useEffect(() => load(), [load]);
 
-  async function run(action: () => Promise<unknown>) {
-    setSaving(true);
+  async function run(
+    acao: string,
+    action: () => Promise<unknown>,
+    sucesso?: { bloco: string; texto: string },
+  ) {
+    setAcaoEmCurso(acao);
     setError(null);
+    setFeito(null);
     try {
       await action();
       load();
+      // Só depois de a ação passar: erro que caísse aqui deixaria a tela
+      // dizendo "salvo" sobre o que não foi gravado.
+      if (sucesso) setFeito(sucesso);
     } catch (err) {
       setError(apiErrorMessage(err, "Falha ao executar a ação"));
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
@@ -211,6 +235,30 @@ export function PricingPolicyDetailPage() {
     substantivo: "política de precificação",
     genero: "a",
   });
+
+  /**
+   * A frase de estado do bloco: o que falta gravar, ou o que acabou de gravar.
+   *
+   * Pendência vem primeiro — uma confirmação de "salvo" ao lado de campo já
+   * alterado de novo mente sobre o que está no servidor.
+   */
+  function estadoDoBloco(bloco: string, alterado: boolean) {
+    if (alterado) {
+      return (
+        <span className="form-status form-status--dirty" role="status">
+          Alterações não salvas
+        </span>
+      );
+    }
+    if (feito?.bloco === bloco) {
+      return (
+        <span className="form-status" role="status">
+          {feito.texto}
+        </span>
+      );
+    }
+    return null;
+  }
 
   if (!policy) {
     return (
@@ -314,27 +362,42 @@ export function PricingPolicyDetailPage() {
             </div>
           </div>
           {canEdit && (
-            <div className="line-actions">
-              <button
-                type="button"
-                className="btn btn--secondary btn--sm"
-                disabled={saving}
-                onClick={() =>
-                  void run(() =>
-                    updatePricingPolicy(policy.id, { name: nome, description: descricao || null }),
-                  )
-                }
-              >
-                Salvar identificação
-              </button>
-              <button
-                type="button"
-                className="btn btn--ghost btn--sm"
-                disabled={saving}
-                onClick={() => void run(() => setPricingPolicyArchived(policy.id, !policy.archived))}
-              >
-                {policy.archived ? "Desarquivar" : "Arquivar"}
-              </button>
+            <div className="form-actions form-actions--split">
+              <div className="form-actions__group">
+                <button
+                  type="button"
+                  className="btn btn--secondary btn--sm"
+                  disabled={saving}
+                  onClick={() =>
+                    void run(
+                      "identificacao",
+                      () =>
+                        updatePricingPolicy(policy.id, {
+                          name: nome,
+                          description: descricao || null,
+                        }),
+                      { bloco: "identificacao", texto: "Identificação salva." },
+                    )
+                  }
+                >
+                  {acaoEmCurso === "identificacao" ? "Salvando…" : "Salvar identificação"}
+                </button>
+                {estadoDoBloco("identificacao", identificacaoAlterada)}
+              </div>
+              <div className="form-actions__group">
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  disabled={saving}
+                  onClick={() =>
+                    void run("arquivar", () =>
+                      setPricingPolicyArchived(policy.id, !policy.archived),
+                    )
+                  }
+                >
+                  {policy.archived ? "Desarquivar" : "Arquivar"}
+                </button>
+              </div>
             </div>
           )}
         </FormSection>
@@ -354,16 +417,21 @@ export function PricingPolicyDetailPage() {
                 Nenhuma delas muda quando esta política muda.
               </p>
             )}
+            {/* A ativação é confirmada AQUI: ao dar certo, o bloco do rascunho
+                deixa de existir e levaria a frase junto. */}
             {canEdit && !rascunho && (
-              <div className="line-actions">
+              <div className="form-actions">
                 <button
                   type="button"
                   className="btn btn--accent btn--sm"
                   disabled={saving}
-                  onClick={() => void run(() => createPolicyVersionFrom(ativa.id))}
+                  onClick={() =>
+                    void run("nova-versao", () => createPolicyVersionFrom(ativa.id))
+                  }
                 >
-                  Criar nova versão
+                  {acaoEmCurso === "nova-versao" ? "Criando…" : "Criar nova versão"}
                 </button>
+                {estadoDoBloco("versao-ativa", false)}
               </div>
             )}
           </FormSection>
@@ -475,74 +543,90 @@ export function PricingPolicyDetailPage() {
             )}
 
             {editavel && (
-              <div className="line-actions">
-                <button
-                  type="button"
-                  className="btn btn--secondary btn--sm"
-                  onClick={() =>
-                    setLinhas((atual) => [
-                      ...atual,
-                      {
-                        chave: `nova-${atual.length}-${Date.now()}`,
-                        quantity: "",
-                        targetContributionMarginPercent: "",
-                        commissionPercent: "5",
-                      },
-                    ])
-                  }
-                >
-                  + Adicionar faixa
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--secondary btn--sm"
-                  disabled={saving}
-                  onClick={() =>
-                    void run(() =>
-                      updatePricingPolicyVersion(rascunho.id, {
-                        // O Modelo inteiro vai junto, valores de modos
-                        // desligados inclusive — desligar não apaga.
-                        ...(modelo
-                          ? {
-                              pricingModel: modeloDoRascunho(modelo),
-                              applicableTaxProfiles: modelo.applicableTaxProfiles,
-                            }
-                          : {}),
-                        tiers: linhas
-                          .filter(
-                            (linha) => linha.quantity && linha.targetContributionMarginPercent,
-                          )
-                          .map(({ chave: _chave, ...resto }) => {
-                            // Comissão em branco continua em branco — só o
-                            // que foi digitado precisa ser legível.
-                            const comissao = exigirDecimalOpcional(
-                              resto.commissionPercent ?? "",
-                              "Comissão (%)",
-                            );
-                            return {
-                              ...resto,
-                              quantity: exigirDecimal(resto.quantity, "Quantidade"),
-                              targetContributionMarginPercent: exigirDecimal(
-                                resto.targetContributionMarginPercent,
-                                "Margem alvo (%)",
-                              ),
-                              ...(comissao === null ? {} : { commissionPercent: comissao }),
-                            };
+              <div className="form-actions form-actions--split">
+                <div className="form-actions__group">
+                  {/* Terciária: acrescentar faixa não grava nada. */}
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={() =>
+                      setLinhas((atual) => [
+                        ...atual,
+                        {
+                          chave: `nova-${atual.length}-${Date.now()}`,
+                          quantity: "",
+                          targetContributionMarginPercent: "",
+                          commissionPercent: "5",
+                        },
+                      ])
+                    }
+                  >
+                    + Adicionar faixa
+                  </button>
+                </div>
+                <div className="form-actions__group">
+                  {estadoDoBloco("rascunho", rascunhoAlterado)}
+                  <button
+                    type="button"
+                    className="btn btn--secondary btn--sm"
+                    // Sem alteração pendente não há o que gravar, e a gravação
+                    // em curso não aceita um segundo clique.
+                    disabled={saving || !rascunhoAlterado}
+                    onClick={() =>
+                      void run(
+                        "rascunho",
+                        () =>
+                          updatePricingPolicyVersion(rascunho.id, {
+                            // O Modelo inteiro vai junto, valores de modos
+                            // desligados inclusive — desligar não apaga.
+                            ...(modelo
+                              ? {
+                                  pricingModel: modeloDoRascunho(modelo),
+                                  applicableTaxProfiles: modelo.applicableTaxProfiles,
+                                }
+                              : {}),
+                            tiers: linhas
+                              .filter(
+                                (linha) => linha.quantity && linha.targetContributionMarginPercent,
+                              )
+                              .map(({ chave: _chave, ...resto }) => {
+                                // Comissão em branco continua em branco — só o
+                                // que foi digitado precisa ser legível.
+                                const comissao = exigirDecimalOpcional(
+                                  resto.commissionPercent ?? "",
+                                  "Comissão (%)",
+                                );
+                                return {
+                                  ...resto,
+                                  quantity: exigirDecimal(resto.quantity, "Quantidade"),
+                                  targetContributionMarginPercent: exigirDecimal(
+                                    resto.targetContributionMarginPercent,
+                                    "Margem alvo (%)",
+                                  ),
+                                  ...(comissao === null ? {} : { commissionPercent: comissao }),
+                                };
+                              }),
                           }),
-                      }),
-                    )
-                  }
-                >
-                  Salvar rascunho
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--accent btn--sm"
-                  disabled={saving || rascunho.tiers.length === 0}
-                  onClick={() => void run(() => activatePricingPolicyVersion(rascunho.id))}
-                >
-                  Ativar versão
-                </button>
+                        { bloco: "rascunho", texto: "Rascunho salvo." },
+                      )
+                    }
+                  >
+                    {acaoEmCurso === "rascunho" ? "Salvando…" : "Salvar rascunho"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--accent btn--sm"
+                    disabled={saving || rascunho.tiers.length === 0}
+                    onClick={() =>
+                      void run("ativar", () => activatePricingPolicyVersion(rascunho.id), {
+                        bloco: "versao-ativa",
+                        texto: "Versão ativada.",
+                      })
+                    }
+                  >
+                    {acaoEmCurso === "ativar" ? "Ativando…" : "Ativar versão"}
+                  </button>
+                </div>
               </div>
             )}
           </FormSection>

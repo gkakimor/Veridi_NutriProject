@@ -1603,6 +1603,48 @@ mesmo gate dos Perfis de Produção. **Próximo:** PLANNING-CAPACITY-BOARD-01
 (capacidade de recurso, início/fim previstos da OP e quadro dia/semana), que
 é onde `IndustrialResource.capacityQuantity` e a agenda da OP entram.
 
+## A opção é a linha, e gravar responde (UX-ACTIONS-FEEDBACK-01, 2026-09-12)
+
+Política de Precificação como implementação de referência; o padrão ficou em
+`components.css` para as próximas telas. Nada de cálculo, regra ou
+persistência mudou.
+
+**`.selection-row` — a opção é uma linha inteira.** Custo industrial e
+Impostos estimados eram `.field-grid-2`: radio à esquerda, campo do modo na
+outra metade de uma tela de 1300px, e nada além da bolinha dizendo o que
+estava escolhido. Agora rótulo e campo ficam lado a lado sob um teto de
+640px, o rótulo cobre a coluna toda (clicar no texto escolhe) e "escolhida"
+muda fundo, borda **e** peso do rótulo — cor sozinha não comunica estado. O
+radio continua sendo o indicador semântico; o campo do modo desligado
+continua desabilitado com o valor guardado.
+
+**Custos externos viraram um bloco só** — caixa, título e explicação —, com a
+explicação em `aria-describedby` para não ser engolida pelo nome acessível
+do controle. Perfis tributários ganharam a variante `--plain`: alinhamento,
+não card. Semântica e regra de compatibilidade intactas.
+
+**`.form-actions` — barra de ações de formulário.** Mesmo gap e mesma quebra
+da `.doc-actions`, com `--split` e `__group`; em 480px os grupos ocupam a
+linha e os botões esticam, sem encolher fonte. As três ações do rascunho
+deixaram de ter peso igual: `+ Adicionar faixa` terciária (ghost), `Salvar
+rascunho` secundária, `Ativar versão` de commit (accent). **Não houve regra
+global**: `.line-actions` — só `margin-top`, sem gap — continua como está
+nos outros ~27 blocos com botões irmãos encostados, listados para a onda
+seguinte.
+
+**Gravar responde.** `Salvando…` no botão que está gravando (e só nele:
+`saving` virou o NOME da ação em curso), desabilitado contra clique duplo, e
+`Rascunho salvo.` no fim — uma frase, `role="status"`, sem modal e sem
+empilhar. Erro continua em `role="alert"` e nunca vira sucesso. Sem
+alteração pendente o botão fica desabilitado, pela mesma pendência que o
+UNSAVED-CHANGES-WAVE-04 já calcula — nenhum `dirty` paralelo. Save parcial
+preservado: gravar o rascunho não absolve o nome trocado. `Ativar versão`
+segue independente e confirma com **outra** frase, exibida na Versão ativa
+porque o bloco do rascunho deixa de existir ao ativar.
+
+**Próximo:** UX-ACTIONS-FEEDBACK-WAVE-02 — migrar os `.line-actions` com
+botões irmãos, a começar por Projetos (4 botões), Modelos e Formulação (3).
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

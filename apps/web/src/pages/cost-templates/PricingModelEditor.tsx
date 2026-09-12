@@ -29,6 +29,23 @@ import { assinaturaDoDocumento, decimalComparavel } from "../../lib/dirty-fields
  * o valor digitado continua ali e volta a valer quando o modo voltar.
  */
 
+/**
+ * As classes de uma linha de escolha.
+ *
+ * "Escolhido" não é só cor: fundo, borda E peso do rótulo mudam juntos, e o
+ * próprio radio/checkbox continua sendo o indicador semântico que leitor de
+ * tela e teclado usam.
+ */
+function linhaDeEscolha(escolhido: boolean, desabilitado: boolean): string {
+  return [
+    "selection-row",
+    escolhido ? "selection-row--selected" : "",
+    desabilitado ? "selection-row--disabled" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 type ValoresDigitados = Record<PricingModelValueField, string>;
 
 export interface PricingModelDraft extends ValoresDigitados {
@@ -129,38 +146,52 @@ export function PricingModelEditor({ draft, disabled, onChange }: Props) {
     return (
       <fieldset className="field">
         <legend>{opcoes.legenda}</legend>
-        {opcoes.modos.map((modo) => {
-          const campo = opcoes.campoDoModo[modo];
-          return (
-            <div key={modo} className="field-grid-2">
-              <label className="checkbox">
-                <input
-                  type="radio"
-                  name={opcoes.nome}
-                  value={modo}
-                  checked={opcoes.atual === modo}
-                  disabled={disabled}
-                  onChange={() => opcoes.escolher(modo)}
-                />
-                {opcoes.rotulos[modo]}
-              </label>
-              {campo ? (
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  aria-label={PRICING_MODEL_VALUE_LABELS[campo]}
-                  // Só o valor do modo escolhido vale; os outros ficam
-                  // guardados, visíveis e intocados.
-                  disabled={disabled || opcoes.atual !== modo}
-                  value={draft[campo]}
-                  onChange={(event) => onChange({ ...draft, [campo]: event.target.value })}
-                />
-              ) : (
-                <span aria-hidden="true" />
-              )}
-            </div>
-          );
-        })}
+        <div className="selection-group">
+          {opcoes.modos.map((modo) => {
+            const campo = opcoes.campoDoModo[modo];
+            const escolhido = opcoes.atual === modo;
+            return (
+              <div
+                key={modo}
+                className={linhaDeEscolha(escolhido, disabled)}
+                data-selected={escolhido ? "true" : "false"}
+              >
+                {/* O rótulo é a área clicável da opção: quem lê "R$ total" não
+                    tem de acertar a bolinha. Sem campo próprio, ele ocupa a
+                    linha inteira. */}
+                <label
+                  className={
+                    campo
+                      ? "selection-row__label"
+                      : "selection-row__label selection-row__label--full"
+                  }
+                >
+                  <input
+                    type="radio"
+                    name={opcoes.nome}
+                    value={modo}
+                    checked={escolhido}
+                    disabled={disabled}
+                    onChange={() => opcoes.escolher(modo)}
+                  />
+                  {opcoes.rotulos[modo]}
+                </label>
+                {campo && (
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    aria-label={PRICING_MODEL_VALUE_LABELS[campo]}
+                    // Só o valor do modo escolhido vale; os outros ficam
+                    // guardados, visíveis e intocados.
+                    disabled={disabled || !escolhido}
+                    value={draft[campo]}
+                    onChange={(event) => onChange({ ...draft, [campo]: event.target.value })}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
         <p className="field__hint">{opcoes.dica}</p>
         {externo && (
           <p className="field__hint">
@@ -196,43 +227,62 @@ export function PricingModelEditor({ draft, disabled, onChange }: Props) {
         dica: "O percentual sobre o preço de venda entra na formação do preço junto com margem e comissão; R$ por unidade e R$ total somam ao custo. O ERP não calcula imposto: o valor vem da Veridi.",
       })}
 
+      {/* Caixa, título e explicação como uma unidade: soltos, a caixa parecia
+          pertencer ao bloco de cima e a explicação a ninguém. A explicação vai
+          por `aria-describedby`, e não engolida pelo nome da caixa. */}
       <div className="field">
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={externo}
-            disabled={disabled}
-            onChange={(event) => onChange({ ...draft, externalAdditionalCosts: event.target.checked })}
-          />
-          Custos adicionais administrados externamente
-        </label>
-        <p className="field__hint">
-          Ligado: custo industrial e impostos deste Modelo ficam fora da conta, sem apagar os valores
-          acima. O custo de materiais continua sendo calculado, e margem e comissão continuam no
-          preço.
-        </p>
+        <div className={linhaDeEscolha(externo, disabled)} data-selected={externo ? "true" : "false"}>
+          <label className="selection-row__label selection-row__label--full">
+            <input
+              type="checkbox"
+              checked={externo}
+              disabled={disabled}
+              aria-describedby="tpp-custos-externos-ajuda"
+              onChange={(event) =>
+                onChange({ ...draft, externalAdditionalCosts: event.target.checked })
+              }
+            />
+            Custos adicionais administrados externamente
+          </label>
+          <p className="selection-row__hint" id="tpp-custos-externos-ajuda">
+            Ligado: custo industrial e impostos deste Modelo ficam fora da conta, sem apagar os
+            valores acima. O custo de materiais continua sendo calculado, e margem e comissão
+            continuam no preço.
+          </p>
+        </div>
       </div>
 
       <fieldset className="field">
         <legend>Perfis tributários aplicáveis</legend>
-        {PRICING_MODEL_TAX_PROFILES.map((perfil) => (
-          <label key={perfil} className="checkbox">
-            <input
-              type="checkbox"
-              checked={draft.applicableTaxProfiles.includes(perfil)}
-              disabled={disabled}
-              onChange={(event) =>
-                onChange({
-                  ...draft,
-                  applicableTaxProfiles: event.target.checked
-                    ? [...draft.applicableTaxProfiles, perfil]
-                    : draft.applicableTaxProfiles.filter((atual) => atual !== perfil),
-                })
-              }
-            />
-            {CUSTOMER_TAX_PROFILE_LABELS[perfil]}
-          </label>
-        ))}
+        <div className="selection-group">
+          {PRICING_MODEL_TAX_PROFILES.map((perfil) => {
+            const marcado = draft.applicableTaxProfiles.includes(perfil);
+            return (
+              <div
+                key={perfil}
+                className={linhaDeEscolha(marcado, disabled) + " selection-row--plain"}
+                data-selected={marcado ? "true" : "false"}
+              >
+                <label className="selection-row__label selection-row__label--full">
+                  <input
+                    type="checkbox"
+                    checked={marcado}
+                    disabled={disabled}
+                    onChange={(event) =>
+                      onChange({
+                        ...draft,
+                        applicableTaxProfiles: event.target.checked
+                          ? [...draft.applicableTaxProfiles, perfil]
+                          : draft.applicableTaxProfiles.filter((atual) => atual !== perfil),
+                      })
+                    }
+                  />
+                  {CUSTOMER_TAX_PROFILE_LABELS[perfil]}
+                </label>
+              </div>
+            );
+          })}
+        </div>
         <p className="field__hint">
           {draft.applicableTaxProfiles.length === 0
             ? "Nenhum marcado: indicado para todos os perfis."
