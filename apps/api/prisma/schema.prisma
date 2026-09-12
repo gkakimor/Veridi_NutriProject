@@ -2143,6 +2143,20 @@ model Supplier {
   cnpj  String?
   email String?
   phone String?
+
+  /// Endereco estruturado, mesmo modelo do Cliente. Todos opcionais:
+  /// fornecedor sem endereco continua valido e nao bloqueia homologacao,
+  /// oferta, Ordem de Compra nem Recebimento. Cadastro complementar.
+  street     String?
+  number     String?
+  complement String?
+  district   String?
+  /// Somente digitos quando informado (a formatacao 00000-000 e da UI).
+  zipCode    String?
+  city       String?
+
+  /// UF brasileira, sempre maiuscula.
+  state String?
   notes String?
 
   active Boolean @default(true)

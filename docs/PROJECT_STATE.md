@@ -1334,8 +1334,17 @@ Gravar os campos do item com um custo digitado ao lado não libera a saída — 
 pendência é a soma, e cada parcela some quando o seu botão grava. Mesma regra
 do detalhe de Item × Fornecedor.
 
-Fornecedor segue com os seis campos que tem hoje; SUPPLIER-ADDRESS-01 não foi
-antecipado.
+**Endereço do Fornecedor (SUPPLIER-ADDRESS-01, 2026-09-11).** O Fornecedor
+passou a ter o MESMO endereço estruturado do Cliente — `street`, `number`,
+`complement`, `district`, `zipCode`, `city`, `state` —, todos opcionais e com
+as mesmas validações (CEP só dígitos, UF maiúscula da lista brasileira). O
+cadastro continua completo sem endereço: homologação, oferta, preferência,
+Ordem de Compra e Recebimento não passaram a exigir nada. O bloco entrou na
+guarda de alterações não salvas junto com os outros campos, e a consulta de
+CEP é a mesma do Cliente, com a mesma regra de que o endereço pertence a UM
+CEP. Nenhum PDF mudou, e nenhum dado legado foi preenchido — o workbook de
+Fornecedores será regenerado em MIGRATION-PACK-REVIEW-02 para a Veridi
+enriquecer os campos à mão.
 
 ## Próxima prioridade
 

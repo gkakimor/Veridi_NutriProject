@@ -16,9 +16,10 @@ import type { SupplierDTO } from "@veridi/shared";
  *
  * Duas portas, um controller (`useSupplierForm`) — a guarda mora nele.
  *
- * São os seis campos que o cadastro tem HOJE: razão social, nome fantasia,
- * CNPJ, e-mail, telefone e notas. Endereço de fornecedor não existe nesta
- * tela, e antecipá-lo aqui seria proteger campo que ninguém vê.
+ * São os campos que o cadastro tem HOJE: razão social, nome fantasia, CNPJ,
+ * e-mail, telefone, ENDEREÇO (SUPPLIER-ADDRESS-01) e notas. O endereço é
+ * opcional no domínio e isso não o tira da guarda: campo opcional digitado e
+ * perdido na saída é perdido do mesmo jeito.
  */
 
 vi.mock("../../lib/suppliers-api", () => ({
@@ -40,6 +41,13 @@ function fornecedor(overrides: Partial<SupplierDTO> = {}): SupplierDTO {
     cnpj: null,
     email: null,
     phone: null,
+    street: null,
+    number: null,
+    complement: null,
+    district: null,
+    zipCode: null,
+    city: null,
+    state: null,
     notes: null,
     active: true,
     createdAt: "2026-08-31T17:32:00.000Z",
@@ -102,6 +110,8 @@ const pergunta = () => screen.queryByRole("alertdialog");
 const menu = () => screen.getByRole("link", { name: "Painel" });
 const razaoSocial = () => campo("supplier-legal-name");
 const notas = () => campo("supplier-notes");
+const logradouro = () => campo("supplier-street");
+const cidade = () => campo("supplier-city");
 
 /** O aviso nativo de F5 / fechar aba só existe quando alguém o registra. */
 function avisaAoFechar(): boolean {
@@ -166,6 +176,24 @@ describe("Fornecedor novo — guarda de alterações não salvas", () => {
     expect(await screen.findByRole("heading", { name: "Painel" })).toBeInTheDocument();
   });
 
+  it("endereço digitado marca alteração pendente, e revertido volta a limpo", async () => {
+    const user = userEvent.setup();
+    await abrirPagina();
+
+    fireEvent.change(logradouro(), { target: { value: "Rua Vicente José de Almeida" } });
+    await waitFor(() => expect(avisaAoFechar()).toBe(true));
+
+    // Apagar de volta é voltar ao formulário como ele abriu — e abrir não é
+    // alterar.
+    fireEvent.change(logradouro(), { target: { value: "" } });
+    await waitFor(() => expect(avisaAoFechar()).toBe(false));
+
+    fireEvent.change(cidade(), { target: { value: "São Paulo" } });
+    await user.click(menu());
+
+    expect(await screen.findByText("Sair sem salvar?")).toBeInTheDocument();
+  });
+
   it("o aviso do navegador acompanha a digitação", async () => {
     await abrirPagina();
 
@@ -213,6 +241,40 @@ describe("Fornecedor — modal de edição", () => {
     await user.keyboard("{Escape}");
     expect(await screen.findAllByText("Sair sem salvar?")).toHaveLength(1);
     expect(fechou).toBe(false);
+  });
+
+  it("endereço carregado abre limpo e alterado passa pela pergunta", async () => {
+    const user = userEvent.setup();
+    await abrirModalDeEdicao(
+      fornecedor({
+        zipCode: "04816100",
+        street: "Rua Vicente José de Almeida",
+        city: "São Paulo",
+        state: "SP",
+      }),
+    );
+
+    // O CEP entra com máscara e o resto vem do registro: nada disso é edição.
+    expect(campo("supplier-zip").value).toBe("04816-100");
+    expect(avisaAoFechar()).toBe(false);
+
+    fireEvent.change(cidade(), { target: { value: "Campinas" } });
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(await screen.findByText("Sair sem salvar?")).toBeInTheDocument();
+  });
+
+  it("salvar limpa a pendência do endereço", async () => {
+    const user = userEvent.setup();
+    await abrirModalDeEdicao();
+
+    fireEvent.change(cidade(), { target: { value: "Campinas" } });
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    await waitFor(() => expect(updateSupplier).toHaveBeenCalledTimes(1));
+
+    await user.click(menu());
+    expect(await screen.findByRole("heading", { name: "Painel" })).toBeInTheDocument();
+    expect(pergunta()).toBeNull();
   });
 
   it("salvar limpa a pendência", async () => {

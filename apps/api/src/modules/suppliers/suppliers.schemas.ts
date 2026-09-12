@@ -1,6 +1,25 @@
 import { z } from "zod";
 import { optionalCnpjSchema, optionalNullableText } from "../../lib/cnpj-schema.js";
 import { optionalBrPhoneSchema, optionalEmailSchema } from "../../lib/contact-schema.js";
+import { optionalBrState, optionalZipCode } from "../../lib/industrial-schema.js";
+
+/**
+ * Endereço do Fornecedor — os MESMOS limites e as MESMAS regras do Cliente.
+ *
+ * Todos opcionais: fornecedor existe sem endereço, e campo enviado vazio
+ * persiste como `null`. Nada aqui é mais rígido que no Cliente de propósito —
+ * uma UF que passa num cadastro e é recusada no outro é defeito, não regra de
+ * domínio.
+ */
+const addressShape = {
+  street: optionalNullableText(200),
+  number: optionalNullableText(20),
+  complement: optionalNullableText(100),
+  district: optionalNullableText(100),
+  zipCode: optionalZipCode,
+  city: optionalNullableText(100),
+  state: optionalBrState,
+};
 
 export const createSupplierSchema = z.object({
   legalName: z.string().trim().min(1, "Razão social é obrigatória").max(200),
@@ -8,6 +27,7 @@ export const createSupplierSchema = z.object({
   cnpj: optionalCnpjSchema,
   email: optionalEmailSchema,
   phone: optionalBrPhoneSchema,
+  ...addressShape,
   notes: optionalNullableText(1000),
 });
 
@@ -22,6 +42,7 @@ export const updateSupplierSchema = z.object({
   cnpj: optionalCnpjSchema,
   email: optionalEmailSchema,
   phone: optionalBrPhoneSchema,
+  ...addressShape,
   notes: optionalNullableText(1000),
 });
 

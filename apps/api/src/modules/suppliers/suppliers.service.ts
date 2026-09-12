@@ -15,6 +15,36 @@ import type {
 
 const CODE_SEQUENCE = "supplier_code_seq";
 
+/**
+ * Os campos de endereço, na ordem do formulário.
+ *
+ * Uma lista só: o DTO, o create e o update leem dela. Campo acrescentado ao
+ * endereço entra nos três caminhos de uma vez — a alternativa é o campo que
+ * grava mas não volta na leitura, e isso só aparece meses depois.
+ */
+const ADDRESS_FIELDS = [
+  "street",
+  "number",
+  "complement",
+  "district",
+  "zipCode",
+  "city",
+  "state",
+] as const;
+
+type AddressField = (typeof ADDRESS_FIELDS)[number];
+
+/** O que veio no payload, só as chaves presentes — ausente não mexe no gravado. */
+function addressData(
+  input: { [K in AddressField]?: string | null | undefined },
+): Record<string, string | null> {
+  const data: Record<string, string | null> = {};
+  for (const field of ADDRESS_FIELDS) {
+    if (input[field] !== undefined) data[field] = input[field] as string | null;
+  }
+  return data;
+}
+
 function toSupplierDTO(supplier: Supplier): SupplierDTO {
   return {
     id: supplier.id,
@@ -24,6 +54,13 @@ function toSupplierDTO(supplier: Supplier): SupplierDTO {
     cnpj: supplier.cnpj,
     email: supplier.email,
     phone: supplier.phone,
+    street: supplier.street,
+    number: supplier.number,
+    complement: supplier.complement,
+    district: supplier.district,
+    zipCode: supplier.zipCode,
+    city: supplier.city,
+    state: supplier.state,
     notes: supplier.notes,
     active: supplier.active,
     createdAt: supplier.createdAt.toISOString(),
@@ -105,6 +142,7 @@ export async function createSupplier(
         ...(input.cnpj !== undefined ? { cnpj: input.cnpj } : {}),
         ...(input.email !== undefined ? { email: input.email } : {}),
         ...(input.phone !== undefined ? { phone: input.phone } : {}),
+        ...addressData(input),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
       },
     });
@@ -133,6 +171,7 @@ export async function updateSupplier(
         ...(input.cnpj !== undefined ? { cnpj: input.cnpj } : {}),
         ...(input.email !== undefined ? { email: input.email } : {}),
         ...(input.phone !== undefined ? { phone: input.phone } : {}),
+        ...addressData(input),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
       },
     });
