@@ -16,7 +16,7 @@ import type {
 } from "@veridi/shared";
 
 /**
- * UNSAVED-CHANGES-FOUNDATION-01 no Perfil de Produção.
+ * UNSAVED-CHANGES-FOUNDATION-01 no Roteiro de Produção.
  *
  * A tela já compara a assinatura do rascunho com a do que está gravado — é
  * dela que sai o aviso "Alterações não salvas". A guarda de saída usa a MESMA
@@ -153,7 +153,7 @@ async function abrir() {
   );
   render(<RouterProvider router={router} />);
   await screen.findByRole("heading", { name: /PPR-000001/ });
-  await waitFor(() => expect(screen.getByLabelText("Quantidade-base")).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByLabelText("Quantidade de referência")).toBeInTheDocument());
 }
 
 const pergunta = () => screen.queryByRole("alertdialog");
@@ -169,8 +169,8 @@ beforeEach(() => {
   });
 });
 
-describe("Perfil de Produção — guarda de alterações não salvas", () => {
-  it("perfil carregado e não tocado sai sem perguntar", async () => {
+describe("Roteiro de Produção — guarda de alterações não salvas", () => {
+  it("roteiro carregado e não tocado sai sem perguntar", async () => {
     const user = userEvent.setup();
     await abrir();
 
@@ -180,16 +180,16 @@ describe("Perfil de Produção — guarda de alterações não salvas", () => {
     expect(pergunta()).toBeNull();
   });
 
-  it("alterar a quantidade-base pergunta antes de sair", async () => {
+  it("alterar a quantidade de referência pergunta antes de sair", async () => {
     const user = userEvent.setup();
     await abrir();
 
-    fireEvent.change(screen.getByLabelText("Quantidade-base"), { target: { value: "500" } });
+    fireEvent.change(screen.getByLabelText("Quantidade de referência"), { target: { value: "500" } });
     await user.click(menuPedidos());
 
     expect(await screen.findByText("Sair sem salvar?")).toBeInTheDocument();
     expect(
-      screen.getByText(/alterações não salvas neste perfil de produção/i),
+      screen.getByText(/alterações não salvas neste roteiro de produção/i),
     ).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Pedidos" })).toBeNull();
   });

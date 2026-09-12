@@ -12,11 +12,12 @@ import { LibraryPagination } from "../cost-templates/TemplateLibraryTable";
 import "./planning.css";
 
 /**
- * Planejamento → Perfis de Produção.
+ * Planejamento → Roteiros de Produção.
  *
  * Roteiros reutilizáveis de COMO se produz (`PRODUCT_RULES.md` §89). Não é
  * Formulação nem Estrutura de Custos — nada aqui move estoque, custo ou
- * ordem de produção.
+ * ordem de produção. O nome técnico continua `ProductionProfile`: só a
+ * palavra que o usuário lê mudou (PRODUCTION-ROUTE-UX-01).
  */
 
 const PAGE_SIZE = 20;
@@ -51,7 +52,7 @@ export function ProductionProfilesPage() {
         setProfiles(result.profiles);
         setTotal(result.total);
       })
-      .catch((err: unknown) => setError(apiErrorMessage(err, "Falha ao carregar os perfis")))
+      .catch((err: unknown) => setError(apiErrorMessage(err, "Falha ao carregar os roteiros")))
       .finally(() => setLoading(false));
   }, [page, search]);
 
@@ -66,7 +67,7 @@ export function ProductionProfilesPage() {
       const perfil = await createProductionProfile({ name: nome });
       navigate(`/planejamento/perfis-producao/${perfil.id}`);
     } catch (err) {
-      setError(apiErrorMessage(err, "Falha ao criar o perfil"));
+      setError(apiErrorMessage(err, "Falha ao criar o roteiro"));
     } finally {
       setSaving(false);
     }
@@ -76,16 +77,16 @@ export function ProductionProfilesPage() {
     <>
       <div className="page__header">
         <div>
-          <h1 className="page__title">Perfis de Produção</h1>
+          <h1 className="page__title">Roteiros de Produção</h1>
           <p className="page__subtitle">
-            Como cada produto é normalmente produzido: etapas em ordem, tempo de preparação e de
-            execução e os recursos que cada etapa ocupa ao mesmo tempo. Não é Formulação nem
-            Estrutura de Custos.
+            Como o produto é fabricado: as etapas em ordem, os tempos e os recursos que cada etapa
+            ocupa ao mesmo tempo. A Formulação diz o que entra no produto; o roteiro diz como a
+            fabricação acontece. O mesmo roteiro serve a vários produtos.
           </p>
         </div>
         {canEdit && (
           <button type="button" className="btn btn--accent" onClick={() => setCreating(true)}>
-            Novo perfil
+            Novo roteiro
           </button>
         )}
       </div>
@@ -94,7 +95,7 @@ export function ProductionProfilesPage() {
 
       {creating && (
         <div className="inline-form">
-          <label htmlFor="production-profile-name">Nome do perfil</label>
+          <label htmlFor="production-profile-name">Nome do roteiro</label>
           <input
             id="production-profile-name"
             type="text"
@@ -122,7 +123,7 @@ export function ProductionProfilesPage() {
       )}
 
       <div className="field planning-search">
-        <label htmlFor="production-profiles-search">Buscar perfis</label>
+        <label htmlFor="production-profiles-search">Buscar roteiros</label>
         <input
           id="production-profiles-search"
           type="search"
@@ -145,7 +146,7 @@ export function ProductionProfilesPage() {
               <th>Código</th>
               <th>Nome</th>
               <th>Versão ativa</th>
-              <th className="is-numeric">Quantidade-base</th>
+              <th className="is-numeric">Quantidade de referência</th>
               <th className="is-numeric">Etapas</th>
               <th className="is-numeric">Produtos</th>
               <th>Atualização</th>
@@ -192,8 +193,8 @@ export function ProductionProfilesPage() {
               <tr>
                 <td colSpan={8} className="table__empty">
                   {search
-                    ? "Nenhum perfil encontrado para esta busca."
-                    : "Nenhum Perfil de Produção ainda. Crie o primeiro roteiro."}
+                    ? "Nenhum roteiro encontrado para esta busca."
+                    : "Nenhum Roteiro de Produção ainda. Crie o primeiro."}
                 </td>
               </tr>
             )}

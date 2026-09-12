@@ -61,7 +61,7 @@ export function ProductionPlanningSection({ order, quantityDraft, onApplied }: P
       onApplied(await applyProductionProfile(order.id));
       setConfirmarAtualizacao(false);
     } catch (error) {
-      setErro(apiErrorMessage(error, "Não foi possível aplicar o perfil de produção."));
+      setErro(apiErrorMessage(error, "Não foi possível aplicar o roteiro de produção."));
     } finally {
       setAplicando(false);
     }
@@ -74,19 +74,19 @@ export function ProductionPlanningSection({ order, quantityDraft, onApplied }: P
       title="Planejamento previsto"
       subtitle={
         snapshot
-          ? "Cópia do perfil de produção congelada nesta ordem. Ativar uma versão nova do perfil não altera o que está aqui."
-          : "Cópia do perfil de produção do produto, tirada na criação da ordem."
+          ? "Cópia do roteiro de produção congelada nesta ordem. Ativar uma versão nova do roteiro não altera o que está aqui."
+          : "Cópia do roteiro de produção do produto, tirada na criação da ordem."
       }
     >
       {erro && <p className="form-error">{erro}</p>}
 
       {!snapshot && (
         <>
-          <p className="field__hint">Sem perfil de produção aplicado.</p>
+          <p className="field__hint">Sem roteiro de produção aplicado.</p>
           {canApply && availableProfile && (
             <p>
               <button type="button" className="btn btn--ghost" disabled={aplicando} onClick={aplicar}>
-                Aplicar perfil de produção
+                Aplicar roteiro de produção
               </button>{" "}
               <span className="field__hint">
                 {availableProfile.profileCode} · V{availableProfile.versionNumber} —{" "}
@@ -122,7 +122,7 @@ export function ProductionPlanningSection({ order, quantityDraft, onApplied }: P
 
           {canUpdate && availableProfile && (
             <p className="field__hint">
-              Há uma versão mais recente do perfil disponível ({availableProfile.profileCode} · V
+              Há uma versão mais recente do roteiro disponível ({availableProfile.profileCode} · V
               {availableProfile.versionNumber}).{" "}
               <button
                 type="button"
@@ -130,7 +130,7 @@ export function ProductionPlanningSection({ order, quantityDraft, onApplied }: P
                 disabled={aplicando}
                 onClick={() => setConfirmarAtualizacao(true)}
               >
-                Atualizar perfil
+                Atualizar roteiro
               </button>
             </p>
           )}
@@ -217,9 +217,9 @@ export function ProductionPlanningSection({ order, quantityDraft, onApplied }: P
 
       <ConfirmDialog
         open={confirmarAtualizacao}
-        title="Atualizar perfil de produção?"
+        title="Atualizar roteiro de produção?"
         confirmTone="accent"
-        confirmLabel="Atualizar perfil de produção"
+        confirmLabel="Atualizar roteiro de produção"
         message={
           <p>
             O planejamento previsto desta ordem passa a ser a cópia de{" "}

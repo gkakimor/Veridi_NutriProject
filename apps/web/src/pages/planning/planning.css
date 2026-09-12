@@ -1,5 +1,5 @@
 /*
- * Planejamento → Perfis de Produção.
+ * Planejamento → Roteiros de Produção.
  *
  * Etapa é CARTÃO, não linha de tabela: cada valor técnico leva o próprio
  * rótulo, e em tela estreita (390px) os campos empilham sem rolagem lateral.
@@ -120,6 +120,52 @@
   overflow-wrap: anywhere;
 }
 
+/*
+ * O que ainda não existe, dito como falta e não como vazio.
+ *
+ * Lista sem etapa e catálogo sem recurso não são erro: são o começo. O bloco
+ * diz o que falta, dá um exemplo e oferece a ação — em vez de uma linha cinza
+ * que a pessoa lê como "a tela quebrou".
+ */
+.profile-empty {
+  display: grid;
+  justify-items: start;
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0;
+  padding: var(--sp-4);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--canvas);
+}
+
+.profile-empty__title {
+  margin: 0;
+  font-weight: var(--fw-semibold);
+}
+
+/* Resumo do roteiro: quatro fatos derivados do MESMO motor da simulação. */
+.profile-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-2) var(--sp-3);
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.profile-summary dt {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.profile-summary dd {
+  margin: 0;
+  font-weight: var(--fw-semibold);
+  overflow-wrap: anywhere;
+}
+
 .profile-subtitle {
   margin: var(--sp-4) 0 var(--sp-1);
   font-size: var(--fs-md);
@@ -178,8 +224,19 @@
     grid-template-columns: 1fr;
   }
 
+  /* Quatro fatos viram dois pares: em 390px uma coluna só deixaria o resumo
+     mais alto que a tela. */
+  .profile-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .profile-step {
     padding: var(--sp-3);
+  }
+
+  /* Ação do estado vazio ocupa a linha, como na barra de ações. */
+  .profile-empty .btn {
+    width: 100%;
   }
 }
 

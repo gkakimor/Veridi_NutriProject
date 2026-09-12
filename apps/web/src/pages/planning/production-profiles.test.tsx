@@ -202,8 +202,8 @@ beforeEach(() => {
   setProductProductionProfile.mockResolvedValue({});
 });
 
-describe("Perfis de Produção — lista", () => {
-  it("cria um Perfil e abre o detalhe dele", async () => {
+describe("Roteiros de Produção — lista", () => {
+  it("cria um Roteiro e abre o detalhe dele", async () => {
     listProductionProfiles.mockResolvedValue({ profiles: [], page: 1, pageSize: 20, total: 0 });
     createProductionProfile.mockResolvedValue(perfil({ id: "ppr-9" }));
     render(
@@ -211,10 +211,10 @@ describe("Perfis de Produção — lista", () => {
         <ProductionProfilesPage />
       </MemoryRouter>,
     );
-    await screen.findByText(/Nenhum Perfil de Produção ainda/);
+    await screen.findByText(/Nenhum Roteiro de Produção ainda/);
 
-    fireEvent.click(screen.getByRole("button", { name: "Novo perfil" }));
-    fireEvent.change(screen.getByLabelText("Nome do perfil"), {
+    fireEvent.click(screen.getByRole("button", { name: "Novo roteiro" }));
+    fireEvent.change(screen.getByLabelText("Nome do roteiro"), {
       target: { value: "Cápsulas — linha padrão" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Criar" }));
@@ -225,7 +225,7 @@ describe("Perfis de Produção — lista", () => {
     expect(createProductionProfile).toHaveBeenCalledWith({ name: "Cápsulas — linha padrão" });
   });
 
-  it("mostra versão ativa, quantidade-base e o roteiro em ordem", async () => {
+  it("mostra versão ativa, quantidade de referência e as etapas em ordem", async () => {
     const resumo: ProductionProfileSummaryDTO = {
       id: "ppr-1",
       code: "PPR-000001",
@@ -254,11 +254,11 @@ describe("Perfis de Produção — lista", () => {
   });
 });
 
-describe("Perfil de Produção — rascunho", () => {
-  it("quantidade-base e etapas: adiciona, preenche, reordena com ↑ ↓ e salva na ordem da lista", async () => {
+describe("Roteiro de Produção — rascunho", () => {
+  it("quantidade de referência e etapas: adiciona, preenche, reordena com ↑ ↓ e salva na ordem da lista", async () => {
     await abrirDetalhe(perfil());
 
-    fireEvent.change(screen.getByLabelText("Quantidade-base"), { target: { value: "500" } });
+    fireEvent.change(screen.getByLabelText("Quantidade de referência"), { target: { value: "500" } });
     fireEvent.click(screen.getByRole("button", { name: "+ Adicionar etapa" }));
     fireEvent.click(screen.getByRole("button", { name: "+ Adicionar etapa" }));
 
@@ -308,7 +308,7 @@ describe("Perfil de Produção — rascunho", () => {
         }),
       }),
     );
-    const simulacao = screen.getByRole("region", { name: "Simulação" });
+    const simulacao = screen.getByRole("region", { name: "Simulação do roteiro" });
     fireEvent.change(within(simulacao).getByLabelText(/Quantidade para simular/), {
       target: { value: "1500" },
     });
@@ -335,9 +335,9 @@ describe("Perfil de Produção — rascunho", () => {
     expect(within(recurso).queryByRole("option", { name: /Energia/ })).toBeNull();
 
     fireEvent.change(recurso, { target: { value: "op" } });
-    fireEvent.change(screen.getByLabelText("Quantidade de recursos"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("Quantidade necessária"), { target: { value: "2" } });
 
-    const simulacao = screen.getByRole("region", { name: "Simulação" });
+    const simulacao = screen.getByRole("region", { name: "Simulação do roteiro" });
     // A etapa continua durando 2 h: os dois trabalham juntos.
     expect(within(simulacao).getAllByText("2 h").length).toBeGreaterThan(0);
     expect(
@@ -345,13 +345,13 @@ describe("Perfil de Produção — rascunho", () => {
     ).toBeInTheDocument();
   });
 
-  it("quantidade de recursos fracionária é recusada na tela, antes do servidor", async () => {
+  it("quantidade necessária fracionária é recusada na tela, antes do servidor", async () => {
     await abrirDetalhe(perfil({ draftVersion: versao({ steps: [passo({ resources: [operadores(2)] })] }) }));
 
-    fireEvent.change(screen.getByLabelText("Quantidade de recursos"), { target: { value: "1,5" } });
+    fireEvent.change(screen.getByLabelText("Quantidade necessária"), { target: { value: "1,5" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar rascunho" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/quantidade de recursos/);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/quantidade necessária/);
     expect(updateProductionProfileVersion).not.toHaveBeenCalled();
   });
 
@@ -362,11 +362,11 @@ describe("Perfil de Produção — rascunho", () => {
     fireEvent.change(screen.getByLabelText("Nome da etapa"), { target: { value: "Mistura lenta" } });
 
     expect(screen.getByRole("button", { name: "Ativar versão" })).toBeDisabled();
-    expect(screen.getByText(/salve o rascunho antes de ativar/)).toBeInTheDocument();
+    expect(screen.getByText(/Salve o rascunho antes de ativar a versão/)).toBeInTheDocument();
   });
 });
 
-describe("Perfil de Produção — versão ativa", () => {
+describe("Roteiro de Produção — versão ativa", () => {
   const ativa = versao({
     status: "ACTIVE",
     activatedAt: "2026-09-11T12:10:00.000Z",
@@ -387,7 +387,7 @@ describe("Perfil de Produção — versão ativa", () => {
 
   it("a simulação calcula e não grava nada", async () => {
     await abrirDetalhe(perfil({ activeVersion: ativa, draftVersion: null, versions: [ativa] }));
-    const simulacao = screen.getByRole("region", { name: "Simulação" });
+    const simulacao = screen.getByRole("region", { name: "Simulação do roteiro" });
 
     fireEvent.change(within(simulacao).getByLabelText(/Quantidade para simular/), {
       target: { value: "3000" },
@@ -437,7 +437,7 @@ describe("Perfil de Produção — versão ativa", () => {
   });
 });
 
-describe("Perfil de Produção — 390px", () => {
+describe("Roteiro de Produção — 390px", () => {
   it("etapa é cartão com rótulo em cada valor, e o CSS empilha tudo em tela estreita", async () => {
     const css = readFileSync(join(process.cwd(), "src", "pages", "planning", "planning.css"), "utf8");
     const estreita = css.slice(css.indexOf("@media (max-width: 720px)"));
@@ -464,6 +464,6 @@ describe("Perfil de Produção — 390px", () => {
     for (const rotulo of ["Nome da etapa", "Modo de escala", "Preparação (min)", "Execução da base (min)"]) {
       expect(screen.getAllByLabelText(rotulo)).toHaveLength(2);
     }
-    expect(screen.getAllByLabelText("Quantidade de recursos")).toHaveLength(1);
+    expect(screen.getAllByLabelText("Quantidade necessária")).toHaveLength(1);
   });
 });

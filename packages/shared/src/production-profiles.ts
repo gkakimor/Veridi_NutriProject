@@ -321,7 +321,7 @@ export function planProductionProfile(
   profile: { referenceQuantity: string | number; steps: readonly ProductionPlanStepInput[] },
   quantity: string | number,
 ): ProductionPlan {
-  const base = positivo(profile.referenceQuantity, "Quantidade-base");
+  const base = positivo(profile.referenceQuantity, "Quantidade de referência");
   const alvo = positivo(quantity, "Quantidade");
 
   const porRecurso = new Map<

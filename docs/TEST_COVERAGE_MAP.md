@@ -335,6 +335,18 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Entrega com expedição em rascunho não cancela nem reprograma; confirmada não bloqueia | alterar a promessa por baixo de uma separação em curso | `api customer-orders/delivery-schedule.test.ts` |
 | Confirmação recusa quando a promessa encolheu, e não realoca a linha | realocação silenciosa apagando a evidência do que se preparava | `api customer-orders/delivery-schedule.test.ts` |
 
+## Roteiro de Produção — linguagem e leitura da tela
+
+| Regra | Origem do risco | Proteção canônica |
+|---|---|---|
+| A interface diz **Roteiro de Produção** — menu, busca, trilha, listagem, detalhe, ajuda e Ordem de Produção — e a rota `/planejamento/perfis-producao` NÃO muda | PRODUCTION-ROUTE-UX-01: "perfil" não dizia a ninguém que a tela responde "como se fabrica", e meia interface falava outra língua | `web pages/planning/roteiro-de-producao.test.tsx`, `web app/planning-navigation.test.tsx`, `web pages/production-orders/planejamento-previsto.test.tsx` |
+| Quantidade de referência, unidade de referência e quantidade necessária têm rótulo, exemplo numérico e explicação — sem separador de milhar, porque o valor é copiado de volta | PRODUCTION-ROUTE-UX-01 | `web pages/planning/roteiro-de-producao.test.tsx` |
+| Sem etapa e sem recurso de capacidade a tela diz o que falta e oferece a ação; "Cadastrar recurso" usa a criação contextual e devolve o rascunho inteiro | PRODUCTION-ROUTE-UX-01: linha cinza "Nenhuma etapa ainda" não ensina o próximo passo | `web pages/planning/roteiro-de-producao.test.tsx` |
+| Só mão de obra e equipamento são escolhíveis na etapa; energia continua fora e a tela diz onde ela mora | §89 · PRODUCTION-ROUTE-UX-01 | `web pages/planning/roteiro-de-producao.test.tsx`, `web pages/planning/production-profiles.test.tsx` |
+| O Resumo do roteiro sai do MESMO motor da simulação (`planProductionProfile`) e some quando o rascunho não fecha — nenhuma métrica de capacidade inventada | PRODUCTION-ROUTE-UX-01: resumo com conta própria divergiria da simulação na mesma tela | `web pages/planning/roteiro-de-producao.test.tsx` |
+| A simulação vem DEPOIS das etapas, não grava nada, e sem etapa diz o que falta | PRODUCTION-ROUTE-UX-01 | `web pages/planning/roteiro-de-producao.test.tsx` |
+| Gravar o rascunho não absolve o nome trocado, e a leitura do salvamento não reescreve o que foi digitado | PRODUCTION-ROUTE-UX-01: `load()` fazia `setNome(result.name)` sem condição, e o nome digitado sumia ao salvar o rascunho | `web pages/planning/roteiro-de-producao.test.tsx`, `web pages/planning/perfil-alteracoes-nao-salvas.test.tsx` |
+
 ## Ações e feedback de formulário
 
 | Regra | Origem do risco | Proteção canônica |

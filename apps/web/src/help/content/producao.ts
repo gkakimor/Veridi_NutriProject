@@ -552,48 +552,58 @@ export const producaoTopics = {
 
   "planejamento.perfisProducao": {
     module: "producao",
-    title: "Perfis de Produção: como o produto é normalmente produzido",
+    title: "Roteiro de Produção: como o produto é fabricado",
     summary:
-      "Um Perfil de Produção descreve o roteiro que se repete: as etapas em ordem, quanto tempo cada uma leva para a quantidade-base e quantos recursos ela ocupa ao mesmo tempo. Não é Formulação (o que entra no produto) nem Estrutura de Custos (quanto custa): nada aqui muda estoque, custo ou ordem de produção.",
+      "O Roteiro de Produção responde uma pergunta: como este produto é fabricado? Ele define as etapas, a ordem delas, os tempos, a forma de escala e os recursos — mão de obra e equipamentos — que cada etapa ocupa ao mesmo tempo. A Formulação diz O QUE entra no produto; o roteiro diz COMO a fabricação acontece. Nada aqui muda estoque, custo, preço ou ordem de produção.",
     concepts: [
       {
-        term: "Quantidade-base",
-        text: "A quantidade a que os tempos de execução se referem — por exemplo, 2 h para 1.000 un. Precisa estar numa unidade da mesma dimensão da unidade do produto: unidade não vira quilo.",
+        term: "Roteiro e Formulação",
+        text: "A Formulação é a receita: quais itens entram e quanto de cada um. O roteiro é o processo: pesar, misturar, encapsular, embalar. A Ordem de Produção é uma fabricação concreta, e o Calendário de Produção diz quando a fábrica trabalha.",
+      },
+      {
+        term: "Quantidade de referência",
+        text: "A quantidade a que os tempos de execução se referem — por exemplo, 60 min para 1.000 un. Precisa estar numa unidade da mesma dimensão da unidade do produto: unidade não vira quilo.",
       },
       {
         term: "Preparação",
-        text: "O tempo de preparar a etapa: montar, limpar, ajustar. Não escala com a quantidade — 30 min continuam 30 min para 3.000 un ou para 3 lotes.",
+        text: "O tempo fixo da etapa: montar, limpar, ajustar. Não aumenta com a quantidade — 30 min continuam 30 min para 3.000 un ou para 3 lotes.",
       },
       {
         term: "Execução",
-        text: "O tempo de produzir a quantidade-base. É ele que acompanha a quantidade, pelo modo de escala.",
+        text: "O tempo de fabricar a quantidade de referência. É ele que acompanha a quantidade, pelo modo de escala.",
       },
       {
         term: "Modo de escala",
-        text: "Proporcional: 2 h por 1.000 un viram 6 h para 3.000 un. Por lote: 1.500 un em lotes de 1.000 são 2 lotes, e 2 h por lote viram 4 h — nunca regra de três.",
+        text: "Proporcional: o tempo de execução cresce junto com a quantidade — 2 h por 1.000 un viram 6 h para 3.000 un. Por lote: o tempo cresce a cada lote começado — 1.500 un em lotes de 1.000 são 2 lotes, e 2 h por lote viram 4 h.",
       },
       {
-        term: "Quantidade de recursos",
-        text: "Quantos recursos iguais trabalham ao mesmo tempo na etapa. 2 operadores por 2 h: a etapa dura 2 h e ocupa 4 horas-recurso — ela não dura 4 h.",
+        term: "Quantidade necessária",
+        text: "Quantos recursos iguais precisam estar disponíveis ao mesmo tempo na etapa. 2 operadores por 2 h: a etapa dura 2 h e ocupa 4 horas-recurso — ela não dura 4 h.",
       },
       {
         term: "Horas-recurso",
-        text: "Quanto de cada recurso a produção ocupa: quantidade de recursos × duração da etapa, com a preparação incluída.",
+        text: "Quanto de cada recurso a fabricação ocupa: quantidade necessária × duração da etapa, com a preparação incluída.",
       },
       {
         term: "Versão",
-        text: "Cada perfil tem uma versão ativa e, no máximo, um rascunho. Só o rascunho se edita; a ativa fica congelada.",
+        text: "Cada roteiro tem uma versão ativa e, no máximo, um rascunho. Só o rascunho se edita; a ativa fica congelada.",
       },
     ],
     flow: [
       {
-        label: "Criar o perfil",
-        detail: "Ele nasce com a V1 em rascunho e a quantidade-base de 1.000 un, para ajustar.",
+        label: "Criar o roteiro",
+        detail:
+          "Ele nasce com a V1 em rascunho e a quantidade de referência de 1.000 un, para ajustar.",
       },
       {
         label: "Montar as etapas",
         detail:
           "Nome, modo de escala, preparação, execução e os recursos de cada etapa. As setas ↑ ↓ mudam a ordem; as etapas acontecem uma depois da outra.",
+      },
+      {
+        label: "Escolher os recursos",
+        detail:
+          "Mão de obra e equipamentos vêm do cadastro de Recursos industriais, em Modelos e parâmetros. Energia não entra aqui.",
       },
       {
         label: "Simular",
@@ -608,16 +618,17 @@ export const producaoTopics = {
       },
       {
         label: "Definir o padrão do produto",
-        detail: "Escolha os produtos que usam esta versão ativa como Perfil de Produção padrão.",
+        detail:
+          "Escolha os produtos que usam esta versão ativa como Roteiro de Produção padrão.",
       },
     ],
     notes: [
       "Energia não entra em etapa: ela não ocupa capacidade e continua no custo, na Estrutura de Custos.",
       "Recurso aqui é o grupo, não a pessoa nem a máquina: “Mão de obra — Produção” com quantidade 2 são dois operadores quaisquer.",
-      "Ativar uma versão nova leva junto os produtos que usavam a versão anterior deste mesmo perfil: eles passam a usar a nova. Produto sem perfil, ou com outro perfil, não é tocado — o sistema nunca escolhe um perfil por você.",
-      "Quando a ordem de produção passar a usar o perfil, ela vai receber uma cópia. Mudar o perfil depois não muda ordem que já existe.",
-      "Ainda não há calendário, turno nem data sugerida: os tempos são minutos de trabalho corridos, uma etapa depois da outra.",
-      "Editar e ativar exigem perfil de Administração ou Produção. Os demais perfis leem.",
+      "Ativar uma versão nova leva junto os produtos que usavam a versão anterior deste mesmo roteiro: eles passam a usar a nova. Produto sem roteiro, ou com outro roteiro, não é tocado — o sistema nunca escolhe um roteiro por você.",
+      "Quando a ordem de produção passar a usar o roteiro, ela vai receber uma cópia. Mudar o roteiro depois não muda ordem que já existe.",
+      "Ainda não há data sugerida nem conferência de capacidade: os tempos são minutos de trabalho corridos, uma etapa depois da outra. Quando cada ordem começa e termina é assunto do Planejamento, que ainda está por vir.",
+      "Editar e ativar exigem permissão de Administração ou Produção. Os demais perfis de acesso leem.",
     ],
   },
 } satisfies Record<string, HelpTopic>;

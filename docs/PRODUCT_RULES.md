@@ -5441,6 +5441,13 @@ cada valor técnico com o seu rótulo, sem rolagem lateral.
 PLANNING-PRODUCTION-PROFILE-01 e PLANNING-OP-SNAPSHOT-01, 2026-09-11. Primeira
 fundação do módulo Planejamento, e a cópia do perfil para a Ordem de Produção.
 
+> **Nome na interface (PRODUCTION-ROUTE-UX-01, 2026-09-12):** o usuário lê
+> **Roteiro de Produção**, e "quantidade-base" lê-se **quantidade de
+> referência**. Decisão do Product Owner. O nome de domínio segue
+> `ProductionProfile` — rota, API, schema e este parágrafo inclusive —, e a
+> regra abaixo não mudou nenhuma vírgula. Ao mexer nas telas, mantenha a
+> palavra da interface; ver `UI_BRAND.md`.
+
 **Perfil de Produção é o roteiro reutilizável de COMO um produto é
 produzido:** etapas em ordem, tempo de preparação e de execução, modo de
 escala e os recursos que cada etapa ocupa ao mesmo tempo. Não é Formulação (o

@@ -134,10 +134,19 @@ export const navGroups: NavGroup[] = [
     items: [
       {
         id: "production-profiles",
-        label: "Perfis de Produção",
+        label: "Roteiros de Produção",
         path: "/planejamento/perfis-producao",
         implemented: true,
-        aliases: ["perfil de produção", "roteiro", "etapas de produção", "planejamento"],
+        /* O nome antigo continua achando a tela: quem aprendeu "perfil" não
+           perde o caminho porque o rótulo mudou. */
+        aliases: [
+          "roteiro de produção",
+          "perfil de produção",
+          "perfis de produção",
+          "etapas de produção",
+          "processo de fabricação",
+          "planejamento",
+        ],
       },
       {
         id: "production-calendar",
