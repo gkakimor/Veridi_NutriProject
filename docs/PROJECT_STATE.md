@@ -1346,6 +1346,60 @@ CEP. Nenhum PDF mudou, e nenhum dado legado foi preenchido — o workbook de
 Fornecedores será regenerado em MIGRATION-PACK-REVIEW-02 para a Veridi
 enriquecer os campos à mão.
 
+## Custo, preço e os três modelos (UNSAVED-CHANGES-WAVE-04, 2026-09-12)
+
+Estrutura de Custo, Precificação, Modelo de Estrutura de Custo, Política de
+Precificação e Modelo de Formulação. Foundation intocada.
+
+**A regra desta wave.** Dirty é entrada do usuário ainda não persistida, e só
+isso. Custo calculado, preço sugerido, margem e contribuição da prévia,
+energia derivada dos equipamentos, totais e a base recalculada do rebase são
+RESULTADO: saem de `computePrice` e do servidor a cada tecla e se refazem
+sozinhos na próxima abertura. Quem causa a pergunta é o campo que provocou o
+recálculo, nunca o recálculo.
+
+**Save parcial, terceiro caso — e o bug que ele revelou.** Quatro das cinco
+telas gravam em mais de um bloco, cada um com o seu botão:
+
+| Tela | Blocos que gravam separado |
+| --- | --- |
+| Estrutura de Custo | base de produção · premissa nova · recurso novo |
+| Modelo de Estrutura de Custo | identificação · rascunho |
+| Política de Precificação | identificação · rascunho (Modelo + faixas) |
+| Modelo de Formulação | identificação · rascunho · painel de ajustes da linha |
+| Precificação | um só: a faixa em montagem |
+
+A guarda é a SOMA do que continua pendente: gravar um bloco não absolve o
+outro. Escrever o teste disso mostrou que a soma ainda não era verdade —
+**toda ação termina em `load()`, e a releitura reescrevia os campos dos OUTROS
+blocos com o que está gravado**. Salvar a identificação do Modelo apagava a
+base do rascunho que estava sendo digitada, sem aviso e sem pergunta, porque a
+tela achava que tinha acabado de ler a verdade. As quatro telas passaram a
+guardar a leitura anterior do servidor e só substituir o campo que ainda está
+como ele deixou — o que foi mexido fica como está. É a mesma regra de
+QUOTE-DRAFT-STATE-01, aplicada onde faltava.
+
+**O que não suja.** Defaults não são digitação: a margem de 30% e a comissão
+de 5% da Precificação são a regra da PRÓXIMA faixa e continuam valendo depois
+de gravar — contá-las deixaria a tela suja para sempre depois do primeiro
+salvamento. A comissão de 5% da faixa nova da Política, idem. Linha em branco
+de "+ Adicionar recurso/faixa/componente" também não: é o que o próprio
+salvamento descarta. A base de produção sugerida pelo lote mínimo chega
+preenchida e não é de ninguém até ser mudada.
+
+**Ações de domínio não viram segunda pergunta.** Ativar, arquivar e criar
+versão gravam na hora e não deixam pendência. O rebase da Precificação já foi
+confirmado na sua própria caixa e leva para a versão nova pela própria ação:
+navega por `liberarGuarda`. Sair para cadastrar um item ou um recurso a partir
+do campo de busca também — o rascunho vai junto e volta aplicado na linha.
+
+**Modelo de Formulação.** O dirty que existia era só o do painel de ajustes,
+medido por `ajustes.alterado()` — o mesmo que prende "Salvar rascunho". Ele
+continua inteiro e agora é UMA das três parcelas: a guarda usa a MESMA
+comparação, para que não divirjam no primeiro campo novo. Quantidade física,
+modo de cálculo, pureza, overage, marcas, unidade, fornecimento e notas entram
+na assinatura do rascunho.
+
 ## Fundação de filtros, e o período do Faturamento (FILTER-FOUNDATION-01, 2026-09-12)
 
 A auditoria de filtros apontou que o período do Faturamento interpretava

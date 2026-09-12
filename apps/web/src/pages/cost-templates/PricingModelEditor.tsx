@@ -19,6 +19,7 @@ import {
 } from "@veridi/shared";
 import { exigirDecimalOpcional } from "../../lib/decimal-field";
 import { formatDecimalInput } from "../../lib/decimal-input";
+import { assinaturaDoDocumento, decimalComparavel } from "../../lib/dirty-fields";
 
 /**
  * O que entra no custo que forma o preço — edição no rascunho do Modelo, §84.
@@ -78,6 +79,32 @@ export function modeloDoRascunho(draft: PricingModelDraft): PricingModelConfig {
   const problema = validarModeloDePrecificacao(model);
   if (problema) throw new Error(problema);
   return model;
+}
+
+/**
+ * A assinatura do Modelo digitado, para a guarda de alterações não salvas.
+ *
+ * Mora aqui, ao lado de `rascunhoDoModelo` e `modeloDoRascunho`: campo novo do
+ * Modelo entra nos três de uma vez ou em nenhum. Quem acrescentasse um valor
+ * sem passar por aqui ganharia um Modelo alterado que sai da tela sem
+ * perguntar — e sem que nada aponte o esquecimento.
+ *
+ * Os valores vão em forma canônica porque o servidor devolve `5.000000` onde a
+ * pessoa digitou `5`, e os perfis vão ordenados porque a ordem em que foram
+ * marcados não é alteração de nada.
+ */
+export function assinaturaDoModelo(draft: PricingModelDraft): string {
+  const valores: Record<string, string | null> = {};
+  for (const campo of Object.keys(PRICING_MODEL_VALUE_LABELS).sort()) {
+    valores[campo] = decimalComparavel(draft[campo as PricingModelValueField]);
+  }
+  return assinaturaDoDocumento({
+    ...valores,
+    industrialCostMode: draft.industrialCostMode,
+    estimatedTaxMode: draft.estimatedTaxMode,
+    externalAdditionalCosts: draft.externalAdditionalCosts,
+    applicableTaxProfiles: [...draft.applicableTaxProfiles].sort(),
+  });
 }
 
 interface Props {

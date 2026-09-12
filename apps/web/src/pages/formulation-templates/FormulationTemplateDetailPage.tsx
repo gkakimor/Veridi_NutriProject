@@ -35,6 +35,12 @@ import { TemplateDiff } from "./TemplateDiff";
 import { formatDateTime } from "../../lib/dates";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
+import {
+  assinaturaDoDocumento,
+  decimalComparavel,
+  textoComparavel,
+} from "../../lib/dirty-fields";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import { useAuth } from "../../app/AuthProvider";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
@@ -65,6 +71,70 @@ function Dica({ id }: { id: HelpHintId }) {
 
 interface LinhaEditavel extends FormulationTemplateComponentInput {
   chave: string;
+}
+
+/**
+ * Os componentes da versão, na forma que a tela edita.
+ *
+ * A linha carrega TUDO o que o componente é — salvar recria os componentes, e
+ * o que não viesse aqui voltava ao padrão do banco: base por dose virava base
+ * da fórmula, e pureza, overage e notas sumiam.
+ */
+function linhasDaVersao(version: FormulationTemplateVersionDTO): LinhaEditavel[] {
+  return version.components.map((component, index) => ({
+    chave: `${component.id}-${index}`,
+    itemId: component.itemId,
+    quantity: component.quantity,
+    unitCode: component.unitCode,
+    basis: component.basis,
+    supplyResponsibility: component.supplyResponsibility,
+    purityPercentApplied: component.purityPercentApplied,
+    overagePercent: component.overagePercent,
+    quantityMode: component.quantityMode,
+    applyPurityAdjustment: component.applyPurityAdjustment,
+    applyOverageAdjustment: component.applyOverageAdjustment,
+    notes: component.notes,
+  }));
+}
+
+/**
+ * A assinatura do rascunho — base, unidade e componentes numa string.
+ *
+ * Quantidade física, modo de cálculo, pureza, overage, unidade e notas entram
+ * todos: são digitação que "Salvar rascunho" grava e que sair perde. O que a
+ * tela apenas calcula — a quantidade equivalente que o painel de ajustes
+ * mostra, o resumo da linha, a comparação entre versões — fica fora.
+ *
+ * A chave da linha não entra: é identidade de renderização e muda a cada
+ * recarga. Linha em branco também — "+ Adicionar componente" sem preencher
+ * nada não é trabalho a perder, e é o que o próprio salvamento já descarta.
+ */
+function assinaturaDosComponentes(linhas: LinhaEditavel[]): string {
+  return assinaturaDoDocumento(
+    linhas
+      .filter((linha) => linha.itemId !== "" || linha.quantity.trim() !== "")
+      .map((linha) => ({
+        item: linha.itemId,
+        quantidade: decimalComparavel(linha.quantity),
+        unidade: linha.unitCode,
+        base: linha.basis ?? null,
+        fornecimento: linha.supplyResponsibility ?? null,
+        modo: linha.quantityMode ?? null,
+        pureza: decimalComparavel(linha.purityPercentApplied),
+        overage: decimalComparavel(linha.overagePercent),
+        aplicaPureza: linha.applyPurityAdjustment ?? false,
+        aplicaOverage: linha.applyOverageAdjustment ?? false,
+        notas: textoComparavel(linha.notes),
+      })),
+  );
+}
+
+function assinaturaDoRascunho(base: string, unidade: string, linhas: LinhaEditavel[]): string {
+  return assinaturaDoDocumento({
+    base: decimalComparavel(base),
+    unidade,
+    componentes: assinaturaDosComponentes(linhas),
+  });
 }
 
 /**
@@ -168,6 +238,26 @@ export function FormulationTemplateDetailPage() {
    */
   const rascunhoRestaurado = useRef(false);
 
+  /*
+   * O que o servidor devolveu na última leitura, campo a campo.
+   *
+   * Identificação e rascunho gravam separado, e as duas ações terminam em
+   * `load()`: salvar a identificação reescrevia base, unidade e componentes com
+   * o que está gravado, e a edição pendente do outro bloco sumia sem aviso. Com
+   * a leitura anterior em mãos dá para separar "ainda está como o servidor
+   * deixou" de "a pessoa mexeu" — e só o primeiro recebe a leitura nova.
+   *
+   * Começa nos MESMOS valores iniciais do estado: na primeira carga ninguém
+   * digitou nada e tudo tem de ser substituído.
+   */
+  const lido = useRef({
+    nome: "",
+    descricao: "",
+    base: "1",
+    unidade: "un",
+    componentes: assinaturaDosComponentes([]),
+  });
+
   const load = useCallback(() => {
     if (!templateId) return;
     getFormulationTemplate(templateId)
@@ -177,33 +267,25 @@ export function FormulationTemplateDetailPage() {
           rascunhoRestaurado.current = false;
           return;
         }
-        setNome(result.name);
-        setDescricao(result.description ?? "");
+        const anterior = lido.current;
         const rascunho = result.draftVersion;
+        const novasLinhas = rascunho ? linhasDaVersao(rascunho) : [];
+        lido.current = {
+          nome: result.name,
+          descricao: result.description ?? "",
+          base: rascunho?.basisQuantity ?? anterior.base,
+          unidade: rascunho?.outputUnitCode ?? anterior.unidade,
+          componentes: rascunho ? assinaturaDosComponentes(novasLinhas) : anterior.componentes,
+        };
+        setNome((atual) => (atual === anterior.nome ? result.name : atual));
+        setDescricao((atual) =>
+          atual === anterior.descricao ? (result.description ?? "") : atual,
+        );
         if (rascunho) {
-          setBase(rascunho.basisQuantity);
-          setUnidade(rascunho.outputUnitCode);
-          setLinhas(
-            rascunho.components.map((component, index) => ({
-              chave: `${component.id}-${index}`,
-              itemId: component.itemId,
-              quantity: component.quantity,
-              unitCode: component.unitCode,
-              /*
-                A linha carrega TUDO o que o componente é. Salvar pela tela
-                recria os componentes, e o que não viesse aqui voltava ao
-                padrão do banco: base por dose virava base da fórmula, e
-                pureza, overage e notas sumiam.
-              */
-              basis: component.basis,
-              supplyResponsibility: component.supplyResponsibility,
-              purityPercentApplied: component.purityPercentApplied,
-              overagePercent: component.overagePercent,
-              quantityMode: component.quantityMode,
-              applyPurityAdjustment: component.applyPurityAdjustment,
-              applyOverageAdjustment: component.applyOverageAdjustment,
-              notes: component.notes,
-            })),
+          setBase((atual) => (atual === anterior.base ? rascunho.basisQuantity : atual));
+          setUnidade((atual) => (atual === anterior.unidade ? rascunho.outputUnitCode : atual));
+          setLinhas((atual) =>
+            assinaturaDosComponentes(atual) === anterior.componentes ? novasLinhas : atual,
           );
         }
       })
@@ -410,6 +492,41 @@ export function FormulationTemplateDetailPage() {
       setSaving(false);
     }
   }
+
+  /*
+   * Três pendências convivem nesta tela, e a guarda soma as três.
+   *
+   * Identificação e rascunho gravam separado, cada um com o seu botão: salvar
+   * o nome não absolve o componente meio digitado, e salvar o rascunho não
+   * absolve o nome trocado. A terceira é o painel de ajustes aberto e ainda
+   * não aplicado — a mesma pendência que já prende "Salvar rascunho", contada
+   * pela MESMA comparação, para que não divirjam no primeiro campo novo.
+   *
+   * Nada do que a tela calcula entra: quantidade equivalente, resumo da linha
+   * e comparação entre versões são resultado do que já está ali.
+   */
+  const rascunhoDoServidor = template?.draftVersion ?? null;
+  const ajustePendente = linhas.some((linha) =>
+    ajustes.alterado(linha.chave, ajustesDoModelo(linha)),
+  );
+  const identificacaoAlterada =
+    template !== null &&
+    canEdit &&
+    (textoComparavel(nome) !== textoComparavel(template.name) ||
+      textoComparavel(descricao) !== textoComparavel(template.description));
+  const rascunhoAlterado =
+    rascunhoDoServidor !== null &&
+    canEdit &&
+    assinaturaDoRascunho(base, unidade, linhas) !==
+      assinaturaDoRascunho(
+        rascunhoDoServidor.basisQuantity,
+        rascunhoDoServidor.outputUnitCode,
+        linhasDaVersao(rascunhoDoServidor),
+      );
+  const { liberarGuarda } = useUnsavedChangesGuard({
+    isDirty: identificacaoAlterada || rascunhoAlterado || ajustePendente,
+    substantivo: "modelo de formulação",
+  });
 
   if (!template) {
     return (
@@ -656,14 +773,18 @@ export function FormulationTemplateDetailPage() {
                             onSearch={buscarItens}
                             canCreate={editavel}
                             createLabel="Novo item de estoque"
+                            /* Sair para cadastrar o item NÃO é descartar: o
+                               rascunho vai junto e volta aplicado na linha. */
                             onCreateNew={() =>
-                              origem.goCreate({
-                                route: "/cadastros/itens/novo",
-                                fieldKey: "itemId",
-                                entityType: "item",
-                                // Qual linha pediu — o item volta para ela.
-                                context: { rowKey: linha.chave },
-                              })
+                              liberarGuarda(() =>
+                                origem.goCreate({
+                                  route: "/cadastros/itens/novo",
+                                  fieldKey: "itemId",
+                                  entityType: "item",
+                                  // Qual linha pediu — o item volta para ela.
+                                  context: { rowKey: linha.chave },
+                                }),
+                              )
                             }
                           />
                         </td>

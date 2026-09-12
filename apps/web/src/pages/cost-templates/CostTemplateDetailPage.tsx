@@ -1,5 +1,5 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type {
   CostTemplateDTO,
@@ -36,6 +36,13 @@ import { formatDateTime } from "../../lib/dates";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal } from "../../lib/decimal-field";
 import {
+  assinaturaDoDocumento,
+  decimalComparavel,
+  inteiroComparavel,
+  textoComparavel,
+} from "../../lib/dirty-fields";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
+import {
   ResourceUsageAmount,
   exigirQuantidadeDeRecursos,
 } from "../../components/ResourceUsageAmount";
@@ -54,6 +61,56 @@ interface LinhaRecurso extends CostTemplateResourceUsageInput {
   chave: string;
   /** Texto do campo "Quantidade de recursos" — vira inteiro só ao salvar (§87). */
   quantidadeDeRecursos: string;
+}
+
+/** As linhas de recurso da versão, na forma que a tela edita. */
+function linhasDaVersao(version: CostTemplateVersionDTO): LinhaRecurso[] {
+  return version.resourceUsages.map((usage, index) => ({
+    chave: `${usage.id}-${index}`,
+    industrialResourceId: usage.industrialResourceId,
+    usageQuantity: usage.usageQuantity,
+    usageUom: usage.usageUom,
+    usageBasis: usage.usageBasis,
+    quantidadeDeRecursos: String(usage.resourceCount),
+  }));
+}
+
+/**
+ * A assinatura do rascunho — base, unidade, energia e recursos numa string.
+ *
+ * A chave da linha fica de fora: ela é identidade de renderização e muda a cada
+ * recarga. Linha em branco também: "+ Adicionar recurso" sem preencher nada não
+ * é trabalho a perder, e é o que o próprio salvamento já descarta.
+ */
+function assinaturaDasLinhas(linhas: LinhaRecurso[]): string {
+  return assinaturaDoDocumento(
+    linhas
+      .filter((linha) => linha.industrialResourceId !== "" || linha.usageQuantity.trim() !== "")
+      .map((linha) => ({
+        recurso: linha.industrialResourceId,
+        quantidade: decimalComparavel(linha.usageQuantity),
+        unidade: linha.usageUom,
+        base: linha.usageBasis ?? null,
+        recursos: inteiroComparavel(linha.quantidadeDeRecursos),
+      })),
+  );
+}
+
+function assinaturaDoRascunho(
+  base: string,
+  unidade: string,
+  modoEnergia: string,
+  recursoEnergia: string,
+  linhas: LinhaRecurso[],
+): string {
+  return assinaturaDoDocumento({
+    base: decimalComparavel(base),
+    unidade,
+    modoEnergia,
+    // Fora do modo derivado o campo nem é enviado: escolher e voltar atrás não deixa pendência.
+    recursoEnergia: modoEnergia === "FROM_EQUIPMENT" ? recursoEnergia : "",
+    linhas: assinaturaDasLinhas(linhas),
+  });
 }
 
 export function CostTemplateDetailPage() {
@@ -75,28 +132,60 @@ export function CostTemplateDetailPage() {
   const [linhas, setLinhas] = useState<LinhaRecurso[]>([]);
   const [diff, setDiff] = useState<TemplateDiffDTO | null>(null);
 
+  /*
+   * O que o servidor devolveu na última leitura, campo a campo.
+   *
+   * Identificação e rascunho gravam separado, e as duas ações terminam em
+   * `load()`: salvar a identificação reescrevia a base do rascunho com o valor
+   * gravado, e a edição pendente do outro bloco sumia sem aviso. Com a leitura
+   * anterior em mãos dá para separar "o campo ainda está como o servidor
+   * deixou" de "a pessoa mexeu nele" — e só o primeiro recebe a leitura nova.
+   *
+   * Começa nos MESMOS valores iniciais do estado: na primeira carga ninguém
+   * digitou nada e tudo tem de ser substituído.
+   */
+  const lido = useRef({
+    nome: "",
+    descricao: "",
+    base: "1000",
+    unidade: "un",
+    modoEnergia: "NONE" as "NONE" | "DIRECT" | "FROM_EQUIPMENT",
+    recursoEnergia: "",
+    linhas: assinaturaDasLinhas([]),
+  });
+
   const load = useCallback(() => {
     if (!templateId) return;
     getCostTemplate(templateId)
       .then((result) => {
         setTemplate(result);
-        setNome(result.name);
-        setDescricao(result.description ?? "");
+        const anterior = lido.current;
         const rascunho = result.draftVersion;
+        const novasLinhas = rascunho ? linhasDaVersao(rascunho) : [];
+        lido.current = {
+          nome: result.name,
+          descricao: result.description ?? "",
+          base: rascunho?.referenceOutputQuantity ?? anterior.base,
+          unidade: rascunho?.referenceOutputUomCode ?? anterior.unidade,
+          modoEnergia: rascunho?.energyCalculationMode ?? anterior.modoEnergia,
+          recursoEnergia: rascunho?.energyResourceId ?? "",
+          linhas: rascunho ? assinaturaDasLinhas(novasLinhas) : anterior.linhas,
+        };
+        setNome((atual) => (atual === anterior.nome ? lido.current.nome : atual));
+        setDescricao((atual) => (atual === anterior.descricao ? lido.current.descricao : atual));
         if (rascunho) {
-          setBase(rascunho.referenceOutputQuantity);
-          setUnidade(rascunho.referenceOutputUomCode);
-          setModoEnergia(rascunho.energyCalculationMode);
-          setRecursoEnergia(rascunho.energyResourceId ?? "");
-          setLinhas(
-            rascunho.resourceUsages.map((usage, index) => ({
-              chave: `${usage.id}-${index}`,
-              industrialResourceId: usage.industrialResourceId,
-              usageQuantity: usage.usageQuantity,
-              usageUom: usage.usageUom,
-              usageBasis: usage.usageBasis,
-              quantidadeDeRecursos: String(usage.resourceCount),
-            })),
+          setBase((atual) => (atual === anterior.base ? rascunho.referenceOutputQuantity : atual));
+          setUnidade((atual) =>
+            atual === anterior.unidade ? rascunho.referenceOutputUomCode : atual,
+          );
+          setModoEnergia((atual) =>
+            atual === anterior.modoEnergia ? rascunho.energyCalculationMode : atual,
+          );
+          setRecursoEnergia((atual) =>
+            atual === anterior.recursoEnergia ? (rascunho.energyResourceId ?? "") : atual,
+          );
+          setLinhas((atual) =>
+            assinaturaDasLinhas(atual) === anterior.linhas ? novasLinhas : atual,
           );
         }
       })
@@ -124,6 +213,37 @@ export function CostTemplateDetailPage() {
       setSaving(false);
     }
   }
+
+  /*
+   * Dois blocos gravam separado aqui — identificação e rascunho —, cada um com
+   * o seu botão, e a guarda soma os dois: "Salvar identificação" não absolve a
+   * base alterada, e "Salvar rascunho" não absolve o nome trocado.
+   *
+   * Fora da conta fica tudo que a tela apenas mostra: a versão ativa, o
+   * histórico, quantas estruturas nasceram do template e a comparação entre
+   * versões — nada disso é digitação pendente.
+   */
+  const rascunhoDoServidor = template?.draftVersion ?? null;
+  const identificacaoAlterada =
+    template !== null &&
+    canEdit &&
+    (textoComparavel(nome) !== textoComparavel(template.name) ||
+      textoComparavel(descricao) !== textoComparavel(template.description));
+  const rascunhoAlterado =
+    rascunhoDoServidor !== null &&
+    canEdit &&
+    assinaturaDoRascunho(base, unidade, modoEnergia, recursoEnergia, linhas) !==
+      assinaturaDoRascunho(
+        rascunhoDoServidor.referenceOutputQuantity,
+        rascunhoDoServidor.referenceOutputUomCode,
+        rascunhoDoServidor.energyCalculationMode,
+        rascunhoDoServidor.energyResourceId ?? "",
+        linhasDaVersao(rascunhoDoServidor),
+      );
+  useUnsavedChangesGuard({
+    isDirty: identificacaoAlterada || rascunhoAlterado,
+    substantivo: "modelo de estrutura de custo",
+  });
 
   if (!template) {
     return (

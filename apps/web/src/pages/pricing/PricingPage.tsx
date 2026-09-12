@@ -44,6 +44,8 @@ import {
 import { formatDate } from "../../lib/dates";
 import { formatPercent } from "../../lib/percent";
 import { apiErrorMessage } from "../../lib/api-errors";
+import { textoComparavel } from "../../lib/dirty-fields";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import { exigirDecimal } from "../../lib/decimal-field";
 import { parseDecimalInput } from "../../lib/decimal-input";
 import { PricingPolicyOrigin } from "../cost-templates/PricingPolicyOrigin";
@@ -253,6 +255,31 @@ export function PricingPage() {
       setSaving(false);
     }
   }
+
+  /*
+   * Um bloco de gravação nesta tela: a faixa em montagem. "Adicionar faixa" é
+   * o único botão que escreve o que está digitado, e ele limpa quantidade e
+   * preço unitário ao terminar.
+   *
+   * A guarda protege o que foi DIGITADO. Preço sugerido, margem calculada,
+   * contribuição, markup, o custo da prévia e a base do rebase são resultado:
+   * saem de `computePrice` e do servidor a cada tecla e se refazem sozinhos na
+   * próxima abertura.
+   *
+   * Margem desejada e comissão ficam de fora por serem a regra da PRÓXIMA
+   * faixa, não a faixa: nascem em 30% e 5%, continuam valendo depois de gravar
+   * — é o que permite cadastrar três faixas seguidas sem redigitar — e pesá-las
+   * deixaria a tela suja para sempre depois do primeiro salvamento. Enquanto há
+   * quantidade em campo elas já viajam junto na pendência dela.
+   */
+  const faixaEmAberto =
+    Boolean(editavel) &&
+    (textoComparavel(quantity) !== null || textoComparavel(manualPrice) !== null);
+  const { liberarGuarda } = useUnsavedChangesGuard({
+    isDirty: faixaEmAberto,
+    substantivo: "precificação",
+    genero: "a",
+  });
 
   if (error && !pricing) return <p className="form-alert" role="alert">{error}</p>;
   if (!pricing) return <p>Carregando…</p>;
@@ -871,7 +898,11 @@ export function PricingPage() {
           if (!rebase?.targetCalculationId) return;
           void run(async () => {
             const versao = await rebasePricingVersion(pricing.id, rebase.targetCalculationId!);
-            if (versao.id !== pricing.id) navigate(`/gestao/precificacao/${versao.id}`);
+            /* Trocar a base já foi confirmado nesta caixa, e a versão nova é o
+               destino da própria ação — não uma saída para outro lugar. Uma
+               segunda pergunta seria a mesma decisão perguntada duas vezes. */
+            if (versao.id !== pricing.id)
+              liberarGuarda(() => navigate(`/gestao/precificacao/${versao.id}`));
           });
         }}
       />

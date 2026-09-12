@@ -40,6 +40,8 @@ import { RowActions } from "../../components/RowActions";
 import { useAuth } from "../../app/AuthProvider";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
+import { decimalComparavel, textoComparavel } from "../../lib/dirty-fields";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import {
   ResourceCountField,
   ResourceUsageAmount,
@@ -62,6 +64,22 @@ import { EntityLink } from "../../components/EntityLink";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { formatDateTime } from "../../lib/dates";
+
+/**
+ * A base de produção que o servidor tem para esta estrutura.
+ *
+ * Rascunho primeiro, vigente depois, sugestão por último — a sugestão é do
+ * sistema, não digitação de ninguém, e por isso o campo já nascer preenchido
+ * com ela não é alteração pendente.
+ */
+function baseDoServidor(dados: ProductIndustrialCostResponse): string {
+  return (
+    dados.draft?.referenceOutputQuantity ??
+    dados.current?.referenceOutputQuantity ??
+    dados.suggestedReferenceOutputQuantity ??
+    ""
+  );
+}
 
 function statusBadgeClass(status: string): string {
   if (status === "ACTIVE") return "badge badge--active";
@@ -216,16 +234,30 @@ export function IndustrialCostPage() {
    */
   const canCreateResource = user?.role === "ADMIN";
 
+  /*
+   * A base que veio do servidor na última leitura.
+   *
+   * Recarregar não pode apagar o que a pessoa digitou: cada ação da tela
+   * termina em `load()`, e adicionar uma premissa reescrevia o campo de base
+   * com o valor gravado — a edição pendente da base sumia sem aviso porque
+   * outro bloco foi salvo. Com a referência anterior em mãos dá para separar
+   * "o campo ainda é o do servidor" de "a pessoa mexeu nele".
+   */
+  const baseLida = useRef("");
+
   const load = useCallback(() => {
     if (!productId) return;
     getProductIndustrialCosts(productId)
       .then((result) => {
         setData(result);
-        setReferenceQuantity(
-          result.draft?.referenceOutputQuantity ??
-            result.current?.referenceOutputQuantity ??
-            result.suggestedReferenceOutputQuantity ??
-            "",
+        const doServidor = baseDoServidor(result);
+        /* A referência ANTERIOR é lida antes de ser trocada: o atualizador de
+           estado roda depois desta função, e consultar a ref lá dentro já
+           acharia o valor novo — o campo nunca receberia a carga. */
+        const anterior = baseLida.current;
+        baseLida.current = doServidor;
+        setReferenceQuantity((atual) =>
+          decimalComparavel(atual) === decimalComparavel(anterior) ? doServidor : atual,
         );
       })
       .catch((err: unknown) =>
@@ -281,12 +313,48 @@ export function IndustrialCostPage() {
     }
   }
 
+  // A versão em edição é o rascunho; sem rascunho, mostra-se a vigente.
+  const version: IndustrialCostVersionDTO | null =
+    (lendoAtiva && data?.current ? data.current : (data?.draft ?? data?.current)) ?? null;
+  const editable = canEdit && version?.status === "DRAFT";
+
+  /*
+   * Três blocos gravam separado nesta tela — base de produção, premissa nova e
+   * recurso novo —, cada um com o seu botão. A guarda de saída é a SOMA do que
+   * continua pendente: salvar a base não apaga a premissa meio digitada, e
+   * adicionar o recurso não absolve a base alterada.
+   *
+   * Custo calculado, consumo de energia derivado, totais e a própria lista de
+   * versões ficam de fora: são resultado do que já está gravado, não digitação
+   * que se perde ao sair. Categoria e base de cálculo também não entram
+   * sozinhas — nascem escolhidas e continuam escolhidas depois de gravar; sem
+   * descrição nem valor não há premissa nenhuma sendo montada.
+   *
+   * A base tem campo antes de existir versão — é ela que "Criar estrutura de
+   * custos" usa —, então não depende de rascunho editável como os outros dois.
+   */
+  const baseAlterada =
+    data !== null &&
+    canEdit &&
+    (editable || data.versions.length === 0) &&
+    decimalComparavel(referenceQuantity) !== decimalComparavel(baseDoServidor(data));
+  const premissaEmAberto =
+    Boolean(editable) &&
+    (textoComparavel(description) !== null || decimalComparavel(rateValue) !== null);
+  const recursoEmAberto =
+    Boolean(editable) &&
+    (usageResourceId !== "" ||
+      decimalComparavel(usageQuantity) !== null ||
+      decimalComparavel(usageResourceCount) !== "1");
+  const { liberarGuarda } = useUnsavedChangesGuard({
+    isDirty: baseAlterada || premissaEmAberto || recursoEmAberto,
+    substantivo: "estrutura de custos",
+    genero: "a",
+  });
+
   if (error && !data) return <p className="form-alert" role="alert">{error}</p>;
   if (!data || !productId) return <p>Carregando…</p>;
 
-  // A versão em edição é o rascunho; sem rascunho, mostra-se a vigente.
-  const version: IndustrialCostVersionDTO | null =
-    lendoAtiva && data.current ? data.current : (data.draft ?? data.current);
   const podeAlternar = Boolean(data.draft && data.current);
 
   resourcesRef.current = resources;
@@ -306,7 +374,6 @@ export function IndustrialCostPage() {
     data.versions.length === 0 &&
     !referenceQuantity.trim() &&
     !data.suggestedReferenceOutputQuantity;
-  const editable = canEdit && version?.status === "DRAFT";
 
   /* A receita ativa do produto já passou da que esta estrutura congelou. */
   const formulacaoDefasada =
@@ -942,12 +1009,16 @@ options={selectableResources.map((resource) => ({
                         }))}
                         canCreate={canCreateResource}
                         createLabel="Novo recurso"
+                        /* Sair para cadastrar o recurso NÃO é descartar: o
+                           rascunho vai junto e volta aplicado no campo. */
                         onCreateNew={() =>
-                          goCreate({
-                            route: "/gestao/recursos-industriais/novo",
-                            fieldKey: "usageResourceId",
-                            entityType: "industrialResource",
-                          })
+                          liberarGuarda(() =>
+                            goCreate({
+                              route: "/gestao/recursos-industriais/novo",
+                              fieldKey: "usageResourceId",
+                              entityType: "industrialResource",
+                            }),
+                          )
                         }
                       />
                       <span className="field__hint">
