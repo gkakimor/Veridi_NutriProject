@@ -1788,6 +1788,59 @@ foram junto. Sem backfill: OCs antigas ficam como estão.
 
 **Próximo:** UX-ACTIONS-FEEDBACK-WAVE-02.
 
+## A barra antiga saiu de onde havia ação irmã (UX-ACTIONS-FEEDBACK-WAVE-02, 2026-09-12)
+
+O padrão da onda 01 (`.form-actions`, `--split`, `__group`, `.form-status`)
+aplicado às telas com botões colados. Nenhum cálculo, status, lifecycle,
+permissão, API ou migration mudou; diálogos de aprovar, cancelar, ativar e
+inativar continuam onde estavam.
+
+**`.line-actions`: 65 usos → 35, nenhum com ação irmã.** 28 barras tinham duas
+ou mais ações encostadas; as 28 viraram `.form-actions`, mais os dois "Criar
+nova versão" dos Modelos, para a frase "Versão ativada." morar como na
+Precificação. As 35 que ficaram são botão isolado, `.table__actions` com gap
+próprio ou bloco de espaçamento. `ux-acoes-onda-02.test.tsx` lê o fonte e recusa
+barra antiga com irmãs — única exceção nomeada: a Qualidade do lote, cujos
+botões dependem de status que nunca coexistem.
+
+**Modelos** (Estrutura de Custos e Formulação) ganharam a barra da Precificação
+inteira: `+ Adicionar` terciária, `Salvar rascunho` secundária e desabilitada
+sem pendência, `Ativar versão` de commit; "Salvando…"/"Ativando…" só no botão
+clicado, "Identificação salva.", "Rascunho salvo." e "Versão ativada." só com a
+resposta. No Modelo de Formulação o ajuste aberto e não aplicado conta como
+pendência — é o clique que diz qual linha espera decisão. **Formulação** e
+**Pedido**: a pendência e a confirmação moram na barra do documento, e o
+`saving` compartilhado deixou de pôr "Salvando…" no botão de salvar durante
+ativar, confirmar ou cancelar. Na versão da Formulação o salvar continua
+clicável sem pendência, porque é ele que valida e leva ao primeiro erro.
+
+**Projeto:** a etapa (Amostra, Stand-by) de um lado; aprovar e cancelar do
+outro, mesma ordem de tabulação. **Proposta:** PDF separado de enviar/aceitar/
+recusar; nas condições, `Simular` longe de quem grava, e "Salvando…" segue a
+promessa do salvamento. **Custos:** "Salvar base" com "Base salva." perto do
+campo, ativação na outra ponta; "Calcular custo" continua accent e "Salvar
+cálculo" secundária de propósito (salvar congela documento). **Item ×
+Fornecedor:** a inativação virou grupo próprio — `btn--set-apart`, margem
+avulsa, saiu do CSS — e "Dados comerciais salvos.". **Folha de Receita:**
+pesar e concluir a parte em grupos, cada botão com o próprio "…ando".
+Referência de custo do item confirma "Referência salva." quando o formulário
+fecha. CoA, amostra, CMV, origem dos modelos e links do custeio: só gap.
+
+**`.checkbox` ganhou regra** (alinhamento, gap, cursor; cor e fonte do lugar):
+seis telas usavam a classe sem nenhuma. Em 480px, grupo vazio da barra (a
+ação que só aparece com pendência) some em vez de virar linha em branco; no
+desktop ele continua segurando a outra ponta. Smoke 1440 + 390 nas sete telas pedidas
+e nas quatro com checkbox: nenhum overflow, nenhum botão colado ou com texto
+vazando, fonte igual à do desktop, console limpo. Rascunho de Modelo e de
+Estrutura de Custos simulado por interceptação no Playwright — o banco local
+não tem nenhum, e o smoke não grava.
+
+Achado sem correção: Faturamento, Ordem de Produção, Ordem de Compra,
+Expedição e Recebimento dizem "Salvando…" e não confirmam o salvamento — fora
+das telas desta onda.
+
+**Próximo:** BULK-SELECTION-FOUNDATION-01.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

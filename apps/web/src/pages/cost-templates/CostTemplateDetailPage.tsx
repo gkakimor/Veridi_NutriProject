@@ -122,7 +122,15 @@ export function CostTemplateDetailPage() {
   const [template, setTemplate] = useState<CostTemplateDTO | null>(null);
   const [recursos, setRecursos] = useState<IndustrialResourceDTO[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  /*
+   * A ação em curso pelo nome, não um booleano — o mesmo desenho da Política
+   * de Precificação: só o botão clicado diz "Salvando…", e todos recusam o
+   * segundo clique enquanto a gravação está no ar.
+   */
+  const [acaoEmCurso, setAcaoEmCurso] = useState<string | null>(null);
+  const saving = acaoEmCurso !== null;
+  /** O que a última ação gravou, no bloco que a disparou — uma frase, nunca uma pilha. */
+  const [feito, setFeito] = useState<{ bloco: string; texto: string } | null>(null);
   const [nome, setNome] = useState("");
   const [descricao, setDescricao] = useState("");
   const [base, setBase] = useState("1000");
@@ -201,16 +209,24 @@ export function CostTemplateDetailPage() {
       .catch(() => setRecursos([]));
   }, []);
 
-  async function run(action: () => Promise<unknown>) {
-    setSaving(true);
+  async function run(
+    acao: string,
+    action: () => Promise<unknown>,
+    sucesso?: { bloco: string; texto: string },
+  ) {
+    setAcaoEmCurso(acao);
     setError(null);
+    setFeito(null);
     try {
       await action();
       load();
+      // Só depois de a ação passar: erro que caísse aqui deixaria a tela
+      // dizendo "salvo" sobre o que não foi gravado.
+      if (sucesso) setFeito(sucesso);
     } catch (err) {
       setError(apiErrorMessage(err, "Falha ao executar a ação"));
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
@@ -244,6 +260,30 @@ export function CostTemplateDetailPage() {
     isDirty: identificacaoAlterada || rascunhoAlterado,
     substantivo: "modelo de estrutura de custo",
   });
+
+  /**
+   * A frase de estado do bloco: o que falta gravar, ou o que acabou de gravar.
+   *
+   * Pendência vem primeiro — confirmação de "salvo" ao lado de campo já
+   * alterado de novo mente sobre o que está no servidor.
+   */
+  function estadoDoBloco(bloco: string, alterado: boolean) {
+    if (alterado) {
+      return (
+        <span className="form-status form-status--dirty" role="status">
+          Alterações não salvas
+        </span>
+      );
+    }
+    if (feito?.bloco === bloco) {
+      return (
+        <span className="form-status" role="status">
+          {feito.texto}
+        </span>
+      );
+    }
+    return null;
+  }
 
   if (!template) {
     return (
@@ -395,27 +435,42 @@ export function CostTemplateDetailPage() {
             </div>
           </div>
           {canEdit && (
-            <div className="line-actions">
-              <button
-                type="button"
-                className="btn btn--secondary btn--sm"
-                disabled={saving}
-                onClick={() =>
-                  void run(() =>
-                    updateCostTemplate(template.id, { name: nome, description: descricao || null }),
-                  )
-                }
-              >
-                Salvar identificação
-              </button>
-              <button
-                type="button"
-                className="btn btn--ghost btn--sm"
-                disabled={saving}
-                onClick={() => void run(() => setCostTemplateArchived(template.id, !template.archived))}
-              >
-                {template.archived ? "Desarquivar" : "Arquivar"}
-              </button>
+            <div className="form-actions form-actions--split">
+              <div className="form-actions__group">
+                <button
+                  type="button"
+                  className="btn btn--secondary btn--sm"
+                  disabled={saving}
+                  onClick={() =>
+                    void run(
+                      "identificacao",
+                      () =>
+                        updateCostTemplate(template.id, {
+                          name: nome,
+                          description: descricao || null,
+                        }),
+                      { bloco: "identificacao", texto: "Identificação salva." },
+                    )
+                  }
+                >
+                  {acaoEmCurso === "identificacao" ? "Salvando…" : "Salvar identificação"}
+                </button>
+                {estadoDoBloco("identificacao", identificacaoAlterada)}
+              </div>
+              <div className="form-actions__group">
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  disabled={saving}
+                  onClick={() =>
+                    void run("arquivar", () =>
+                      setCostTemplateArchived(template.id, !template.archived),
+                    )
+                  }
+                >
+                  {template.archived ? "Desarquivar" : "Arquivar"}
+                </button>
+              </div>
             </div>
           )}
         </FormSection>
@@ -434,16 +489,23 @@ export function CostTemplateDetailPage() {
                 Nenhuma delas muda quando este template muda.
               </p>
             )}
+            {/* A ativação é confirmada AQUI: ao dar certo, o bloco do rascunho
+                deixa de existir e levaria a frase junto. */}
             {canEdit && !rascunho && (
-              <div className="line-actions">
-                <button
-                  type="button"
-                  className="btn btn--accent btn--sm"
-                  disabled={saving}
-                  onClick={() => void run(() => createCostTemplateVersionFrom(ativa.id))}
-                >
-                  Criar nova versão
-                </button>
+              <div className="form-actions">
+                <div className="form-actions__group">
+                  <button
+                    type="button"
+                    className="btn btn--accent btn--sm"
+                    disabled={saving}
+                    onClick={() =>
+                      void run("nova-versao", () => createCostTemplateVersionFrom(ativa.id))
+                    }
+                  >
+                    {acaoEmCurso === "nova-versao" ? "Criando…" : "Criar nova versão"}
+                  </button>
+                  {estadoDoBloco("versao-ativa", false)}
+                </div>
               </div>
             )}
           </FormSection>
@@ -634,63 +696,83 @@ export function CostTemplateDetailPage() {
             </div>
 
             {editavel && (
-              <div className="line-actions">
-                <button
-                  type="button"
-                  className="btn btn--secondary btn--sm"
-                  onClick={() =>
-                    setLinhas((atual) => [
-                      ...atual,
-                      {
-                        chave: `novo-${atual.length}-${Date.now()}`,
-                        industrialResourceId: "",
-                        usageQuantity: "",
-                        usageUom: "HOUR",
-                        quantidadeDeRecursos: "1",
-                      },
-                    ])
-                  }
-                >
-                  + Adicionar recurso
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--secondary btn--sm"
-                  disabled={saving}
-                  onClick={() =>
-                    void run(() =>
-                      updateCostTemplateVersion(rascunho.id, {
-                        referenceOutputQuantity: exigirDecimal(base, "Base de produção"),
-                        referenceOutputUomCode: unidade,
-                        energyCalculationMode: modoEnergia,
-                        energyResourceId: modoEnergia === "FROM_EQUIPMENT" ? recursoEnergia : null,
-                        resourceUsages: linhas
-                          .filter((linha) => linha.industrialResourceId && linha.usageQuantity)
-                          .map(({ chave: _chave, quantidadeDeRecursos, ...resto }) => ({
-                            ...resto,
-                            usageQuantity: exigirDecimal(resto.usageQuantity, "Uso por lote"),
-                            // Energia não envia quantidade: para ela o domínio usa 1.
-                            ...(contaRecursosDaLinha(resto.industrialResourceId)
-                              ? { resourceCount: exigirQuantidadeDeRecursos(quantidadeDeRecursos) }
-                              : {}),
-                          })),
-                      }),
-                    )
-                  }
-                >
-                  Salvar rascunho
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--accent btn--sm"
-                  disabled={
-                    saving ||
-                    (rascunho.resourceUsages.length === 0 && rascunho.additionalCosts.length === 0)
-                  }
-                  onClick={() => void run(() => activateCostTemplateVersion(rascunho.id))}
-                >
-                  Ativar versão
-                </button>
+              <div className="form-actions form-actions--split">
+                <div className="form-actions__group">
+                  {/* Terciária: acrescentar recurso não grava nada. */}
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={() =>
+                      setLinhas((atual) => [
+                        ...atual,
+                        {
+                          chave: `novo-${atual.length}-${Date.now()}`,
+                          industrialResourceId: "",
+                          usageQuantity: "",
+                          usageUom: "HOUR",
+                          quantidadeDeRecursos: "1",
+                        },
+                      ])
+                    }
+                  >
+                    + Adicionar recurso
+                  </button>
+                </div>
+                <div className="form-actions__group">
+                  {estadoDoBloco("rascunho", rascunhoAlterado)}
+                  <button
+                    type="button"
+                    className="btn btn--secondary btn--sm"
+                    // Sem alteração pendente não há o que gravar, e a gravação
+                    // em curso não aceita um segundo clique.
+                    disabled={saving || !rascunhoAlterado}
+                    onClick={() =>
+                      void run(
+                        "rascunho",
+                        () =>
+                          updateCostTemplateVersion(rascunho.id, {
+                            referenceOutputQuantity: exigirDecimal(base, "Base de produção"),
+                            referenceOutputUomCode: unidade,
+                            energyCalculationMode: modoEnergia,
+                            energyResourceId:
+                              modoEnergia === "FROM_EQUIPMENT" ? recursoEnergia : null,
+                            resourceUsages: linhas
+                              .filter((linha) => linha.industrialResourceId && linha.usageQuantity)
+                              .map(({ chave: _chave, quantidadeDeRecursos, ...resto }) => ({
+                                ...resto,
+                                usageQuantity: exigirDecimal(resto.usageQuantity, "Uso por lote"),
+                                // Energia não envia quantidade: para ela o domínio usa 1.
+                                ...(contaRecursosDaLinha(resto.industrialResourceId)
+                                  ? {
+                                      resourceCount:
+                                        exigirQuantidadeDeRecursos(quantidadeDeRecursos),
+                                    }
+                                  : {}),
+                              })),
+                          }),
+                        { bloco: "rascunho", texto: "Rascunho salvo." },
+                      )
+                    }
+                  >
+                    {acaoEmCurso === "rascunho" ? "Salvando…" : "Salvar rascunho"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--accent btn--sm"
+                    disabled={
+                      saving ||
+                      (rascunho.resourceUsages.length === 0 && rascunho.additionalCosts.length === 0)
+                    }
+                    onClick={() =>
+                      void run("ativar", () => activateCostTemplateVersion(rascunho.id), {
+                        bloco: "versao-ativa",
+                        texto: "Versão ativada.",
+                      })
+                    }
+                  >
+                    {acaoEmCurso === "ativar" ? "Ativando…" : "Ativar versão"}
+                  </button>
+                </div>
               </div>
             )}
           </FormSection>

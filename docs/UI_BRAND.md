@@ -354,14 +354,29 @@ Ações **dentro** de um formulário usam `.form-actions`, com o mesmo
 documento. `--split` separa os assuntos nas pontas e
 `.form-actions__group` junta o que pertence ao mesmo; em 480px os grupos
 ocupam a linha inteira e os botões esticam — a fonte do botão **nunca**
-encolhe para caber.
+encolhe para caber. Grupo que pode ficar vazio (ação que só aparece com
+pendência) continua no JSX para segurar a outra ponta no desktop; em 480px
+ele some, em vez de virar linha em branco.
 
 Nunca resolver isso com regra genérica (`button + button { margin… }`):
 espaçamento de ação é classe explícita, aplicada onde se quis aplicar.
 
-`.line-actions` é o padrão **antigo** — só `margin-top`, sem gap nenhum —
-e continua em ~27 blocos com botões irmãos encostados. Tela tocada migra
-para `.form-actions`; migração em massa é trabalho de onda própria.
+`.line-actions` é o padrão **antigo** — só `margin-top`, sem gap nenhum — e
+desde o UX-ACTIONS-FEEDBACK-WAVE-02 **não recebe duas ações lado a lado**.
+Continua valendo para um botão isolado, para um `.table__actions` que já
+traz o gap dele, e para o bloco que só dá espaço (uma `dl`). Duas ações
+irmãs vão para `.form-actions`, e `ux-acoes-onda-02.test.tsx` lê o fonte e
+recusa a barra antiga com irmãs. A única exceção nomeada é a Qualidade do
+lote, cujos botões dependem de status que nunca coexistem.
+
+Hierarquia na barra, sem mudar o que a ação faz: **commit** do fluxo
+(`Ativar`, `Aprovar`, `Enviar ao cliente`) em `btn--accent`, na ponta;
+**gravar** o bloco (`Salvar rascunho`, `Salvar condições`) e **recalcular**
+(`Simular`) em `btn--secondary`; **acrescentar** sem gravar (`+ Adicionar…`)
+em `btn--ghost`; **destrutiva** mantém `btn--danger` e o diálogo dela. Quatro
+ações nunca ficam com o mesmo peso: grupos separam o andamento do documento
+da decisão que encerra o fluxo. Separar ações é grupo, nunca `margin-left`
+avulso num botão — `btn--set-apart` saiu.
 
 ### Gravou? A tela responde
 
@@ -375,6 +390,21 @@ Pendência vem antes de confirmação: enquanto o bloco está sujo a mesma faixa
 diz `Alterações não salvas`. Sem alteração pendente o botão de gravar fica
 desabilitado — a pendência é a que a guarda de alterações não salvas já
 calcula, nunca um `dirty` paralelo.
+
+Onde o salvar também valida e leva ao primeiro erro (a versão da Formulação),
+o botão continua clicável sem pendência: desabilitá-lo tiraria da pessoa o
+caminho que diz o que está errado. A frase de estado vale do mesmo jeito.
+
+Com freio de clique duplo compartilhado (`saving` de várias ações), o nome da
+ação em curso decide o rótulo: "Salvando…" nunca aparece no botão de salvar
+enquanto o que está no ar é ativar, confirmar ou cancelar.
+
+### Caixa com rótulo (`.checkbox`)
+
+`<label class="checkbox"><input type="checkbox"> Texto</label>` — a caixa
+DENTRO do rótulo, que dá o nome acessível e a área clicável. A regra só
+alinha (`inline-flex`, centro), dá `gap` e cursor; cor e tamanho de letra
+são os do lugar onde o rótulo mora (filtro de lista, formulário).
 
 ---
 

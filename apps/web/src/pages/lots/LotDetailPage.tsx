@@ -728,7 +728,7 @@ export function LotDetailPage() {
           </dl>
 
           {canReviewCoa && lot.requiresCoa && lot.coaStatus === "RECEIVED" && (
-            <div className="line-actions">
+            <div className="form-actions">
               <button
                 type="button"
                 className="btn btn--accent"

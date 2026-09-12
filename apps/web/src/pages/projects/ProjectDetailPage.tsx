@@ -300,48 +300,57 @@ export function ProjectDetailPage() {
             <ProjectCommercialSummary project={project} />
           </div>
 
+          {/* Quatro ações, dois assuntos. À esquerda, a etapa em que o projeto
+              espera; à direita, as decisões que encerram o fluxo — aprovar e
+              cancelar, cada uma com o seu diálogo. Coladas e com o mesmo
+              espaçamento, trocar de etapa parecia tão definitivo quanto
+              aprovar. A ordem de leitura e de tabulação não mudou. */}
           {editable && (
-            <div className="line-actions">
-              {project.status !== "SAMPLE" && (
+            <div className="form-actions form-actions--split">
+              <div className="form-actions__group">
+                {project.status !== "SAMPLE" && (
+                  <button
+                    type="button"
+                    className="btn btn--secondary btn--sm"
+                    disabled={saving}
+                    onClick={() =>
+                      void run(() => changeProjectStatus(project.id, { status: "SAMPLE" }))
+                    }
+                  >
+                    Mudar para Amostra
+                  </button>
+                )}
+                {project.status !== "STAND_BY" && (
+                  <button
+                    type="button"
+                    className="btn btn--secondary btn--sm"
+                    disabled={saving}
+                    onClick={() =>
+                      void run(() => changeProjectStatus(project.id, { status: "STAND_BY" }))
+                    }
+                  >
+                    Stand-by
+                  </button>
+                )}
+              </div>
+              <div className="form-actions__group">
                 <button
                   type="button"
-                  className="btn btn--secondary btn--sm"
+                  className="btn btn--accent btn--sm"
                   disabled={saving}
-                  onClick={() =>
-                    void run(() => changeProjectStatus(project.id, { status: "SAMPLE" }))
-                  }
+                  onClick={() => setApprovalOpen(true)}
                 >
-                  Mudar para Amostra
+                  Aprovar projeto
                 </button>
-              )}
-              {project.status !== "STAND_BY" && (
                 <button
                   type="button"
-                  className="btn btn--secondary btn--sm"
+                  className="btn btn--danger btn--sm"
                   disabled={saving}
-                  onClick={() =>
-                    void run(() => changeProjectStatus(project.id, { status: "STAND_BY" }))
-                  }
+                  onClick={() => setCancelOpen(true)}
                 >
-                  Stand-by
+                  Cancelar projeto
                 </button>
-              )}
-              <button
-                type="button"
-                className="btn btn--accent btn--sm"
-                disabled={saving}
-                onClick={() => setApprovalOpen(true)}
-              >
-                Aprovar projeto
-              </button>
-              <button
-                type="button"
-                className="btn btn--danger btn--sm"
-                disabled={saving}
-                onClick={() => setCancelOpen(true)}
-              >
-                Cancelar projeto
-              </button>
+              </div>
             </div>
           )}
         </FormSection>

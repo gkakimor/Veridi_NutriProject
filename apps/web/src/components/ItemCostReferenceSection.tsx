@@ -46,6 +46,11 @@ export function ItemCostReferenceSection({ itemId }: { itemId: string }) {
   const [editando, setEditando] = useState(false);
   const [mostrarHistorico, setMostrarHistorico] = useState(false);
   const [saving, setSaving] = useState(false);
+  /*
+   * Gravar fecha o formulário — e formulário que some sem dizer nada deixa a
+   * dúvida "salvou ou cancelou?". A frase fica até a próxima edição.
+   */
+  const [salva, setSalva] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
 
   const [unitCost, setUnitCost] = useState("");
@@ -109,6 +114,7 @@ export function ItemCostReferenceSection({ itemId }: { itemId: string }) {
     setFieldError(null);
     setSaving(true);
     setError(null);
+    setSalva(false);
     try {
       const result = await createItemCostReference(itemId, {
         unitCost: normalizado,
@@ -121,6 +127,7 @@ export function ItemCostReferenceSection({ itemId }: { itemId: string }) {
       setUnitCost("");
       setNote("");
       setEffectiveFrom(hojeISO());
+      setSalva(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao salvar a referência");
     } finally {
@@ -210,10 +217,18 @@ export function ItemCostReferenceSection({ itemId }: { itemId: string }) {
                 <button
                   type="button"
                   className="btn btn--secondary btn--sm"
-                  onClick={() => setEditando(true)}
+                  onClick={() => {
+                    setSalva(false);
+                    setEditando(true);
+                  }}
                 >
                   {current ? "Alterar referência" : "Definir referência"}
                 </button>
+              )}
+              {salva && !editando && (
+                <span className="form-status" role="status">
+                  Referência salva.
+                </span>
               )}
               {data.history.length > 0 && (
                 <button

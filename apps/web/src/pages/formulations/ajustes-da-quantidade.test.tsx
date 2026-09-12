@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { FormulationComponentDTO, FormulationVersionDTO } from "@veridi/shared";
@@ -208,7 +208,10 @@ describe("Painel de ajustes — rascunho, Aplicar e Cancelar", () => {
     await user.click(botaoDaLinha);
 
     expect(painel()).not.toBeNull();
-    expect(screen.getByRole("status")).toHaveTextContent(/Há ajustes não aplicados nesta linha/);
+    // O aviso é do painel; a barra de ações tem o seu próprio "Alterações não salvas".
+    expect(within(painel() as HTMLElement).getByRole("status")).toHaveTextContent(
+      /Há ajustes não aplicados nesta linha/,
+    );
     expect(screen.getByRole("textbox", { name: "Pureza aplicada" })).toHaveValue("95");
   });
 

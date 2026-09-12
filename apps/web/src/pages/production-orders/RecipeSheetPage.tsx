@@ -95,7 +95,12 @@ export function RecipeSheetPage() {
   const [lotCode, setLotCode] = useState("");
   const [actualQuantity, setActualQuantity] = useState("");
   const [notes, setNotes] = useState("");
-  const [saving, setSaving] = useState(false);
+  /*
+   * A ação em curso pelo nome: pesar e concluir a parte dividem o freio de
+   * clique duplo, mas cada botão diz só o que ELE está fazendo.
+   */
+  const [acaoEmCurso, setAcaoEmCurso] = useState<"pesagem" | "concluir-parte" | null>(null);
+  const saving = acaoEmCurso !== null;
 
   const reload = useCallback(() => {
     if (!id) return;
@@ -114,7 +119,7 @@ export function RecipeSheetPage() {
 
   async function handleRegisterWeighing() {
     if (!id) return;
-    setSaving(true);
+    setAcaoEmCurso("pesagem");
     setError(null);
     try {
       const updated = await registerWeighing(id, activePart, {
@@ -130,20 +135,20 @@ export function RecipeSheetPage() {
     } catch (err) {
       reportError(err, "Falha ao registrar pesagem");
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
   async function handleCompletePart() {
     if (!id) return;
-    setSaving(true);
+    setAcaoEmCurso("concluir-parte");
     setError(null);
     try {
       setSheet(await completePart(id, activePart));
     } catch (err) {
       reportError(err, "Falha ao concluir a parte");
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
@@ -474,23 +479,31 @@ export function RecipeSheetPage() {
                   />
                 </div>
 
-                <div className="line-actions">
-                  <button
-                    type="button"
-                    className="btn btn--accent"
-                    disabled={saving || !requirementId || !lotCode.trim() || !actualQuantity.trim()}
-                    onClick={() => void handleRegisterWeighing()}
-                  >
-                    {saving ? "Registrando…" : "Confirmar pesagem"}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn--secondary"
-                    disabled={saving}
-                    onClick={() => void handleCompletePart()}
-                  >
-                    Concluir parte {part.partNumber}
-                  </button>
+                {/* Pesar é a rotina, repetida a cada material; concluir a parte
+                    encerra a pesagem dela. Na mesma barra, mas em grupos
+                    diferentes — longe o bastante para não se clicarem por
+                    engano. */}
+                <div className="form-actions form-actions--split">
+                  <div className="form-actions__group">
+                    <button
+                      type="button"
+                      className="btn btn--accent"
+                      disabled={saving || !requirementId || !lotCode.trim() || !actualQuantity.trim()}
+                      onClick={() => void handleRegisterWeighing()}
+                    >
+                      {acaoEmCurso === "pesagem" ? "Registrando…" : "Confirmar pesagem"}
+                    </button>
+                  </div>
+                  <div className="form-actions__group">
+                    <button
+                      type="button"
+                      className="btn btn--secondary"
+                      disabled={saving}
+                      onClick={() => void handleCompletePart()}
+                    >
+                      {acaoEmCurso === "concluir-parte" ? "Concluindo…" : `Concluir parte ${part.partNumber}`}
+                    </button>
+                  </div>
                 </div>
               </>
             )}

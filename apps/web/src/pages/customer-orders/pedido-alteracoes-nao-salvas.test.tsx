@@ -297,8 +297,13 @@ describe("Pedido gravado — guarda de alterações não salvas", () => {
     await abrirGravado();
 
     fireEvent.change(observacoes(), { target: { value: "Conferir com o cliente" } });
+    // A pendência aparece ao lado de quem grava (UX-ACTIONS-FEEDBACK-WAVE-02)…
+    expect(screen.getByText("Alterações não salvas")).toHaveAttribute("role", "status");
     await user.click(screen.getByRole("button", { name: /Salvar rascunho/ }));
     await waitFor(() => expect(updateCustomerOrder).toHaveBeenCalledTimes(1));
+    // …e dá lugar à confirmação, uma só, depois da resposta.
+    expect(await screen.findByText("Rascunho salvo.")).toHaveAttribute("role", "status");
+    expect(screen.queryByText("Alterações não salvas")).toBeNull();
 
     await user.click(menuEstoque());
 

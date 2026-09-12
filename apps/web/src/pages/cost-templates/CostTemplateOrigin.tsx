@@ -118,7 +118,7 @@ export function CostTemplateOrigin({ version, productId, canEdit, onChanged }: P
             <strong>V{novidade.latestVersionNumber}</strong>. Esta estrutura continua na V
             {novidade.originVersionNumber} e não muda sozinha.
           </p>
-          <div className="line-actions">
+          <div className="form-actions">
             <button
               type="button"
               className="btn btn--secondary btn--sm"

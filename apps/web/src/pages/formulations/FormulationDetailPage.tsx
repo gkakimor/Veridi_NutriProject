@@ -215,7 +215,7 @@ export function FormulationDetailPage() {
             biblioteca. Esconder o terceiro atrás da Biblioteca obrigaria quem
             está no produto a sair dele para reaproveitar o que já existe.
           */}
-          <div className="line-actions">
+          <div className="form-actions">
             {versions.length === 0 ? (
               <button
                 type="button"

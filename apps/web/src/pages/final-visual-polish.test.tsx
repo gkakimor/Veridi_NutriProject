@@ -145,10 +145,17 @@ describe("Inativar relação — peso e confirmação", () => {
       name: "Inativar relação",
     })) as HTMLButtonElement;
     expect(inativar.className).toContain("btn--danger");
-    expect(inativar.className).toContain("btn--set-apart");
 
     // Nenhuma ação de rotina do painel parece mais forte que ela.
     const preferencial = screen.getByRole("button", { name: "Remover preferencial" });
+    // Separada por grupo, não por margem avulsa (UX-ACTIONS-FEEDBACK-WAVE-02):
+    // a rotina de um lado da barra, a inativação na outra ponta.
+    const barra = inativar.closest(".form-actions--split");
+    expect(barra).not.toBeNull();
+    expect(inativar.closest(".form-actions__group")).not.toBe(
+      preferencial.closest(".form-actions__group"),
+    );
+    expect(barra).toContainElement(preferencial);
     expect(preferencial.className).not.toContain("btn--accent");
     expect(preferencial.className).not.toContain("btn--danger");
   });

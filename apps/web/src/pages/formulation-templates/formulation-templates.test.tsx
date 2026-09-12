@@ -293,6 +293,11 @@ describe("Detalhe do template", () => {
     );
     await waitFor(() => expect(screen.getByText(/Rascunho — V4/)).toBeInTheDocument());
 
+    // Sem alteração pendente não há o que gravar (UX-ACTIONS-FEEDBACK-WAVE-02):
+    // editar vem antes de salvar.
+    fireEvent.change(screen.getByLabelText(/Base da formulação/, { selector: "input" }), {
+      target: { value: "2" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Salvar rascunho" }));
     await waitFor(() => expect(updateFormulationTemplateVersion).toHaveBeenCalled());
 
