@@ -46,6 +46,14 @@ vi.mock("../lib/projects-api", () => ({
   createProjectProduct: vi.fn(),
   linkProjectProduct: vi.fn(),
 }));
+/*
+ * As listagens sobre a foundation de filtros leem o usuário — a lembrança de
+ * sessão dos filtros é por pessoa. Este arquivo renderiza a tela fora do
+ * `AuthProvider`, e `useAuth` lança de propósito quando falta o provider.
+ */
+vi.mock("../app/AuthProvider", () => ({
+  useAuth: () => ({ user: { id: "u-1", role: "ADMIN" } }),
+}));
 
 import { ReceiptsPage } from "./receiving/ReceiptsPage";
 import { PurchaseOrdersPage } from "./purchase-orders/PurchaseOrdersPage";

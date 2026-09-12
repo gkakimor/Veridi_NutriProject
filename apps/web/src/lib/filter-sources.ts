@@ -1,6 +1,7 @@
-import type { ProductDTO, SupplierDTO } from "@veridi/shared";
+import type { ItemDTO, ProductDTO, SupplierDTO } from "@veridi/shared";
 import type { EntityFilterSource } from "../components/filters/EntityFilterSelect";
 import type { EntityOption } from "../components/SearchableEntitySelect";
+import { listItems } from "./items-api";
 import { listProducts } from "./products-api";
 import { listSuppliers } from "./suppliers-api";
 
@@ -67,5 +68,33 @@ export const fornecedorFilterSource: EntityFilterSource = {
     const encontrados = (await listSuppliers({ ids: [id], pageSize: 1 })).suppliers;
     const fornecedor = encontrados[0];
     return fornecedor ? opcaoDeFornecedor(fornecedor) : null;
+  },
+};
+
+function opcaoDeItem(item: ItemDTO): EntityOption {
+  return {
+    id: item.id,
+    code: item.code,
+    name: item.name,
+    // A unidade distingue itens de nome parecido controlados de formas
+    // diferentes, e é o que a pessoa confere antes de escolher.
+    hint: item.unitCode,
+  };
+}
+
+/** Itens de estoque — filtro de Lotes. Catálogo grande: busca no servidor. */
+export const itemFilterSource: EntityFilterSource = {
+  inicial: async () => (await listItems({ active: true, pageSize: PAGINA })).items.map(opcaoDeItem),
+  buscar: async (termo) => (await listItems({ search: termo, pageSize: PAGINA })).items.map(opcaoDeItem),
+  /*
+   * `ids` é filtro de identidade do servidor, não busca textual: um item que
+   * veio pela URL é encontrado esteja ele na primeira página ou na milésima,
+   * e continua sendo encontrado se estiver inativo — um lote antigo aponta
+   * para um item que pode já ter saído do catálogo ativo.
+   */
+  porId: async (id) => {
+    const encontrados = (await listItems({ ids: [id], pageSize: 1 })).items;
+    const item = encontrados[0];
+    return item ? opcaoDeItem(item) : null;
   },
 };

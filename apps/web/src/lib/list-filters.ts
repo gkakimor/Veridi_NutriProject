@@ -120,14 +120,28 @@ export function useListFilters<T extends Record<string, string>>(
     [defaults, setParams],
   );
 
+  /*
+   * A pessoa mexeu em algum filtro NESTA visita?
+   *
+   * É o que separa "escolhi isto" de "cheguei aqui por um link" — ver o
+   * efeito de persistência mais abaixo.
+   */
+  const escolheu = useRef(false);
+
   const set = useCallback(
-    (patch: Partial<T>) => escrever({ ...values, ...patch }, 1),
+    (patch: Partial<T>) => {
+      escolheu.current = true;
+      escrever({ ...values, ...patch }, 1);
+    },
     [escrever, values],
   );
 
   const setPage = useCallback((pagina: number) => escrever(values, pagina), [escrever, values]);
 
-  const clear = useCallback(() => escrever(defaults, 1), [defaults, escrever]);
+  const clear = useCallback(() => {
+    escolheu.current = true;
+    escrever(defaults, 1);
+  }, [defaults, escrever]);
 
   /*
    * Restaura a lembrança da sessão UMA vez, e só quando a URL não trouxe
@@ -150,8 +164,22 @@ export function useListFilters<T extends Record<string, string>>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /*
+   * A sessão lembra o que a PESSOA escolheu na tela — nunca o que um link
+   * entregou a ela.
+   *
+   * Sem essa distinção, um clique em "Liberação de lotes"
+   * (`/estoque/lotes?status=AWAITING_RELEASE`) gravava aquele status como
+   * lembrança, e a partir dali "Lotes" — o MESMO endereço, sem query — abria
+   * na quarentena. Um link de contexto reescrevia em silêncio a visão padrão
+   * de quem o clicou, e o menu apontava para um item enquanto a tela
+   * mostrava o recorte do outro.
+   *
+   * O que continua valendo: filtrei, abri um registro, voltei — a lista
+   * ainda está filtrada, porque ali houve escolha.
+   */
   useEffect(() => {
-    if (!persistScope) return;
+    if (!persistScope || !escolheu.current) return;
     writeStoredFilterSet(userId, persistScope, applied as Record<string, string>);
   }, [applied, persistScope, userId]);
 
