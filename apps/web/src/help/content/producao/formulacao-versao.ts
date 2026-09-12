@@ -51,7 +51,7 @@ export const formulacaoVersao = {
       system: 'O sistema converte para a unidade de estoque do item e mostra "Equivalente estoque" e "Físico / unidade", cada um na sua coluna.',
     },
     {
-      you: 'Abra os ajustes da linha e diga o que a quantidade significa: física informada, ou calculada com os ajustes que você marcar. Clique em "Aplicar ajustes" para confirmar, ou em "Cancelar" para desistir.',
+      you: 'Abra os ajustes da linha e diga o que a quantidade significa: física informada, ou calculada com os ajustes que você marcar. Clique em "Aplicar ajustes" para confirmar.',
       system: "Ao aplicar, o sistema recalcula o físico da linha e resume os ajustes nela; a conta fica no ⓘ do painel.",
     },
     {
