@@ -506,3 +506,127 @@ describe("Produto Acabado — visão operacional", () => {
     await app.close();
   });
 });
+
+/**
+ * FILTER-OPERATIONS-WAVE-01 — o período de Produto Acabado é DIA COMERCIAL.
+ *
+ * Dois defeitos no mesmo filtro. No servidor, `requiredDateSchema` (=
+ * `z.coerce.date`) com `lte`: "até 10/09" terminava às 21h do dia 09 em São
+ * Paulo. Na tela, `new Date(`${dia}T00:00:00`)` e `...T23:59:59.999` —
+ * componentes LOCAIS do navegador —, então o mesmo filtro devolvia conjuntos
+ * diferentes em fusos diferentes. E o CSV não levava período nenhum: a tela
+ * mostrava um recorte e o arquivo exportava a produção inteira.
+ */
+describe("Produto Acabado — filtro por dia comercial", () => {
+  /** Produz um lote e crava o `producedAt` do apontamento no instante pedido. */
+  async function produzidoEm(app: App, productId: string, marca: string, instante: Date) {
+    const produced = await produceLot(app, productId, "1", "1", marca);
+    await getPrisma().productionOutput.updateMany({
+      where: { lotId: produced.lotId },
+      data: { producedAt: instante },
+    });
+    return produced;
+  }
+
+  async function lotesDoPeriodo(app: App, productId: string, dateFrom: string, dateTo: string) {
+    const result = await listFinishedGoods(
+      app,
+      `?productId=${productId}&dateFrom=${dateFrom}&dateTo=${dateTo}&pageSize=100`,
+    );
+    return (result.rows as { lotId: string }[]).map((row) => row.lotId);
+  }
+
+  it("o mesmo dia nas duas pontas cobre o dia comercial inteiro, e a fronteira é real", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const supplier = await createSupplier();
+    const rawMaterial = await createItem("RAW_MATERIAL");
+    await receiveWithCost(app, {
+      supplierId: supplier.id,
+      itemId: rawMaterial.id,
+      quantity: "1000",
+      unitCost: "10",
+    });
+    const { product } = await createProductWithFormulation(app, rawMaterial.id, "10");
+
+    // 23:30 de 10/09 em São Paulo — em UTC já é 11/09 às 02:30.
+    const noiteDoDia10 = await produzidoEm(
+      app,
+      product.id,
+      `VD-FG-DIA-A-${Date.now()}`,
+      new Date("2026-09-11T02:30:00.000Z"),
+    );
+    // Meio do dia 11 — fica FORA do filtro do dia 10.
+    const dia11 = await produzidoEm(
+      app,
+      product.id,
+      `VD-FG-DIA-B-${Date.now()}`,
+      new Date("2026-09-11T15:00:00.000Z"),
+    );
+
+    const dia10 = await lotesDoPeriodo(app, product.id, "2026-09-10", "2026-09-10");
+    expect(dia10).toContain(noiteDoDia10.lotId);
+    expect(dia10).not.toContain(dia11.lotId);
+
+    // E o dia 11 traz o dia 11, não o 10.
+    const onze = await lotesDoPeriodo(app, product.id, "2026-09-11", "2026-09-11");
+    expect(onze).toContain(dia11.lotId);
+    expect(onze).not.toContain(noiteDoDia10.lotId);
+
+    // Período cruzando o mês inclui os dois.
+    const janela = await lotesDoPeriodo(app, product.id, "2026-08-25", "2026-09-11");
+    expect(janela).toContain(noiteDoDia10.lotId);
+    expect(janela).toContain(dia11.lotId);
+
+    await app.close();
+  });
+
+  it("o CSV exporta o MESMO período da tela", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const supplier = await createSupplier();
+    const rawMaterial = await createItem("RAW_MATERIAL");
+    await receiveWithCost(app, {
+      supplierId: supplier.id,
+      itemId: rawMaterial.id,
+      quantity: "1000",
+      unitCost: "10",
+    });
+    const { product } = await createProductWithFormulation(app, rawMaterial.id, "10");
+
+    const marcaDia10 = `VD-FG-CSV-A-${Date.now()}`;
+    const marcaDia11 = `VD-FG-CSV-B-${Date.now()}`;
+    await produzidoEm(app, product.id, marcaDia10, new Date("2026-09-11T02:30:00.000Z"));
+    await produzidoEm(app, product.id, marcaDia11, new Date("2026-09-11T15:00:00.000Z"));
+
+    const csv = await app.inject({
+      method: "GET",
+      url: `/finished-goods/export.csv?productId=${product.id}&dateFrom=2026-09-10&dateTo=2026-09-10`,
+    });
+    expect(csv.statusCode).toBe(200);
+    expect(csv.body).toContain(marcaDia10);
+    expect(csv.body).not.toContain(marcaDia11);
+
+    await app.close();
+  });
+
+  it("data que não é dia civil é recusada em vez de virar outro dia", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    for (const valor of ["10/09/2026", "2026-02-30", "2026-09-10T00:00:00.000Z"]) {
+      const resposta = await app.inject({
+        method: "GET",
+        url: `/finished-goods?dateTo=${encodeURIComponent(valor)}`,
+      });
+      expect(resposta.statusCode).toBe(400);
+    }
+
+    const vazio = await app.inject({ method: "GET", url: "/finished-goods?dateFrom=&dateTo=" });
+    expect(vazio.statusCode).toBe(200);
+
+    await app.close();
+  });
+});

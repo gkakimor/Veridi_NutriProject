@@ -9,7 +9,7 @@ import type {
   ReceiptLine,
 } from "@prisma/client";
 import type { ReceiptDTO, ReceiptLineDTO, ReceiptListResponse } from "@veridi/shared";
-import { RECEIPT_CODE_PREFIX } from "@veridi/shared";
+import { RECEIPT_CODE_PREFIX, intervaloDeDiasComerciais } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
@@ -129,10 +129,16 @@ export async function listReceipts(
   if (query.supplierId) where["supplierId"] = query.supplierId;
   if (query.sourceType) where["sourceType"] = query.sourceType;
   if (query.customerId) where["customerId"] = query.customerId;
-  if (query.dateFrom || query.dateTo) {
+  /*
+   * Período por dia comercial, fim EXCLUSIVO — mesma conversão do
+   * Faturamento, mesma função. Um recebimento lançado às 22h de 10/09
+   * pertence ao dia 10 para a Veridi, embora em UTC já seja dia 11.
+   */
+  const periodo = intervaloDeDiasComerciais(query.dateFrom, query.dateTo);
+  if (periodo.inicio || periodo.fimExclusivo) {
     where["receivedAt"] = {
-      ...(query.dateFrom ? { gte: query.dateFrom } : {}),
-      ...(query.dateTo ? { lte: query.dateTo } : {}),
+      ...(periodo.inicio ? { gte: periodo.inicio } : {}),
+      ...(periodo.fimExclusivo ? { lt: periodo.fimExclusivo } : {}),
     };
   }
   if (query.search) {

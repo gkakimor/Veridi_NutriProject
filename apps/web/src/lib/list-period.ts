@@ -21,9 +21,15 @@ import {
  * mesma lista.
  */
 
-export type ListPeriodPreset = "mes-atual" | "hoje" | "7d" | "30d" | "custom";
+export type ListPeriodPreset = "todos" | "mes-atual" | "hoje" | "7d" | "30d" | "custom";
 
 export const LIST_PERIOD_PRESET_LABELS: Record<ListPeriodPreset, string> = {
+  /*
+   * Sem recorte de período. É o default de listagem que nunca teve um — e
+   * tirá-lo para impor "Mês atual" esconderia registros de uma tela que hoje
+   * mostra tudo, o que é decisão de Product Ownership e não de refatoração.
+   */
+  todos: "Todo o período",
   "mes-atual": "Mês atual",
   hoje: "Hoje",
   "7d": "Últimos 7 dias",
@@ -60,6 +66,8 @@ export function resolveListPeriod(
 ): ListPeriodDays {
   const hoje = hojeComercial(agora);
   switch (preset) {
+    case "todos":
+      return { dateFrom: "", dateTo: "" };
     case "hoje":
       return { dateFrom: hoje, dateTo: hoje };
     case "7d":

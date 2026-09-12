@@ -97,3 +97,19 @@ describe("período por extenso", () => {
     expect(formatListPeriod({ dateFrom: "", dateTo: "" })).toBe("todo o período");
   });
 });
+
+describe("`Todo o período` — o default das listas que nunca tiveram recorte", () => {
+  it("não produz nenhuma ponta: é a ausência de filtro, não um intervalo largo", () => {
+    expect(resolveListPeriod("todos", "", "", NOITE_DE_ONZE_DE_SETEMBRO)).toEqual({
+      dateFrom: "",
+      dateTo: "",
+    });
+  });
+
+  it("ignora datas remanescentes de um `Personalizado` anterior", () => {
+    expect(resolveListPeriod("todos", "2026-08-25", "2026-09-05")).toEqual({
+      dateFrom: "",
+      dateTo: "",
+    });
+  });
+});

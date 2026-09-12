@@ -46,6 +46,11 @@ afterAll(async () => {
     });
     const reservationIds = reservations.map((r) => r.id);
     if (reservationIds.length > 0) {
+      // Consumo aponta para a linha de reserva: sem apagar o consumo antes, a
+      // FK `production_consumptions_reservationLineId_fkey` derruba a limpeza.
+      await prisma.productionConsumption.deleteMany({
+        where: { reservationLine: { reservationId: { in: reservationIds } } },
+      });
       await prisma.materialReservationLine.deleteMany({ where: { reservationId: { in: reservationIds } } });
       await prisma.materialReservation.deleteMany({ where: { id: { in: reservationIds } } });
     }
@@ -538,6 +543,150 @@ describe("Production Orders — cancelamento de OP RELEASED", () => {
     // Continua so o movimento original de entrada — cancelar RELEASED nunca
     // cria InventoryMovement (nada fisico mudou).
     expect(movements.json().movements).toHaveLength(1);
+
+    await app.close();
+  });
+});
+
+/**
+ * FILTER-OPERATIONS-WAVE-01 — a fila do Picking/Consumo é UMA consulta.
+ *
+ * A tela pedia `status=RELEASED` e `status=IN_PRODUCTION` separadamente, com
+ * `pageSize: 100` em cada, e concatenava as duas respostas no navegador. A
+ * partir da 101ª ordem de qualquer um dos dois lados a fila perdia linhas em
+ * silêncio, e o rodapé contava o que havia sobrado como se fosse o total —
+ * numa tela cuja função é garantir que nada ficou para trás.
+ *
+ * `status` passou a aceitar uma lista separada por vírgula. Um valor só
+ * continua valendo igual: não é breaking change.
+ */
+describe("Ordens de Produção — filtro por vários status", () => {
+  async function releasedEInProduction(app: App) {
+    const rawMaterial = await createItem("RAW_MATERIAL", { controlsLot: false });
+    await receiveStockNoLot(app, rawMaterial.id, "1000");
+    const { product } = await createProductWithActiveFormulation(app, [
+      { itemId: rawMaterial.id, quantity: "30", unitCode: "kg" },
+    ]);
+
+    const liberada = (
+      await app.inject({
+        method: "POST",
+        url: `/production-orders/${(await createPlannedOrder(app, product.id, "1")).id}/release`,
+      })
+    ).json();
+
+    const segunda = (
+      await app.inject({
+        method: "POST",
+        url: `/production-orders/${(await createPlannedOrder(app, product.id, "1")).id}/release`,
+      })
+    ).json();
+    // Consumir material é o que leva a OP para IN_PRODUCTION.
+    for (const requirement of segunda.requirements) {
+      for (const line of requirement.reservationLines) {
+        await app.inject({
+          method: "POST",
+          url: `/production-orders/${segunda.id}/picking/${line.id}/confirm`,
+          payload: line.lotCode ? { lotCode: line.lotCode } : {},
+        });
+        await app.inject({
+          method: "POST",
+          url: `/production-orders/${segunda.id}/consumptions`,
+          payload: { entries: [{ reservationLineId: line.id, quantity: line.quantity }] },
+        });
+      }
+    }
+    const emProducao = (
+      await app.inject({ method: "GET", url: `/production-orders/${segunda.id}` })
+    ).json();
+    expect(emProducao.status).toBe("IN_PRODUCTION");
+
+    return { productId: product.id, liberada, emProducao };
+  }
+
+  async function consultar(app: App, query: string) {
+    const resposta = await app.inject({ method: "GET", url: `/production-orders?${query}` });
+    expect(resposta.statusCode).toBe(200);
+    const corpo = resposta.json();
+    return {
+      total: corpo.total as number,
+      codes: (corpo.productionOrders as { code: string }[]).map((order) => order.code),
+    };
+  }
+
+  it("`RELEASED,IN_PRODUCTION` traz as duas em UMA consulta", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const { productId, liberada, emProducao } = await releasedEInProduction(app);
+
+    const fila = await consultar(
+      app,
+      `productId=${productId}&status=RELEASED,IN_PRODUCTION&pageSize=100`,
+    );
+    expect(fila.codes).toContain(liberada.code);
+    expect(fila.codes).toContain(emProducao.code);
+    expect(fila.total).toBe(2);
+
+    await app.close();
+  });
+
+  it("um status só continua valendo — o contrato antigo não quebrou", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const { productId, liberada, emProducao } = await releasedEInProduction(app);
+
+    const so = await consultar(app, `productId=${productId}&status=RELEASED&pageSize=100`);
+    expect(so.codes).toEqual([liberada.code]);
+    expect(so.codes).not.toContain(emProducao.code);
+
+    await app.close();
+  });
+
+  /*
+   * O teto de página é `100` e é explícito. O que se prova aqui é que ele é
+   * uma PÁGINA e não um corte: `total` sai de um `count` sobre o mesmo
+   * `where`, então ele não depende do `pageSize`, e paginar alcança todas as
+   * linhas. Criar 101 ordens para ver a 101ª só mediria a mesma coisa, em
+   * dois minutos e deixando lixo no banco.
+   */
+  it("o total é do servidor e paginar alcança todas as ordens", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const { productId, liberada, emProducao } = await releasedEInProduction(app);
+
+    const primeira = await consultar(
+      app,
+      `productId=${productId}&status=RELEASED,IN_PRODUCTION&page=1&pageSize=1`,
+    );
+    const segunda = await consultar(
+      app,
+      `productId=${productId}&status=RELEASED,IN_PRODUCTION&page=2&pageSize=1`,
+    );
+
+    expect(primeira.codes).toHaveLength(1);
+    expect(segunda.codes).toHaveLength(1);
+    // O total NÃO é o tamanho da página.
+    expect(primeira.total).toBe(2);
+    expect(segunda.total).toBe(2);
+    expect([...primeira.codes, ...segunda.codes].sort()).toEqual(
+      [liberada.code, emProducao.code].sort(),
+    );
+
+    await app.close();
+  });
+
+  it("status inexistente na lista é recusado em vez de virar filtro vazio", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const invalido = await app.inject({
+      method: "GET",
+      url: "/production-orders?status=RELEASED,VOANDO",
+    });
+    expect(invalido.statusCode).toBe(400);
 
     await app.close();
   });

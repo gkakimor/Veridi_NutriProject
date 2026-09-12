@@ -93,6 +93,43 @@ export async function getOnHandByLots(
 }
 
 /**
+ * Os lotes com saldo físico POSITIVO entre os que um filtro seleciona.
+ *
+ * Existe para que "somente com saldo" possa ser respondido pelo BANCO, e não
+ * lendo a tabela de lotes inteira para peneirar em memória. A fila da
+ * Qualidade fazia isso: carregava todos os `Lot`, somava o ledger de cada um
+ * e só então cortava a página — o custo crescia com a base, e a lista não
+ * tinha teto nenhum.
+ *
+ * A soma continua sendo algébrica sobre os movimentos (nunca uma coluna
+ * guardada): o sinal vive em `INVENTORY_MOVEMENT_DIRECTION`, então o
+ * PostgreSQL agrega por `(lotId, type)` e o sinal entra aqui. O resultado é
+ * uma lista de ids que volta ao `where` como `id: { in: ... }`, e daí em
+ * diante a paginação é do banco.
+ *
+ * Lote sem nenhum movimento não aparece — saldo zero não é saldo positivo.
+ */
+export async function lotIdsComSaldoPositivo(
+  prisma: PrismaOrTx,
+  lotWhere: Prisma.LotWhereInput,
+): Promise<string[]> {
+  const grouped = await prisma.inventoryMovement.groupBy({
+    by: ["lotId", "type"],
+    where: { lot: { is: lotWhere } },
+    _sum: { quantity: true },
+  });
+  const saldos = groupIntoMap(
+    grouped as { lotId: string | null; type: InventoryMovementType; _sum: { quantity: Prisma.Decimal | null } }[],
+    (row) => row.lotId as string,
+  );
+  const ids: string[] = [];
+  for (const [lotId, saldo] of saldos) {
+    if (saldo.greaterThan(0)) ids.push(lotId);
+  }
+  return ids;
+}
+
+/**
  * Consumido por MaterialReservationLine — soma dos ProductionConsumption
  * de cada linha. Base do calculo de Reserved remanescente (linha reservada
  * menos o que ja foi efetivamente consumido).

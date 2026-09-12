@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import type { CostQuality, CostSource, FinishedGoodRowDTO, FinishedGoodsListResponse } from "@veridi/shared";
+import { intervaloDeDiasComerciais } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
@@ -32,12 +33,15 @@ export async function listFinishedGoods(
   if (query.productId) {
     where["productionOrder"] = { is: { productId: query.productId } };
   }
-  if (query.dateFrom || query.dateTo) {
+  // Período por dia comercial, fim EXCLUSIVO — mesma conversão das outras
+  // listas. O apontamento das 22h pertence ao dia em que a fábrica o fez.
+  const periodo = intervaloDeDiasComerciais(query.dateFrom, query.dateTo);
+  if (periodo.inicio || periodo.fimExclusivo) {
     where["productionOutputs"] = {
       some: {
         producedAt: {
-          ...(query.dateFrom ? { gte: query.dateFrom } : {}),
-          ...(query.dateTo ? { lte: query.dateTo } : {}),
+          ...(periodo.inicio ? { gte: periodo.inicio } : {}),
+          ...(periodo.fimExclusivo ? { lt: periodo.fimExclusivo } : {}),
         },
       },
     };

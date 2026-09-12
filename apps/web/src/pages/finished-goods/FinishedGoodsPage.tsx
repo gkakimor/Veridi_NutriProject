@@ -1,12 +1,27 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { Link, useNavigate } from "react-router-dom";
-import type { FinishedGoodRowDTO, LotStatus, ProductDTO } from "@veridi/shared";
+import type { FinishedGoodRowDTO, LotStatus } from "@veridi/shared";
 import { COST_QUALITY_LABELS, COST_SOURCE_LABELS, LOT_STATUSES, LOT_STATUS_LABELS } from "@veridi/shared";
+import type { ListFinishedGoodsParams } from "../../lib/finished-goods-api";
 import { listFinishedGoods } from "../../lib/finished-goods-api";
-import { listProducts } from "../../lib/products-api";
 import { formatBRL } from "../../lib/currency";
+import { useListFilters } from "../../lib/list-filters";
+import type { ListPeriodPreset } from "../../lib/list-period";
+import {
+  LIST_PERIOD_PRESET_LABELS,
+  ehListPeriodPreset,
+  formatListPeriod,
+  resolveListPeriod,
+} from "../../lib/list-period";
+import { ActiveFilterChips } from "../../components/filters/ActiveFilterChips";
+import type { FilterChip } from "../../components/filters/ActiveFilterChips";
+import { ClearFilters } from "../../components/filters/ClearFilters";
+import { DateRangeFilter } from "../../components/filters/DateRangeFilter";
+import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
+import { produtoFilterSource } from "../../lib/filter-sources";
+import { useAuth } from "../../app/AuthProvider";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
 import { ContextHelp, InfoHint } from "../../components/help";
@@ -28,6 +43,34 @@ function DicaDaColuna({ id }: { id: HelpHintId }) {
 type StatusFilter = LotStatus | "all";
 
 const PAGE_SIZE = 20;
+
+/**
+ * Os filtros desta lista e o que cada um significa quando está limpo.
+ *
+ * `period: "todos"` PRESERVA o comportamento atual: a tela nunca teve recorte
+ * de período, e impor "Mês atual" só porque o Faturamento usa esconderia
+ * lotes de uma consulta que hoje mostra tudo. Mudar isso é decisão de
+ * Product Ownership.
+ */
+const FILTROS_PADRAO = {
+  search: "",
+  status: "all",
+  productId: "",
+  period: "todos",
+  dateFrom: "",
+  dateTo: "",
+  /* Contexto por link: "ver o que esta OP produziu". */
+  productionOrderId: "",
+};
+
+const PRESETS_DO_PRODUTO_ACABADO: ListPeriodPreset[] = [
+  "todos",
+  "hoje",
+  "7d",
+  "30d",
+  "mes-atual",
+  "custom",
+];
 
 function statusBadgeClass(status: LotStatus, isExpired: boolean): string {
   if (isExpired) return "badge badge--err";
@@ -75,48 +118,70 @@ function CostCell({ row }: { row: FinishedGoodRowDTO }) {
  */
 export function FinishedGoodsPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [rows, setRows] = useState<FinishedGoodRowDTO[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [products, setProducts] = useState<ProductDTO[]>([]);
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [productFilter, setProductFilter] = useState("all");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const { values, page, set, setPage, clear, isActive } = useListFilters({
+    defaults: FILTROS_PADRAO,
+    persistScope: "finished-goods",
+    userId: user?.id ?? null,
+  });
+  const { search, productId, productionOrderId } = values;
+  const statusFilter = values.status as StatusFilter;
+  const period: ListPeriodPreset = ehListPeriodPreset(values.period) ? values.period : "todos";
+
+  /*
+   * Período em DIAS comerciais.
+   *
+   * A tela montava o instante com os componentes LOCAIS do navegador — meia
+   * -noite local na ponta de baixo e um 23:59:59.999 inventado na de cima.
+   * O mesmo filtro "produzido em 10/09" devolvia conjuntos diferentes em São
+   * Paulo, em Vancouver e em Tóquio, e nada dizia isso. Agora viaja o DIA, e
+   * quem o abre nos dois instantes é o servidor, com fim exclusivo.
+   */
+  const periodo = useMemo(
+    () => resolveListPeriod(period, values.dateFrom, values.dateTo),
+    [period, values.dateFrom, values.dateTo],
+  );
+
+  /*
+   * UM conjunto de filtros para a consulta e para o CSV.
+   *
+   * O CSV levava só busca, qualidade e produto: a tela mostrava um período e
+   * o arquivo exportava a produção inteira, sem nada avisando.
+   */
+  const filtrosDaConsulta = useMemo(() => {
+    const filtros: Omit<ListFinishedGoodsParams, "page" | "pageSize"> = {};
+    if (search) filtros.search = search;
+    if (statusFilter !== "all") filtros.status = statusFilter;
+    if (productId) filtros.productId = productId;
+    if (productionOrderId) filtros.productionOrderId = productionOrderId;
+    if (periodo.dateFrom) filtros.dateFrom = periodo.dateFrom;
+    if (periodo.dateTo) filtros.dateTo = periodo.dateTo;
+    return filtros;
+  }, [search, statusFilter, productId, productionOrderId, periodo.dateFrom, periodo.dateTo]);
+
+  const [searchInput, setSearchInput] = useState(search);
 
   useEffect(() => {
-    const handle = setTimeout(() => setSearch(searchInput), 300);
+    setSearchInput(search);
+  }, [search]);
+
+  useEffect(() => {
+    if (searchInput === search) return;
+    const handle = setTimeout(() => set({ search: searchInput }), 300);
     return () => clearTimeout(handle);
-  }, [searchInput]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, statusFilter, productFilter, dateFrom, dateTo]);
-
-  useEffect(() => {
-    listProducts({ active: true, pageSize: 1000 })
-      .then((result) => setProducts(result.products))
-      .catch(() => setProducts([]));
-  }, []);
+  }, [searchInput, search, set]);
 
   const reload = useCallback(() => {
     setLoading(true);
     setError(null);
 
-    const params: Parameters<typeof listFinishedGoods>[0] = { page, pageSize: PAGE_SIZE };
-    if (search) params.search = search;
-    if (statusFilter !== "all") params.status = statusFilter;
-    if (productFilter !== "all") params.productId = productFilter;
-    if (dateFrom) params.dateFrom = new Date(`${dateFrom}T00:00:00`).toISOString();
-    if (dateTo) params.dateTo = new Date(`${dateTo}T23:59:59.999`).toISOString();
-
-    listFinishedGoods(params)
+    listFinishedGoods({ ...filtrosDaConsulta, page, pageSize: PAGE_SIZE })
       .then((result) => {
         setRows(result.rows);
         setTotal(result.total);
@@ -125,15 +190,46 @@ export function FinishedGoodsPage() {
         setError(err instanceof Error ? err.message : "Falha ao carregar produtos acabados");
       })
       .finally(() => setLoading(false));
-  }, [page, search, statusFilter, productFilter, dateFrom, dateTo]);
+  }, [filtrosDaConsulta, page]);
 
   useEffect(() => {
     reload();
   }, [reload]);
 
+  const chips: FilterChip[] = [];
+  if (search) {
+    chips.push({ label: "Busca", value: search, onRemove: () => set({ search: "" }) });
+  }
+  if (statusFilter !== "all") {
+    chips.push({
+      label: "Qualidade",
+      value: LOT_STATUS_LABELS[statusFilter],
+      onRemove: () => set({ status: "all" }),
+    });
+  }
+  if (productId) {
+    chips.push({
+      label: "Produto",
+      value: rows.find((row) => row.productId === productId)?.productName ?? "selecionado",
+      onRemove: () => set({ productId: "" }),
+    });
+  }
+  if (productionOrderId) {
+    chips.push({
+      label: "OP",
+      value: rows[0]?.productionOrderCode ?? "da origem",
+      onRemove: () => set({ productionOrderId: "" }),
+    });
+  }
+  if (period !== FILTROS_PADRAO.period) {
+    chips.push({
+      label: "Período",
+      value: period === "custom" ? formatListPeriod(periodo) : LIST_PERIOD_PRESET_LABELS[period],
+      onRemove: () => set({ period: FILTROS_PADRAO.period, dateFrom: "", dateTo: "" }),
+    });
+  }
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const hasFilters =
-    search !== "" || statusFilter !== "all" || productFilter !== "all" || dateFrom !== "" || dateTo !== "";
 
   return (
     <>
@@ -145,14 +241,19 @@ export function FinishedGoodsPage() {
             vêm das fontes originais.
           </p>
         </div>
-        <ExportCsvButton path="/finished-goods/export.csv" filters={{
-            search,
-            status: statusFilter === "all" ? undefined : statusFilter,
-            productId: productFilter === "all" ? undefined : productFilter,
-          }} />
+        <ExportCsvButton path="/finished-goods/export.csv" filters={filtrosDaConsulta} />
 </div>
 
       <ContextHelp topic={helpTopics["producao.produtoAcabado"]} />
+
+      <DateRangeFilter
+        idPrefix="fg"
+        value={{ period, dateFrom: values.dateFrom, dateTo: values.dateTo }}
+        presets={PRESETS_DO_PRODUTO_ACABADO}
+        fromLabel="Produzido a partir de"
+        toLabel="Produzido até"
+        onChange={(next) => set(next)}
+      />
 
       <div className="toolbar">
         <div className="toolbar__search">
@@ -174,7 +275,7 @@ export function FinishedGoodsPage() {
         <select
           id="fg-status-filter"
           value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+          onChange={(event) => set({ status: event.target.value })}
         >
           <option value="all">Toda qualidade</option>
           {LOT_STATUSES.map((status) => (
@@ -184,37 +285,21 @@ export function FinishedGoodsPage() {
           ))}
         </select>
 
-        <label className="sr-only" htmlFor="fg-product-filter">
-          Filtrar por produto
-        </label>
-        <select
+        {/* Era um `<select>` alimentado por `listProducts({ pageSize: 1000 })`:
+            catálogo com teto fixo apresentado como completo. Do produto 1001
+            em diante ele existia no sistema e não existia no filtro. Agora a
+            busca é do servidor. */}
+        <EntityFilterSelect
           id="fg-product-filter"
-          value={productFilter}
-          onChange={(event) => setProductFilter(event.target.value)}
-        >
-          <option value="all">Todos os produtos</option>
-          {products.map((product) => (
-            <option key={product.id} value={product.id}>
-              {product.name}
-            </option>
-          ))}
-        </select>
-
-        <label htmlFor="fg-date-from">Produzido de</label>
-        <input
-          id="fg-date-from"
-          type="date"
-          value={dateFrom}
-          onChange={(event) => setDateFrom(event.target.value)}
-        />
-        <label htmlFor="fg-date-to">até</label>
-        <input
-          id="fg-date-to"
-          type="date"
-          value={dateTo}
-          onChange={(event) => setDateTo(event.target.value)}
+          label="Filtrar por produto"
+          placeholder="Todos os produtos"
+          value={productId}
+          onChange={(value) => set({ productId: value })}
+          source={produtoFilterSource}
         />
       </div>
+
+      <ActiveFilterChips chips={chips} onClear={clear} />
 
       {error && <p className="form-alert" role="alert">{error}</p>}
 
@@ -330,9 +415,14 @@ export function FinishedGoodsPage() {
             {!loading && rows.length === 0 && (
               <tr>
                 <td colSpan={14} className="table__empty">
-                  {hasFilters
-                    ? "Nenhum produto acabado encontrado com esses filtros."
-                    : "Nenhum produto acabado produzido ainda."}
+                  {isActive ? (
+                    <>
+                      Nenhum produto acabado encontrado com esses filtros.{" "}
+                      <ClearFilters onClear={clear} />
+                    </>
+                  ) : (
+                    "Nenhum produto acabado produzido ainda."
+                  )}
                 </td>
               </tr>
             )}
@@ -352,7 +442,7 @@ export function FinishedGoodsPage() {
             type="button"
             className="btn btn--secondary btn--sm"
             disabled={page <= 1}
-            onClick={() => setPage((current) => current - 1)}
+            onClick={() => setPage(page - 1)}
           >
             Anterior
           </button>
@@ -360,7 +450,7 @@ export function FinishedGoodsPage() {
             type="button"
             className="btn btn--secondary btn--sm"
             disabled={page >= totalPages}
-            onClick={() => setPage((current) => current + 1)}
+            onClick={() => setPage(page + 1)}
           >
             Próxima
           </button>

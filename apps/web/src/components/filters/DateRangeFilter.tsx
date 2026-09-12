@@ -27,6 +27,7 @@ export function DateRangeFilter({
   idPrefix,
   value,
   onChange,
+  presets = LIST_PERIOD_PRESETS,
   fromLabel = "Data inicial",
   toLabel = "Data final",
 }: {
@@ -34,6 +35,14 @@ export function DateRangeFilter({
   idPrefix: string;
   value: DateRangeValue;
   onChange: (next: DateRangeValue) => void;
+  /**
+   * Quais atalhos a tela oferece, na ordem em que aparecem.
+   *
+   * É escolha de cada listagem, não de quem escreveu o componente: uma tela
+   * com default operacional não precisa de "Todo o período" no meio dos
+   * atalhos, e uma que mostra a base inteira precisa dele como saída.
+   */
+  presets?: ListPeriodPreset[];
   fromLabel?: string;
   toLabel?: string;
 }) {
@@ -48,7 +57,7 @@ export function DateRangeFilter({
 
   return (
     <div className="filter-period" role="group" aria-label="Período">
-      {LIST_PERIOD_PRESETS.map((preset) => (
+      {presets.map((preset) => (
         <button
           key={preset}
           type="button"

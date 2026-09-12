@@ -2,9 +2,9 @@ import { Prisma } from "@prisma/client";
 import type { User } from "@prisma/client";
 import type { CoaReviewResultDTO, QualityQueueResponse, QualityQueueRowDTO } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
-import { getOnHandByLots, isLotExpired } from "../../lib/inventory-ledger.js";
+import { getOnHandByLots, isLotExpired, lotIdsComSaldoPositivo } from "../../lib/inventory-ledger.js";
 import type { Pagination } from "../../lib/pagination.js";
-import { pageMeta, slicePage } from "../../lib/pagination.js";
+import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { LotNotFoundError } from "../lots/lots.errors.js";
 import {
   CoaAlreadyApprovedError,
@@ -139,9 +139,47 @@ export async function rejectCoa(
   };
 }
 
+/** O `where` de `Lot` que a fila da Qualidade seleciona. */
+function filaDaQualidadeWhere(query: ListQualityQueueQuery): Prisma.LotWhereInput {
+  return {
+    ...(query.itemId ? { itemId: query.itemId } : {}),
+    ...(query.supplierId ? { supplierId: query.supplierId } : {}),
+    ...(query.ownerCustomerId ? { ownerCustomerId: query.ownerCustomerId } : {}),
+    ...(query.lotStatus ? { status: query.lotStatus } : {}),
+    /*
+     * `coaStatus` explícito manda; senão, `onlyPending` é o recorte "exige
+     * ação da Qualidade". Sem nenhum dos dois a fila mostra TUDO — é o
+     * "Todos" da tela, que antes não existia: o `<select>` obrigava um
+     * recorte documental e não havia como ver a fila inteira.
+     */
+    ...(query.coaStatus
+      ? { coaStatus: query.coaStatus }
+      : query.onlyPending
+        ? { coaStatus: { in: ["PENDING", "RECEIVED", "REJECTED"] } }
+        : {}),
+    ...(query.search
+      ? {
+          OR: [
+            { code: { contains: query.search, mode: "insensitive" } },
+            { supplierLot: { contains: query.search, mode: "insensitive" } },
+            { item: { is: { code: { contains: query.search, mode: "insensitive" } } } },
+            { item: { is: { name: { contains: query.search, mode: "insensitive" } } } },
+          ],
+        }
+      : {}),
+  };
+}
+
 /**
  * Fila operacional da Qualidade — READ MODEL sobre `Lot` + ledger. Sem
  * entidade nova: a fila é uma leitura do que já existe.
+ *
+ * Paginada PELO BANCO. Antes, esta função lia a tabela de lotes inteira,
+ * somava o ledger de cada linha e cortava a página em memória: o custo
+ * crescia com a base e o `total` só estava certo porque tudo já havia sido
+ * carregado. "Somente com saldo" era a razão da leitura completa — saldo não
+ * é coluna de `Lot` —, e agora ela vira uma agregação sobre os movimentos
+ * (`lotIdsComSaldoPositivo`) que devolve ids para o próprio `where`.
  */
 export async function listQualityQueue(
   query: ListQualityQueueQuery,
@@ -149,39 +187,27 @@ export async function listQualityQueue(
 ): Promise<QualityQueueResponse> {
   const prisma = getPrisma();
 
-  const lots = await prisma.lot.findMany({
-    where: {
-      ...(query.itemId ? { itemId: query.itemId } : {}),
-      ...(query.supplierId ? { supplierId: query.supplierId } : {}),
-      ...(query.ownerCustomerId ? { ownerCustomerId: query.ownerCustomerId } : {}),
-      ...(query.lotStatus ? { status: query.lotStatus } : {}),
-      ...(query.coaStatus
-        ? { coaStatus: query.coaStatus }
-        : query.onlyPending
-          ? { coaStatus: { in: ["PENDING", "RECEIVED", "REJECTED"] } }
-          : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { code: { contains: query.search, mode: "insensitive" } },
-              { supplierLot: { contains: query.search, mode: "insensitive" } },
-              { item: { is: { code: { contains: query.search, mode: "insensitive" } } } },
-              { item: { is: { name: { contains: query.search, mode: "insensitive" } } } },
-            ],
-          }
-        : {}),
-    },
-    include: { item: true, supplier: true, ownerCustomer: true, receiptLine: { include: { receipt: true } } },
-    // Pendência documental primeiro; depois o lote mais antigo.
-    orderBy: [{ coaStatus: "asc" }, { code: "asc" }],
-  });
+  const base = filaDaQualidadeWhere(query);
+  const where: Prisma.LotWhereInput = query.onlyWithBalance
+    ? { ...base, id: { in: await lotIdsComSaldoPositivo(prisma, base) } }
+    : base;
+
+  const [lots, total] = await Promise.all([
+    prisma.lot.findMany({
+      where,
+      include: { item: true, supplier: true, ownerCustomer: true, receiptLine: { include: { receipt: true } } },
+      // Pendência documental primeiro; depois o lote mais antigo.
+      orderBy: [{ coaStatus: "asc" }, { code: "asc" }],
+      ...pageArgs(pagination),
+    }),
+    prisma.lot.count({ where }),
+  ]);
 
   const onHandByLot = await getOnHandByLots(prisma, lots.map((lot) => lot.id));
 
   const rows: QualityQueueRowDTO[] = [];
   for (const lot of lots) {
     const onHand = onHandByLot.get(lot.id) ?? new Prisma.Decimal(0);
-    if (query.onlyWithBalance && onHand.lessThanOrEqualTo(0)) continue;
 
     rows.push({
       lotId: lot.id,
@@ -208,5 +234,5 @@ export async function listQualityQueue(
     });
   }
 
-  return { rows: slicePage(rows, pagination), ...pageMeta(pagination, rows.length) };
+  return { rows, ...pageMeta(pagination, total) };
 }

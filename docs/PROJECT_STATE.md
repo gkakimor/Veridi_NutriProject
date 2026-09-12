@@ -1387,6 +1387,68 @@ objeto de filtros da consulta da tela, não uma segunda lista de campos.
 Nenhuma migration. As outras 51 telas não foram convertidas — próximo é
 FILTER-OPERATIONS-WAVE-01.
 
+## Primeira onda de filtros operacionais (FILTER-OPERATIONS-WAVE-01, 2026-09-12)
+
+Quatro telas sobre a foundation da FILTER-FOUNDATION-01, e os problemas
+operacionais que a auditoria tinha achado nelas. Nenhuma segunda foundation:
+`useListFilters`, `list-period`, `DateRangeFilter`, `ActiveFilterChips`,
+`ClearFilters`, `business-timezone` e `diaCivilDeFiltroSchema` foram reusados
+como estavam.
+
+**O mesmo bug de data, em dois lugares.** `receiving.schemas.ts` e
+`finished-goods.schemas.ts` usavam `requiredDateSchema` (= `z.coerce.date`)
+com `lte`: "até 10/09" encerrava o dia às 21h de 09/09 em São Paulo. Em
+Produto Acabado havia um segundo defeito, na tela — `new Date(dia +
+"T00:00:00")` e `...T23:59:59.999`, componentes LOCAIS do navegador —, então
+o mesmo filtro devolvia conjuntos diferentes em São Paulo, em Vancouver e em
+Tóquio, sem nada avisando. Os dois filtros passam a viajar como `YYYY-MM-DD`
+e viram instante uma vez, no serviço, por `intervaloDeDiasComerciais`, com
+fim exclusivo. `Receipt.receivedAt` e `ProductionOutput.producedAt` continuam
+instantes; o que mudou é o DIA a que eles pertencem ser o da operação.
+
+**CSV.** Produto Acabado exportava busca, qualidade e produto e deixava o
+período de fora: a tela mostrava um recorte e o arquivo trazia a produção
+inteira. As quatro telas agora montam UM objeto de filtros que alimenta a
+consulta e o botão de exportação — não há segunda lista de campos.
+
+**Picking/Consumo — o corte silencioso.** A fila era
+`Promise.all([status=RELEASED pageSize=100, status=IN_PRODUCTION
+pageSize=100])` concatenado no navegador, sem filtro e sem paginação: da 101ª
+ordem em diante cada lado perdia linhas e o rodapé contava `orders.length`
+como total. `listProductionOrdersQuerySchema.status` passou a aceitar lista
+separada por vírgula (um valor só continua valendo — sem breaking change) e a
+tela faz UMA consulta paginada com `status=RELEASED,IN_PRODUCTION`. Default
+operacional **Em aberto**, que é esse par — nenhum status novo foi inventado.
+`StatusGroupFilter` nasceu aqui, pequeno e reutilizável, e NÃO foi aplicado
+às outras telas.
+
+**Fila da Qualidade.** O achado real não era um corte em 100: era leitura
+SEM teto. `listQualityQueue` carregava a tabela de lotes inteira, somava o
+ledger de cada linha e cortava a página em memória. Agora pagina no banco;
+"somente com saldo" virou `lotIdsComSaldoPositivo` (agregação sobre os
+movimentos, em `inventory-ledger.ts`) que devolve ids para o próprio `where`,
+e o `total` sai de um `count`. A tela ganhou **Todos** — o `<select>` obrigava
+um recorte documental e a fila inteira era inalcançável —, e o sentinela de
+pendências virou `pendencias`, para não conviver na URL com o `CoaStatus`
+`PENDING`, que quer dizer outra coisa. `supplierId` e `ownerCustomerId`
+existiam no servidor e o cliente não os enviava: contexto por link se perdia.
+
+**Catálogo com teto fixo.** Produto Acabado carregava
+`listProducts({ pageSize: 1000 })` num `<select>` e apresentava isso como
+catálogo completo. `EntityFilterSelect` (novo, usado por Produto Acabado,
+Picking e Recebimentos) faz busca no SERVIDOR e resolve o rótulo de um id que
+veio da URL fora da primeira página — sem isso o filtro valia e a tela não
+dizia por quê.
+
+**Defaults preservados.** Recebimentos e Produto Acabado abrem em `Todo o
+período`: nunca tiveram recorte, e impor "Mês atual" esconderia registros —
+decisão de Product Ownership, não de migração. A CoA continua abrindo em
+Pendências.
+
+Nenhuma migration. Lotes, Liberação de Lotes, Pedidos, Expedições, OP, OC,
+Relatórios e Dashboard não foram tocados — próximo é
+FILTER-OPERATIONS-WAVE-02.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

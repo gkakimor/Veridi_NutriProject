@@ -54,6 +54,14 @@ const FILTROS_PADRAO = {
   dateTo: "",
 };
 
+const PRESETS_DO_FATURAMENTO: ListPeriodPreset[] = [
+  "mes-atual",
+  "hoje",
+  "7d",
+  "30d",
+  "custom",
+];
+
 function statusBadgeClass(status: BillingStatus): string {
   switch (status) {
     case "DRAFT":
@@ -333,6 +341,10 @@ export function BillingsPage() {
       <DateRangeFilter
         idPrefix="billing"
         value={{ period, dateFrom: values.dateFrom, dateTo: values.dateTo }}
+        /* Faturamento tem default operacional (Mês atual): "Todo o período"
+           não entra na fileira de atalhos — quem quer a base inteira usa
+           Personalizado sem limite de recuo. */
+        presets={PRESETS_DO_FATURAMENTO}
         fromLabel="Emitido a partir de"
         toLabel="Emitido até"
         onChange={(next) => set(next)}

@@ -7,6 +7,7 @@ export interface ListFinishedGoodsParams {
   status?: LotStatus;
   productId?: string;
   productionOrderId?: string;
+  /** Dia comercial `yyyy-mm-dd` — produzido a partir de / até. NUNCA instante. */
   dateFrom?: string;
   dateTo?: string;
   page?: number;
