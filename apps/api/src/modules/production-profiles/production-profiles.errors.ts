@@ -105,7 +105,7 @@ export class ProductionProfileUomNotFoundError extends Error {
 export class ProductionProfileVersionNotActiveError extends Error {
   constructor(status: string) {
     super(
-      `Só uma versão ativa pode ser o Perfil de Produção padrão de um produto — esta está "${situacao(status)}".`,
+      `Só uma versão ativa pode ser o Roteiro de Produção padrão de um produto — esta está "${situacao(status)}".`,
     );
     this.name = "ProductionProfileVersionNotActiveError";
   }
@@ -115,7 +115,7 @@ export class ProductionProfileVersionNotActiveError extends Error {
 export class ProductWithoutUnitError extends Error {
   constructor(productCode: string) {
     super(
-      `${productCode} não tem item de produto acabado: sem a unidade do produto não há como conferir a quantidade-base do perfil.`,
+      `${productCode} não tem item de produto acabado: sem a unidade do produto não há como conferir a quantidade de referência do roteiro.`,
     );
     this.name = "ProductWithoutUnitError";
   }
@@ -125,7 +125,7 @@ export class ProductWithoutUnitError extends Error {
 export class ProductionProfileUomIncompatibleError extends Error {
   constructor(profileUom: string, productUom: string) {
     super(
-      `A quantidade-base do perfil está em ${profileUom} e o produto é controlado em ${productUom}: unidades de dimensões diferentes não se convertem.`,
+      `A quantidade de referência do roteiro está em ${profileUom} e o produto é controlado em ${productUom}: unidades de dimensões diferentes não se convertem.`,
     );
     this.name = "ProductionProfileUomIncompatibleError";
   }

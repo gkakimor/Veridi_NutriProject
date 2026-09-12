@@ -103,7 +103,7 @@ beforeEach(() => {
 });
 
 describe("Planejamento no menu", () => {
-  it("a seção fica entre Produção e Compras, com Perfis de Produção dentro", async () => {
+  it("a seção fica entre Produção e Compras, com Roteiros de Produção dentro", async () => {
     renderShell("/", { prefs: { openGroups: ["planning"] } });
     await carregar();
 
@@ -114,7 +114,7 @@ describe("Planejamento no menu", () => {
       "Compras",
     ]);
 
-    const tela = within(lista("planning")).getByRole("link", { name: "Perfis de Produção" });
+    const tela = within(lista("planning")).getByRole("link", { name: "Roteiros de Produção" });
     expect(tela).toHaveAttribute("href", "/planejamento/perfis-producao");
   });
 
@@ -124,12 +124,12 @@ describe("Planejamento no menu", () => {
     await carregar();
     const busca = screen.getByRole("combobox", { name: "Buscar telas" });
 
-    await user.type(busca, "perfis de produ");
-    expect(opcoes()).toEqual(["Planejamento › Perfis de Produção"]);
+    await user.type(busca, "roteiros de produ");
+    expect(opcoes()).toEqual(["Planejamento › Roteiros de Produção"]);
 
     await user.clear(busca);
     await user.type(busca, "roteiro");
-    expect(opcoes()).toEqual(["Planejamento › Perfis de Produção"]);
+    expect(opcoes()).toEqual(["Planejamento › Roteiros de Produção"]);
 
     await user.keyboard("{Enter}");
     expect(currentLocation.pathname).toBe("/planejamento/perfis-producao");
@@ -140,9 +140,9 @@ describe("Planejamento no menu", () => {
     renderShell("/", { prefs: { openGroups: ["planning"] } });
     await carregar();
 
-    await user.click(within(lista("planning")).getByRole("button", { name: "Favoritar Perfis de Produção" }));
+    await user.click(within(lista("planning")).getByRole("button", { name: "Favoritar Roteiros de Produção" }));
 
-    expect(within(favoritos()).getByRole("link", { name: "Perfis de Produção" })).toHaveAttribute(
+    expect(within(favoritos()).getByRole("link", { name: "Roteiros de Produção" })).toHaveAttribute(
       "href",
       "/planejamento/perfis-producao",
     );
@@ -156,12 +156,12 @@ describe("Planejamento no menu", () => {
     );
   });
 
-  it("na tela de Perfis de Produção a seção abre sozinha e a tela fica marcada", async () => {
+  it("na tela de Roteiros de Produção a seção abre sozinha e a tela fica marcada", async () => {
     renderShell("/planejamento/perfis-producao");
     await carregar();
 
     expect(grupo("Planejamento")).toHaveAttribute("aria-expanded", "true");
-    expect(within(lista("planning")).getByRole("link", { name: "Perfis de Produção" })).toHaveAttribute(
+    expect(within(lista("planning")).getByRole("link", { name: "Roteiros de Produção" })).toHaveAttribute(
       "aria-current",
       "page",
     );
@@ -188,6 +188,6 @@ describe("Planejamento no menu", () => {
 
     await user.click(screen.getByRole("button", { name: "Abrir menu" }));
     expect(grupo("Planejamento")).toBeInTheDocument();
-    expect(within(lista("planning")).getByRole("link", { name: "Perfis de Produção" })).toBeInTheDocument();
+    expect(within(lista("planning")).getByRole("link", { name: "Roteiros de Produção" })).toBeInTheDocument();
   });
 });

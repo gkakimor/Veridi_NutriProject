@@ -279,11 +279,11 @@ describe("Ordem de Produção — Planejamento previsto", () => {
 
     const { container } = renderizar();
 
-    await screen.findByText("Sem perfil de produção aplicado.");
+    await screen.findByText("Sem roteiro de produção aplicado.");
     // Nenhum zero disfarçado de tempo previsto.
     expect(container.textContent).not.toContain("Tempo sequencial previsto");
 
-    fireEvent.click(await screen.findByRole("button", { name: "Aplicar perfil de produção" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Aplicar roteiro de produção" }));
 
     await waitFor(() => expect(applyProductionProfileMock).toHaveBeenCalledWith("op-1"));
     await waitFor(() => expect(screen.getByText(/PPR-000012 · V3/)).toBeInTheDocument());
@@ -294,8 +294,8 @@ describe("Ordem de Produção — Planejamento previsto", () => {
 
     renderizar();
 
-    await screen.findByText("Sem perfil de produção aplicado.");
-    expect(screen.queryByRole("button", { name: "Aplicar perfil de produção" })).toBeNull();
+    await screen.findByText("Sem roteiro de produção aplicado.");
+    expect(screen.queryByRole("button", { name: "Aplicar roteiro de produção" })).toBeNull();
   });
 
   it("avisa da versão mais recente e atualiza o perfil com confirmação", async () => {
@@ -315,14 +315,14 @@ describe("Ordem de Produção — Planejamento previsto", () => {
 
     const { container } = renderizar();
 
-    await screen.findByText(/Há uma versão mais recente do perfil disponível/);
+    await screen.findByText(/Há uma versão mais recente do roteiro disponível/);
     expect(container.textContent).toContain("PPR-000012 · V1");
 
-    fireEvent.click(screen.getByRole("button", { name: "Atualizar perfil" }));
+    fireEvent.click(screen.getByRole("button", { name: "Atualizar roteiro" }));
     // Confirmação simples antes de trocar o roteiro inteiro.
-    await screen.findByText("Atualizar perfil de produção?");
+    await screen.findByText("Atualizar roteiro de produção?");
 
-    fireEvent.click(screen.getByRole("button", { name: "Atualizar perfil de produção" }));
+    fireEvent.click(screen.getByRole("button", { name: "Atualizar roteiro de produção" }));
     await waitFor(() => expect(applyProductionProfileMock).toHaveBeenCalledWith("op-1"));
     await waitFor(() => expect(screen.getByText(/PPR-000012 · V3/)).toBeInTheDocument());
   });
@@ -336,8 +336,8 @@ describe("Ordem de Produção — Planejamento previsto", () => {
 
     await screen.findByText("Planejamento previsto");
     expect(container.textContent).toContain("PPR-000012 · V3");
-    expect(screen.queryByRole("button", { name: "Aplicar perfil de produção" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Atualizar perfil" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Aplicar roteiro de produção" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Atualizar roteiro" })).toBeNull();
     expect(container.textContent).not.toContain("Há uma versão mais recente");
   });
 

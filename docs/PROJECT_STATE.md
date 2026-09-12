@@ -1645,6 +1645,51 @@ porque o bloco do rascunho deixa de existir ao ativar.
 **Próximo:** UX-ACTIONS-FEEDBACK-WAVE-02 — migrar os `.line-actions` com
 botões irmãos, a começar por Projetos (4 botões), Modelos e Formulação (3).
 
+## O perfil virou roteiro (PRODUCTION-ROUTE-UX-01, 2026-09-12)
+
+Decisão do Product Owner: na interface, **Roteiro de Produção**. No código,
+`ProductionProfile` continua — rota `/planejamento/perfis-producao`, API,
+schema e §89 inclusive. Nenhuma fórmula, regra, versão ou migração mudou.
+
+**A palavra, onde o usuário a encontra:** menu, busca de telas (com o apelido
+antigo preservado), trilha, título, listagem, detalhe, ajuda "Como funciona",
+e as mensagens de erro da API que chegam à tela. A Ordem de Produção fala a
+mesma língua — "Aplicar roteiro de produção", "Atualizar roteiro" —, porque
+metade do ERP dizendo "perfil" era a confusão que a rodada veio desfazer.
+"Quantidade-base" virou **quantidade de referência**; "Unidade da base",
+**unidade de referência**; "Quantidade de recursos", **quantidade
+necessária**. A Formulação e a Estrutura de Custos, que têm base própria, não
+foram tocadas.
+
+**O que a tela passou a explicar:** que o roteiro responde "como este produto é
+fabricado" e a Formulação responde "o que entra nele"; que a quantidade de
+referência é a que os tempos usam, com exemplo numérico; que as etapas
+acontecem em ordem; que preparação é tempo fixo e execução acompanha a
+quantidade pelo modo de escala, cada modo descrito em português; e que
+recurso é o que precisa estar disponível AO MESMO TEMPO, com o caminho do
+cadastro nomeado.
+
+**Estado vazio deixou de ser linha cinza.** Sem etapa, a tela diz o que falta,
+dá exemplos (Pesagem, Mistura, Encapsulamento, Embalagem) e oferece a ação.
+Sem nenhum recurso de capacidade cadastrado, ela oferece "Cadastrar recurso" —
+pela criação contextual que o ERP já tinha (`use-contextual-create`), com o
+rascunho inteiro guardado e devolvido no retorno. Nada de navegação paralela.
+
+**Resumo do roteiro**, quatro fatos do MESMO motor (`planProductionProfile`),
+nenhuma conta nova: etapas, tempo sequencial para a própria quantidade de
+referência, tipos de mão de obra e tipos de equipamento. Nada de capacidade,
+pico simultâneo ou agenda — isso é PLANNING-CAPACITY-BOARD-01.
+
+**Ações e feedback pelo padrão do UX-ACTIONS-FEEDBACK-01:** `.form-actions`
+com grupos, "+ Adicionar etapa" terciária, "Salvar rascunho" secundária,
+"Ativar versão" de commit; "Salvando…" só no botão clicado, "Rascunho salvo."
+ao lado dele e "Versão ativada." na Versão ativa. Identificação ganhou
+pendência própria na MESMA guarda de alterações não salvas, e a leitura que
+vem com o salvamento deixou de reescrever o nome ainda não salvo.
+
+**Próximo:** FILTER-OPERATIONS-WAVE-03 ou PLANNING-CAPACITY-BOARD-01, a
+critério do Product Owner.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

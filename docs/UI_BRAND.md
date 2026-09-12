@@ -308,6 +308,25 @@ operator had to relearn which button commits on every screen. The rule:
     read as "dismiss", which is the opposite action — the ambiguity would
     land on the irreversible button.
 
+### Nome de tela × nome de domínio
+
+O que o usuário lê não é obrigado a ser o identificador do código. Quando as
+duas coisas divergem por decisão do Product Owner, a interface inteira usa a
+palavra da interface — menu, trilha, título, rótulo, botão, ajuda, mensagem de
+erro que chega à tela e apelido de busca —, e o domínio fica onde está.
+
+Divergências em vigor:
+
+| Interface | Domínio (rota, API, schema) |
+|---|---|
+| Roteiro de Produção | `ProductionProfile`, `/planejamento/perfis-producao` |
+| Quantidade de referência · Unidade de referência | `referenceQuantity` · `referenceUomCode` |
+| Quantidade necessária | `resourceQuantity` |
+
+O apelido antigo continua na busca de telas: quem aprendeu "perfil de produção"
+não perde o caminho porque o rótulo mudou. Rota **não** muda — link
+compartilhado e favorito sobrevivem à troca de nome.
+
 ### Linha de escolha (`.selection-row`)
 
 Uma opção de radio ou checkbox é uma **linha**, não uma bolinha com texto ao
