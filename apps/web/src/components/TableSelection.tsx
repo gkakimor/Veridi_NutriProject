@@ -10,6 +10,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * A seleção é da PÁGINA ATUAL. O cabeçalho marca o que está à vista e nada
  * mais: dizer "8 selecionados" quando a pessoa já não consegue ver quais seria
  * mentira útil para ninguém. Trocar filtro limpa a seleção pelo mesmo motivo.
+ *
+ * Lista que precisa atravessar páginas ou selecionar todos os resultados do
+ * filtro usa `BulkSelection.tsx` — a foundation, com Pedidos e OP de piloto.
  */
 export function useTableSelection<T extends { id: string }>(rows: T[], resetKey: unknown) {
   const [selected, setSelected] = useState<string[]>([]);

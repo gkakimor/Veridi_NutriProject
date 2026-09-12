@@ -1841,6 +1841,34 @@ das telas desta onda.
 
 **Próximo:** BULK-SELECTION-FOUNDATION-01.
 
+## Página não é tudo (BULK-SELECTION-FOUNDATION-01, 2026-09-12)
+
+Foundation de seleção em massa (`components/BulkSelection.tsx`: hook, barra,
+checkbox e células), com piloto em Pedidos e Ordens de Produção. Nenhuma ação
+em lote, nenhuma API nova, nenhuma migration.
+
+**O cabeçalho marca a página; "todos os filtrados" é outro gesto.** Com 327
+resultados e 20 à vista, o cabeçalho seleciona 20. Com a página inteira
+marcada aparece "Selecionar todos os 327 resultados filtrados"; só esse clique
+entra no modo `filtered`, que guarda filtro e exceções — desmarcar uma linha
+ali vira `excludedIds` (326), remarcar tira da exceção. Nenhum id do filtro
+inteiro é buscado: a tela continua pedindo só a página de 20.
+
+**Contrato para BULK-DOCUMENTS-01.** `descriptor` é `{ mode: "ids", ids }` ou
+`{ mode: "filtered", filters, excludedIds }`, com `filters` = o mesmo objeto da
+consulta e do CSV; `null` sem seleção. Não conhece PDF. O schema do servidor
+nasce com o primeiro endpoint que o receber.
+
+**Regra escrita que mudou** (PRODUCT_RULES §5.11, UI_BRAND): a seleção deixou
+de ser só da página — trocar de página preserva e o contador conta linhas de
+outras páginas. Continua: trocar filtro limpa (comparação por valor, paginação
+fora), nada vai para URL ou sessão, id estável, seleção não é mutação. Itens
+segue com a seleção só de página. Gesto de seleção espera a consulta em
+andamento (as linhas à vista podem ser do filtro anterior); `prune(ids)` fica
+para a mutação na própria tela confirmada pelo servidor — recarregar não limpa.
+
+**Próximo:** BULK-DOCUMENTS-01.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

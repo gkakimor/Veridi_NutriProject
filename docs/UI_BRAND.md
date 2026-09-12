@@ -406,6 +406,27 @@ DENTRO do rótulo, que dá o nome acessível e a área clicável. A regra só
 alinha (`inline-flex`, centro), dá `gap` e cursor; cor e tamanho de letra
 são os do lugar onde o rótulo mora (filtro de lista, formulário).
 
+### Seleção em massa (`components/BulkSelection.tsx`)
+
+**Página ≠ todos os filtrados.** O checkbox do cabeçalho marca os registros
+desta página. Com a página inteira marcada, a barra oferece "Selecionar todos
+os N resultados filtrados" — só esse clique seleciona o filtro inteiro.
+
+`useBulkSelection({ pageIds, total, filters, loading })` devolve o descritor
+que a ação em lote recebe, em um de dois modos:
+
+- `{ mode: "ids", ids }` — linhas marcadas, em qualquer página;
+- `{ mode: "filtered", filters, excludedIds }` — o filtro (o MESMO objeto da
+  consulta e do CSV, sem paginação) menos as linhas desmarcadas depois.
+
+Contagem = ids, ou total − exceções. Trocar de página preserva; trocar filtro
+limpa; nada vai para URL ou sessão; id estável, nunca índice ou código. O
+navegador nunca junta os ids do filtro inteiro — quem executa resolve no
+servidor. `BulkSelectionBar` só existe com seleção, acima da tabela, com
+contagem, alcance, ações do consumidor (`children`) e "Limpar seleção"; a
+célula de seleção não abre a linha. Pilotos: Pedidos e Ordens de Produção.
+Itens segue com a seleção só de página (`TableSelection`).
+
 ---
 
 # 4. Navigation baseline
@@ -763,8 +784,9 @@ record*, which is most of the work in an ERP.
 - **An empty result says which one it is**: "nothing matches these filters"
   (with a way to clear them) is a different message from "nothing registered".
 - **A checkbox means "I can act on these records".** No decorative selection.
-  Selection is page-local, the counter never describes rows the user can no
-  longer see, and selection existing never implies bulk mutation — approving,
+  The header selects this page; "all filtered results" is a separate explicit
+  action (see "Seleção em massa"). The counter is always the real number
+  selected, and selection existing never implies bulk mutation — approving,
   releasing, shipping and invoicing keep their own transactional rules.
 
 # 16. Avoid

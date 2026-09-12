@@ -1,4 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  BulkSelectionBar,
+  BulkSelectionCell,
+  BulkSelectionHeaderCell,
+  useBulkSelection,
+} from "../../components/BulkSelection";
 import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
@@ -161,6 +167,17 @@ export function CustomerOrdersPage() {
     reload();
   }, [reload]);
 
+  /*
+   * Seleção em massa sobre o MESMO recorte da consulta e do CSV. Ainda sem
+   * ação: os documentos em lote chegam em BULK-DOCUMENTS-01.
+   */
+  const selecao = useBulkSelection({
+    pageIds: customerOrders.map((order) => order.id),
+    total,
+    filters: filtrosDaConsulta,
+    loading,
+  });
+
   const chips: FilterChip[] = [];
   if (search) {
     chips.push({ label: "Busca", value: search, onRemove: () => set({ search: "" }) });
@@ -245,10 +262,13 @@ export function CustomerOrdersPage() {
 
       {error && <p className="form-alert" role="alert">{error}</p>}
 
+      <BulkSelectionBar selection={selecao} />
+
       <div className="table-container">
         <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
+              <BulkSelectionHeaderCell selection={selecao} />
               <th className="col-tight">Pedido</th>
               <th className="col-flex">Cliente</th>
               <th className="col-tight">Data</th>
@@ -273,6 +293,11 @@ export function CustomerOrdersPage() {
                     if (event.key === "Enter") navigate(`/comercial/pedidos/${order.id}`);
                   }}
                 >
+                  <BulkSelectionCell
+                    selection={selecao}
+                    id={order.id}
+                    label={`Selecionar pedido ${order.code}`}
+                  />
                   <td className="is-code col-tight">{order.code}</td>
                   <td className="col-flex">
                     <EntityLink kind="customer" id={order.customerId} code={order.customerName} />
@@ -331,7 +356,7 @@ export function CustomerOrdersPage() {
 
             {!loading && customerOrders.length === 0 && (
               <tr>
-                <td colSpan={10} className="table__empty">
+                <td colSpan={11} className="table__empty">
                   {isActive ? (
                     <>
                       Nenhum pedido encontrado para os filtros atuais.{" "}
