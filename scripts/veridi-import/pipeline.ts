@@ -28,6 +28,10 @@ import {
 } from "../veridi-data/mapping.js";
 import { nextSequenceCode } from "../../apps/api/src/lib/sequence-code.js";
 import { ImportFindingLog } from "./findings.js";
+import { campo, workbookObrigatorio } from "./review-package.js";
+import type { PacoteRevisao, RegistroRevisado } from "./review-package.js";
+import { lerFornecedoresRevisados, resolverFornecedorDaOferta } from "./supplier-review.js";
+import type { LeituraDeFornecedores } from "./supplier-review.js";
 import type { Overrides } from "./overrides.js";
 
 /**
@@ -132,7 +136,26 @@ export interface PipelineResult {
     }[];
     openingInventory: OpeningInventoryRow[];
   };
+  /** Retrato da revisão humana usada nesta execução. `null` = rodou sem pacote. */
+  review: ReviewSummary | null;
   findings: ImportFindingLog;
+}
+
+export interface ReviewSummary {
+  identity: string;
+  path: string;
+  workbooks: { name: string; records: number; counts: Record<string, number> }[];
+  suppliers: {
+    approved: number;
+    excluded: number;
+    created: number;
+    updated: number;
+    unchanged: number;
+    withAddress: number;
+  };
+  supplierItems: { approved: number; excluded: number; orphan: number };
+  /** `true` quando a leitura do pacote produziu finding BLOCKING. */
+  blocked: boolean;
 }
 
 export interface PipelineContext {
@@ -140,7 +163,31 @@ export interface PipelineContext {
   /** `false` = dry-run (PLAN): nenhuma escrita acontece. */
   write: boolean;
   overrides: Overrides;
+  /**
+   * Pacote de revisão devolvido pela Veridi. Quando presente, ele é a
+   * autoridade sobre inclusão, exclusão e valores dos domínios que já passam
+   * por ele — o corpus vira só a fonte histórica. Ausente, o pipeline roda
+   * como sempre rodou, o que serve para desenvolvimento; o APPLY recusa.
+   */
+  review?: PacoteRevisao | null;
 }
+
+/** Workbooks que esta versão do bridge consome de verdade. */
+export const WORKBOOK_FORNECEDORES = "02_FORNECEDORES";
+export const WORKBOOK_OFERTAS = "07_FORNECEDOR_ITENS_PRECOS";
+export const WORKBOOKS_DO_ESCOPO: readonly string[] = [WORKBOOK_FORNECEDORES, WORKBOOK_OFERTAS];
+
+/**
+ * HOMOLOGACAO do workbook → `SupplierItemQualificationStatus`.
+ *
+ * O rótulo em português é o que a Veridi vê; o valor técnico é o mesmo que a
+ * aba VALORES_PERMITIDOS documenta para cada um.
+ */
+const QUALIFICACAO_DO_PACOTE: Record<string, "PENDING" | "APPROVED" | "BLOCKED"> = {
+  PENDENTE: "PENDING",
+  HOMOLOGADO: "APPROVED",
+  BLOQUEADO: "BLOCKED",
+};
 
 /** Id fictício usado no dry-run para manter o encadeamento entre domínios. */
 function plannedId(kind: string, key: string): string {
@@ -151,8 +198,21 @@ function isPlanned(id: string): boolean {
   return id.startsWith("plan:");
 }
 
+/** Número revisado no workbook. Vazio vira `null`; texto ilegível também. */
+function decimalRevisado(registro: RegistroRevisado, coluna: string): Prisma.Decimal | null {
+  const valor = campo(registro, coluna);
+  if (valor === null) return null;
+  try {
+    const numero = new Prisma.Decimal(valor.replace(",", "."));
+    return numero.isFinite() ? numero : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult> {
   const { prisma, write, overrides } = ctx;
+  const review = ctx.review ?? null;
   const findings = new ImportFindingLog();
 
   const domains: PipelineResult["domains"] = {
@@ -187,30 +247,109 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
   }
 
   /* ── 2. Fornecedores ───────────────────────────────────── */
+  // Com pacote de revisão, o 02 devolvido manda: razão social, contato e
+  // endereço saem do workbook, a CHAVE_MIGRACAO é a identidade e o corpus não
+  // é consultado. Sem pacote, segue o caminho antigo — que serve para
+  // desenvolvimento, e que o APPLY recusa.
   const supplierIdByName = new Map<string, string>();
-  for (const supplier of mapSuppliers(findings)) {
-    const existing = await prisma.supplier.findFirst({ where: { legalName: supplier.legalName } });
-    if (existing) {
-      domains.suppliers.existing += 1;
-      supplierIdByName.set(normalizeSupplierName(supplier.legalName), existing.id);
-      continue;
+  const supplierIdByKey = new Map<string, string>();
+  let supplierReview: LeituraDeFornecedores | null = null;
+  const supplierStats = { created: 0, updated: 0, unchanged: 0, withAddress: 0 };
+
+  if (review) {
+    supplierReview = lerFornecedoresRevisados(workbookObrigatorio(review, WORKBOOK_FORNECEDORES), findings);
+
+    for (const chave of supplierReview.excluidos) {
+      findings.add(
+        "SUPPLIER_REVIEW_NOT_IMPORTED",
+        "Supplier",
+        chave,
+        "marcado NAO_IMPORTAR na revisao — nao criado, nao atualizado",
+      );
+      domains.suppliers.skipped += 1;
     }
-    const code = await nextCode("supplier_code_seq", "FOR", supplier.legalName);
-    const id = write
-      ? (
-          await prisma.supplier.create({
-            data: { code, legalName: supplier.legalName, active: true },
-          })
-        ).id
-      : plannedId("supplier", supplier.legalName);
-    supplierIdByName.set(normalizeSupplierName(supplier.legalName), id);
-    domains.suppliers.created += 1;
-  }
-  // Fornecedores já existentes que não vieram da planilha continuam válidos
-  // para resolver preços — a base pode ter cadastro manual anterior.
-  for (const supplier of await prisma.supplier.findMany()) {
-    const key = normalizeSupplierName(supplier.legalName);
-    if (!supplierIdByName.has(key)) supplierIdByName.set(key, supplier.id);
+
+    for (const supplier of supplierReview.aprovados) {
+      const data = {
+        legalName: supplier.legalName,
+        tradeName: supplier.tradeName,
+        cnpj: supplier.cnpj,
+        email: supplier.email,
+        phone: supplier.phone,
+        zipCode: supplier.zipCode,
+        street: supplier.street,
+        number: supplier.number,
+        complement: supplier.complement,
+        district: supplier.district,
+        city: supplier.city,
+        state: supplier.state,
+        notes: supplier.notes,
+        active: supplier.active,
+      };
+      if (supplier.temEndereco) supplierStats.withAddress += 1;
+
+      // Reencontro entre execuções é por razão social — é o único
+      // identificador estável que o Supplier tem hoje. A colisão já foi
+      // barrada na leitura, então este `findFirst` é determinístico.
+      const existing = await prisma.supplier.findFirst({ where: { legalName: supplier.legalName } });
+      if (existing) {
+        const igual = (Object.keys(data) as (keyof typeof data)[]).every(
+          (chave) => (existing[chave] ?? null) === (data[chave] ?? null),
+        );
+        if (igual) {
+          domains.suppliers.existing += 1;
+          supplierStats.unchanged += 1;
+        } else {
+          if (write) await prisma.supplier.update({ where: { id: existing.id }, data });
+          findings.add(
+            "SUPPLIER_REVIEW_EXISTING_UPDATED",
+            "Supplier",
+            supplier.key,
+            `cadastro existente (${existing.code}) alinhado com os valores aprovados na revisao`,
+          );
+          domains.suppliers.updated += 1;
+          supplierStats.updated += 1;
+        }
+        supplierIdByKey.set(supplier.key, existing.id);
+        continue;
+      }
+
+      const code = await nextCode("supplier_code_seq", "FOR", supplier.key);
+      const id = write
+        ? (await prisma.supplier.create({ data: { code, ...data } })).id
+        : plannedId("supplier", supplier.key);
+      supplierIdByKey.set(supplier.key, id);
+      domains.suppliers.created += 1;
+      supplierStats.created += 1;
+    }
+    // Sem varredura por nome aqui, de propósito: com revisão, relação só
+    // resolve pela CHAVE_MIGRACAO. Casar por nome parecido é como um
+    // fornecedor excluído reapareceria pela porta dos fundos.
+  } else {
+    for (const supplier of mapSuppliers(findings)) {
+      const existing = await prisma.supplier.findFirst({ where: { legalName: supplier.legalName } });
+      if (existing) {
+        domains.suppliers.existing += 1;
+        supplierIdByName.set(normalizeSupplierName(supplier.legalName), existing.id);
+        continue;
+      }
+      const code = await nextCode("supplier_code_seq", "FOR", supplier.legalName);
+      const id = write
+        ? (
+            await prisma.supplier.create({
+              data: { code, legalName: supplier.legalName, active: true },
+            })
+          ).id
+        : plannedId("supplier", supplier.legalName);
+      supplierIdByName.set(normalizeSupplierName(supplier.legalName), id);
+      domains.suppliers.created += 1;
+    }
+    // Fornecedores já existentes que não vieram da planilha continuam válidos
+    // para resolver preços — a base pode ter cadastro manual anterior.
+    for (const supplier of await prisma.supplier.findMany()) {
+      const key = normalizeSupplierName(supplier.legalName);
+      if (!supplierIdByName.has(key)) supplierIdByName.set(key, supplier.id);
+    }
   }
 
   /* ── 3. Clientes ───────────────────────────────────────── */
@@ -810,10 +949,47 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
 
   const supplierItemIdByPair = new Map<string, string>();
   const reportedUnresolvedItems = new Set<string>();
+  const ofertasRevisadas = review ? workbookObrigatorio(review, WORKBOOK_OFERTAS) : null;
+  const relacaoStats = { approved: 0, excluded: 0, orphan: 0 };
 
   for (const row of priceRows) {
     const supplierKey = normalizeSupplierName(row.supplierName);
-    const supplierId = supplierIdByName.get(supplierKey) ?? null;
+    const offerSourceKey = legacyOfferSourceKey(row);
+
+    /*
+     * Com revisão, a relação item × fornecedor é resolvida pela
+     * CHAVE_MIGRACAO da oferta no 07 — nunca pela string do nome. É essa
+     * chave que diz de qual fornecedor APROVADO a oferta é; casar por nome
+     * parecido é exatamente como se aponta para o fornecedor errado.
+     */
+    let revisaoDaOferta: RegistroRevisado | null = null;
+    let supplierId: string | null;
+
+    if (ofertasRevisadas) {
+      const destino = resolverFornecedorDaOferta(offerSourceKey, {
+        ofertas: ofertasRevisadas,
+        excluidos: supplierReview?.excluidos ?? new Set<string>(),
+        supplierIdByKey,
+      });
+      if (destino.situacao === "FORA_DA_CARGA") {
+        relacaoStats.excluded += 1;
+        domains.supplierItems.skipped += 1;
+        domains.supplierItemOffers.skipped += 1;
+        continue;
+      }
+      if (destino.situacao !== "IMPORTAR") {
+        findings.add(destino.code, "SupplierItem", destino.referencia, destino.detalhe);
+        if (destino.situacao === "SEM_FORNECEDOR") relacaoStats.orphan += 1;
+        domains.supplierItems.skipped += 1;
+        domains.supplierItemOffers.skipped += 1;
+        continue;
+      }
+      relacaoStats.approved += 1;
+      revisaoDaOferta = destino.revisao;
+      supplierId = destino.supplierId;
+    } else {
+      supplierId = supplierIdByName.get(supplierKey) ?? null;
+    }
 
     // Resolução do item: código legado direto ou override humano. Nunca
     // criar Item a partir de uma linha de preço — preço isolado não é
@@ -893,21 +1069,38 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
         supplierItemId = existing.id;
         domains.supplierItems.existing += 1;
       } else {
-        const qualified = qualifiedPairs.has(
-          `${row.itemExternalCode}::${supplierKey}`,
-        );
+        // Com revisão, a relação sai do 07 devolvido: homologação,
+        // preferência, código no fornecedor e observação são decisão da
+        // Veridi. Sem revisão, vale o que a planilha bruta deixava concluir.
+        const relacao = revisaoDaOferta
+          ? {
+              qualificationStatus: QUALIFICACAO_DO_PACOTE[campo(revisaoDaOferta, "HOMOLOGACAO") ?? ""] ?? "PENDING",
+              preferred: campo(revisaoDaOferta, "PREFERENCIAL") === "SIM",
+              active: campo(revisaoDaOferta, "RELACAO_ATIVA") !== "NÃO",
+              supplierItemCode: campo(revisaoDaOferta, "CODIGO_DO_ITEM_NO_FORNECEDOR"),
+              commercialNotes: campo(revisaoDaOferta, "OBSERVACOES_COMERCIAIS"),
+            }
+          : {
+              // Homologado quando a planilha diz explicitamente;
+              // ausência é desconhecimento (PENDING), nunca bloqueio.
+              qualificationStatus: qualifiedPairs.has(`${row.itemExternalCode}::${supplierKey}`)
+                ? ("APPROVED" as const)
+                : ("PENDING" as const),
+              // "melhor_preco" da planilha é snapshot de CMV, não
+              // fornecedor preferencial oficial.
+              preferred: false,
+              active: true,
+              supplierItemCode: null,
+              commercialNotes: null,
+            };
+        const qualified = relacao.qualificationStatus === "APPROVED";
         supplierItemId = write
           ? (
               await prisma.supplierItem.create({
                 data: {
                   itemId: item.id,
                   supplierId,
-                  // Homologado quando a planilha diz explicitamente;
-                  // ausência é desconhecimento (PENDING), nunca bloqueio.
-                  qualificationStatus: qualified ? "APPROVED" : "PENDING",
-                  // "melhor_preco" da planilha é snapshot de CMV, não
-                  // fornecedor preferencial oficial.
-                  preferred: false,
+                  ...relacao,
                   createdByNameSnapshot: ACTOR,
                   updatedByNameSnapshot: ACTOR,
                 },
@@ -943,87 +1136,137 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
     }
 
     /* Oferta */
-    if (row.price === null) {
-      findings.add(
-        "SUPPLIER_PRICE_INVALID",
-        "SupplierItemOffer",
-        `${row.itemExternalCode}/${row.supplierName}`,
-        `preco nao interpretavel: "${row.rawPrice}" — oferta nao criada`,
-      );
-      domains.supplierItemOffers.skipped += 1;
-      continue;
-    }
+    const sourceKey = offerSourceKey;
+    const referencia = `${row.itemExternalCode}/${row.supplierName}`;
 
-    const sourceKey = legacyOfferSourceKey(row);
-    const uomOverride = overrides.priceUoms.get(sourceKey);
+    /*
+     * Com revisão, a oferta sai do 07 devolvido — preço, unidade do preço e
+     * pedido mínimo inclusive.
+     *
+     * É para isso que o workbook existe: o corpus só traz `preco_brl_kg` e
+     * um pedido mínimo em texto livre, e era essa ambiguidade que obrigava o
+     * arquivo de override. Quando a Veridi já decidiu a unidade na planilha,
+     * ler o valor bruto de novo seria ignorar a decisão dela.
+     */
+    let unitPrice: Prisma.Decimal;
+    let priceUomCode: string;
+    let moqQuantity: Prisma.Decimal | null = null;
+    let moqUomCode: string | null = null;
+    let offerNotes: string | null = row.sourceName;
 
-    // O corpus só traz preço por quilo (header `preco_brl_kg`).
-    let priceUomCode = "kg";
-    const itemIsMass = MASS_UOM_CODES.has(item.unitCode);
-    if (!itemIsMass) {
-      if (uomOverride?.action === "IGNORE_PRICE") {
+    if (revisaoDaOferta) {
+      const precoRevisado = decimalRevisado(revisaoDaOferta, "PRECO");
+      const unidadeRevisada = campo(revisaoDaOferta, "UNIDADE_DO_PRECO");
+      if (!precoRevisado || !unidadeRevisada) {
+        findings.add(
+          "SUPPLIER_PRICE_INVALID",
+          "SupplierItemOffer",
+          revisaoDaOferta.chave,
+          "oferta aprovada sem PRECO ou sem UNIDADE_DO_PRECO — oferta nao criada",
+        );
         domains.supplierItemOffers.skipped += 1;
         continue;
       }
-      if (uomOverride?.action === "MAP_UOM" && uomOverride.overridePriceUom) {
-        priceUomCode = uomOverride.overridePriceUom;
+      unitPrice = precoRevisado;
+      priceUomCode = unidadeRevisada;
+      moqQuantity = decimalRevisado(revisaoDaOferta, "PEDIDO_MINIMO");
+      moqUomCode = moqQuantity ? campo(revisaoDaOferta, "UNIDADE_PEDIDO_MINIMO") : null;
+      if (moqQuantity && !moqUomCode) {
         findings.add(
-          "SUPPLIER_PRICE_UOM_BY_OVERRIDE",
+          "SUPPLIER_MOQ_AMBIGUOUS",
           "SupplierItemOffer",
-          `${row.itemExternalCode}/${row.supplierName}`,
-          `unidade do preco definida como ${priceUomCode} por decisao humana`,
+          revisaoDaOferta.chave,
+          "pedido minimo aprovado sem unidade — oferta sem MOQ estruturado",
         );
-      } else {
-        // Converter R$/kg em R$/un exigiria peso por unidade — dado que
-        // não existe. Sem override não há oferta.
+        moqQuantity = null;
+      }
+      offerNotes = campo(revisaoDaOferta, "OBSERVACAO_DA_OFERTA") ?? row.sourceName;
+    } else {
+      if (row.price === null) {
         findings.add(
-          "SUPPLIER_PRICE_UOM_INCOMPATIBLE",
+          "SUPPLIER_PRICE_INVALID",
           "SupplierItemOffer",
-          `${row.itemExternalCode}/${row.supplierName}`,
-          `preco por kg em item na unidade ${item.unitCode} — oferta nao criada`,
+          referencia,
+          `preco nao interpretavel: "${row.rawPrice}" — oferta nao criada`,
         );
-        templates.incompatiblePriceUom.push({
-          sourceKey,
-          legacyItemCode: row.itemExternalCode,
-          itemCode: item.code,
-          itemUom: item.unitCode,
-          sourcePriceUom: "kg",
-        });
         domains.supplierItemOffers.skipped += 1;
         continue;
       }
-    }
+      unitPrice = row.price;
 
-    const parsedMoq = parseMinimumOrder(row.rawMinimumOrder);
-    if (row.rawMinimumOrder && !parsedMoq) {
-      findings.add(
-        "SUPPLIER_MOQ_AMBIGUOUS",
-        "SupplierItemOffer",
-        `${row.itemExternalCode}/${row.supplierName}`,
-        `pedido minimo nao interpretavel: "${row.rawMinimumOrder}" — oferta sem MOQ estruturado`,
-      );
-    }
+      const uomOverride = overrides.priceUoms.get(sourceKey);
+      // O corpus só traz preço por quilo (header `preco_brl_kg`).
+      priceUomCode = "kg";
+      const itemIsMass = MASS_UOM_CODES.has(item.unitCode);
+      if (!itemIsMass) {
+        if (uomOverride?.action === "IGNORE_PRICE") {
+          domains.supplierItemOffers.skipped += 1;
+          continue;
+        }
+        if (uomOverride?.action === "MAP_UOM" && uomOverride.overridePriceUom) {
+          priceUomCode = uomOverride.overridePriceUom;
+          findings.add(
+            "SUPPLIER_PRICE_UOM_BY_OVERRIDE",
+            "SupplierItemOffer",
+            referencia,
+            `unidade do preco definida como ${priceUomCode} por decisao humana`,
+          );
+        } else {
+          // Converter R$/kg em R$/un exigiria peso por unidade — dado que
+          // não existe. Sem override não há oferta.
+          findings.add(
+            "SUPPLIER_PRICE_UOM_INCOMPATIBLE",
+            "SupplierItemOffer",
+            referencia,
+            `preco por kg em item na unidade ${item.unitCode} — oferta nao criada`,
+          );
+          templates.incompatiblePriceUom.push({
+            sourceKey,
+            legacyItemCode: row.itemExternalCode,
+            itemCode: item.code,
+            itemUom: item.unitCode,
+            sourcePriceUom: "kg",
+          });
+          domains.supplierItemOffers.skipped += 1;
+          continue;
+        }
+      }
 
-    // Número puro assume a unidade do item — transformação conhecida e
-    // aceita porque a oferta legada nunca vira preço vigente.
-    const moqUom = parsedMoq ? (parsedMoq.uomCode ?? item.unitCode) : null;
-    if (parsedMoq && parsedMoq.uomCode === null) {
-      findings.add(
-        "MOQ_ASSUMED_ITEM_UOM",
-        "SupplierItemOffer",
-        `${row.itemExternalCode}/${row.supplierName}`,
-        `pedido minimo "${row.rawMinimumOrder}" interpretado como ${parsedMoq.quantity.toString()} ${item.unitCode}`,
-      );
-    }
-    const moqCompatible =
-      moqUom !== null && MASS_UOM_CODES.has(moqUom) === MASS_UOM_CODES.has(item.unitCode);
-    if (parsedMoq && !moqCompatible) {
-      findings.add(
-        "SUPPLIER_MOQ_UOM_INCOMPATIBLE",
-        "SupplierItemOffer",
-        `${row.itemExternalCode}/${row.supplierName}`,
-        `pedido minimo "${row.rawMinimumOrder}" incompativel com a unidade do item (${item.unitCode}) — oferta sem MOQ`,
-      );
+      const parsedMoq = parseMinimumOrder(row.rawMinimumOrder);
+      if (row.rawMinimumOrder && !parsedMoq) {
+        findings.add(
+          "SUPPLIER_MOQ_AMBIGUOUS",
+          "SupplierItemOffer",
+          referencia,
+          `pedido minimo nao interpretavel: "${row.rawMinimumOrder}" — oferta sem MOQ estruturado`,
+        );
+      }
+
+      // Número puro assume a unidade do item — transformação conhecida e
+      // aceita porque a oferta legada nunca vira preço vigente.
+      const moqUom = parsedMoq ? (parsedMoq.uomCode ?? item.unitCode) : null;
+      if (parsedMoq && parsedMoq.uomCode === null) {
+        findings.add(
+          "MOQ_ASSUMED_ITEM_UOM",
+          "SupplierItemOffer",
+          referencia,
+          `pedido minimo "${row.rawMinimumOrder}" interpretado como ${parsedMoq.quantity.toString()} ${item.unitCode}`,
+        );
+      }
+      const moqCompatible =
+        moqUom !== null && MASS_UOM_CODES.has(moqUom) === MASS_UOM_CODES.has(item.unitCode);
+      if (parsedMoq && !moqCompatible) {
+        findings.add(
+          "SUPPLIER_MOQ_UOM_INCOMPATIBLE",
+          "SupplierItemOffer",
+          referencia,
+          `pedido minimo "${row.rawMinimumOrder}" incompativel com a unidade do item (${item.unitCode}) — oferta sem MOQ`,
+        );
+      }
+      if (parsedMoq && moqCompatible) {
+        moqQuantity = parsedMoq.quantity;
+        moqUomCode = moqUom;
+      }
     }
 
     // Consulta também no dry-run: o plano precisa dizer a verdade sobre o
@@ -1038,19 +1281,20 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
       await prisma.supplierItemOffer.create({
         data: {
           supplierItemId,
-          unitPrice: row.price,
+          unitPrice,
           currencyCode: "BRL",
           priceUomCode,
-          ...(parsedMoq && moqCompatible
-            ? { minimumOrderQuantity: parsedMoq.quantity, minimumOrderUomCode: moqUom! }
+          ...(moqQuantity && moqUomCode
+            ? { minimumOrderQuantity: moqQuantity, minimumOrderUomCode: moqUomCode }
             : {}),
           // O export não tem data de cotação: observação histórica, nunca
-          // preço vigente.
+          // preço vigente. A revisão não muda isso — a Veridi revisa o
+          // preço observado, não cria cotação nova.
           effectiveAt: null,
           validUntil: null,
           source: "LEGACY_IMPORT",
           sourceKey,
-          notes: row.sourceName,
+          notes: offerNotes,
           createdByNameSnapshot: ACTOR,
         },
       });
@@ -1149,6 +1393,27 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
     golden,
     stock,
     templates,
+    review: review
+      ? {
+          identity: review.identidade,
+          path: review.pasta,
+          workbooks: [...review.workbooks.values()].map((workbook) => ({
+            name: workbook.nome,
+            records: workbook.porChave.size,
+            counts: workbook.contagem,
+          })),
+          suppliers: {
+            approved: supplierReview?.aprovados.length ?? 0,
+            excluded: supplierReview?.excluidos.size ?? 0,
+            created: supplierStats.created,
+            updated: supplierStats.updated,
+            unchanged: supplierStats.unchanged,
+            withAddress: supplierStats.withAddress,
+          },
+          supplierItems: relacaoStats,
+          blocked: supplierReview?.bloqueado ?? false,
+        }
+      : null,
     findings,
   };
 }

@@ -2,7 +2,7 @@
 """
 Valida o pacote de revisão da migração — o gerado agora ou o devolvido pela Veridi.
 
-    python scripts/veridi-migration-pack/validar_pacote.py <pasta> [--devolucao]         [--referencia <pasta do pacote anterior>] [--relatorio arquivo.txt]
+    python scripts/veridi-migration-pack/validar_pacote.py <pasta> [--devolucao]         [--referencia <pasta do pacote anterior>] [--relatorio arquivo.txt]         [--exportar pacote-revisao.json]
 
 ERRO reprova (exit 1); AVISO só informa. Na geração, todo registro nasce com
 STATUS_REVISAO = REVISAR e o custo de referência de cada item tem de bater com
@@ -11,12 +11,18 @@ Veridi (status, custo informado por ela, preço recalculado) vira AVISO.
 Com --referencia, compara o pacote com a revisão anterior: nenhuma CHAVE_MIGRACAO
 pode sumir, aparecer ou mudar, e nenhuma coluna obrigatória de antes pode ter
 sido apagada ou virado opcional. Colunas novas opcionais são permitidas.
+Com --exportar, e SÓ quando a validação passa sem erro, grava a leitura
+normalizada do pacote (identidade, SHA-256 de cada workbook, e por workbook os
+registros indexados pela CHAVE_MIGRACAO). É esse JSON que o pipeline de
+migração consome: o Excel entra aqui e em nenhum outro lugar.
 Só lê os .xlsx: não conecta em banco nenhum.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import re
 import sys
 from collections import Counter, defaultdict
@@ -242,9 +248,12 @@ def validar_arquivo(pasta: Path, arquivo: str, rel: Relatorio, devolucao: bool) 
         if "NÃO é custo real" not in str(ws.cell(row=1, column=1).value or ""):
             rel.erro(arquivo, "aba DADOS sem o aviso 'NÃO é custo real'")
 
+    coluna_status_spec = next((s for s in specs if s.nome == coluna_status), None)
     return {
         "chaves": chaves,
         "colunas": [s.nome for s in specs],
+        "coluna_status": coluna_status,
+        "status_permitidos": list(coluna_status_spec.valores) if coluna_status_spec else [],
         "obrigatorias": {s.nome for s in specs if s.obrigatorio},
         "linhas": linhas,
         "status": Counter(l.get(coluna_status) for l in linhas),
@@ -453,6 +462,106 @@ def comparar_com_referencia(pasta: Path, resultados: dict, rel: Relatorio) -> No
             rel.aviso(arquivo, f"{len(antes)} chaves conferem com a referência (nenhuma nova, nenhuma ausente)")
 
 
+FORMATO_EXPORTACAO = 1
+
+
+def _celula(valor):
+    """Valor de célula em algo que o JSON aceita. Vazio é sempre None."""
+    if valor is None or valor == "":
+        return None
+    if isinstance(valor, bool):
+        return valor
+    if isinstance(valor, (int, float)):
+        return valor
+    if isinstance(valor, datetime):
+        return valor.date().isoformat()
+    if isinstance(valor, date):
+        return valor.isoformat()
+    if isinstance(valor, Decimal):
+        return str(valor)
+    texto = str(valor).strip()
+    return texto or None
+
+
+def _sha256(caminho: Path) -> str:
+    digest = hashlib.sha256()
+    with caminho.open("rb") as arquivo:
+        for bloco in iter(lambda: arquivo.read(1 << 20), b""):
+            digest.update(bloco)
+    return digest.hexdigest()
+
+
+def exportar_pacote(pasta: Path, resultados: dict, destino: Path, referencia: Path | None,
+                    devolucao: bool) -> dict:
+    """Leitura normalizada do pacote, indexada por workbook + CHAVE_MIGRACAO.
+
+    É o contrato entre o Excel e o pipeline da migração: o openpyxl para aqui.
+    A identidade do pacote deriva dos SHA-256 dos .xlsx — é com ela que o APPLY
+    prova estar aplicando exatamente o pacote que o PLAN aprovou.
+    """
+    arquivos = []
+    for arquivo in F.ARQUIVOS:
+        caminho = pasta / f"{arquivo}.xlsx"
+        if not caminho.exists():
+            continue
+        estado = caminho.stat()
+        arquivos.append({
+            "nome": arquivo,
+            "sha256": _sha256(caminho),
+            "bytes": estado.st_size,
+            "modificadoEm": datetime.fromtimestamp(estado.st_mtime).isoformat(timespec="seconds"),
+            "registros": len((resultados.get(arquivo) or {}).get("linhas", [])),
+        })
+
+    resumo = '\n'.join(
+        f"{a['nome']}:{a['sha256']}" for a in sorted(arquivos, key=lambda a: a["nome"])
+    )
+    identidade = hashlib.sha256(resumo.encode("utf-8")).hexdigest()
+
+    workbooks = {}
+    for arquivo in F.ARQUIVOS:
+        r = resultados.get(arquivo)
+        if not r:
+            continue
+        coluna_status = r["coluna_status"]
+        registros = []
+        for linha in r["linhas"]:
+            campos = {
+                nome: _celula(linha.get(nome))
+                for nome in r["colunas"]
+                if nome not in ("CHAVE_MIGRACAO", coluna_status)
+            }
+            registros.append({
+                "chave": str(linha["CHAVE_MIGRACAO"]),
+                "status": _celula(linha.get(coluna_status)),
+                "campos": campos,
+            })
+        workbooks[arquivo] = {
+            "colunaStatus": coluna_status,
+            "statusPermitidos": r["status_permitidos"],
+            "colunas": r["colunas"],
+            "obrigatorias": sorted(r["obrigatorias"]),
+            "contagem": dict(Counter(reg["status"] for reg in registros)),
+            "registros": registros,
+        }
+
+    pacote = {
+        "formato": FORMATO_EXPORTACAO,
+        "geradoEm": datetime.now().isoformat(timespec="seconds"),
+        "pacote": {
+            "caminho": str(pasta.resolve()),
+            "identidade": identidade,
+            "referencia": str(referencia.resolve()) if referencia else None,
+            "arquivos": arquivos,
+        },
+        "validacao": {"devolucao": devolucao, "erros": 0},
+        "workbooks": workbooks,
+    }
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    destino.write_text(json.dumps(pacote, ensure_ascii=False, indent=1) + '\n', encoding="utf-8")
+    return pacote
+
+
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
@@ -460,6 +569,8 @@ def main() -> int:
     parser.add_argument("--devolucao", action="store_true", help="valida arquivos já editados pela Veridi")
     parser.add_argument("--referencia", type=Path,
                         help="pasta do pacote anterior: confere chaves e colunas obrigatórias preservadas")
+    parser.add_argument("--exportar", type=Path,
+                        help="grava a leitura normalizada do pacote (JSON) quando a validação passa")
     parser.add_argument("--relatorio", type=Path, help="grava o relatório neste arquivo")
     args = parser.parse_args()
 
@@ -483,6 +594,18 @@ def main() -> int:
     saida += ["", f"ERROS: {len(rel.erros)}"] + [f"  {e}" for e in rel.erros[:500]]
     saida += ["", f"AVISOS: {len(rel.avisos)}"] + [f"  {a}" for a in rel.avisos[:500]]
     saida += ["", "RESULTADO: " + ("APROVADO" if not rel.erros else "REPROVADO")]
+
+    if args.exportar:
+        if rel.erros:
+            saida += ["", f"EXPORTAÇÃO: não gerada — {len(rel.erros)} erro(s) na validação."]
+        else:
+            pacote = exportar_pacote(args.pasta, resultados, args.exportar, args.referencia, args.devolucao)
+            saida += [
+                "",
+                f"EXPORTAÇÃO: {args.exportar}",
+                f"  identidade do pacote: {pacote['pacote']['identidade'][:16]}…",
+                f"  workbooks exportados: {len(pacote['workbooks'])}",
+            ]
     texto = "\n".join(saida)
     print(texto)
     if args.relatorio:

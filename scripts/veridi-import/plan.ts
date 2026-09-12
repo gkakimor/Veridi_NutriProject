@@ -4,7 +4,13 @@ import path from "node:path";
 import { CORPUS_DIR, corpusAvailable } from "../veridi-data/corpus.js";
 import { assertImportEnvironment } from "./environment.js";
 import { readOverrides, writeOverrideTemplate, ITEM_MAP_FILE, PRICE_UOM_FILE, SAMPLE_FILE } from "./overrides.js";
-import { runPipeline } from "./pipeline.js";
+import { WORKBOOKS_DO_ESCOPO, runPipeline } from "./pipeline.js";
+import {
+  bloqueiosDaRevisao,
+  carimboDoPacote,
+  devolucaoArgumento,
+  loadReviewPackage,
+} from "./review-package.js";
 import { writeFindingsArtifacts, writeImportReport, writeOpeningInventoryTemplate } from "./report.js";
 import {
   OUT_DIR,
@@ -20,6 +26,12 @@ import {
  * findings — só que com as escritas desligadas. Junto sai o manifesto com
  * SHA-256 de cada arquivo fonte, que o APPLY confere antes de tocar no
  * banco.
+ *
+ * `--devolucao=<pacote.json>` liga o pacote revisado pela Veridi. Com ele o
+ * plano é candidato a carga real e passa a falhar fechado: registro em
+ * REVISAR ou PENDENTE reprova o plano inteiro, porque "ainda não olhei" não
+ * é "pode ir". Sem ele o plano continua servindo para desenvolvimento, mas
+ * fica marcado como não aplicável — e o APPLY recusa.
  */
 export async function buildPlan(options: { quiet?: boolean } = {}): Promise<void> {
   if (!corpusAvailable()) {
@@ -40,8 +52,19 @@ export async function buildPlan(options: { quiet?: boolean } = {}): Promise<void
       process.exit(1);
     }
 
+    const caminhoDevolucao = devolucaoArgumento();
+    const review = caminhoDevolucao ? loadReviewPackage(caminhoDevolucao) : null;
+    if (review) {
+      console.log(`Pacote de revisão: ${review.pasta}`);
+      console.log(`  identidade ${review.identidade.slice(0, 16)}… · exportado em ${review.exportadoEm}`);
+      for (const arquivo of review.arquivos) {
+        console.log(`  ${arquivo.nome}: ${arquivo.registros} registros · sha256 ${arquivo.sha256.slice(0, 12)}…`);
+      }
+      console.log("");
+    }
+
     const overrides = readOverrides();
-    const result = await runPipeline({ prisma, write: false, overrides });
+    const result = await runPipeline({ prisma, write: false, overrides, review });
 
     // Templates de decisão humana: gerados só quando ainda não existem,
     // para nunca sobrescrever uma decisão já tomada.
@@ -95,6 +118,8 @@ export async function buildPlan(options: { quiet?: boolean } = {}): Promise<void
     writeFindingsArtifacts(result.findings);
     const openingTemplate = writeOpeningInventoryTemplate(result);
 
+    const bloqueios = review ? bloqueiosDaRevisao(review, WORKBOOKS_DO_ESCOPO) : [];
+
     const plan = {
       generatedAt: new Date().toISOString(),
       database: `${environment.database}@${environment.host}`,
@@ -119,6 +144,12 @@ export async function buildPlan(options: { quiet?: boolean } = {}): Promise<void
         unresolvedSamples: result.templates.unresolvedSamples.length,
         openingInventoryItems: result.templates.openingInventory.length,
       },
+      // Identidade do pacote aprovado aqui. O APPLY confere os dois hashes
+      // antes de escrever: plano aprovado sobre um pacote e aplicado sobre
+      // outro é a mesma armadilha do manifesto de fontes.
+      reviewPackage: review ? carimboDoPacote(review) : null,
+      review: result.review,
+      readyForLoad: review !== null && bloqueios.length === 0 && !result.review?.blocked,
     };
     fs.writeFileSync(PLAN_FILE, `${JSON.stringify(plan, null, 2)}\n`, "utf8");
 
@@ -149,11 +180,55 @@ export async function buildPlan(options: { quiet?: boolean } = {}): Promise<void
       console.log(`    amostras não resolvidas: ${plan.pendingHumanDecisions.unresolvedSamples} (${sampleTemplate.written ? "template gerado" : "override já existe"})`);
       console.log(`    itens com saldo para reconciliar: ${plan.pendingHumanDecisions.openingInventoryItems}`);
 
+      if (result.review) {
+        const r = result.review;
+        console.log("\n  REVISÃO HUMANA (pacote devolvido):");
+        for (const workbook of r.workbooks) {
+          const contagem = Object.entries(workbook.counts)
+            .map(([status, quantidade]) => `${status} ${quantidade}`)
+            .join(" · ");
+          console.log(`    ${workbook.name}: ${workbook.records} registros — ${contagem}`);
+        }
+        console.log(
+          `    Fornecedores: ${r.suppliers.approved} aprovados (${r.suppliers.created} a criar · ` +
+            `${r.suppliers.updated} a atualizar · ${r.suppliers.unchanged} sem mudança) · ` +
+            `${r.suppliers.excluded} marcados NAO_IMPORTAR · ${r.suppliers.withAddress} com endereço preenchido`,
+        );
+        console.log(
+          `    Item × Fornecedor: ${r.supplierItems.approved} aprovados · ` +
+            `${r.supplierItems.excluded} fora da carga · ${r.supplierItems.orphan} sem fornecedor resolvível`,
+        );
+      }
+
       result.findings.print(2);
       console.log(`\n  Plano: ${PLAN_FILE}`);
       console.log(`  Relatórios: ${OUT_DIR}`);
       console.log(`  Template de abertura: ${openingTemplate}`);
       console.log("\n  Nada foi escrito no banco. Para aplicar: pnpm veridi:import:apply -- --apply");
+    }
+
+    // Falha fechado só DEPOIS de gravar plano e relatórios: quem for
+    // resolver as pendências precisa do retrato completo, não só do motivo.
+    if (!review) {
+      console.error(
+        "\nATENÇÃO: plano gerado SEM pacote de revisão (--devolucao=<pacote.json>).\n" +
+          "  Serve para conferência e desenvolvimento. NÃO é plano de carga real: para os campos que\n" +
+          "  o pacote revisa, este plano usa o corpus bruto e ignora as decisões da Veridi.\n" +
+          "  O APPLY recusa um plano assim.",
+      );
+      return;
+    }
+    if (bloqueios.length > 0 || result.review?.blocked) {
+      console.error("\nABORTADO: o pacote ainda possui registros pendentes de revisão.");
+      for (const bloqueio of bloqueios) console.error(`  - ${bloqueio}`);
+      if (result.review?.blocked) {
+        console.error("  - a leitura do pacote produziu erro BLOCKING (ver findings acima)");
+      }
+      console.error(
+        "\n  Só entra na carga o registro marcado OK. REVISAR e PENDENTE significam que a revisão\n" +
+          "  ainda não terminou — o importador não decide isso no lugar da Veridi.",
+      );
+      process.exit(1);
     }
   } finally {
     await prisma.$disconnect();

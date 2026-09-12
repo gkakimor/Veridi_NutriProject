@@ -246,9 +246,7 @@ aba ORIGEM) — a `CHAVE_MIGRACAO` é a mesma em todas as revisões.
   APPLY: nenhum é previsto no pacote.
 - As colunas seguem os campos das telas do ERP. Todo registro nasce
   `REVISAR`; a Veridi devolve os arquivos marcando `OK` (entra na carga),
-  `PENDENTE` ou `NAO_IMPORTAR`, sem apagar linhas. Depois:
-  `validar_pacote.py --devolucao` → PLAN → relatório de diferenças → aprovação
-  do PO → backup de produção → APPLY → verify (PROD-MASTER-MIGRATION-APPLY-01).
+  `PENDENTE` ou `NAO_IMPORTAR`, sem apagar linhas.
 - O custo de referência dos materiais (referência manual) é a mediana das
   ofertas do legado ou, sem elas, dos preços públicos; a referência de mercado
   (arquivo 06) nunca entra como custo de aquisição.
@@ -265,6 +263,69 @@ aba ORIGEM) — a `CHAVE_MIGRACAO` é a mesma em todas as revisões.
   obrigatória de antes pode ter sido apagada ou virado opcional. Coluna nova
   opcional pode entrar — foi assim que o endereço entrou.
 
+### Do Excel devolvido até a carga
+
+O corpus legado é a fonte **histórica**. O pacote devolvido e aprovado é a
+**autoridade**: decide quem entra, quem fica de fora e com quais valores, para
+todo campo que o workbook expõe. Com pacote informado não existe fallback
+silencioso para o valor bruto do CSV.
+
+```
+corpus (.local-data/veridi/csv)
+  → gerar_pacote.py            .xlsx da revisão
+  → revisão humana da Veridi   STATUS_REVISAO por registro
+  → validar_pacote.py --devolucao --referencia <revisão anterior> --exportar <pacote.json>
+  → pnpm veridi:import:plan  -- --devolucao=<pacote.json>
+  → relatório de diferenças → aprovação do PO → backup de produção
+  → pnpm veridi:import:apply -- --apply --devolucao=<pacote.json>
+  → pnpm veridi:import:verify
+```
+
+O Excel é lido em **um lugar só**: `validar_pacote.py --exportar`, que já é dono
+do contrato das colunas e só exporta quando a validação passa sem erro. O
+pipeline recebe a leitura normalizada em JSON, indexada por workbook e
+`CHAVE_MIGRACAO` (`scripts/veridi-import/review-package.ts`). Nenhuma etapa do
+importador abre .xlsx.
+
+Regras de status, iguais em PLAN e APPLY:
+
+| Status | Efeito |
+| --- | --- |
+| `OK` | elegível: entra na carga com os valores do workbook |
+| `NAO_IMPORTAR` | excluído: não é criado, não é atualizado, e não reaparece pelo corpus |
+| `REVISAR` | não revisado: **reprova o plano inteiro** |
+| `PENDENTE` | revisado sem conclusão: **reprova o plano inteiro** |
+
+`REVISAR` e `PENDENTE` reprovam porque significam "ainda não olhei" — o
+importador não decide isso no lugar da Veridi. O 06 (referência de mercado) usa
+`ACEITA`/`REJEITADA`, fluxo próprio, e fica fora desse portão de propósito.
+
+O PLAN grava a identidade do pacote aprovado (SHA-256 dos workbooks **e** do
+JSON lido) em `import-plan.json`. O APPLY confere os dois antes de escrever,
+exige `--devolucao` explícito — nunca "a última pasta" — e recusa um plano que
+não tenha sido aprovado com pacote (`readyForLoad`). Rodar o APPLY sem pacote
+carregaria o corpus bruto e descartaria a revisão humana em silêncio; por isso
+é erro, não aviso.
+
+O que o bridge já consome (BRIDGE-01):
+
+- **02_FORNECEDORES** — razão social, nome fantasia, CNPJ, e-mail, telefone,
+  endereço completo, notas e ativo. A identidade durante a migração é a
+  `CHAVE_MIGRACAO`; `legalName` continua sendo o que reencontra o `Supplier`
+  entre execuções, e dois aprovados que colidem por nome (exato ou depois de
+  `normalizeSupplierName`) reprovam em vez de virar escolha arbitrária.
+- **07_FORNECEDOR_ITENS_PRECOS** — homologação, preferência, código do item no
+  fornecedor, observações, preço, moeda, unidade do preço e pedido mínimo. O
+  fornecedor da oferta é resolvido pela `CHAVE_FORNECEDOR` do workbook, nunca
+  pela string do nome. Oferta que aponta para fornecedor `NAO_IMPORTAR` ou para
+  chave inexistente vira erro de PLAN, não associação silenciosa.
+
+Ainda **não** consumido — os workbooks 01, 03, 04 e 05 continuam sendo montados
+a partir do corpus, e a revisão humana deles ainda é ignorada
+(MIGRATION-REVIEW-BRIDGE-02). O portão de status já vale para eles assim que
+entrarem no escopo: o bloqueio é genérico, a autoridade de campo é que é por
+domínio.
+
 Pontos que a carga a partir do Excel precisa decidir (achados na geração):
 
 - `Supplier` não tem `externalCode`: a `CHAVE_MIGRACAO` do fornecedor deriva do
@@ -274,11 +335,16 @@ Pontos que a carga a partir do Excel precisa decidir (achados na geração):
   string, enquanto o mapa em memória usa `normalizeSupplierName`. Duas grafias
   que normalizam igual viram dois `Supplier` no banco e um só no mapa — é o que
   as 38 pendências `DUPLICIDADE` do arquivo 02 antecipam.
-- O APPLY ainda não lê o pacote devolvido: `mapSuppliers` monta o fornecedor a
-  partir de `fornecedores.csv` e `supplier.create` grava só `code`, `legalName` e
-  `active`. Enquanto for assim, correção de razão social, `NAO_IMPORTAR` e o
-  endereço novo não chegam a produção. Fechar essa ponte é pré-requisito do
-  APPLY real — não do pacote de revisão.
+- ~~O APPLY ainda não lê o pacote devolvido~~ — resolvido em
+  MIGRATION-REVIEW-BRIDGE-01 para Fornecedor e Item × Fornecedor.
+- **Identidade do `Supplier` entre pacotes diferentes** continua em aberto. Sem
+  `externalCode`, o reencontro é por `legalName`. Dentro de um mesmo pacote
+  aprovado isso é determinístico (a colisão reprova antes de escrever) e
+  reaplicar não duplica. Mas se a razão social for corrigida entre duas revisões
+  e o APPLY rodar de novo, o fornecedor da primeira carga não é reencontrado e
+  nasce um segundo cadastro. Enquanto for assim: **um APPLY real por pacote**, e
+  correção de razão social depois da carga é edição no ERP, não nova migração.
+  Resolver de vez exige campo de identidade no domínio — decisão de produto.
 - O importador atual não reconhece a família `MINERAIS` (plural) e gravaria
   `OTHER_RAW_MATERIAL`; o pacote já propõe `MINERAL`.
 - Há itens com código só no CMV ou só na planilha de preços, e produtos cuja
