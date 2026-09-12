@@ -15,7 +15,14 @@ export function ExportCsvButton({
 }: {
   /** Rota explícita, ex.: `/customers/export.csv`. */
   path: string;
-  filters?: Record<string, string | number | boolean | undefined>;
+  /**
+   * O MESMO objeto de filtros que a tela manda para a listagem.
+   *
+   * Lista de valores (a situação "Em aberto" é um conjunto de status) viaja
+   * separada por vírgula, que é como a API a lê na listagem e no CSV — sem
+   * isto a tela teria de montar uma segunda versão do filtro só para o botão.
+   */
+  filters?: Record<string, string | number | boolean | readonly string[] | undefined>;
   label?: string;
 }) {
   const query = new URLSearchParams();
@@ -23,6 +30,10 @@ export function ExportCsvButton({
     if (value === undefined || value === "") continue;
     // Paginação nunca vai para a exportação: o CSV é o resultado completo.
     if (key === "page" || key === "pageSize") continue;
+    if (Array.isArray(value)) {
+      if (value.length > 0) query.set(key, value.join(","));
+      continue;
+    }
     query.set(key, String(value));
   }
   const suffix = query.toString() ? `?${query.toString()}` : "";

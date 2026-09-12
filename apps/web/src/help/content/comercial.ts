@@ -456,7 +456,7 @@ export const comercialTopics = {
     module: "comercial",
     title: "O que é um Pedido do Cliente e o que ele decide",
     summary:
-      "Pedido do Cliente é a demanda comercial: quem pediu, o que pediu e quanto. Ele não é estoque e não reserva nada sozinho — é o documento que autoriza o resto a acontecer: reserva, produção, compra de material em falta, expedição e faturamento. Esta lista mostra todos os pedidos e três leituras de situação lado a lado: o status do pedido, o atendimento e o faturamento.",
+      "Pedido do Cliente é a demanda comercial: quem pediu, o que pediu e quanto. Ele não é estoque e não reserva nada sozinho — é o documento que autoriza o resto a acontecer: reserva, produção, compra de material em falta, expedição e faturamento. Esta lista abre nos pedidos em aberto — do rascunho ao parcialmente expedido; Todos os status traz o histórico — e mostra três leituras de situação lado a lado: o status do pedido, o atendimento e o faturamento.",
     concepts: [
       {
         term: "Pedido do Cliente",
@@ -546,7 +546,7 @@ export const comercialTopics = {
     module: "comercial",
     title: "O que é uma expedição e por que ela nasce do pedido",
     summary:
-      "Expedição é a saída física de produto acabado de um Pedido do Cliente: quais lotes saíram, quanto de cada um e quando. Esta lista mostra o que está em separação (rascunho) e o que já saiu (confirmada), sempre amarrado ao pedido de origem. Não existe expedição avulsa — ela parte de um pedido com reserva feita, e só a confirmada mexe no estoque.",
+      "Expedição é a saída física de produto acabado de um Pedido do Cliente: quais lotes saíram, quanto de cada um e quando. Esta lista abre no que ainda está em separação (rascunho); Todos os status traz também o que já saiu (confirmada), sempre amarrado ao pedido de origem. Não existe expedição avulsa — ela parte de um pedido com reserva feita, e só a confirmada mexe no estoque.",
     concepts: [
       {
         term: "Expedição",

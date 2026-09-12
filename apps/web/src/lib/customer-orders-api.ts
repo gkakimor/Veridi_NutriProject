@@ -16,7 +16,11 @@ import { parseJsonOrThrow } from "./api-errors";
 
 export interface ListCustomerOrdersParams {
   search?: string;
-  status?: CustomerOrderStatus;
+  /**
+   * Um status, ou vários — "Em aberto" são quatro. Vários viajam separados
+   * por vírgula e o servidor responde com UMA consulta paginada.
+   */
+  status?: CustomerOrderStatus | CustomerOrderStatus[];
   customerId?: string;
   page?: number;
   pageSize?: number;
@@ -27,7 +31,8 @@ export async function listCustomerOrders(
 ): Promise<CustomerOrderListResponse> {
   const query = new URLSearchParams();
   if (params.search) query.set("search", params.search);
-  if (params.status) query.set("status", params.status);
+  const status = Array.isArray(params.status) ? params.status.join(",") : params.status;
+  if (status) query.set("status", status);
   if (params.customerId) query.set("customerId", params.customerId);
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 20));

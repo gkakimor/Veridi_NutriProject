@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import { quantityDecimalSchema } from "../../lib/decimal-schema.js";
+import { listaDeStatusSchema } from "../../lib/status-list-schema.js";
 
 const statusEnum = z.enum([
   "DRAFT",
@@ -14,27 +15,15 @@ const statusEnum = z.enum([
 
 const originEnum = z.enum(["MANUAL", "STOCK_PRODUCTION"]);
 
-/**
- * Um status, ou vários separados por vírgula — `RELEASED,IN_PRODUCTION`.
- *
- * A fila do Picking/Consumo é "OP ainda atendível", e isso são DOIS status.
- * Antes, a tela pedia um de cada vez com `pageSize: 100` e concatenava as
- * duas respostas no navegador: a partir da 101ª OP de qualquer um dos dois
- * lados a fila simplesmente perdia linhas, sem dizer nada, e o rodapé
- * contava o que sobrou como se fosse o total.
- *
- * Não é breaking change: um valor só continua valendo, e o resultado é o
- * mesmo `where` de antes.
- */
-const statusFilterSchema = z
-  .string()
-  .trim()
-  .transform((valor) => valor.split(",").map((parte) => parte.trim()).filter(Boolean))
-  .pipe(z.array(statusEnum).min(1, "Informe ao menos um status"));
-
 export const listProductionOrdersQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
-  status: statusFilterSchema.optional(),
+  /*
+   * Um status, ou vários separados por vírgula — `RELEASED,IN_PRODUCTION`.
+   * O Picking/Consumo pede o par atendível; a lista de Ordens de Produção
+   * pede "Em aberto". O contrato é o mesmo das outras listas
+   * (`listaDeStatusSchema`).
+   */
+  status: listaDeStatusSchema(statusEnum).optional(),
   productId: z.string().trim().min(1).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),

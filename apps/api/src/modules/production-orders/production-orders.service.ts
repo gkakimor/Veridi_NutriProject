@@ -33,6 +33,7 @@ import { isPending, reconciliationStatus, unreconciledQuantity } from "./reconci
 import { assertProductOperational } from "../../lib/product-lifecycle.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
+import { statusDoWhere } from "../../lib/status-list-schema.js";
 import { computeRequirementAvailability } from "../../lib/requirement-availability.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import {
@@ -715,9 +716,8 @@ export async function listProductionOrders(
 
   // Um status vira igualdade; vários viram `in`. A fila operacional pede
   // dois de uma vez, e agora isso é UMA consulta paginada pelo banco.
-  if (query.status && query.status.length > 0) {
-    where["status"] = query.status.length === 1 ? query.status[0] : { in: query.status };
-  }
+  const status = statusDoWhere(query.status);
+  if (status) where["status"] = status;
   if (query.productId) where["productId"] = query.productId;
   if (query.search) {
     where["OR"] = [

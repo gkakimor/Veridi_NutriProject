@@ -12,7 +12,14 @@ import { parseJsonOrThrow } from "./api-errors";
 export interface ListPurchaseOrdersParams {
   search?: string;
   supplierId?: string;
-  status?: PurchaseOrderStatus;
+  /**
+   * Um status, ou vários — "Em aberto" são três. Vários viajam separados por
+   * vírgula e o servidor responde com UMA consulta paginada.
+   */
+  status?: PurchaseOrderStatus | PurchaseOrderStatus[];
+  /** Data do pedido, dia civil `YYYY-MM-DD` — nunca instante. */
+  dateFrom?: string;
+  dateTo?: string;
   page?: number;
   pageSize?: number;
 }
@@ -23,7 +30,10 @@ export async function listPurchaseOrders(
   const query = new URLSearchParams();
   if (params.search) query.set("search", params.search);
   if (params.supplierId) query.set("supplierId", params.supplierId);
-  if (params.status) query.set("status", params.status);
+  const status = Array.isArray(params.status) ? params.status.join(",") : params.status;
+  if (status) query.set("status", status);
+  if (params.dateFrom) query.set("dateFrom", params.dateFrom);
+  if (params.dateTo) query.set("dateTo", params.dateTo);
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 20));
 

@@ -1,19 +1,29 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../app/AuthProvider";
-import { useInitialFilters } from "../../lib/filter-params";
-import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
 import type { ProductionOrderDTO, ProductionOrderStatus } from "@veridi/shared";
 import { PRODUCTION_ORDER_STATUSES, PRODUCTION_ORDER_STATUS_LABELS } from "@veridi/shared";
+import type { ListProductionOrdersParams } from "../../lib/production-orders-api";
 import { listProductionOrders } from "../../lib/production-orders-api";
 import { formatDate } from "../../lib/dates";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
-
-type ActiveFilter = ProductionOrderStatus | "all";
+import { useListFilters } from "../../lib/list-filters";
+import { produtoFilterSource } from "../../lib/filter-sources";
+import { ActiveFilterChips } from "../../components/filters/ActiveFilterChips";
+import type { FilterChip } from "../../components/filters/ActiveFilterChips";
+import { ClearFilters } from "../../components/filters/ClearFilters";
+import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
+import type { StatusGroup } from "../../components/filters/StatusGroupFilter";
+import {
+  StatusGroupFilter,
+  labelOfGroup,
+  statusesOfGroup,
+} from "../../components/filters/StatusGroupFilter";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
 
 const PAGE_SIZE = 20;
 
@@ -53,7 +63,60 @@ function materialsBadgeClass(order: ProductionOrderDTO): string {
   return order.materialsStatus === "MATERIALS_AVAILABLE" ? "badge badge--active" : "badge badge--warn";
 }
 
-/** Produção → Ordens de Produção. Documento transacional: linha abre página própria, não modal. */
+/**
+ * "Em aberto" — a ordem que a produção ainda tem pela frente.
+ *
+ * Os quatro estados que o ciclo da OP percorre antes de terminar: rascunho
+ * (falta planejar), planejada (falta liberar), liberada (falta separar e
+ * consumir) e em produção (falta apontar e concluir). `COMPLETED` e
+ * `CANCELLED` ficam fora: não há mais trabalho.
+ *
+ * `BLOCKED` também fica fora, e não por decisão desta tela: nenhum serviço
+ * escreve esse status hoje, então não existe o que "bloqueada" significa na
+ * operação — se ainda pede trabalho, de quem, e o que a destrava. Colocá-la
+ * na fila seria inventar essa semântica. Ela continua exatamente como
+ * estava: uma opção própria do filtro e parte de "Todos os status".
+ */
+const EM_ABERTO: ProductionOrderStatus[] = ["DRAFT", "PLANNED", "RELEASED", "IN_PRODUCTION"];
+
+/**
+ * As escolhas do filtro de status. O valor na URL é a chave: `em-aberto` (o
+ * default, fora do endereço), `todos`, ou o status do domínio.
+ *
+ * "Em aberto" são quatro status numa consulta — o mesmo `status=A,B,...`
+ * que o Picking/Consumo já usa. Nenhum contrato novo.
+ */
+const GRUPOS: StatusGroup<ProductionOrderStatus>[] = [
+  { key: "em-aberto", label: "Em aberto", statuses: EM_ABERTO },
+  { key: "todos", label: "Todos os status", statuses: [] },
+  ...PRODUCTION_ORDER_STATUSES.map((status) => ({
+    key: status,
+    label: PRODUCTION_ORDER_STATUS_LABELS[status],
+    statuses: [status],
+  })),
+];
+
+const FILTROS_PADRAO = {
+  search: "",
+  /* Default operacional: não vira chip e não aparece na URL. */
+  status: "em-aberto",
+  /* Também é o contexto do link "Ordens de produção" do cadastro do Produto. */
+  productId: "",
+};
+
+function grupoValido(valor: string): string {
+  return GRUPOS.some((grupo) => grupo.key === valor) ? valor : FILTROS_PADRAO.status;
+}
+
+/**
+ * Produção → Ordens de Produção. Documento transacional: linha abre página própria, não modal.
+ *
+ * FILTER-OPERATIONS-WAVE-03. O `?productId=` do cadastro do Produto era lido
+ * à parte, fora do conjunto de filtros — e por isso fora das dependências do
+ * recarregamento, fora do CSV e fora do "Limpar filtros" da barra. A busca e
+ * o status vinham da sessão campo a campo e se somavam ao produto do link.
+ * Agora o produto é filtro como os outros, com chip, controle e endereço.
+ */
 const FILTER_SCOPE = "production-orders";
 
 export function ProductionOrdersPage() {
@@ -62,58 +125,45 @@ export function ProductionOrdersPage() {
 
   const [productionOrders, setProductionOrders] = useState<ProductionOrderDTO[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [produtoEscolhido, setProdutoEscolhido] = useState<EntityOption | null>(null);
 
-  const urlFilter = useInitialFilters();
-  const [search, setSearch] = usePersistentFilter(
-    user?.id ?? null,
-    FILTER_SCOPE,
-    "search",
-    "",
-    urlFilter("search"),
-  );
-  const [statusFilter, setStatusFilter] = usePersistentFilter<ActiveFilter>(
-    user?.id ?? null,
-    FILTER_SCOPE,
-    "status",
-    "all",
-  );
+  const { values, page, set, setPage, clear, isActive } = useListFilters({
+    defaults: FILTROS_PADRAO,
+    persistScope: FILTER_SCOPE,
+    userId: user?.id ?? null,
+  });
+  const { search, productId } = values;
+  const grupo = grupoValido(values.status);
+
+  /* UM conjunto de filtros para a consulta e para o CSV. */
+  const filtrosDaConsulta = useMemo(() => {
+    const filtros: Omit<ListProductionOrdersParams, "page" | "pageSize"> = {};
+    if (search) filtros.search = search;
+    if (productId) filtros.productId = productId;
+    const statuses = statusesOfGroup(GRUPOS, grupo);
+    if (statuses.length > 0) filtros.status = statuses;
+    return filtros;
+  }, [search, productId, grupo]);
+
   const [searchInput, setSearchInput] = useState(search);
 
-  const hasFilters = search !== "" || statusFilter !== "all";
-
-  function handleClearFilters() {
-    setSearchInput("");
-    setSearch("");
-    setStatusFilter("all");
-    clearStoredFilters(user?.id ?? null, FILTER_SCOPE);
-  }
+  useEffect(() => {
+    setSearchInput(search);
+  }, [search]);
 
   useEffect(() => {
-    const handle = setTimeout(() => setSearch(searchInput), 300);
+    if (searchInput === search) return;
+    const handle = setTimeout(() => set({ search: searchInput }), 300);
     return () => clearTimeout(handle);
-  }, [searchInput]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, statusFilter]);
-
-  // Link contextual traz identidade exata; nunca combina com filtro anterior.
-  const [urlParams] = useSearchParams();
-  const contextParam = urlParams.get("productId") ?? "";
+  }, [searchInput, search, set]);
 
   const reload = useCallback(() => {
     setLoading(true);
     setError(null);
 
-    const params: Parameters<typeof listProductionOrders>[0] = { page, pageSize: PAGE_SIZE };
-    if (contextParam) params.productId = contextParam;
-    if (search) params.search = search;
-    if (statusFilter !== "all") params.status = statusFilter;
-
-    listProductionOrders(params)
+    listProductionOrders({ ...filtrosDaConsulta, page, pageSize: PAGE_SIZE })
       .then((result) => {
         setProductionOrders(result.productionOrders);
         setTotal(result.total);
@@ -122,11 +172,30 @@ export function ProductionOrdersPage() {
         setError(err instanceof Error ? err.message : "Falha ao carregar ordens de produção");
       })
       .finally(() => setLoading(false));
-  }, [page, search, statusFilter]);
+  }, [filtrosDaConsulta, page]);
 
   useEffect(() => {
     reload();
   }, [reload]);
+
+  const chips: FilterChip[] = [];
+  if (search) {
+    chips.push({ label: "Busca", value: search, onRemove: () => set({ search: "" }) });
+  }
+  if (grupo !== FILTROS_PADRAO.status) {
+    chips.push({
+      label: "Status",
+      value: labelOfGroup(GRUPOS, grupo),
+      onRemove: () => set({ status: FILTROS_PADRAO.status }),
+    });
+  }
+  if (productId) {
+    const nome =
+      produtoEscolhido?.id === productId
+        ? `${produtoEscolhido.code} · ${produtoEscolhido.name}`
+        : (productionOrders.find((op) => op.productId === productId)?.productName ?? "selecionado");
+    chips.push({ label: "Produto", value: nome, onRemove: () => set({ productId: "" }) });
+  }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -146,8 +215,8 @@ export function ProductionOrdersPage() {
         >
           + Nova OP
         </button>
-        <ExportCsvButton path="/production-orders/export.csv" filters={{ search, status: statusFilter === "all" ? undefined : statusFilter }} />
-</div>
+        <ExportCsvButton path="/production-orders/export.csv" filters={filtrosDaConsulta} />
+      </div>
 
       <ContextHelp topic={helpTopics["producao.ordens"]} />
 
@@ -165,43 +234,29 @@ export function ProductionOrdersPage() {
           />
         </div>
 
-        <label className="sr-only" htmlFor="op-status-filter">
-          Filtrar por status
-        </label>
-        <select
+        <StatusGroupFilter
           id="op-status-filter"
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as ActiveFilter)}
-        >
-          <option value="all">Todos os status</option>
-          {PRODUCTION_ORDER_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {PRODUCTION_ORDER_STATUS_LABELS[status]}
-            </option>
-          ))}
-        </select>
+          label="Filtrar por status"
+          groups={GRUPOS}
+          value={grupo}
+          onChange={(key) => set({ status: key })}
+        />
 
-        {hasFilters && (
-          <button type="button" className="btn btn--ghost btn--sm" onClick={handleClearFilters}>
-            Limpar filtros
-          </button>
-        )}
+        {/* Busca no servidor: o catálogo de produtos não cabe num `<select>`. */}
+        <EntityFilterSelect
+          id="op-product-filter"
+          label="Filtrar por produto"
+          placeholder="Todos os produtos"
+          value={productId}
+          onChange={(value) => set({ productId: value })}
+          source={produtoFilterSource}
+          onResolve={setProdutoEscolhido}
+        />
       </div>
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      <ActiveFilterChips chips={chips} onClear={clear} />
 
-      {contextParam && (
-        <p className="context-chip">
-          Mostrando apenas as ordens deste produto — filtro veio de um link.{" "}
-          <button
-            type="button"
-            className="btn btn--ghost btn--sm"
-            onClick={() => navigate("/producao/ordens")}
-          >
-            Limpar filtros
-          </button>
-        </p>
-      )}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="table-container">
         <table className="table table--clickable-rows table--sticky-actions">
@@ -285,7 +340,23 @@ export function ProductionOrdersPage() {
             {!loading && productionOrders.length === 0 && (
               <tr>
                 <td colSpan={9} className="table__empty">
-                  Nenhuma ordem de produção encontrada.
+                  {isActive ? (
+                    <>
+                      Nenhuma ordem de produção encontrada para os filtros atuais.{" "}
+                      <ClearFilters onClear={clear} />
+                    </>
+                  ) : (
+                    <>
+                      Nenhuma ordem de produção em aberto.{" "}
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--sm"
+                        onClick={() => set({ status: "todos" })}
+                      >
+                        Ver todas
+                      </button>
+                    </>
+                  )}
                 </td>
               </tr>
             )}
@@ -305,7 +376,7 @@ export function ProductionOrdersPage() {
             type="button"
             className="btn btn--secondary btn--sm"
             disabled={page <= 1}
-            onClick={() => setPage((current) => current - 1)}
+            onClick={() => setPage(page - 1)}
           >
             Anterior
           </button>
@@ -313,7 +384,7 @@ export function ProductionOrdersPage() {
             type="button"
             className="btn btn--secondary btn--sm"
             disabled={page >= totalPages}
-            onClick={() => setPage((current) => current + 1)}
+            onClick={() => setPage(page + 1)}
           >
             Próxima
           </button>

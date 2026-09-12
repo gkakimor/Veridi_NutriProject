@@ -72,6 +72,14 @@ vi.mock("../lib/shipments-api", () => ({
   cancelShipment: vi.fn(),
   verifyShipmentLine: vi.fn(),
 }));
+/*
+ * O filtro "Pedido" da lista de Expedições busca pedidos no servidor
+ * (FILTER-OPERATIONS-WAVE-03). Sem isto o teste bateria na API de verdade.
+ */
+vi.mock("../lib/customer-orders-api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/customer-orders-api")>()),
+  listCustomerOrders: () => Promise.resolve({ customerOrders: [], page: 1, pageSize: 20, total: 0 }),
+}));
 vi.mock("../lib/billings-api", () => ({ createBilling: vi.fn() }));
 vi.mock("../lib/items-api", () => ({ listItems: () => Promise.resolve({ items: [] }) }));
 vi.mock("../lib/units-api", () => ({ listUnits: () => Promise.resolve([]) }));

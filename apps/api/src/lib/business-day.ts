@@ -1,4 +1,4 @@
-import { diaCivil, hojeComercial } from "@veridi/shared";
+import { diaCivil, diaCivilDeslocado, hojeComercial } from "@veridi/shared";
 
 /**
  * Data civil no domínio — o que "até quando vale" significa.
@@ -75,6 +75,36 @@ export function diaComercialPorExtenso(dia: Date): string {
  */
 export function marcadorDoDiaCivil(diaISO: string): Date {
   return new Date(`${diaISO}T00:00:00.000Z`);
+}
+
+/**
+ * O intervalo de um período sobre uma COLUNA DE DATA CIVIL — `[inicio,
+ * fimExclusivo)` em marcadores.
+ *
+ * É o irmão de `intervaloDeDiasComerciais` (`@veridi/shared`) para o outro
+ * tipo de coluna, e a escolha entre os dois é a espécie do dado, nunca gosto:
+ *
+ * - coluna de INSTANTE (`receivedAt`, `issuedAt`) → `intervaloDeDiasComerciais`,
+ *   os instantes que limitam o dia em São Paulo;
+ * - coluna de DATA CIVIL (a data de documento da Ordem de Compra, que a tela
+ *   grava como a meia-noite UTC do dia escolhido) → este.
+ *
+ * Trocar um pelo outro erra o dia INTEIRO, não três horas: o marcador de
+ * 10/09 é `2026-09-10T00:00Z`, que fica antes do início do dia comercial de
+ * 10/09 (`03:00Z`) e dentro do de 09/09. "De 10/09 até 10/09" traria as
+ * ordens de 11/09 e nenhuma de 10/09.
+ *
+ * O fim continua exclusivo — o marcador do dia seguinte —, pelo mesmo motivo
+ * do filtro por instante: nenhum `23:59:59.999` inventado.
+ */
+export function intervaloDeDiasCivis(
+  deDiaISO: string | null | undefined,
+  ateDiaISO: string | null | undefined,
+): { inicio?: Date; fimExclusivo?: Date } {
+  const intervalo: { inicio?: Date; fimExclusivo?: Date } = {};
+  if (deDiaISO) intervalo.inicio = marcadorDoDiaCivil(deDiaISO);
+  if (ateDiaISO) intervalo.fimExclusivo = marcadorDoDiaCivil(diaCivilDeslocado(ateDiaISO, 1));
+  return intervalo;
 }
 
 /**

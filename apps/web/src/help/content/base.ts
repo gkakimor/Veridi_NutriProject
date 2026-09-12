@@ -127,7 +127,7 @@ export const baseTopics = {
     module: "producao",
     title: "Ordens de Produção: a fila da fábrica",
     summary:
-      "Esta lista reúne todas as ordens de produção e diz, de cada uma, o produto, o cliente, a versão da formulação, a quantidade planejada, se o material já está reservado e em que situação a ordem está. Nada se executa aqui: liberar, separar, consumir e concluir acontecem dentro da ordem.",
+      "Esta lista abre nas ordens em aberto — rascunho, planejada, liberada e em produção — e diz, de cada uma, o produto, o cliente, a versão da formulação, a quantidade planejada, se o material já está reservado e em que situação a ordem está. Nada se executa aqui: liberar, separar, consumir e concluir acontecem dentro da ordem.",
     concepts: [
       {
         term: "Situação",
@@ -157,7 +157,7 @@ export const baseTopics = {
       { label: "Executar na ordem" },
     ],
     steps: [
-      { label: "Filtrar", detail: "Por situação, ou buscando por código, produto ou cliente. Exportar leva o recorte filtrado." },
+      { label: "Filtrar", detail: "A lista abre em Em aberto; Todos os status traz o histórico. Filtre por situação ou produto, ou busque por código ou produto. Exportar leva o recorte filtrado." },
       { label: "Ler a situação", detail: "Rascunho e planejada ainda aceitam mudança; liberada e em produção têm material comprometido; concluída e cancelada são histórico." },
       { label: "Abrir a ordem", detail: "A linha abre a ordem completa: necessidades, reservas, separação, consumo, apontamento e custo." },
       { label: "Executar na ordem", detail: "Planejar, liberar, consumir, apontar e concluir são ações da própria ordem, cada uma com a sua regra." },

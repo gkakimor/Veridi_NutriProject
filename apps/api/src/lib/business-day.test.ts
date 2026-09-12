@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { diaDaColunaDeData, venceuEm } from "./business-day.js";
+import { intervaloDeDiasComerciais } from "@veridi/shared";
+import { diaDaColunaDeData, intervaloDeDiasCivis, venceuEm } from "./business-day.js";
 
 /**
  * "Válido até 15/09" vale o dia 15 inteiro — na operação brasileira.
@@ -81,5 +82,53 @@ describe("viradas de calendário", () => {
     expect(diaDaColunaDeData(bissexto)).toBe("2028-02-29");
     expect(venceuEm(bissexto, new Date("2028-03-01T02:00:00.000Z"))).toBe(false);
     expect(venceuEm(bissexto, new Date("2028-03-01T03:00:00.000Z"))).toBe(true);
+  });
+});
+
+/**
+ * Filtro por período sobre coluna de DATA CIVIL (FILTER-OPERATIONS-WAVE-03).
+ *
+ * A data do pedido da Ordem de Compra é marcador de dia, e o intervalo tem de
+ * ser de marcadores. O de dias comerciais é para coluna de instante — usado
+ * aqui, erra o dia inteiro.
+ */
+describe("intervaloDeDiasCivis", () => {
+  it("o mesmo dia nas duas pontas é [marcador do dia, marcador do dia seguinte)", () => {
+    expect(intervaloDeDiasCivis("2026-09-10", "2026-09-10")).toEqual({
+      inicio: new Date("2026-09-10T00:00:00.000Z"),
+      fimExclusivo: new Date("2026-09-11T00:00:00.000Z"),
+    });
+  });
+
+  it("cada ponta vale sozinha, e ponta vazia não filtra", () => {
+    expect(intervaloDeDiasCivis("2026-09-10", undefined)).toEqual({
+      inicio: new Date("2026-09-10T00:00:00.000Z"),
+    });
+    expect(intervaloDeDiasCivis(null, "2026-09-10")).toEqual({
+      fimExclusivo: new Date("2026-09-11T00:00:00.000Z"),
+    });
+    expect(intervaloDeDiasCivis("", "")).toEqual({});
+  });
+
+  it("vira mês e ano pelo calendário, sem hora inventada", () => {
+    expect(intervaloDeDiasCivis(null, "2026-12-31").fimExclusivo).toEqual(
+      new Date("2027-01-01T00:00:00.000Z"),
+    );
+    expect(intervaloDeDiasCivis(null, "2028-02-28").fimExclusivo).toEqual(
+      new Date("2028-02-29T00:00:00.000Z"),
+    );
+  });
+
+  it("é o intervalo certo para o marcador — o comercial deixaria o dia de fora", () => {
+    const marcadorDeDez = new Date("2026-09-10T00:00:00.000Z");
+    const civil = intervaloDeDiasCivis("2026-09-10", "2026-09-10");
+    const comercial = intervaloDeDiasComerciais("2026-09-10", "2026-09-10");
+
+    const dentro = (intervalo: { inicio?: Date; fimExclusivo?: Date }, valor: Date) =>
+      (!intervalo.inicio || valor >= intervalo.inicio) &&
+      (!intervalo.fimExclusivo || valor < intervalo.fimExclusivo);
+
+    expect(dentro(civil, marcadorDeDez)).toBe(true);
+    expect(dentro(comercial, marcadorDeDez)).toBe(false);
   });
 });

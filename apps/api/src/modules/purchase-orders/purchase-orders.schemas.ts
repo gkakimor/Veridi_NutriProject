@@ -5,7 +5,12 @@ import {
   decimalStringSchema,
   quantityDecimalSchema,
 } from "../../lib/decimal-schema.js";
-import { optionalNullableDateSchema, requiredDateSchema } from "../../lib/date-schema.js";
+import {
+  diaCivilDeFiltroSchema,
+  optionalNullableDateSchema,
+  requiredDateSchema,
+} from "../../lib/date-schema.js";
+import { listaDeStatusSchema } from "../../lib/status-list-schema.js";
 
 const purchaseOrderLineInputSchema = z.object({
   itemId: z.string().trim().min(1, "Item é obrigatório"),
@@ -44,9 +49,22 @@ export const cancelPurchaseOrderSchema = z.object({
 export const listPurchaseOrdersQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
   supplierId: z.string().trim().min(1).optional(),
-  status: z
-    .enum(["DRAFT", "ORDERED", "PARTIALLY_RECEIVED", "RECEIVED", "CANCELLED"])
-    .optional(),
+  /*
+   * Um status ou vários separados por vírgula (FILTER-OPERATIONS-WAVE-03): a
+   * fila de Ordens de Compra abre em "Em aberto" — rascunho, confirmada e
+   * recebida parcialmente —, numa consulta só. Um valor continua valendo.
+   */
+  status: listaDeStatusSchema(
+    z.enum(["DRAFT", "ORDERED", "PARTIALLY_RECEIVED", "RECEIVED", "CANCELLED"]),
+  ).optional(),
+  /*
+   * Período pela DATA DO PEDIDO, em dias civis `YYYY-MM-DD`. `orderDate` é
+   * data de documento — a tela grava a meia-noite UTC do dia escolhido —, e
+   * o serviço compara marcador com marcador (`intervaloDeDiasCivis`), com fim
+   * exclusivo. Nunca `z.coerce.date()`.
+   */
+  dateFrom: diaCivilDeFiltroSchema,
+  dateTo: diaCivilDeFiltroSchema,
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });

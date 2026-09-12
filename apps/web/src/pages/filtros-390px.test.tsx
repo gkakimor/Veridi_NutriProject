@@ -6,7 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 
 /**
  * 390px — as telas migradas para a foundation de filtros
- * (FILTER-OPERATIONS-WAVE-01 e -02).
+ * (FILTER-OPERATIONS-WAVE-01, -02 e -03).
  *
  * jsdom não faz layout, então o que se prova é a REGRA e a estrutura: os
  * controles de filtro com largura mínima em pixel passam a ocupar a linha
@@ -31,6 +31,13 @@ vi.mock("../lib/suppliers-api", () => ({ listSuppliers: vi.fn().mockResolvedValu
 vi.mock("../lib/lots-api", () => ({ listLots: vi.fn().mockResolvedValue({ lots: [], page: 1, pageSize: 20, total: 0 }) }));
 vi.mock("../lib/items-api", () => ({ listItems: vi.fn().mockResolvedValue({ items: [], page: 1, pageSize: 20, total: 0 }) }));
 vi.mock("../lib/products-api", () => ({ listProducts: vi.fn().mockResolvedValue({ products: [], page: 1, pageSize: 20, total: 0 }) }));
+vi.mock("../lib/customer-orders-api", () => ({
+  listCustomerOrders: vi.fn().mockResolvedValue({ customerOrders: [], page: 1, pageSize: 20, total: 0 }),
+  getCustomerOrder: vi.fn(),
+}));
+vi.mock("../lib/customers-api", () => ({ listCustomers: vi.fn().mockResolvedValue({ customers: [], page: 1, pageSize: 20, total: 0 }) }));
+vi.mock("../lib/shipments-api", () => ({ listShipments: vi.fn().mockResolvedValue({ shipments: [], page: 1, pageSize: 20, total: 0 }) }));
+vi.mock("../lib/purchase-orders-api", () => ({ listPurchaseOrders: vi.fn().mockResolvedValue({ purchaseOrders: [], page: 1, pageSize: 20, total: 0 }) }));
 vi.mock("../app/AuthProvider", () => ({
   useAuth: () => ({ user: { id: "u-1", role: "ADMIN" } }),
 }));
@@ -40,12 +47,19 @@ import { listFinishedGoods } from "../lib/finished-goods-api";
 import { listProductionOrders } from "../lib/production-orders-api";
 import { listQualityQueue } from "../lib/attachments-api";
 import { listLots } from "../lib/lots-api";
+import { listCustomerOrders } from "../lib/customer-orders-api";
+import { listShipments } from "../lib/shipments-api";
+import { listPurchaseOrders } from "../lib/purchase-orders-api";
 import { clearStoredFilters } from "../lib/stored-filters";
 import { ReceiptsPage } from "./receiving/ReceiptsPage";
 import { FinishedGoodsPage } from "./finished-goods/FinishedGoodsPage";
 import { PickingConsumptionPage } from "./production-orders/PickingConsumptionPage";
 import { CoaQueuePage } from "./quality/CoaQueuePage";
 import { LotsPage } from "./lots/LotsPage";
+import { CustomerOrdersPage } from "./customer-orders/CustomerOrdersPage";
+import { ShipmentsPage } from "./shipments/ShipmentsPage";
+import { ProductionOrdersPage } from "./production-orders/ProductionOrdersPage";
+import { PurchaseOrdersPage } from "./purchase-orders/PurchaseOrdersPage";
 
 const TELAS = [
   { nome: "Recebimentos", Tela: ReceiptsPage, carregou: listReceipts, escopo: "receipts" },
@@ -54,6 +68,11 @@ const TELAS = [
   { nome: "Documentos / CoA", Tela: CoaQueuePage, carregou: listQualityQueue, escopo: "coa-queue" },
   // Lotes é também "Liberação de lotes" (`?status=AWAITING_RELEASE`).
   { nome: "Lotes", Tela: LotsPage, carregou: listLots, escopo: "lots" },
+  // FILTER-OPERATIONS-WAVE-03 — as quatro filas operacionais.
+  { nome: "Pedidos", Tela: CustomerOrdersPage, carregou: listCustomerOrders, escopo: "customer-orders" },
+  { nome: "Expedições", Tela: ShipmentsPage, carregou: listShipments, escopo: "shipments" },
+  { nome: "Ordens de Produção", Tela: ProductionOrdersPage, carregou: listProductionOrders, escopo: "production-orders" },
+  { nome: "Ordens de Compra", Tela: PurchaseOrdersPage, carregou: listPurchaseOrders, escopo: "purchase-orders" },
 ];
 
 const css = () =>

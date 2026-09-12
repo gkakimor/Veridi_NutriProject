@@ -390,3 +390,103 @@ describe("CustomerOrder — CRUD e transições", () => {
     await app.close();
   });
 });
+
+/**
+ * FILTER-OPERATIONS-WAVE-03 — a fila de Pedidos abre em "Em aberto".
+ *
+ * "Em aberto" são quatro status do domínio (rascunho, confirmado, em
+ * atendimento, parcialmente expedido), e a lista só aceitava um por vez. O
+ * contrato é o mesmo do Picking: `status=A,B,...`, um valor só continua
+ * valendo. O CSV lê o MESMO schema e o MESMO serviço — a prova é pedir os
+ * dois com a mesma query e comparar.
+ *
+ * O status é gravado direto no banco: aqui se testa o FILTRO, não as
+ * transições, que têm testes próprios.
+ */
+describe("Pedidos — filtro por vários status e CSV com a mesma consulta", () => {
+  const EM_ABERTO = "DRAFT,CONFIRMED,IN_FULFILLMENT,PARTIALLY_SHIPPED";
+
+  async function umPedidoPorStatus(app: App) {
+    const customer = await createCustomer();
+    const statuses = [
+      "DRAFT",
+      "CONFIRMED",
+      "IN_FULFILLMENT",
+      "PARTIALLY_SHIPPED",
+      "SHIPPED",
+      "CANCELLED",
+    ] as const;
+    const codigos: Record<string, string> = {};
+    for (const status of statuses) {
+      const order = await createDraftOrder(app, customer.id);
+      await getPrisma().customerOrder.update({ where: { id: order.id }, data: { status } });
+      codigos[status] = order.code;
+    }
+    return { customerId: customer.id, codigos };
+  }
+
+  async function codigosDaLista(app: App, query: string) {
+    const resposta = await app.inject({ method: "GET", url: `/customer-orders?${query}` });
+    expect(resposta.statusCode, resposta.body).toBe(200);
+    const corpo = resposta.json();
+    return {
+      total: corpo.total as number,
+      codes: (corpo.customerOrders as { code: string }[]).map((order) => order.code).sort(),
+    };
+  }
+
+  it("`Em aberto` traz os quatro status abertos numa consulta, sem expedido nem cancelado", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const { customerId, codigos } = await umPedidoPorStatus(app);
+    const fila = await codigosDaLista(app, `customerId=${customerId}&status=${EM_ABERTO}&pageSize=100`);
+
+    expect(fila.codes).toEqual(
+      [codigos.DRAFT, codigos.CONFIRMED, codigos.IN_FULFILLMENT, codigos.PARTIALLY_SHIPPED].sort(),
+    );
+    expect(fila.total).toBe(4);
+    expect(fila.codes).not.toContain(codigos.SHIPPED);
+    expect(fila.codes).not.toContain(codigos.CANCELLED);
+
+    await app.close();
+  });
+
+  it("um status só continua valendo, e status inexistente é recusado", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const { customerId, codigos } = await umPedidoPorStatus(app);
+    const so = await codigosDaLista(app, `customerId=${customerId}&status=SHIPPED&pageSize=100`);
+    expect(so.codes).toEqual([codigos.SHIPPED]);
+
+    const invalido = await app.inject({
+      method: "GET",
+      url: `/customer-orders?status=CONFIRMED,VOANDO`,
+    });
+    expect(invalido.statusCode).toBe(400);
+
+    await app.close();
+  });
+
+  it("o CSV exporta o MESMO conjunto da tela — cliente, status e busca", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const { customerId, codigos } = await umPedidoPorStatus(app);
+    const query = `customerId=${customerId}&status=${EM_ABERTO}&search=PED-`;
+
+    const tela = await codigosDaLista(app, `${query}&pageSize=100`);
+    const csv = await app.inject({ method: "GET", url: `/customer-orders/export.csv?${query}` });
+    expect(csv.statusCode).toBe(200);
+
+    for (const code of tela.codes) expect(csv.body).toContain(code);
+    expect(csv.body).not.toContain(codigos.SHIPPED);
+    expect(csv.body).not.toContain(codigos.CANCELLED);
+    // Cabeçalho + uma linha por pedido da tela: nada a mais, nada a menos.
+    const linhas = csv.body.replace(/^﻿/, "").split("\r\n").filter((linha) => linha.length > 0);
+    expect(linhas).toHaveLength(tela.total + 1);
+
+    await app.close();
+  });
+});

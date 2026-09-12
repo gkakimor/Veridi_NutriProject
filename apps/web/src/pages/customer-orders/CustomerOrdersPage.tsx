@@ -1,23 +1,32 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
-import type { CustomerDTO, CustomerOrderDTO, CustomerOrderStatus } from "@veridi/shared";
+import type { CustomerOrderDTO, CustomerOrderStatus } from "@veridi/shared";
 import {
   CUSTOMER_ORDER_BILLING_STATUS_LABELS,
   CUSTOMER_ORDER_STATUSES,
   CUSTOMER_ORDER_STATUS_LABELS,
 } from "@veridi/shared";
+import type { ListCustomerOrdersParams } from "../../lib/customer-orders-api";
 import { listCustomerOrders } from "../../lib/customer-orders-api";
-import { listCustomers } from "../../lib/customers-api";
 import { useAuth } from "../../app/AuthProvider";
-import { useInitialFilters } from "../../lib/filter-params";
-import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
+import { useListFilters } from "../../lib/list-filters";
+import { clienteFilterSource } from "../../lib/filter-sources";
 import { formatDate } from "../../lib/dates";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
-
-type ActiveFilter = CustomerOrderStatus | "all";
+import { ActiveFilterChips } from "../../components/filters/ActiveFilterChips";
+import type { FilterChip } from "../../components/filters/ActiveFilterChips";
+import { ClearFilters } from "../../components/filters/ClearFilters";
+import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
+import type { StatusGroup } from "../../components/filters/StatusGroupFilter";
+import {
+  StatusGroupFilter,
+  labelOfGroup,
+  statusesOfGroup,
+} from "../../components/filters/StatusGroupFilter";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
 
 const PAGE_SIZE = 20;
 
@@ -37,8 +46,60 @@ function statusBadgeClass(status: CustomerOrderStatus): string {
   }
 }
 
+/**
+ * "Em aberto" — o pedido que ainda pede trabalho de alguém.
+ *
+ * Quatro status do domínio, nenhum inventado: o rascunho ainda precisa ser
+ * confirmado, o confirmado ainda precisa de atendimento, e o que está em
+ * atendimento ou parcialmente expedido ainda tem produto para sair. Ficam de
+ * fora os dois estados encerrados: `SHIPPED` (tudo foi expedido e a reserva
+ * que sobrava já foi liberada) e `CANCELLED`. O faturamento do pedido
+ * expedido tem fila própria, "Aguardando faturamento", na tela de
+ * Faturamento.
+ */
+const EM_ABERTO: CustomerOrderStatus[] = ["DRAFT", "CONFIRMED", "IN_FULFILLMENT", "PARTIALLY_SHIPPED"];
 
-/** Comercial → Pedidos. Documento transacional: linhas abrem página própria, não modal. */
+/**
+ * As escolhas do filtro de status.
+ *
+ * O valor na URL é a chave: `em-aberto` (o default, que não aparece no
+ * endereço), `todos`, ou o próprio status do domínio — um link externo pode
+ * dizer `?status=CONFIRMED` sem conhecer apelido nenhum.
+ */
+const GRUPOS: StatusGroup<CustomerOrderStatus>[] = [
+  { key: "em-aberto", label: "Em aberto", statuses: EM_ABERTO },
+  // A saída para o histórico: sem ela a tela ficaria presa à fila.
+  { key: "todos", label: "Todos os status", statuses: [] },
+  ...CUSTOMER_ORDER_STATUSES.map((status) => ({
+    key: status,
+    label: CUSTOMER_ORDER_STATUS_LABELS[status],
+    statuses: [status],
+  })),
+];
+
+const FILTROS_PADRAO = {
+  search: "",
+  /* Default operacional: não vira chip e não aparece na URL. */
+  status: "em-aberto",
+  /* Também é o contexto do link "Pedidos" do cadastro do Cliente. */
+  customerId: "",
+};
+
+/** Chave conhecida, ou o default — `?status=QUALQUERCOISA` não vira consulta inválida. */
+function grupoValido(valor: string): string {
+  return GRUPOS.some((grupo) => grupo.key === valor) ? valor : FILTROS_PADRAO.status;
+}
+
+/**
+ * Comercial → Pedidos. Documento transacional: linhas abrem página própria, não modal.
+ *
+ * FILTER-OPERATIONS-WAVE-03. A tela abria em "todos os status" e lembrava os
+ * filtros campo a campo (`usePersistentFilter`): chegando pelo link
+ * "Pedidos" do Cliente X, o cliente vinha do link e a busca e o status
+ * vinham da sessão — o cruzamento que a foundation existe para impedir. O
+ * cliente era um `<select>` com `listCustomers({ pageSize: 1000 })`, teto
+ * fixo apresentado como catálogo inteiro.
+ */
 const FILTER_SCOPE = "customer-orders";
 
 export function CustomerOrdersPage() {
@@ -47,58 +108,45 @@ export function CustomerOrdersPage() {
 
   const [customerOrders, setCustomerOrders] = useState<CustomerOrderDTO[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [clienteEscolhido, setClienteEscolhido] = useState<EntityOption | null>(null);
 
-  const urlFilter = useInitialFilters();
-  const [search, setSearch] = usePersistentFilter(user?.id ?? null, FILTER_SCOPE, "search", "");
-  const [customerFilter, setCustomerFilter] = usePersistentFilter(
-    user?.id ?? null,
-    FILTER_SCOPE,
-    "customer",
-    "",
-    urlFilter("customerId"),
-  );
-  const [statusFilter, setStatusFilter] = usePersistentFilter<ActiveFilter>(
-    user?.id ?? null,
-    FILTER_SCOPE,
-    "status",
-    "all",
-  );
+  const { values, page, set, setPage, clear, isActive } = useListFilters({
+    defaults: FILTROS_PADRAO,
+    persistScope: FILTER_SCOPE,
+    userId: user?.id ?? null,
+  });
+  const { search, customerId } = values;
+  const grupo = grupoValido(values.status);
+
+  /* UM conjunto de filtros para a consulta e para o CSV. */
+  const filtrosDaConsulta = useMemo(() => {
+    const filtros: Omit<ListCustomerOrdersParams, "page" | "pageSize"> = {};
+    if (search) filtros.search = search;
+    if (customerId) filtros.customerId = customerId;
+    const statuses = statusesOfGroup(GRUPOS, grupo);
+    if (statuses.length > 0) filtros.status = statuses;
+    return filtros;
+  }, [search, customerId, grupo]);
+
   const [searchInput, setSearchInput] = useState(search);
 
-  const hasFilters = search !== "" || customerFilter !== "" || statusFilter !== "all";
-
-  function handleClearFilters() {
-    setSearchInput("");
-    setSearch("");
-    setCustomerFilter("");
-    setStatusFilter("all");
-    clearStoredFilters(user?.id ?? null, FILTER_SCOPE);
-  }
-
-  const [customers, setCustomers] = useState<CustomerDTO[]>([]);
+  useEffect(() => {
+    setSearchInput(search);
+  }, [search]);
 
   useEffect(() => {
-    const handle = setTimeout(() => setSearch(searchInput), 300);
+    if (searchInput === search) return;
+    const handle = setTimeout(() => set({ search: searchInput }), 300);
     return () => clearTimeout(handle);
-  }, [searchInput]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, customerFilter, statusFilter]);
+  }, [searchInput, search, set]);
 
   const reload = useCallback(() => {
     setLoading(true);
     setError(null);
 
-    const params: Parameters<typeof listCustomerOrders>[0] = { page, pageSize: PAGE_SIZE };
-    if (search) params.search = search;
-    if (customerFilter) params.customerId = customerFilter;
-    if (statusFilter !== "all") params.status = statusFilter;
-
-    listCustomerOrders(params)
+    listCustomerOrders({ ...filtrosDaConsulta, page, pageSize: PAGE_SIZE })
       .then((result) => {
         setCustomerOrders(result.customerOrders);
         setTotal(result.total);
@@ -107,17 +155,36 @@ export function CustomerOrdersPage() {
         setError(err instanceof Error ? err.message : "Falha ao carregar pedidos");
       })
       .finally(() => setLoading(false));
-  }, [page, search, customerFilter, statusFilter]);
+  }, [filtrosDaConsulta, page]);
 
   useEffect(() => {
     reload();
   }, [reload]);
 
-  useEffect(() => {
-    listCustomers({ pageSize: 1000 })
-      .then((result) => setCustomers(result.customers))
-      .catch(() => setCustomers([]));
-  }, []);
+  const chips: FilterChip[] = [];
+  if (search) {
+    chips.push({ label: "Busca", value: search, onRemove: () => set({ search: "" }) });
+  }
+  if (grupo !== FILTROS_PADRAO.status) {
+    chips.push({
+      label: "Status",
+      value: labelOfGroup(GRUPOS, grupo),
+      // Tirar o recorte devolve a FILA, não a base inteira.
+      onRemove: () => set({ status: FILTROS_PADRAO.status }),
+    });
+  }
+  if (customerId) {
+    /*
+     * O nome sai do próprio filtro, não das linhas: o link do Cliente pode
+     * abrir uma lista vazia, e é aí que a pessoa mais precisa ler de quem.
+     */
+    const nome =
+      clienteEscolhido?.id === customerId
+        ? `${clienteEscolhido.code} · ${clienteEscolhido.name}`
+        : (customerOrders.find((order) => order.customerId === customerId)?.customerName ??
+          "selecionado");
+    chips.push({ label: "Cliente", value: nome, onRemove: () => set({ customerId: "" }) });
+  }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -135,8 +202,8 @@ export function CustomerOrdersPage() {
         >
           + Novo pedido
         </button>
-        <ExportCsvButton path="/customer-orders/export.csv" filters={{ search, customerId: customerFilter, status: statusFilter === "all" ? undefined : statusFilter }} />
-</div>
+        <ExportCsvButton path="/customer-orders/export.csv" filters={filtrosDaConsulta} />
+      </div>
 
       <ContextHelp topic={helpTopics["comercial.pedidos"]} />
 
@@ -154,44 +221,27 @@ export function CustomerOrdersPage() {
           />
         </div>
 
-        <label className="sr-only" htmlFor="co-customer-filter">
-          Filtrar por cliente
-        </label>
-        <select
-          id="co-customer-filter"
-          value={customerFilter}
-          onChange={(event) => setCustomerFilter(event.target.value)}
-        >
-          <option value="">Todos os clientes</option>
-          {customers.map((customer) => (
-            <option key={customer.id} value={customer.id}>
-              {customer.code} — {customer.tradeName ?? customer.legalName}
-            </option>
-          ))}
-        </select>
-
-        <label className="sr-only" htmlFor="co-status-filter">
-          Filtrar por status
-        </label>
-        <select
+        <StatusGroupFilter
           id="co-status-filter"
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as ActiveFilter)}
-        >
-          <option value="all">Todos os status</option>
-          {CUSTOMER_ORDER_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {CUSTOMER_ORDER_STATUS_LABELS[status]}
-            </option>
-          ))}
-        </select>
+          label="Filtrar por status"
+          groups={GRUPOS}
+          value={grupo}
+          onChange={(key) => set({ status: key })}
+        />
 
-        {hasFilters && (
-          <button type="button" className="btn btn--ghost btn--sm" onClick={handleClearFilters}>
-            Limpar filtros
-          </button>
-        )}
+        {/* Busca no servidor: a carteira de clientes não cabe num `<select>`. */}
+        <EntityFilterSelect
+          id="co-customer-filter"
+          label="Filtrar por cliente"
+          placeholder="Todos os clientes"
+          value={customerId}
+          onChange={(value) => set({ customerId: value })}
+          source={clienteFilterSource}
+          onResolve={setClienteEscolhido}
+        />
       </div>
+
+      <ActiveFilterChips chips={chips} onClear={clear} />
 
       {error && <p className="form-alert" role="alert">{error}</p>}
 
@@ -282,7 +332,25 @@ export function CustomerOrdersPage() {
             {!loading && customerOrders.length === 0 && (
               <tr>
                 <td colSpan={10} className="table__empty">
-                  Nenhum pedido encontrado.
+                  {isActive ? (
+                    <>
+                      Nenhum pedido encontrado para os filtros atuais.{" "}
+                      <ClearFilters onClear={clear} />
+                    </>
+                  ) : (
+                    <>
+                      {/* A fila vazia não é a base vazia: o histórico continua
+                          a um clique. */}
+                      Nenhum pedido em aberto.{" "}
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--sm"
+                        onClick={() => set({ status: "todos" })}
+                      >
+                        Ver todos
+                      </button>
+                    </>
+                  )}
                 </td>
               </tr>
             )}
@@ -302,7 +370,7 @@ export function CustomerOrdersPage() {
             type="button"
             className="btn btn--secondary btn--sm"
             disabled={page <= 1}
-            onClick={() => setPage((current) => current - 1)}
+            onClick={() => setPage(page - 1)}
           >
             Anterior
           </button>
@@ -310,7 +378,7 @@ export function CustomerOrdersPage() {
             type="button"
             className="btn btn--secondary btn--sm"
             disabled={page >= totalPages}
-            onClick={() => setPage((current) => current + 1)}
+            onClick={() => setPage(page + 1)}
           >
             Próxima
           </button>

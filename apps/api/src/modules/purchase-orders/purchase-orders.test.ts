@@ -565,3 +565,136 @@ describe("Purchase Orders", () => {
     await app.close();
   });
 });
+
+/**
+ * FILTER-OPERATIONS-WAVE-03 — a fila de Ordens de Compra.
+ *
+ * "Em aberto" são três status (rascunho, confirmada, recebida parcialmente),
+ * no mesmo contrato `status=A,B,...` do Picking. E a lista ganhou período
+ * pela DATA DO PEDIDO.
+ *
+ * `orderDate` é data de documento: a tela manda o dia escolhido e a coluna
+ * guarda a meia-noite UTC dele. O filtro compara marcador com marcador. Se
+ * comparasse com os instantes do dia comercial, "10/09" começaria às 03:00Z
+ * — DEPOIS do marcador de 10/09 — e traria o de 11/09 no lugar: um dia
+ * inteiro de erro, não três horas. É isso que o teste de fronteira prende.
+ *
+ * O status é gravado direto no banco: aqui se testa o FILTRO.
+ */
+describe("Ordens de Compra — fila Em aberto e período por data do pedido", () => {
+  const EM_ABERTO = "DRAFT,ORDERED,PARTIALLY_RECEIVED";
+
+  async function ocEm(app: App, orderDate: string, status?: string) {
+    const response = await createTestPurchaseOrder(app, { orderDate });
+    expect(response.statusCode, response.body).toBe(201);
+    const oc = response.json();
+    if (status) {
+      await getPrisma().purchaseOrder.update({
+        where: { id: oc.id },
+        data: { status: status as "DRAFT" | "ORDERED" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELLED" },
+      });
+    }
+    return oc as { id: string; code: string };
+  }
+
+  async function codigos(app: App, query: string) {
+    const resposta = await app.inject({
+      method: "GET",
+      url: `/purchase-orders?supplierId=${activeSupplierId}&pageSize=100&${query}`,
+    });
+    expect(resposta.statusCode, resposta.body).toBe(200);
+    const corpo = resposta.json();
+    return {
+      total: corpo.total as number,
+      codes: (corpo.purchaseOrders as { code: string }[]).map((po) => po.code).sort(),
+    };
+  }
+
+  it("`Em aberto` traz rascunho, confirmada e recebida parcialmente — sem recebida nem cancelada", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const rascunho = await ocEm(app, "2026-09-10");
+    const confirmada = await ocEm(app, "2026-09-10", "ORDERED");
+    const parcial = await ocEm(app, "2026-09-10", "PARTIALLY_RECEIVED");
+    const recebida = await ocEm(app, "2026-09-10", "RECEIVED");
+    const cancelada = await ocEm(app, "2026-09-10", "CANCELLED");
+
+    const fila = await codigos(app, `status=${EM_ABERTO}`);
+    expect(fila.codes).toEqual([rascunho.code, confirmada.code, parcial.code].sort());
+    expect(fila.total).toBe(3);
+    expect(fila.codes).not.toContain(recebida.code);
+    expect(fila.codes).not.toContain(cancelada.code);
+
+    // Um status só continua valendo.
+    expect((await codigos(app, "status=RECEIVED")).codes).toEqual([recebida.code]);
+
+    const invalido = await app.inject({ method: "GET", url: "/purchase-orders?status=ORDERED,VOANDO" });
+    expect(invalido.statusCode).toBe(400);
+
+    await app.close();
+  });
+
+  it("o mesmo dia nas duas pontas traz a OC daquele dia — e não a do dia seguinte", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const nove = await ocEm(app, "2026-09-09");
+    const dez = await ocEm(app, "2026-09-10");
+    const onze = await ocEm(app, "2026-09-11");
+
+    // Como a tela grava: a meia-noite UTC do dia escolhido.
+    const gravada = await app.inject({ method: "GET", url: `/purchase-orders/${dez.id}` });
+    expect(gravada.json().orderDate).toBe("2026-09-10T00:00:00.000Z");
+
+    expect((await codigos(app, "dateFrom=2026-09-10&dateTo=2026-09-10")).codes).toEqual([dez.code]);
+    // Cada ponta vale sozinha, e o fim é exclusivo no dia SEGUINTE.
+    expect((await codigos(app, "dateFrom=2026-09-10")).codes).toEqual([dez.code, onze.code].sort());
+    expect((await codigos(app, "dateTo=2026-09-10")).codes).toEqual([nove.code, dez.code].sort());
+
+    await app.close();
+  });
+
+  it("data que não é dia civil é recusada em vez de virar outro dia", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    for (const valor of ["10/09/2026", "2026-02-30", "2026-09-10T00:00:00.000Z", "ontem"]) {
+      const resposta = await app.inject({
+        method: "GET",
+        url: `/purchase-orders?dateFrom=${encodeURIComponent(valor)}`,
+      });
+      expect(resposta.statusCode).toBe(400);
+    }
+    const vazio = await app.inject({ method: "GET", url: "/purchase-orders?dateFrom=&dateTo=" });
+    expect(vazio.statusCode).toBe(200);
+
+    await app.close();
+  });
+
+  it("o CSV exporta o MESMO recorte da tela — fornecedor, status, período e busca", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const dentro = await ocEm(app, "2026-09-10", "ORDERED");
+    const foraDoPeriodo = await ocEm(app, "2026-09-11", "ORDERED");
+    const foraDoStatus = await ocEm(app, "2026-09-10", "RECEIVED");
+
+    const query = `status=${EM_ABERTO}&dateFrom=2026-09-10&dateTo=2026-09-10&search=OC-`;
+    const tela = await codigos(app, query);
+    expect(tela.codes).toEqual([dentro.code]);
+
+    const csv = await app.inject({
+      method: "GET",
+      url: `/purchase-orders/export.csv?supplierId=${activeSupplierId}&${query}`,
+    });
+    expect(csv.statusCode).toBe(200);
+    expect(csv.body).toContain(dentro.code);
+    expect(csv.body).not.toContain(foraDoPeriodo.code);
+    expect(csv.body).not.toContain(foraDoStatus.code);
+    const linhas = csv.body.replace(/^﻿/, "").split("\r\n").filter((linha) => linha.length > 0);
+    expect(linhas).toHaveLength(tela.total + 1);
+
+    await app.close();
+  });
+});
