@@ -11,6 +11,7 @@ import {
 import { nextItemCode } from "../src/modules/items/item-codes.js";
 import { nextSequenceCode } from "../src/lib/sequence-code.js";
 import { nextLotCode } from "../src/lib/lot-code.js";
+import { marcadorDeHojeComercial } from "../src/lib/business-day.js";
 
 const prisma = new PrismaClient();
 
@@ -258,7 +259,7 @@ async function seedPurchaseOrders(): Promise<void> {
         supplierCode: supplier.code,
         supplierName: supplier.legalName,
         supplierCnpj: supplier.cnpj,
-        orderDate: new Date(),
+        orderDate: marcadorDeHojeComercial(),
         notes: po.notes,
         lines: {
           create: lineItems.map((line) => ({
@@ -314,7 +315,7 @@ async function seedReceiving(): Promise<void> {
       supplierCode: supplier.code,
       supplierName: supplier.legalName,
       supplierCnpj: supplier.cnpj,
-      orderDate: new Date(),
+      orderDate: marcadorDeHojeComercial(),
       notes: marker,
       status: "ORDERED",
       orderedAt: new Date(),

@@ -1,5 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { PrismaClient, User } from "@prisma/client";
+// Data do pedido da OC é data civil: o dia comercial, como a tela manda.
+import { hojeComercial } from "@veridi/shared";
 import { buildApp } from "../src/app.js";
 
 /**
@@ -84,7 +86,7 @@ export async function seedIndustrial(
     if (!po) {
       const criada = await chamar<{ id: string }>(ctx, "POST", "/purchase-orders", {
         supplierId: entrada.supplierId,
-        orderDate: new Date().toISOString(),
+        orderDate: hojeComercial(),
         expectedDeliveryDate: new Date(Date.now() + 7 * 864e5).toISOString(),
         notes: DEMO_PO_NOTE,
         lines: [
@@ -169,7 +171,7 @@ export async function seedIndustrial(
     if (!loteSecundario) {
       const poSec = await chamar<{ id: string }>(ctx, "POST", "/purchase-orders", {
         supplierId: entrada.supplierId,
-        orderDate: new Date().toISOString(),
+        orderDate: hojeComercial(),
         notes: "DEMO — cafeína",
         lines: [{ itemId: entrada.materiaPrimaSecundariaId, orderedQuantity: "30", unitPrice: "180.00" }],
       });
@@ -212,7 +214,7 @@ export async function seedIndustrial(
     if (!lotePote) {
       const poEmb = await chamar<{ id: string }>(ctx, "POST", "/purchase-orders", {
         supplierId: entrada.supplierId,
-        orderDate: new Date().toISOString(),
+        orderDate: hojeComercial(),
         notes: "DEMO — embalagem",
         lines: [{ itemId: entrada.embalagemId, orderedQuantity: "1500", unitPrice: "1.80" }],
       });
