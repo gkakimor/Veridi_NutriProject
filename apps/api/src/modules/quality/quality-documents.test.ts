@@ -610,3 +610,141 @@ describe("Fila da Qualidade e leitura documental", () => {
     await app.close();
   });
 });
+
+/**
+ * FILTER-OPERATIONS-WAVE-01 — a fila da Qualidade pagina no BANCO.
+ *
+ * A função lia a tabela de lotes INTEIRA, somava o ledger de cada linha e só
+ * então cortava a página em memória: sem `take`, o custo crescia com a base
+ * e o `total` só estava certo porque tudo já havia sido carregado. "Somente
+ * com saldo" era a razão da leitura completa — saldo não é coluna de `Lot` —,
+ * e virou uma agregação sobre os movimentos que devolve ids para o `where`.
+ *
+ * E a tela não tinha "Todos": o `<select>` obrigava um recorte documental, e
+ * a fila inteira era inalcançável.
+ */
+describe("Fila da Qualidade — recorte, Todos e paginação", () => {
+  async function filaDe(app: App, query: string) {
+    const resposta = await app.inject({ method: "GET", url: `/quality/coa-queue?${query}` });
+    expect(resposta.statusCode).toBe(200);
+    const corpo = resposta.json();
+    return {
+      total: corpo.total as number,
+      lotIds: (corpo.rows as { lotId: string }[]).map((row) => row.lotId),
+    };
+  }
+
+  it("`pendente` realmente filtra: chega à consulta e some quando o laudo é aprovado", async () => {
+    const app = buildTestApp("QUALITY");
+    await app.ready();
+
+    const item = await createItem(app, { requiresCoa: true });
+    const customer = await createCustomer();
+    const { lotId } = await receiveCustomerSupplied(app, customer.id, item.id, "10");
+
+    expect((await filaDe(app, `itemId=${item.id}&onlyPending=true`)).lotIds).toContain(lotId);
+
+    await uploadCoa(app, lotId);
+    await app.inject({ method: "POST", url: `/lots/${lotId}/coa/approve`, payload: {} });
+
+    // Aprovado deixa de ser pendência…
+    expect((await filaDe(app, `itemId=${item.id}&onlyPending=true`)).lotIds).not.toContain(lotId);
+    // …mas continua existindo em "Todos" e no recorte exato.
+    expect((await filaDe(app, `itemId=${item.id}`)).lotIds).toContain(lotId);
+    expect((await filaDe(app, `itemId=${item.id}&coaStatus=APPROVED`)).lotIds).toContain(lotId);
+
+    await app.close();
+  });
+
+  it("`Todos` — sem recorte documental — traz pendente E aprovado juntos", async () => {
+    const app = buildTestApp("QUALITY");
+    await app.ready();
+
+    const item = await createItem(app, { requiresCoa: true });
+    const customer = await createCustomer();
+    const pendente = await receiveCustomerSupplied(app, customer.id, item.id, "10");
+    const aprovado = await receiveCustomerSupplied(app, customer.id, item.id, "10");
+    await uploadCoa(app, aprovado.lotId);
+    await app.inject({ method: "POST", url: `/lots/${aprovado.lotId}/coa/approve`, payload: {} });
+
+    const todos = await filaDe(app, `itemId=${item.id}&pageSize=100`);
+    expect(todos.lotIds).toContain(pendente.lotId);
+    expect(todos.lotIds).toContain(aprovado.lotId);
+    expect(todos.total).toBe(2);
+
+    // O recorte de pendências, esse, mostra só um dos dois.
+    const pendencias = await filaDe(app, `itemId=${item.id}&onlyPending=true&pageSize=100`);
+    expect(pendencias.lotIds).toEqual([pendente.lotId]);
+
+    await app.close();
+  });
+
+  /*
+   * O `total` sai de um `count` sobre o mesmo `where`, então não depende do
+   * `pageSize`, e paginar alcança todas as linhas. É isso que garante que o
+   * rodapé não minta e que nenhuma linha desapareça — criar 101 lotes para
+   * ver a 101ª mediria a mesma coisa, devagar e deixando lixo no banco.
+   */
+  it("o total é do servidor e paginar alcança todos os lotes", async () => {
+    const app = buildTestApp("QUALITY");
+    await app.ready();
+
+    const item = await createItem(app, { requiresCoa: true });
+    const customer = await createCustomer();
+    const primeiro = await receiveCustomerSupplied(app, customer.id, item.id, "10");
+    const segundo = await receiveCustomerSupplied(app, customer.id, item.id, "10");
+    const terceiro = await receiveCustomerSupplied(app, customer.id, item.id, "10");
+
+    const paginas = [
+      await filaDe(app, `itemId=${item.id}&page=1&pageSize=1`),
+      await filaDe(app, `itemId=${item.id}&page=2&pageSize=1`),
+      await filaDe(app, `itemId=${item.id}&page=3&pageSize=1`),
+    ];
+
+    for (const pagina of paginas) {
+      expect(pagina.lotIds).toHaveLength(1);
+      // O total NÃO é o tamanho da página.
+      expect(pagina.total).toBe(3);
+    }
+    expect(paginas.flatMap((pagina) => pagina.lotIds).sort()).toEqual(
+      [primeiro.lotId, segundo.lotId, terceiro.lotId].sort(),
+    );
+
+    await app.close();
+  });
+
+  it("`somente com saldo` filtra pelo ledger, e o total acompanha", async () => {
+    const app = buildTestApp("QUALITY");
+    await app.ready();
+
+    const item = await createItem(app, { requiresCoa: true });
+    const customer = await createCustomer();
+    const comSaldo = await receiveCustomerSupplied(app, customer.id, item.id, "10");
+    const zerado = await receiveCustomerSupplied(app, customer.id, item.id, "10");
+
+    // Zera o segundo lote por ajuste de saída — saldo zero não é saldo.
+    const saida = await app.inject({
+      method: "POST",
+      url: "/inventory-adjustments",
+      payload: {
+        itemId: item.id,
+        lotId: zerado.lotId,
+        type: "ADJUSTMENT_OUT",
+        quantity: "10",
+        reason: "Baixa de teste",
+      },
+    });
+    expect(saida.statusCode).toBe(201);
+
+    const filtrada = await filaDe(app, `itemId=${item.id}&onlyWithBalance=true&pageSize=100`);
+    expect(filtrada.lotIds).toContain(comSaldo.lotId);
+    expect(filtrada.lotIds).not.toContain(zerado.lotId);
+    expect(filtrada.total).toBe(1);
+
+    // Sem o filtro, os dois aparecem.
+    const completa = await filaDe(app, `itemId=${item.id}&pageSize=100`);
+    expect(completa.total).toBe(2);
+
+    await app.close();
+  });
+});

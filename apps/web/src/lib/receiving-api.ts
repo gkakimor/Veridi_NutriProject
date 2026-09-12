@@ -14,6 +14,9 @@ export interface ListReceiptsParams {
   supplierId?: string;
   sourceType?: ReceiptSourceType;
   customerId?: string;
+  /** Dia comercial `yyyy-mm-dd` — recebido a partir de / até. */
+  dateFrom?: string;
+  dateTo?: string;
   page?: number;
   pageSize?: number;
 }
@@ -27,6 +30,8 @@ export async function listReceipts(
   if (params.supplierId) query.set("supplierId", params.supplierId);
   if (params.sourceType) query.set("sourceType", params.sourceType);
   if (params.customerId) query.set("customerId", params.customerId);
+  if (params.dateFrom) query.set("dateFrom", params.dateFrom);
+  if (params.dateTo) query.set("dateTo", params.dateTo);
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 20));
 

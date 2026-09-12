@@ -974,3 +974,120 @@ describe("Receiving", () => {
     await app.close();
   });
 });
+
+/**
+ * FILTER-OPERATIONS-WAVE-01 — o período de Recebimentos é DIA COMERCIAL.
+ *
+ * `receiving.schemas.ts` usava `requiredDateSchema` (= `z.coerce.date`) nas
+ * duas pontas do filtro, e o serviço fechava o intervalo com `lte`. "De
+ * 10/09 até 10/09" perdia o dia 10 inteiro em São Paulo, porque o instante
+ * materializado era a meia-noite UTC — 21h do dia 09.
+ *
+ * `receivedAt` é INSTANTE (§81) e entra pelo próprio payload, então aqui o
+ * carimbo de borda é escolhido na criação, sem tocar no banco.
+ */
+describe("Recebimentos — filtro por dia comercial", () => {
+  async function receberEm(app: App, instanteISO: string) {
+    const purchaseOrder = await createOrderedPurchaseOrder(app, [
+      { itemId: packagingItemId, orderedQuantity: "10" },
+    ]);
+    const receipt = await app.inject({
+      method: "POST",
+      url: `/purchase-orders/${purchaseOrder.id}/receipts`,
+      payload: {
+        receivedAt: instanteISO,
+        lines: [
+          {
+            purchaseOrderLineId: purchaseOrder.lines[0].id,
+            receivedQuantity: "10",
+            supplierLot: `LOTE-${instanteISO.slice(0, 10)}`,
+          },
+        ],
+      },
+    });
+    expect(receipt.statusCode, JSON.stringify(receipt.json())).toBe(201);
+    return receipt.json();
+  }
+
+  async function codigosDoPeriodo(app: App, dateFrom: string, dateTo: string) {
+    const resposta = await app.inject({
+      method: "GET",
+      url: `/receipts?dateFrom=${dateFrom}&dateTo=${dateTo}&pageSize=100`,
+    });
+    expect(resposta.statusCode).toBe(200);
+    return (resposta.json().receipts as { code: string }[]).map((receipt) => receipt.code);
+  }
+
+  it("o mesmo dia nas duas pontas cobre o dia comercial inteiro", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    // 23:30 de 10/09 em São Paulo — em UTC já é 11/09 às 02:30.
+    const noite = await receberEm(app, "2026-09-11T02:30:00.000Z");
+    // 00:15 de 10/09 em São Paulo.
+    const madrugada = await receberEm(app, "2026-09-10T03:15:00.000Z");
+
+    const dentro = await codigosDoPeriodo(app, "2026-09-10", "2026-09-10");
+    expect(dentro).toContain(noite.code);
+    expect(dentro).toContain(madrugada.code);
+
+    await app.close();
+  });
+
+  it("a fronteira é real nos dois lados", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const dezDeSetembro = await receberEm(app, "2026-09-11T02:30:00.000Z");
+
+    expect(await codigosDoPeriodo(app, "2026-09-09", "2026-09-09")).not.toContain(
+      dezDeSetembro.code,
+    );
+    // 03:00Z de 11/09 é a meia-noite comercial: 02:30Z ainda é dia 10.
+    expect(await codigosDoPeriodo(app, "2026-09-11", "2026-09-11")).not.toContain(
+      dezDeSetembro.code,
+    );
+
+    await app.close();
+  });
+
+  it("o CSV exporta o MESMO recorte da tela", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const dezDeSetembro = await receberEm(app, "2026-09-11T02:30:00.000Z");
+    const onzeDeSetembro = await receberEm(app, "2026-09-11T15:00:00.000Z");
+
+    const csv = await app.inject({
+      method: "GET",
+      url: "/receipts/export.csv?dateFrom=2026-09-10&dateTo=2026-09-10",
+    });
+    expect(csv.statusCode).toBe(200);
+    expect(csv.body).toContain(dezDeSetembro.code);
+    expect(csv.body).not.toContain(onzeDeSetembro.code);
+
+    const tela = await codigosDoPeriodo(app, "2026-09-10", "2026-09-10");
+    expect(tela).toContain(dezDeSetembro.code);
+    expect(tela).not.toContain(onzeDeSetembro.code);
+
+    await app.close();
+  });
+
+  it("data que não é dia civil é recusada em vez de virar outro dia", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    for (const valor of ["10/09/2026", "2026-02-30", "2026-09-10T00:00:00.000Z", "ontem"]) {
+      const resposta = await app.inject({
+        method: "GET",
+        url: `/receipts?dateTo=${encodeURIComponent(valor)}`,
+      });
+      expect(resposta.statusCode).toBe(400);
+    }
+
+    const vazio = await app.inject({ method: "GET", url: "/receipts?dateFrom=&dateTo=" });
+    expect(vazio.statusCode).toBe(200);
+
+    await app.close();
+  });
+});

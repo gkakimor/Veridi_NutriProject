@@ -1,9 +1,10 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { RejectCoaDialog } from "../../components/RejectCoaDialog";
 import { useNavigate, Link } from "react-router-dom";
 import type { CoaStatus, QualityQueueRowDTO } from "@veridi/shared";
 import { COA_STATUSES, COA_STATUS_LABELS, LOT_STATUS_LABELS, ownerLabel } from "@veridi/shared";
+import type { QualityQueueParams } from "../../lib/attachments-api";
 import { approveCoa, listQualityQueue, rejectCoa } from "../../lib/attachments-api";
 import { useAuth } from "../../app/AuthProvider";
 import { EntityLink } from "../../components/EntityLink";
@@ -11,6 +12,10 @@ import { formatDate } from "../../lib/dates";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
+import { useListFilters } from "../../lib/list-filters";
+import { ActiveFilterChips } from "../../components/filters/ActiveFilterChips";
+import type { FilterChip } from "../../components/filters/ActiveFilterChips";
+import { ClearFilters } from "../../components/filters/ClearFilters";
 
 function DicaDaColuna({ id }: { id: HelpHintId }) {
   const dica = helpHints[id];
@@ -18,6 +23,35 @@ function DicaDaColuna({ id }: { id: HelpHintId }) {
 }
 
 const PAGE_SIZE = 20;
+
+/**
+ * O recorte documental: as pendências, um `CoaStatus` exato, ou tudo.
+ *
+ * `PENDENCIAS` é o default da tela e vale por três status (`PENDING`,
+ * `RECEIVED`, `REJECTED`) — é "o que exige ação da Qualidade", e o servidor
+ * responde por `onlyPending`. `TODOS` não existia: o `<select>` obrigava um
+ * recorte e não havia como ver a fila inteira, então um lote já aprovado só
+ * aparecia se alguém adivinhasse escolher "Aprovado".
+ *
+ * O valor `pendencias` é escrito assim, e não `pending`, porque ele entra na
+ * URL ao lado de `PENDING` — um `CoaStatus` de verdade, que quer dizer
+ * "pendente de documento" e é UM dos três. Dois valores diferindo só por
+ * caixa, com significados diferentes, é confusão garantida no dia em que
+ * alguém lê o endereço.
+ */
+const PENDENCIAS = "pendencias";
+const TODOS = "todos";
+
+const FILTROS_PADRAO = {
+  search: "",
+  /* Default preservado: a Qualidade abre no que exige ação dela. */
+  coa: PENDENCIAS,
+  comSaldo: "nao",
+  /* Contexto por link: item, fornecedor, cliente-proprietário. */
+  itemId: "",
+  supplierId: "",
+  ownerCustomerId: "",
+};
 
 function coaBadgeClass(status: CoaStatus): string {
   switch (status) {
@@ -48,36 +82,54 @@ export function CoaQueuePage() {
 
   const [rows, setRows] = useState<QualityQueueRowDTO[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<{ lotId: string; lotCode: string } | null>(null);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [coaStatus, setCoaStatus] = useState<CoaStatus | "pending">("pending");
-  const [onlyWithBalance, setOnlyWithBalance] = useState(false);
+  const { values, page, set, setPage, clear, isActive } = useListFilters({
+    defaults: FILTROS_PADRAO,
+    persistScope: "coa-queue",
+    userId: user?.id ?? null,
+  });
+  const { search, coa, itemId, supplierId, ownerCustomerId } = values;
+  const comSaldo = values.comSaldo === "sim";
+
+  /* UM conjunto de filtros — a fila e qualquer export leem o mesmo. */
+  const filtrosDaConsulta = useMemo(() => {
+    const filtros: Omit<QualityQueueParams, "page" | "pageSize"> = {};
+    if (search) filtros.search = search;
+    if (itemId) filtros.itemId = itemId;
+    if (supplierId) filtros.supplierId = supplierId;
+    if (ownerCustomerId) filtros.ownerCustomerId = ownerCustomerId;
+    /*
+     * Três caminhos, e só um chega à API por vez: `PENDENCIAS` vira
+     * `onlyPending`, um `CoaStatus` vira `coaStatus`, e `TODOS` não manda
+     * nada — é a ausência dos dois que faz o servidor devolver a fila
+     * inteira.
+     */
+    if (coa === PENDENCIAS) filtros.onlyPending = true;
+    else if (coa !== TODOS) filtros.coaStatus = coa as CoaStatus;
+    if (comSaldo) filtros.onlyWithBalance = true;
+    return filtros;
+  }, [search, itemId, supplierId, ownerCustomerId, coa, comSaldo]);
+
+  const [searchInput, setSearchInput] = useState(search);
 
   useEffect(() => {
-    const handle = setTimeout(() => setSearch(searchInput), 300);
+    setSearchInput(search);
+  }, [search]);
+
+  useEffect(() => {
+    if (searchInput === search) return;
+    const handle = setTimeout(() => set({ search: searchInput }), 300);
     return () => clearTimeout(handle);
-  }, [searchInput]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, coaStatus, onlyWithBalance]);
+  }, [searchInput, search, set]);
 
   const reload = useCallback(() => {
     setLoading(true);
     setError(null);
 
-    const params: Parameters<typeof listQualityQueue>[0] = { page, pageSize: PAGE_SIZE };
-    if (search) params.search = search;
-    if (coaStatus === "pending") params.onlyPending = true;
-    else params.coaStatus = coaStatus;
-    if (onlyWithBalance) params.onlyWithBalance = true;
-
-    listQualityQueue(params)
+    listQualityQueue({ ...filtrosDaConsulta, page, pageSize: PAGE_SIZE })
       .then((result) => {
         setRows(result.rows);
         setTotal(result.total);
@@ -86,7 +138,7 @@ export function CoaQueuePage() {
         setError(err instanceof Error ? err.message : "Falha ao carregar a fila da Qualidade"),
       )
       .finally(() => setLoading(false));
-  }, [page, search, coaStatus, onlyWithBalance]);
+  }, [filtrosDaConsulta, page]);
 
   useEffect(() => {
     reload();
@@ -111,6 +163,46 @@ export function CoaQueuePage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao rejeitar o CoA");
     }
+  }
+
+  const chips: FilterChip[] = [];
+  if (search) {
+    chips.push({ label: "Busca", value: search, onRemove: () => set({ search: "" }) });
+  }
+  if (coa !== FILTROS_PADRAO.coa) {
+    chips.push({
+      label: "CoA",
+      value: coa === TODOS ? "Todos" : COA_STATUS_LABELS[coa as CoaStatus],
+      onRemove: () => set({ coa: FILTROS_PADRAO.coa }),
+    });
+  }
+  if (comSaldo) {
+    chips.push({
+      label: "Saldo",
+      value: "somente com saldo",
+      onRemove: () => set({ comSaldo: "nao" }),
+    });
+  }
+  if (itemId) {
+    chips.push({
+      label: "Item",
+      value: rows.find((row) => row.itemId === itemId)?.itemName ?? "selecionado",
+      onRemove: () => set({ itemId: "" }),
+    });
+  }
+  if (supplierId) {
+    chips.push({
+      label: "Fornecedor",
+      value: rows.find((row) => row.supplierName)?.supplierName ?? "selecionado",
+      onRemove: () => set({ supplierId: "" }),
+    });
+  }
+  if (ownerCustomerId) {
+    chips.push({
+      label: "Cliente",
+      value: rows.find((row) => row.ownerCustomerName)?.ownerCustomerName ?? "selecionado",
+      onRemove: () => set({ ownerCustomerId: "" }),
+    });
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -160,10 +252,13 @@ export function CoaQueuePage() {
         </label>
         <select
           id="coa-status-filter"
-          value={coaStatus}
-          onChange={(event) => setCoaStatus(event.target.value as CoaStatus | "pending")}
+          value={coa}
+          onChange={(event) => set({ coa: event.target.value })}
         >
-          <option value="pending">Pendências</option>
+          <option value={PENDENCIAS}>Pendências</option>
+          {/* Sem esta opção a tela obrigava um recorte documental, e a fila
+              inteira era inalcançável. */}
+          <option value={TODOS}>Todos</option>
           {COA_STATUSES.map((status) => (
             <option key={status} value={status}>
               {COA_STATUS_LABELS[status]}
@@ -174,12 +269,14 @@ export function CoaQueuePage() {
         <label className="checkbox">
           <input
             type="checkbox"
-            checked={onlyWithBalance}
-            onChange={(event) => setOnlyWithBalance(event.target.checked)}
+            checked={comSaldo}
+            onChange={(event) => set({ comSaldo: event.target.checked ? "sim" : "nao" })}
           />
           Somente com saldo
         </label>
       </div>
+
+      <ActiveFilterChips chips={chips} onClear={clear} />
 
       {error && <p className="form-alert" role="alert">{error}</p>}
 
@@ -287,6 +384,12 @@ export function CoaQueuePage() {
                   <strong>laudo (CoA)</strong>; a liberação de lote para uso é decidida em{" "}
                   <Link to="/estoque/lotes">Estoque › Lotes</Link>, inclusive para itens que não
                   exigem CoA.
+                  {isActive && (
+                    <>
+                      {" "}
+                      <ClearFilters onClear={clear} />
+                    </>
+                  )}
                 </td>
               </tr>
             )}
@@ -299,7 +402,7 @@ export function CoaQueuePage() {
           type="button"
           className="btn btn--ghost btn--sm"
           disabled={page <= 1}
-          onClick={() => setPage((current) => Math.max(1, current - 1))}
+          onClick={() => setPage(Math.max(1, page - 1))}
         >
           Anterior
         </button>
@@ -310,7 +413,7 @@ export function CoaQueuePage() {
           type="button"
           className="btn btn--ghost btn--sm"
           disabled={page >= totalPages}
-          onClick={() => setPage((current) => current + 1)}
+          onClick={() => setPage(page + 1)}
         >
           Próxima
         </button>

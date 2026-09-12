@@ -71,6 +71,10 @@ export async function listQualityQueue(
   const query = new URLSearchParams();
   if (params.search) query.set("search", params.search);
   if (params.itemId) query.set("itemId", params.itemId);
+  // Fornecedor e cliente-proprietário existem no servidor desde sempre e não
+  // eram enviados: chegar aqui por um link desses perdia o recorte.
+  if (params.supplierId) query.set("supplierId", params.supplierId);
+  if (params.ownerCustomerId) query.set("ownerCustomerId", params.ownerCustomerId);
   if (params.coaStatus) query.set("coaStatus", params.coaStatus);
   if (params.lotStatus) query.set("lotStatus", params.lotStatus);
   if (params.onlyPending) query.set("onlyPending", "true");

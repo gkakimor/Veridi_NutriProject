@@ -13,7 +13,15 @@ import { parseJsonOrThrow } from "./api-errors";
 
 export interface ListProductionOrdersParams {
   search?: string;
-  status?: ProductionOrderStatus;
+  /**
+   * Um status, ou vários.
+   *
+   * Vários viajam separados por vírgula e o servidor responde com UMA
+   * consulta paginada. A fila do Picking/Consumo pedia um por vez com
+   * `pageSize: 100` e juntava as respostas no navegador — da 101ª ordem em
+   * diante a fila perdia linhas sem dizer nada.
+   */
+  status?: ProductionOrderStatus | ProductionOrderStatus[];
   productId?: string;
   page?: number;
   pageSize?: number;
@@ -24,7 +32,8 @@ export async function listProductionOrders(
 ): Promise<ProductionOrderListResponse> {
   const query = new URLSearchParams();
   if (params.search) query.set("search", params.search);
-  if (params.status) query.set("status", params.status);
+  const status = Array.isArray(params.status) ? params.status.join(",") : params.status;
+  if (status) query.set("status", status);
   if (params.productId) query.set("productId", params.productId);
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 20));

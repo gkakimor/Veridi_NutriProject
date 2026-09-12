@@ -713,7 +713,11 @@ export async function listProductionOrders(
   const prisma = getPrisma();
   const where: Record<string, unknown> = {};
 
-  if (query.status) where["status"] = query.status;
+  // Um status vira igualdade; vários viram `in`. A fila operacional pede
+  // dois de uma vez, e agora isso é UMA consulta paginada pelo banco.
+  if (query.status && query.status.length > 0) {
+    where["status"] = query.status.length === 1 ? query.status[0] : { in: query.status };
+  }
   if (query.productId) where["productId"] = query.productId;
   if (query.search) {
     where["OR"] = [
