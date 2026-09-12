@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { useUnsavedChangesGuard } from "../app/use-unsaved-changes-guard";
+import { decimalComparavel, textoComparavel } from "../lib/dirty-fields";
 import type { FormEvent } from "react";
 import type { ItemCostReferencesResponse, UnitOfMeasureDTO } from "@veridi/shared";
 import {
@@ -77,6 +79,24 @@ export function ItemCostReferenceSection({ itemId }: { itemId: string }) {
   const unidadesCompativeis = unidadeDoItem
     ? units.filter((unit) => unit.dimension === unidadeDoItem.dimension)
     : units;
+
+  /*
+   * Bloco de salvamento PRÓPRIO dentro do cadastro de item.
+   *
+   * "Definir referência" abre um formulário com botão só dele: salvar os
+   * dados do item não grava esta referência, e vice-versa. A guarda global
+   * soma as duas pendências — é a mesma regra provada no detalhe de Item ×
+   * Fornecedor — e esta parcela some sozinha quando este botão grava, porque
+   * gravar fecha o formulário e limpa os campos.
+   *
+   * Unidade e "válida a partir de" nascem do item e do dia de hoje: são
+   * sugestões, não digitação pendente.
+   */
+  useUnsavedChangesGuard({
+    isDirty:
+      editando && (decimalComparavel(unitCost) !== null || textoComparavel(note) !== null),
+    substantivo: "custo de referência",
+  });
 
   async function salvar(event: FormEvent) {
     event.preventDefault();

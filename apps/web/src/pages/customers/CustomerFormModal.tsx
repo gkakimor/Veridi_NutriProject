@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import type { CustomerDTO } from "@veridi/shared";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { formatDate } from "../../lib/dates";
@@ -21,6 +22,18 @@ interface CustomerFormModalProps {
  */
 export function CustomerFormModal({ mode, customer, onClose, onSaved }: CustomerFormModalProps) {
   const controller = useCustomerForm({ mode, customer, onSaved });
+
+  /**
+   * Cancelar, ✕ e Esc: o router não vê nada disso — a guarda vê.
+   *
+   * Memorizado porque é dependência do efeito de foco e trap do modal: um
+   * `onClose` novo a cada renderização remontava o efeito a cada tecla, e o
+   * campo ficava com a primeira letra.
+   */
+  const fechar = useCallback(
+    () => controller.confirmarSaida(onClose),
+    [controller.confirmarSaida, onClose],
+  );
   const { saving } = controller;
 
   const codeChip = mode === "create" ? "Código gerado ao salvar" : customer?.code;
@@ -32,7 +45,7 @@ export function CustomerFormModal({ mode, customer, onClose, onSaved }: Customer
           O cliente será criado como <b>Ativo</b>.
         </span>
         <div className="modal-fullscreen__actions">
-          <button type="button" className="btn btn--ghost" onClick={onClose}>
+          <button type="button" className="btn btn--ghost" onClick={fechar}>
             Cancelar
           </button>
           <button
@@ -51,7 +64,7 @@ export function CustomerFormModal({ mode, customer, onClose, onSaved }: Customer
           Última alteração: {customer ? formatDate(customer.updatedAt) : "—"}
         </span>
         <div className="modal-fullscreen__actions">
-          <button type="button" className="btn btn--ghost" onClick={onClose}>
+          <button type="button" className="btn btn--ghost" onClick={fechar}>
             Cancelar
           </button>
           <button
@@ -69,7 +82,7 @@ export function CustomerFormModal({ mode, customer, onClose, onSaved }: Customer
   return (
     <FullWorkspaceModal
       open
-      onClose={onClose}
+      onClose={fechar}
       crumb="Cadastros / Clientes"
       crumbActive={mode === "create" ? "Novo" : "Editar"}
       title={mode === "create" ? "Novo cliente" : customer?.legalName}

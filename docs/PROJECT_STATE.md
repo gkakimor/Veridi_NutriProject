@@ -1301,6 +1301,42 @@ O Inventário Físico é contagem de UMA linha por vez — item, lote, contagem,
 motivo — e confirma criando o ajuste sem sair da tela. Não há contagem
 multi-linha nem save parcial por linha para proteger.
 
+## Os quatro cadastros mestres (UNSAVED-CHANGES-WAVE-03, 2026-09-11)
+
+Item, Cliente, Fornecedor e Produto Acabado — criação e edição. Foundation
+intocada.
+
+Cada cadastro tem DUAS portas (a página `/novo`, com URL própria, e o modal da
+listagem) e UM controller: `useItemForm`, `useCustomerForm`,
+`useSupplierForm`, `useProductForm`. A guarda entrou no controller, então as
+duas portas ficaram protegidas pelo mesmo caminho, e o `confirmarDescarte()`
+que cobre Cancelar, ✕ e Esc sai de lá para o modal. O "← Voltar" e o
+"Cancelar" das páginas não ganharam nada: trocam de endereço, e o blocker
+global já resolve — um gesto, um diálogo.
+
+`assinaturaDoFormulario` (em `lib/dirty-fields.ts`) compara formulário plano:
+texto normalizado, marca de sim/não como está, e os campos que são NÚMERO em
+forma canônica, por uma lista explícita por cadastro — que também documenta
+quais campos daquele cadastro são número.
+
+**O que NÃO entra no dirty, e por quê.** A situação comercial do Cliente é
+derivada do histórico pelo servidor e muda sozinha: contá-la faria a tela se
+declarar alterada sem ninguém tocar em nada. Do Produto ficam fora Formulação,
+CMV, custo industrial, estoque e o **Perfil de Produção padrão** — o vínculo
+não é editável no cadastro, é gravado do lado do Planejamento com salvamento
+próprio. O código nasce no servidor nos quatro. Defaults não sujam, inclusive
+o tipo pré-escolhido por `?tipo=` no Item, que traz consigo os controles de
+lote, validade e liberação daquele tipo.
+
+**Save parcial, segundo caso.** O modal de edição de Item tem "Salvar
+alterações" e, dentro do bloco de Custo de referência, um botão só dele.
+Gravar os campos do item com um custo digitado ao lado não libera a saída — a
+pendência é a soma, e cada parcela some quando o seu botão grava. Mesma regra
+do detalhe de Item × Fornecedor.
+
+Fornecedor segue com os seis campos que tem hoje; SUPPLIER-ADDRESS-01 não foi
+antecipado.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

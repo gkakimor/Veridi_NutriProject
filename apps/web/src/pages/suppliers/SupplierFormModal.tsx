@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import type { SupplierDTO } from "@veridi/shared";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { SupplierItemsSection } from "../../components/SupplierItemsSection";
@@ -26,6 +27,18 @@ interface SupplierFormModalProps {
  */
 export function SupplierFormModal({ mode, supplier, onClose, onSaved }: SupplierFormModalProps) {
   const controller = useSupplierForm({ mode, supplier, onSaved });
+
+  /**
+   * Cancelar, ✕ e Esc: o router não vê nada disso — a guarda vê.
+   *
+   * Memorizado porque é dependência do efeito de foco e trap do modal: um
+   * `onClose` novo a cada renderização remontava o efeito a cada tecla, e o
+   * campo ficava com a primeira letra.
+   */
+  const fechar = useCallback(
+    () => controller.confirmarSaida(onClose),
+    [controller.confirmarSaida, onClose],
+  );
   const { saving } = controller;
 
   const codeChip = mode === "create" ? "Código gerado ao salvar" : supplier?.code;
@@ -37,7 +50,7 @@ export function SupplierFormModal({ mode, supplier, onClose, onSaved }: Supplier
           O fornecedor será criado como <b>Ativo</b>.
         </span>
         <div className="modal-fullscreen__actions">
-          <button type="button" className="btn btn--ghost" onClick={onClose}>
+          <button type="button" className="btn btn--ghost" onClick={fechar}>
             Cancelar
           </button>
           <button
@@ -56,7 +69,7 @@ export function SupplierFormModal({ mode, supplier, onClose, onSaved }: Supplier
           Última alteração: {supplier ? formatDate(supplier.updatedAt) : "—"}
         </span>
         <div className="modal-fullscreen__actions">
-          <button type="button" className="btn btn--ghost" onClick={onClose}>
+          <button type="button" className="btn btn--ghost" onClick={fechar}>
             Cancelar
           </button>
           <button
@@ -74,7 +87,7 @@ export function SupplierFormModal({ mode, supplier, onClose, onSaved }: Supplier
   return (
     <FullWorkspaceModal
       open
-      onClose={onClose}
+      onClose={fechar}
       crumb="Cadastros / Fornecedores"
       crumbActive={mode === "create" ? "Novo" : "Editar"}
       title={mode === "create" ? "Novo fornecedor" : supplier?.legalName}

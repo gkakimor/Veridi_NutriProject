@@ -19,6 +19,9 @@ import {
 } from "@veridi/shared";
 import { RelatedLinks } from "../../components/RelatedLinks";
 import { createCustomer, updateCustomer } from "../../lib/customers-api";
+import { useCallback } from "react";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
+import { assinaturaDoFormulario } from "../../lib/dirty-fields";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
 import { formatDateTime } from "../../lib/dates";
@@ -44,6 +47,9 @@ import { isCompleteZipCode, lookupCep } from "../../lib/cep-api";
 
 /** O `<form>` que o botão de commit aciona pelo atributo `form`. */
 export const CUSTOMER_FORM_ID = "customer-form";
+
+/** Nenhum campo do Cliente é número: CNPJ, CEP e telefone são texto com máscara. */
+const DECIMAIS: readonly string[] = [];
 
 interface FormState {
   legalName: string;
@@ -174,6 +180,45 @@ export function useCustomerForm({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [clientErrors, setClientErrors] = useState<Record<string, string>>({});
   const [cepStatus, setCepStatus] = useState<CepStatus>("idle");
+
+  /**
+   * O cadastro como ele está na tela, em forma comparável.
+   *
+   * Só os campos que a pessoa edita. A SITUAÇÃO COMERCIAL fica de fora porque
+   * não é campo: ela é derivada do histórico do cliente pelo servidor, muda
+   * sozinha, e contá-la faria a tela se declarar alterada sem ninguém ter
+   * tocado em nada. O código também não está aqui — nasce no servidor.
+   */
+  const assinaturaAtual = assinaturaDoFormulario(form, DECIMAIS);
+
+  /*
+   * A referência da comparação: o formulário como ele abriu. Criar parte dos
+   * defaults canônicos, editar parte do registro carregado — e ABRIR não é
+   * alterar em nenhum dos dois.
+   */
+  const baseline = useRef(assinaturaAtual);
+
+  const { confirmarDescarte, liberarGuarda } = useUnsavedChangesGuard({
+    isDirty: baseline.current !== assinaturaAtual,
+    substantivo: "cliente",
+  });
+
+  /**
+   * Cancelar, ✕ e Esc: o router não vê nada disso — a guarda vê.
+   *
+   * Memorizado porque vai para `onClose` do modal, e `onClose` novo a cada
+   * renderização é o defeito que a Wave 01 fechou.
+   */
+  const confirmarSaida = useCallback(
+    (acao: () => void) => confirmarDescarte(acao),
+    [confirmarDescarte],
+  );
+
+  /** Gravou: o que está na tela virou registro, e sair dele não perde nada. */
+  function concluir(acao: () => void) {
+    baseline.current = assinaturaAtual;
+    liberarGuarda(acao);
+  }
 
   /**
    * Duas identidades de CEP, e só duas.
@@ -371,12 +416,12 @@ export function useCustomerForm({
     try {
       if (mode === "create") {
         const created = await createCustomer(payload);
-        onSaved(created);
+        concluir(() => onSaved(created));
       } else if (customer) {
         await updateCustomer(customer.id, payload);
-        onSaved();
+        concluir(() => onSaved());
       } else {
-        onSaved();
+        concluir(() => onSaved());
       }
     } catch (err) {
       if (err instanceof ApiValidationError) {
@@ -400,6 +445,8 @@ export function useCustomerForm({
 
   return {
     form,
+    confirmarSaida,
+    liberarGuarda,
     setField,
     saving,
     error,

@@ -11,6 +11,9 @@ import {
   PACKAGING_SUBTYPE_LABELS,
 } from "@veridi/shared";
 import { createItem, updateItem } from "../../lib/items-api";
+import { useCallback, useRef } from "react";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
+import { assinaturaDoFormulario } from "../../lib/dirty-fields";
 import { ApiValidationError } from "../../lib/api-errors";
 import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
 import { RelatedLinks } from "../../components/RelatedLinks";
@@ -41,6 +44,9 @@ import { ToggleCard } from "../../components/ToggleCard";
 
 /** O `<form>` que o botão de commit aciona pelo atributo `form`. */
 export const ITEM_FORM_ID = "item-form";
+
+/** Os campos que são NÚMERO — comparados pelo valor, não pelo texto. */
+const DECIMAIS = ["defaultPurityPercent", "initialCostReference"] as const;
 
 /**
  * Os tipos que a criação manual oferece.
@@ -159,6 +165,45 @@ export function useItemForm({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const structuralLocked = mode === "edit" && (item?.operationallyUsed ?? false);
+
+  /**
+   * O cadastro como ele está na tela, em forma comparável.
+   *
+   * Pureza e custo de referência inicial são NÚMERO: `98` e `98,0` são o mesmo
+   * item, e perguntar por causa do separador ensinaria a ignorar a pergunta
+   * que importa. Código e situação não estão aqui porque não se editam: o
+   * código nasce no servidor e ativar/inativar é ação com confirmação própria.
+   */
+  const assinaturaAtual = assinaturaDoFormulario(form, DECIMAIS);
+
+  /*
+   * A referência da comparação: o formulário como ele abriu. Criar parte dos
+   * defaults canônicos, editar parte do registro carregado — e ABRIR não é
+   * alterar em nenhum dos dois.
+   */
+  const baseline = useRef(assinaturaAtual);
+
+  const { confirmarDescarte, liberarGuarda } = useUnsavedChangesGuard({
+    isDirty: baseline.current !== assinaturaAtual,
+    substantivo: "item",
+  });
+
+  /**
+   * Cancelar, ✕ e Esc: o router não vê nada disso — a guarda vê.
+   *
+   * Memorizado porque vai para `onClose` do modal, e `onClose` novo a cada
+   * renderização é o defeito que a Wave 01 fechou.
+   */
+  const confirmarSaida = useCallback(
+    (acao: () => void) => confirmarDescarte(acao),
+    [confirmarDescarte],
+  );
+
+  /** Gravou: o que está na tela virou registro, e sair dele não perde nada. */
+  function concluir(acao: () => void) {
+    baseline.current = assinaturaAtual;
+    liberarGuarda(acao);
+  }
   const structuralLockHint =
     "Este campo não pode ser alterado porque o item já possui histórico operacional.";
 
@@ -263,12 +308,12 @@ export function useItemForm({
               }
             : {}),
         });
-        onSaved(created);
+        concluir(() => onSaved(created));
       } else if (item) {
         await updateItem(item.id, payload);
-        onSaved();
+        concluir(() => onSaved());
       } else {
-        onSaved();
+        concluir(() => onSaved());
       }
     } catch (err) {
       if (err instanceof ApiValidationError) {
@@ -290,6 +335,8 @@ export function useItemForm({
     form,
     setForm,
     saving,
+    confirmarSaida,
+    liberarGuarda,
     error,
     fieldErrors,
     handleTypeChange,
