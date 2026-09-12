@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BR_STATE_CODES } from "@veridi/shared";
 import {
   CASAS_PERCENTUAL_TECNICO,
   casasDecimais,
@@ -125,3 +126,27 @@ export const optionalZipCode = z
   .refine((value) => value === undefined || value === null || value.length === 8, {
     message: "CEP deve ter 8 dígitos",
   });
+
+/**
+ * UF brasileira: guarda sempre em maiúscula, vazio vira `null`.
+ *
+ * Mora ao lado do CEP porque é a outra metade do mesmo endereço, e endereço
+ * de cadastro é um só modelo no sistema — Cliente e Fornecedor validam a UF
+ * pela MESMA regra, nunca uma mais rígida que a outra.
+ */
+export const optionalBrState = z
+  .string()
+  .trim()
+  .max(2)
+  .optional()
+  .transform((value) => {
+    if (value === undefined) return undefined;
+    return value.length === 0 ? null : value.toUpperCase();
+  })
+  .refine(
+    (value) =>
+      value === undefined ||
+      value === null ||
+      (BR_STATE_CODES as readonly string[]).includes(value),
+    { message: "UF inválida" },
+  );
