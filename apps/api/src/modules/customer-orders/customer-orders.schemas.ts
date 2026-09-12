@@ -1,8 +1,10 @@
 import { z } from "zod";
+import type { CustomerOrderStatus } from "@veridi/shared";
 import { CUSTOMER_ORDER_STATUSES } from "@veridi/shared";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import { quantityDecimalSchema } from "../../lib/decimal-schema.js";
 import { requiredDateSchema } from "../../lib/date-schema.js";
+import { listaDeStatusSchema } from "../../lib/status-list-schema.js";
 
 const customerOrderLineInputSchema = z.object({
   productId: z.string().trim().min(1, "Produto é obrigatório"),
@@ -41,8 +43,13 @@ export const listCustomerOrdersQuerySchema = z.object({
    * listava quatro, `PARTIALLY_SHIPPED` e `SHIPPED` devolviam `400` e a
    * tabela anterior continuava na tela com o contador intacto — o operador
    * lia um resultado que nao correspondia ao filtro escolhido.
+   *
+   * Um status ou varios separados por virgula (FILTER-OPERATIONS-WAVE-03): a
+   * fila abre em "Em aberto", que sao quatro status, numa consulta so.
    */
-  status: z.enum(CUSTOMER_ORDER_STATUSES as unknown as [string, ...string[]]).optional(),
+  status: listaDeStatusSchema(
+    z.enum(CUSTOMER_ORDER_STATUSES as unknown as [CustomerOrderStatus, ...CustomerOrderStatus[]]),
+  ).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });

@@ -46,14 +46,17 @@ const TELAS = [
   },
   {
     nome: "Pedido",
-    lista: "/comercial/pedidos",
+    // A lista abre em "Em aberto" (FILTER-OPERATIONS-WAVE-03); a suíte quer
+    // o primeiro pedido que existir, aberto ou não.
+    lista: "/comercial/pedidos?status=todos",
     abrirPrimeiro: true,
     gatilho: "Como funciona",
     titulo: "Pedido do Cliente: da confirmação à expedição",
   },
   {
     nome: "Ordem de Produção",
-    lista: "/producao/ordens",
+    // Idem: a lista abre em "Em aberto"; a suíte quer qualquer ordem.
+    lista: "/producao/ordens?status=todos",
     abrirPrimeiro: true,
     gatilho: "Como funciona",
     titulo: "Ordem de Produção: do planejamento ao lote acabado",

@@ -678,6 +678,40 @@ describe("Ordens de Produção — filtro por vários status", () => {
     await app.close();
   });
 
+  /*
+   * FILTER-OPERATIONS-WAVE-03 — a lista de Ordens de Produção abre em "Em
+   * aberto": os quatro status antes do fim, pelo MESMO contrato. E o CSV é a
+   * mesma consulta, com a lista de status inteira.
+   */
+  it("`Em aberto` exclui a cancelada, e o CSV traz exatamente o conjunto da tela", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const { productId, liberada, emProducao } = await releasedEInProduction(app);
+    const planejada = await createPlannedOrder(app, productId, "1");
+    const cancelada = await createPlannedOrder(app, productId, "1");
+    const cancelamento = await app.inject({
+      method: "POST",
+      url: `/production-orders/${cancelada.id}/cancel`,
+      payload: { reason: "Fora da fila" },
+    });
+    expect(cancelamento.statusCode, cancelamento.body).toBe(200);
+
+    const query = `productId=${productId}&status=DRAFT,PLANNED,RELEASED,IN_PRODUCTION`;
+    const fila = await consultar(app, `${query}&pageSize=100`);
+    expect(fila.codes.sort()).toEqual([liberada.code, emProducao.code, planejada.code].sort());
+    expect(fila.total).toBe(3);
+
+    const csv = await app.inject({ method: "GET", url: `/production-orders/export.csv?${query}` });
+    expect(csv.statusCode).toBe(200);
+    for (const code of fila.codes) expect(csv.body).toContain(code);
+    expect(csv.body).not.toContain(cancelada.code);
+    const linhas = csv.body.replace(/^﻿/, "").split("\r\n").filter((linha) => linha.length > 0);
+    expect(linhas).toHaveLength(fila.total + 1);
+
+    await app.close();
+  });
+
   it("status inexistente na lista é recusado em vez de virar filtro vazio", async () => {
     const app = buildTestApp();
     await app.ready();

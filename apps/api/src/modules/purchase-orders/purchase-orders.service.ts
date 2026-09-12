@@ -6,6 +6,8 @@ import { getPrisma } from "../../db/prisma.js";
 import { precoUnitario } from "../../lib/decimal-serialization.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
+import { intervaloDeDiasCivis } from "../../lib/business-day.js";
+import { statusDoWhere } from "../../lib/status-list-schema.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import {
   DuplicateLineItemError,
@@ -222,8 +224,22 @@ export async function listPurchaseOrders(
   const prisma = getPrisma();
   const where: Record<string, unknown> = {};
 
-  if (query.status) where["status"] = query.status;
+  const status = statusDoWhere(query.status);
+  if (status) where["status"] = status;
   if (query.supplierId) where["supplierId"] = query.supplierId;
+  /*
+   * `orderDate` é DATA CIVIL (data de documento), não instante: o dia é o
+   * marcador gravado, e o intervalo é de marcadores — ver
+   * `intervaloDeDiasCivis`. É também o dia que a lista, a ficha e o CSV
+   * mostram (componentes UTC).
+   */
+  const periodo = intervaloDeDiasCivis(query.dateFrom, query.dateTo);
+  if (periodo.inicio || periodo.fimExclusivo) {
+    where["orderDate"] = {
+      ...(periodo.inicio ? { gte: periodo.inicio } : {}),
+      ...(periodo.fimExclusivo ? { lt: periodo.fimExclusivo } : {}),
+    };
+  }
   if (query.search) {
     where["OR"] = [
       { code: { contains: query.search, mode: "insensitive" } },

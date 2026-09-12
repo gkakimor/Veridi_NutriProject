@@ -1736,6 +1736,55 @@ rodadas.
 UX-ACTIONS-FEEDBACK-WAVE-02, a critério do Product Owner. Autoagendamento
 continua fora de escopo.
 
+## As quatro filas abrem no que falta fazer (FILTER-OPERATIONS-WAVE-03, 2026-09-12)
+
+Pedidos, Expedições, Ordens de Produção e Ordens de Compra sobre a foundation
+(`useListFilters`, `StatusGroupFilter`, `EntityFilterSelect`, chips, "Limpar
+filtros"), sem segunda foundation e sem migration.
+
+**Default operacional "Em aberto", só com status que existem.** Pedidos:
+rascunho, confirmado, em atendimento, parcialmente expedido (`SHIPPED` e
+`CANCELLED` fora — faturar o expedido tem fila própria no Faturamento). OP:
+rascunho, planejada, liberada, em produção. OC: rascunho, confirmada, recebida
+parcialmente. Expedição: só o rascunho — a confirmada não se edita e o
+faturamento dela é "Aguardando faturamento". O default não vira chip nem entra
+na URL; "Todos os status" é a saída para o histórico, e remover o chip de
+status volta para Em aberto. Na URL, `status` é `todos` ou o próprio status do
+domínio. **`BLOCKED` não entrou em Em aberto**: nenhum serviço o escreve, então
+não há semântica a assumir — continua opção própria e parte de "Todos".
+
+**Vários status, um contrato.** `status=A,B,...` do Picking virou
+`listaDeStatusSchema` (`apps/api/src/lib/status-list-schema.ts`) e passou a
+valer em Pedidos e OC; OP só trocou a cópia pelo helper. Um valor continua
+valendo. O `ExportCsvButton` aceita lista e manda a mesma vírgula: tela e CSV
+leem o MESMO objeto nas quatro telas.
+
+**Contexto de link.** `?customerId=` (Cliente → Pedidos), `?productId=`
+(Produto → OP) e `?supplierId=` (Fornecedor → OC) viraram filtro com controle,
+chip nomeado e endereço. Na OP o `productId` estava fora do recarregamento, do
+CSV e do "Limpar filtros" — o mesmo defeito que Lotes teve. Expedições ganhou o
+filtro por Pedido que a API sempre aceitou. Cliente e fornecedor deixaram o
+`<select>` de `pageSize: 1000`.
+
+**OC ganhou período pela data do pedido — em marcador de dia civil.**
+`orderDate` é data de documento (a tela grava a meia-noite UTC do dia), então
+o intervalo é `intervaloDeDiasCivis` (`lib/business-day.ts`): `gte` marcador do
+dia, `lt` marcador do dia seguinte. `intervaloDeDiasComerciais` é para coluna
+de instante; aqui ele erraria o dia inteiro ("10/09" traria as OCs de 11/09) —
+o teste de fronteira prova com a mutação. Pedidos, OP e Expedições não
+ganharam período: nenhum tinha suporte nem link, e o histórico por período
+mora nos Relatórios.
+
+Paginação: as quatro já paginavam no banco com total do `count`; nenhum corte
+nas listas. Cortes achados fora do escopo, sem correção:
+`ReceivePurchaseOrderPage.tsx` (Receber OC junta duas listas de 100) e
+`CommercialReports.tsx` R-14 (`listCustomerOrders({ pageSize: 100 })`, para
+REPORTS-PAGINATION-01). Achado de dado: a Sugestão de Compra grava
+`orderDate: new Date()` (instante) numa coluna de data civil — a OC gerada entre
+21h e 23h59 de São Paulo cai no dia seguinte do filtro.
+
+**Próximo:** UX-ACTIONS-FEEDBACK-WAVE-02.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

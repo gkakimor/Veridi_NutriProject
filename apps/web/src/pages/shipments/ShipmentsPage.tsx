@@ -1,5 +1,5 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { EntityLink } from "../../components/EntityLink";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
@@ -7,11 +7,24 @@ import type { HelpHintId } from "../../help/help-content";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { Link, useNavigate } from "react-router-dom";
 import type { ShipmentDTO, ShipmentStatus } from "@veridi/shared";
-import { SHIPMENT_STATUSES, SHIPMENT_STATUS_LABELS } from "@veridi/shared";
+import { SHIPMENT_STATUS_LABELS } from "@veridi/shared";
+import type { ListShipmentsParams } from "../../lib/shipments-api";
 import { listShipments } from "../../lib/shipments-api";
 import { formatDate } from "../../lib/dates";
-
-type ActiveFilter = ShipmentStatus | "all";
+import { useAuth } from "../../app/AuthProvider";
+import { useListFilters } from "../../lib/list-filters";
+import { pedidoFilterSource } from "../../lib/filter-sources";
+import { ActiveFilterChips } from "../../components/filters/ActiveFilterChips";
+import type { FilterChip } from "../../components/filters/ActiveFilterChips";
+import { ClearFilters } from "../../components/filters/ClearFilters";
+import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
+import type { StatusGroup } from "../../components/filters/StatusGroupFilter";
+import {
+  StatusGroupFilter,
+  labelOfGroup,
+  statusesOfGroup,
+} from "../../components/filters/StatusGroupFilter";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
 
 const PAGE_SIZE = 20;
 
@@ -37,39 +50,96 @@ function statusBadgeClass(status: ShipmentStatus): string {
   }
 }
 
+/**
+ * As escolhas do filtro de status — e o que ainda exige ação AQUI.
+ *
+ * O ciclo da Expedição tem três estados. Só o rascunho ainda pede trabalho
+ * nesta tela: conferir os lotes e confirmar a saída. A confirmada já saiu —
+ * não se edita, não se reconfirma e não se cancela —, e o faturamento dela
+ * tem fila própria, "Aguardando faturamento", na tela de Faturamento. A
+ * cancelada é histórico.
+ *
+ * Por isso "Em aberto" é UM status, e não aparece de novo como "Rascunho":
+ * seriam duas opções para a mesma consulta, e um chip dizendo "Rascunho"
+ * para a mesma lista que o default mostra sem chip nenhum.
+ *
+ * O valor na URL é a chave: `em-aberto` (o default, fora do endereço),
+ * `todos`, ou o status do domínio (`CONFIRMED`, `CANCELLED`).
+ */
+const GRUPOS: StatusGroup<ShipmentStatus>[] = [
+  { key: "em-aberto", label: "Em aberto", statuses: ["DRAFT"] },
+  { key: "todos", label: "Todos os status", statuses: [] },
+  { key: "CONFIRMED", label: SHIPMENT_STATUS_LABELS.CONFIRMED, statuses: ["CONFIRMED"] },
+  { key: "CANCELLED", label: SHIPMENT_STATUS_LABELS.CANCELLED, statuses: ["CANCELLED"] },
+];
 
-/** Comercial → Expedições. Documento transacional: linhas abrem página própria. */
+const FILTROS_PADRAO = {
+  search: "",
+  /* Default operacional: não vira chip e não aparece na URL. */
+  status: "em-aberto",
+  /*
+   * O pedido de origem. A API sempre filtrou por ele e a tela não oferecia
+   * — é o contexto que um link vindo do Pedido carrega.
+   */
+  customerOrderId: "",
+};
+
+function grupoValido(valor: string): string {
+  return GRUPOS.some((grupo) => grupo.key === valor) ? valor : FILTROS_PADRAO.status;
+}
+
+/**
+ * Comercial → Expedições. Documento transacional: linhas abrem página própria.
+ *
+ * FILTER-OPERATIONS-WAVE-03. Os filtros viviam em `useState`: abrir uma
+ * expedição e voltar perdia a busca, e nenhum endereço reproduzia o recorte.
+ */
 export function ShipmentsPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [shipments, setShipments] = useState<ShipmentDTO[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pedidoEscolhido, setPedidoEscolhido] = useState<EntityOption | null>(null);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<ActiveFilter>("all");
+  const { values, page, set, setPage, clear, isActive } = useListFilters({
+    defaults: FILTROS_PADRAO,
+    persistScope: "shipments",
+    userId: user?.id ?? null,
+  });
+  const { search, customerOrderId } = values;
+  const grupo = grupoValido(values.status);
+
+  /* UM conjunto de filtros para a consulta e para o CSV. */
+  const filtrosDaConsulta = useMemo(() => {
+    const filtros: Omit<ListShipmentsParams, "page" | "pageSize"> = {};
+    if (search) filtros.search = search;
+    if (customerOrderId) filtros.customerOrderId = customerOrderId;
+    // Todo grupo desta tela é um status só — a API de Expedições lê um.
+    const [status] = statusesOfGroup(GRUPOS, grupo);
+    if (status) filtros.status = status;
+    return filtros;
+  }, [search, customerOrderId, grupo]);
+
+  const [searchInput, setSearchInput] = useState(search);
 
   useEffect(() => {
-    const handle = setTimeout(() => setSearch(searchInput), 300);
+    setSearchInput(search);
+  }, [search]);
+
+  useEffect(() => {
+    if (searchInput === search) return;
+    const handle = setTimeout(() => set({ search: searchInput }), 300);
     return () => clearTimeout(handle);
-  }, [searchInput]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, statusFilter]);
+  }, [searchInput, search, set]);
 
   const reload = useCallback(() => {
     setLoading(true);
     setError(null);
 
-    const params: Parameters<typeof listShipments>[0] = { page, pageSize: PAGE_SIZE };
-    if (search) params.search = search;
-    if (statusFilter !== "all") params.status = statusFilter;
-
-    listShipments(params)
+    listShipments({ ...filtrosDaConsulta, page, pageSize: PAGE_SIZE })
       .then((result) => {
         setShipments(result.shipments);
         setTotal(result.total);
@@ -78,11 +148,31 @@ export function ShipmentsPage() {
         setError(err instanceof Error ? err.message : "Falha ao carregar expedições");
       })
       .finally(() => setLoading(false));
-  }, [page, search, statusFilter]);
+  }, [filtrosDaConsulta, page]);
 
   useEffect(() => {
     reload();
   }, [reload]);
+
+  const chips: FilterChip[] = [];
+  if (search) {
+    chips.push({ label: "Busca", value: search, onRemove: () => set({ search: "" }) });
+  }
+  if (grupo !== FILTROS_PADRAO.status) {
+    chips.push({
+      label: "Status",
+      value: labelOfGroup(GRUPOS, grupo),
+      onRemove: () => set({ status: FILTROS_PADRAO.status }),
+    });
+  }
+  if (customerOrderId) {
+    const nome =
+      pedidoEscolhido?.id === customerOrderId
+        ? `${pedidoEscolhido.code} · ${pedidoEscolhido.name}`
+        : (shipments.find((shipment) => shipment.customerOrderId === customerOrderId)
+            ?.customerOrderCode ?? "selecionado");
+    chips.push({ label: "Pedido", value: nome, onRemove: () => set({ customerOrderId: "" }) });
+  }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -95,8 +185,8 @@ export function ShipmentsPage() {
             Saída física de produto acabado — só uma expedição confirmada altera o estoque.
           </p>
         </div>
-        <ExportCsvButton path="/shipments/export.csv" filters={{ search, status: statusFilter === "all" ? undefined : statusFilter }} />
-</div>
+        <ExportCsvButton path="/shipments/export.csv" filters={filtrosDaConsulta} />
+      </div>
 
       {/* Rascunho e confirmada não são dois estágios do mesmo documento:
           um não toca em estoque e o outro é a saída física, definitiva. */}
@@ -128,22 +218,28 @@ export function ShipmentsPage() {
           />
         </div>
 
-        <label className="sr-only" htmlFor="shipment-status-filter">
-          Filtrar por status
-        </label>
-        <select
+        <StatusGroupFilter
           id="shipment-status-filter"
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as ActiveFilter)}
-        >
-          <option value="all">Todos os status</option>
-          {SHIPMENT_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {SHIPMENT_STATUS_LABELS[status]}
-            </option>
-          ))}
-        </select>
+          label="Filtrar por status"
+          groups={GRUPOS}
+          value={grupo}
+          onChange={(key) => set({ status: key })}
+        />
+
+        {/* Busca no servidor, por código ou cliente — e identidade exata,
+            que a busca por texto não dá: "PED-00012" também acha o 120. */}
+        <EntityFilterSelect
+          id="shipment-order-filter"
+          label="Filtrar por pedido"
+          placeholder="Todos os pedidos"
+          value={customerOrderId}
+          onChange={(value) => set({ customerOrderId: value })}
+          source={pedidoFilterSource}
+          onResolve={setPedidoEscolhido}
+        />
       </div>
+
+      <ActiveFilterChips chips={chips} onClear={clear} />
 
       {error && <p className="form-alert" role="alert">{error}</p>}
 
@@ -212,7 +308,23 @@ export function ShipmentsPage() {
             {!loading && shipments.length === 0 && (
               <tr>
                 <td colSpan={7} className="table__empty">
-                  Nenhuma expedição encontrada.
+                  {isActive ? (
+                    <>
+                      Nenhuma expedição encontrada para os filtros atuais.{" "}
+                      <ClearFilters onClear={clear} />
+                    </>
+                  ) : (
+                    <>
+                      Nenhuma expedição em aberto.{" "}
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--sm"
+                        onClick={() => set({ status: "todos" })}
+                      >
+                        Ver todas
+                      </button>
+                    </>
+                  )}
                 </td>
               </tr>
             )}
@@ -232,7 +344,7 @@ export function ShipmentsPage() {
             type="button"
             className="btn btn--secondary btn--sm"
             disabled={page <= 1}
-            onClick={() => setPage((current) => current - 1)}
+            onClick={() => setPage(page - 1)}
           >
             Anterior
           </button>
@@ -240,7 +352,7 @@ export function ShipmentsPage() {
             type="button"
             className="btn btn--secondary btn--sm"
             disabled={page >= totalPages}
-            onClick={() => setPage((current) => current + 1)}
+            onClick={() => setPage(page + 1)}
           >
             Próxima
           </button>

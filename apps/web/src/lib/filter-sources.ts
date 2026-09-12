@@ -1,6 +1,8 @@
-import type { ItemDTO, ProductDTO, SupplierDTO } from "@veridi/shared";
+import type { CustomerDTO, CustomerOrderDTO, ItemDTO, ProductDTO, SupplierDTO } from "@veridi/shared";
 import type { EntityFilterSource } from "../components/filters/EntityFilterSelect";
 import type { EntityOption } from "../components/SearchableEntitySelect";
+import { getCustomerOrder, listCustomerOrders } from "./customer-orders-api";
+import { listCustomers } from "./customers-api";
 import { listItems } from "./items-api";
 import { listProducts } from "./products-api";
 import { listSuppliers } from "./suppliers-api";
@@ -58,7 +60,7 @@ function opcaoDeFornecedor(fornecedor: SupplierDTO): EntityOption {
   };
 }
 
-/** Fornecedores — filtro de Recebimentos. */
+/** Fornecedores — filtro de Recebimentos e de Ordens de Compra. */
 export const fornecedorFilterSource: EntityFilterSource = {
   inicial: async () =>
     (await listSuppliers({ active: true, pageSize: PAGINA })).suppliers.map(opcaoDeFornecedor),
@@ -96,5 +98,70 @@ export const itemFilterSource: EntityFilterSource = {
     const encontrados = (await listItems({ ids: [id], pageSize: 1 })).items;
     const item = encontrados[0];
     return item ? opcaoDeItem(item) : null;
+  },
+};
+
+function opcaoDeCliente(cliente: CustomerDTO): EntityOption {
+  return {
+    id: cliente.id,
+    code: cliente.code,
+    // O mesmo formato dos outros seletores de Cliente: razão social na
+    // linha, nome fantasia ao lado, e o CNPJ só para a busca encontrar.
+    name: cliente.legalName,
+    ...(cliente.tradeName ? { hint: cliente.tradeName } : {}),
+    searchTerms: [cliente.tradeName ?? "", cliente.cnpj ?? ""].filter(Boolean).join(" "),
+  };
+}
+
+/**
+ * Clientes — filtro de Pedidos.
+ *
+ * Substitui `listCustomers({ pageSize: 1000 })` num `<select>`: do cliente
+ * 1001 em diante o filtro deixava de oferecer quem existia. `porId` resolve
+ * o `?customerId=` que chega do cadastro do Cliente, inclusive de cliente
+ * inativo — pedido antigo continua sendo dele.
+ */
+export const clienteFilterSource: EntityFilterSource = {
+  inicial: async () =>
+    (await listCustomers({ active: true, pageSize: PAGINA })).customers.map(opcaoDeCliente),
+  buscar: async (termo) =>
+    (await listCustomers({ search: termo, pageSize: PAGINA })).customers.map(opcaoDeCliente),
+  porId: async (id) => {
+    const encontrados = (await listCustomers({ ids: [id], pageSize: 1 })).customers;
+    const cliente = encontrados[0];
+    return cliente ? opcaoDeCliente(cliente) : null;
+  },
+};
+
+function opcaoDePedido(pedido: CustomerOrderDTO): EntityOption {
+  return {
+    id: pedido.id,
+    code: pedido.code,
+    // O código diz qual pedido; o cliente diz de quem — é o que se confere.
+    name: pedido.customerName ?? "",
+  };
+}
+
+/**
+ * Pedidos do Cliente — filtro de Expedições.
+ *
+ * A primeira página é a dos pedidos mais recentes; o resto é busca no
+ * servidor, por código ou cliente. `porId` pergunta pelo próprio pedido:
+ * um `?customerOrderId=` de pedido antigo não está na primeira página.
+ */
+export const pedidoFilterSource: EntityFilterSource = {
+  inicial: async () =>
+    (await listCustomerOrders({ pageSize: PAGINA })).customerOrders.map(opcaoDePedido),
+  buscar: async (termo) =>
+    (await listCustomerOrders({ search: termo, pageSize: PAGINA })).customerOrders.map(
+      opcaoDePedido,
+    ),
+  porId: async (id) => {
+    try {
+      return opcaoDePedido(await getCustomerOrder(id));
+    } catch {
+      // Pedido que não existe mais: o filtro vale, só o rótulo fica ausente.
+      return null;
+    }
   },
 };

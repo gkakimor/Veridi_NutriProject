@@ -18,6 +18,11 @@ import { ProductionOrdersPage } from "./production-orders/ProductionOrdersPage";
 vi.mock("../lib/samples-api", () => ({ listSamples: vi.fn() }));
 vi.mock("../lib/customers-api", () => ({ listCustomers: () => Promise.resolve({ customers: [] }) }));
 vi.mock("../lib/production-orders-api", () => ({ listProductionOrders: vi.fn() }));
+// O filtro "Produto" da lista de OPs busca no servidor (FILTER-OPERATIONS-WAVE-03).
+vi.mock("../lib/products-api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/products-api")>()),
+  listProducts: () => Promise.resolve({ products: [], page: 1, pageSize: 20, total: 0 }),
+}));
 vi.mock("../app/AuthProvider", () => ({ useAuth: () => ({ user: null }) }));
 
 import { listSamples } from "../lib/samples-api";

@@ -46,6 +46,7 @@ import {
 } from "../../lib/product-customer-ownership.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
+import { statusDoWhere } from "../../lib/status-list-schema.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import {
   CancellationBlockedError,
@@ -605,7 +606,8 @@ export async function listCustomerOrders(
   const prisma = getPrisma();
   const where: Record<string, unknown> = {};
 
-  if (query.status) where["status"] = query.status;
+  const status = statusDoWhere(query.status);
+  if (status) where["status"] = status;
   if (query.customerId) where["customerId"] = query.customerId;
   if (query.search) {
     where["OR"] = [

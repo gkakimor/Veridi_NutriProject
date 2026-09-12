@@ -1,18 +1,37 @@
-import { useCallback, useEffect, useState } from "react";
-import { useInitialFilters } from "../../lib/filter-params";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { Link, useNavigate } from "react-router-dom";
-import type { PurchaseOrderDTO, PurchaseOrderStatus, SupplierDTO } from "@veridi/shared";
+import type { PurchaseOrderDTO, PurchaseOrderStatus } from "@veridi/shared";
 import { PURCHASE_ORDER_STATUSES, PURCHASE_ORDER_STATUS_LABELS } from "@veridi/shared";
+import type { ListPurchaseOrdersParams } from "../../lib/purchase-orders-api";
 import { listPurchaseOrders } from "../../lib/purchase-orders-api";
-import { listSuppliers } from "../../lib/suppliers-api";
 import { formatBRL } from "../../lib/currency";
 import { formatDate } from "../../lib/dates";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
-
-type ActiveFilter = PurchaseOrderStatus | "all";
+import { useAuth } from "../../app/AuthProvider";
+import { useListFilters } from "../../lib/list-filters";
+import type { ListPeriodPreset } from "../../lib/list-period";
+import {
+  LIST_PERIOD_PRESET_LABELS,
+  ehListPeriodPreset,
+  formatListPeriod,
+  resolveListPeriod,
+} from "../../lib/list-period";
+import { fornecedorFilterSource } from "../../lib/filter-sources";
+import { ActiveFilterChips } from "../../components/filters/ActiveFilterChips";
+import type { FilterChip } from "../../components/filters/ActiveFilterChips";
+import { ClearFilters } from "../../components/filters/ClearFilters";
+import { DateRangeFilter } from "../../components/filters/DateRangeFilter";
+import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
+import type { StatusGroup } from "../../components/filters/StatusGroupFilter";
+import {
+  StatusGroupFilter,
+  labelOfGroup,
+  statusesOfGroup,
+} from "../../components/filters/StatusGroupFilter";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
 
 const PAGE_SIZE = 20;
 
@@ -30,44 +49,124 @@ function statusBadgeClass(status: PurchaseOrderStatus): string {
   }
 }
 
+/**
+ * "Em aberto" — a ordem de compra que ainda pede trabalho de Compras.
+ *
+ * O rascunho ainda precisa ser confirmado ao fornecedor; a confirmada e a
+ * recebida parcialmente ainda têm material a chegar. `RECEIVED` e
+ * `CANCELLED` são os estados encerrados. Não é `OPEN_PURCHASE_ORDER_STATUSES`
+ * (`@veridi/shared`): aquele é "o que conta como Em Compra" no estoque, e
+ * rascunho não conta — mas é trabalho aberto de quem compra.
+ *
+ * A regra de compras não muda: uma ordem com sobra que nunca vai chegar
+ * continua parcialmente recebida, e por isso continua na fila.
+ */
+const EM_ABERTO: PurchaseOrderStatus[] = ["DRAFT", "ORDERED", "PARTIALLY_RECEIVED"];
 
-/** Compras → Ordens de Compra. Documento transacional: linhas abrem pagina propria, nao modal. */
+/**
+ * As escolhas do filtro de status. O valor na URL é a chave: `em-aberto` (o
+ * default, fora do endereço), `todos`, ou o status do domínio.
+ */
+const GRUPOS: StatusGroup<PurchaseOrderStatus>[] = [
+  { key: "em-aberto", label: "Em aberto", statuses: EM_ABERTO },
+  { key: "todos", label: "Todos os status", statuses: [] },
+  ...PURCHASE_ORDER_STATUSES.map((status) => ({
+    key: status,
+    label: PURCHASE_ORDER_STATUS_LABELS[status],
+    statuses: [status],
+  })),
+];
+
+const FILTROS_PADRAO = {
+  search: "",
+  /* Default operacional: não vira chip e não aparece na URL. */
+  status: "em-aberto",
+  /* Também é o contexto do link "Ordens de compra" do cadastro do Fornecedor. */
+  supplierId: "",
+  /*
+   * Sem recorte de período por default: a fila é por status, e um período
+   * padrão esconderia a OC confirmada há dois meses que ainda não chegou —
+   * justamente a que mais precisa de atenção.
+   */
+  period: "todos",
+  dateFrom: "",
+  dateTo: "",
+};
+
+/** Sem default de período, "Todo o período" é a saída e vem primeiro. */
+const PRESETS_DA_OC: ListPeriodPreset[] = ["todos", "hoje", "7d", "30d", "mes-atual", "custom"];
+
+function grupoValido(valor: string): string {
+  return GRUPOS.some((grupo) => grupo.key === valor) ? valor : FILTROS_PADRAO.status;
+}
+
+/**
+ * Compras → Ordens de Compra. Documento transacional: linhas abrem pagina propria, nao modal.
+ *
+ * FILTER-OPERATIONS-WAVE-03. Os filtros viviam em `useState`, então nenhum
+ * endereço reproduzia o recorte e voltar de uma OC perdia a busca. O
+ * fornecedor era um `<select>` com `listSuppliers({ pageSize: 1000 })` —
+ * teto fixo apresentado como catálogo inteiro — e o `?supplierId=` do
+ * cadastro do Fornecedor ficava FORA do "Limpar filtros" (não havia um).
+ */
 export function PurchaseOrdersPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderDTO[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fornecedorEscolhido, setFornecedorEscolhido] = useState<EntityOption | null>(null);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const urlFilter = useInitialFilters();
-  const [supplierFilter, setSupplierFilter] = useState(urlFilter("supplierId"));
-  const [statusFilter, setStatusFilter] = useState<ActiveFilter>("all");
+  const { values, page, set, setPage, clear, isActive } = useListFilters({
+    defaults: FILTROS_PADRAO,
+    persistScope: "purchase-orders",
+    userId: user?.id ?? null,
+  });
+  const { search, supplierId } = values;
+  const grupo = grupoValido(values.status);
+  const period: ListPeriodPreset = ehListPeriodPreset(values.period) ? values.period : "todos";
 
-  const [suppliers, setSuppliers] = useState<SupplierDTO[]>([]);
+  /*
+   * Período em DIAS CIVIS pela data do pedido. `orderDate` é data de
+   * documento, e quem compara dia com a coluna é o servidor — a tela só
+   * resolve o que o atalho quer dizer hoje, no fuso da operação.
+   */
+  const periodo = useMemo(
+    () => resolveListPeriod(period, values.dateFrom, values.dateTo),
+    [period, values.dateFrom, values.dateTo],
+  );
+
+  /* UM conjunto de filtros para a consulta e para o CSV. */
+  const filtrosDaConsulta = useMemo(() => {
+    const filtros: Omit<ListPurchaseOrdersParams, "page" | "pageSize"> = {};
+    if (search) filtros.search = search;
+    if (supplierId) filtros.supplierId = supplierId;
+    const statuses = statusesOfGroup(GRUPOS, grupo);
+    if (statuses.length > 0) filtros.status = statuses;
+    if (periodo.dateFrom) filtros.dateFrom = periodo.dateFrom;
+    if (periodo.dateTo) filtros.dateTo = periodo.dateTo;
+    return filtros;
+  }, [search, supplierId, grupo, periodo.dateFrom, periodo.dateTo]);
+
+  const [searchInput, setSearchInput] = useState(search);
 
   useEffect(() => {
-    const handle = setTimeout(() => setSearch(searchInput), 300);
+    setSearchInput(search);
+  }, [search]);
+
+  useEffect(() => {
+    if (searchInput === search) return;
+    const handle = setTimeout(() => set({ search: searchInput }), 300);
     return () => clearTimeout(handle);
-  }, [searchInput]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, supplierFilter, statusFilter]);
+  }, [searchInput, search, set]);
 
   const reload = useCallback(() => {
     setLoading(true);
     setError(null);
 
-    const params: Parameters<typeof listPurchaseOrders>[0] = { page, pageSize: PAGE_SIZE };
-    if (search) params.search = search;
-    if (supplierFilter) params.supplierId = supplierFilter;
-    if (statusFilter !== "all") params.status = statusFilter;
-
-    listPurchaseOrders(params)
+    listPurchaseOrders({ ...filtrosDaConsulta, page, pageSize: PAGE_SIZE })
       .then((result) => {
         setPurchaseOrders(result.purchaseOrders);
         setTotal(result.total);
@@ -76,17 +175,37 @@ export function PurchaseOrdersPage() {
         setError(err instanceof Error ? err.message : "Falha ao carregar ordens de compra");
       })
       .finally(() => setLoading(false));
-  }, [page, search, supplierFilter, statusFilter]);
+  }, [filtrosDaConsulta, page]);
 
   useEffect(() => {
     reload();
   }, [reload]);
 
-  useEffect(() => {
-    listSuppliers({ pageSize: 1000 })
-      .then((result) => setSuppliers(result.suppliers))
-      .catch(() => setSuppliers([]));
-  }, []);
+  const chips: FilterChip[] = [];
+  if (search) {
+    chips.push({ label: "Busca", value: search, onRemove: () => set({ search: "" }) });
+  }
+  if (grupo !== FILTROS_PADRAO.status) {
+    chips.push({
+      label: "Status",
+      value: labelOfGroup(GRUPOS, grupo),
+      onRemove: () => set({ status: FILTROS_PADRAO.status }),
+    });
+  }
+  if (supplierId) {
+    const nome =
+      fornecedorEscolhido?.id === supplierId
+        ? `${fornecedorEscolhido.code} · ${fornecedorEscolhido.name}`
+        : (purchaseOrders.find((po) => po.supplierId === supplierId)?.supplierName ?? "selecionado");
+    chips.push({ label: "Fornecedor", value: nome, onRemove: () => set({ supplierId: "" }) });
+  }
+  if (period !== FILTROS_PADRAO.period) {
+    chips.push({
+      label: "Período",
+      value: period === "custom" ? formatListPeriod(periodo) : LIST_PERIOD_PRESET_LABELS[period],
+      onRemove: () => set({ period: FILTROS_PADRAO.period, dateFrom: "", dateTo: "" }),
+    });
+  }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -106,13 +225,22 @@ export function PurchaseOrdersPage() {
         >
           + Nova OC
         </button>
-        <ExportCsvButton path="/purchase-orders/export.csv" filters={{ search, supplierId: supplierFilter, status: statusFilter === "all" ? undefined : statusFilter }} />
-</div>
+        <ExportCsvButton path="/purchase-orders/export.csv" filters={filtrosDaConsulta} />
+      </div>
 
       {/* Rascunho, Confirmada e Parcialmente recebida são estados com
           consequências diferentes no estoque — e só um deles conta como
           Em Compra. */}
       <ContextHelp topic={helpTopics["compras.ordens"]} />
+
+      <DateRangeFilter
+        idPrefix="po"
+        value={{ period, dateFrom: values.dateFrom, dateTo: values.dateTo }}
+        presets={PRESETS_DA_OC}
+        fromLabel="Pedido a partir de"
+        toLabel="Pedido até"
+        onChange={(next) => set(next)}
+      />
 
       <div className="toolbar">
         <div className="toolbar__search">
@@ -128,38 +256,27 @@ export function PurchaseOrdersPage() {
           />
         </div>
 
-        <label className="sr-only" htmlFor="po-supplier-filter">
-          Filtrar por fornecedor
-        </label>
-        <select
-          id="po-supplier-filter"
-          value={supplierFilter}
-          onChange={(event) => setSupplierFilter(event.target.value)}
-        >
-          <option value="">Todos os fornecedores</option>
-          {suppliers.map((supplier) => (
-            <option key={supplier.id} value={supplier.id}>
-              {supplier.code} — {supplier.tradeName ?? supplier.legalName}
-            </option>
-          ))}
-        </select>
-
-        <label className="sr-only" htmlFor="po-status-filter">
-          Filtrar por status
-        </label>
-        <select
+        <StatusGroupFilter
           id="po-status-filter"
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as ActiveFilter)}
-        >
-          <option value="all">Todos os status</option>
-          {PURCHASE_ORDER_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {PURCHASE_ORDER_STATUS_LABELS[status]}
-            </option>
-          ))}
-        </select>
+          label="Filtrar por status"
+          groups={GRUPOS}
+          value={grupo}
+          onChange={(key) => set({ status: key })}
+        />
+
+        {/* Busca no servidor: o cadastro de fornecedores não cabe num `<select>`. */}
+        <EntityFilterSelect
+          id="po-supplier-filter"
+          label="Filtrar por fornecedor"
+          placeholder="Todos os fornecedores"
+          value={supplierId}
+          onChange={(value) => set({ supplierId: value })}
+          source={fornecedorFilterSource}
+          onResolve={setFornecedorEscolhido}
+        />
       </div>
+
+      <ActiveFilterChips chips={chips} onClear={clear} />
 
       {error && <p className="form-alert" role="alert">{error}</p>}
 
@@ -218,7 +335,23 @@ export function PurchaseOrdersPage() {
             {!loading && purchaseOrders.length === 0 && (
               <tr>
                 <td colSpan={8} className="table__empty">
-                  Nenhuma ordem de compra encontrada.
+                  {isActive ? (
+                    <>
+                      Nenhuma ordem de compra encontrada para os filtros atuais.{" "}
+                      <ClearFilters onClear={clear} />
+                    </>
+                  ) : (
+                    <>
+                      Nenhuma ordem de compra em aberto.{" "}
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--sm"
+                        onClick={() => set({ status: "todos" })}
+                      >
+                        Ver todas
+                      </button>
+                    </>
+                  )}
                 </td>
               </tr>
             )}
@@ -238,7 +371,7 @@ export function PurchaseOrdersPage() {
             type="button"
             className="btn btn--secondary btn--sm"
             disabled={page <= 1}
-            onClick={() => setPage((current) => current - 1)}
+            onClick={() => setPage(page - 1)}
           >
             Anterior
           </button>
@@ -246,7 +379,7 @@ export function PurchaseOrdersPage() {
             type="button"
             className="btn btn--secondary btn--sm"
             disabled={page >= totalPages}
-            onClick={() => setPage((current) => current + 1)}
+            onClick={() => setPage(page + 1)}
           >
             Próxima
           </button>
