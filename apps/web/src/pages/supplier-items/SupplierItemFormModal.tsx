@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
+import {
+  assinaturaDoDocumento,
+  decimalComparavel,
+  textoComparavel,
+} from "../../lib/dirty-fields";
 import type { FormEvent } from "react";
 import type {
   ItemDTO,
@@ -104,6 +110,47 @@ export function SupplierItemFormModal({
   const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * A relação como ela está na tela, em forma comparável.
+   *
+   * Os catorze campos que o formulário tem — nem um a mais. "Válida a partir
+   * de" nasce com o dia de hoje: é sugestão visível, e abrir a tela não pode
+   * virar pergunta de descarte na saída.
+   */
+  const assinaturaAtual = assinaturaDoDocumento({
+    itemId: textoComparavel(itemId),
+    supplierId: textoComparavel(supplierId),
+    supplierItemCode: textoComparavel(supplierItemCode),
+    commercialNotes: textoComparavel(commercialNotes),
+    qualificationStatus,
+    qualificationNote: textoComparavel(qualificationNote),
+    preferred,
+    unitPrice: decimalComparavel(unitPrice),
+    priceUomCode: textoComparavel(priceUomCode),
+    minimumOrderQuantity: decimalComparavel(minimumOrderQuantity),
+    minimumOrderUomCode: textoComparavel(minimumOrderUomCode),
+    effectiveAt: textoComparavel(effectiveAt),
+    validUntil: textoComparavel(validUntil),
+    offerNotes: textoComparavel(offerNotes),
+  });
+
+  const baseline = useRef<string | null>(null);
+  if (baseline.current === null) baseline.current = assinaturaAtual;
+
+  const { confirmarDescarte, liberarGuarda } = useUnsavedChangesGuard({
+    isDirty: baseline.current !== assinaturaAtual,
+    substantivo: "relação",
+    genero: "a",
+  });
+
+  /**
+   * Cancelar, ✕ e Esc: o router não vê nada disso — a guarda vê.
+   *
+   * Memorizado porque vai para `onClose` do `FullWorkspaceModal`: um
+   * `onClose` novo a cada renderização é o defeito que a Wave 01 fechou.
+   */
+  const fechar = useCallback(() => confirmarDescarte(onClose), [confirmarDescarte, onClose]);
 
   useEffect(() => {
     listUnits()
@@ -271,7 +318,12 @@ export function SupplierItemFormModal({
             }
           : {}),
       });
-      onSaved(created);
+      /*
+       * Gravou: o que está na tela virou registro. `onSaved` fecha o modal e
+       * recarrega a listagem na mesma função, antes de qualquer renderização.
+       */
+      baseline.current = assinaturaAtual;
+      liberarGuarda(() => onSaved(created));
     } catch (err) {
       setError(apiErrorMessage(err, "Falha ao criar a relação"));
     } finally {
@@ -287,7 +339,7 @@ export function SupplierItemFormModal({
   return (
     <FullWorkspaceModal
       open
-      onClose={onClose}
+      onClose={fechar}
       crumb="Compras / Item × Fornecedor"
       crumbActive="Nova"
       title="Nova relação item × fornecedor"
@@ -295,7 +347,7 @@ export function SupplierItemFormModal({
         <>
           <span className="modal-fullscreen__foot-meta">{resumo}</span>
           <div className="modal-fullscreen__actions">
-            <button type="button" className="btn btn--ghost" onClick={onClose}>
+            <button type="button" className="btn btn--ghost" onClick={fechar}>
               Cancelar
             </button>
             <button
@@ -336,11 +388,13 @@ export function SupplierItemFormModal({
                 canCreate
                 createLabel="Novo item de estoque"
                 onCreateNew={() =>
-                  origem.goCreate({
-                    route: "/cadastros/itens/novo",
-                    fieldKey: "itemId",
-                    entityType: "item",
-                  })
+                  liberarGuarda(() =>
+                    origem.goCreate({
+                      route: "/cadastros/itens/novo",
+                      fieldKey: "itemId",
+                      entityType: "item",
+                    }),
+                  )
                 }
               />
             </div>
@@ -367,11 +421,13 @@ export function SupplierItemFormModal({
                 canCreate
                 createLabel="Novo fornecedor"
                 onCreateNew={() =>
-                  origem.goCreate({
-                    route: "/cadastros/fornecedores/novo",
-                    fieldKey: "supplierId",
-                    entityType: "supplier",
-                  })
+                  liberarGuarda(() =>
+                    origem.goCreate({
+                      route: "/cadastros/fornecedores/novo",
+                      fieldKey: "supplierId",
+                      entityType: "supplier",
+                    }),
+                  )
                 }
               />
             </div>

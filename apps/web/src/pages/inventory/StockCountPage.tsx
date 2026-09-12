@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
+import { assinaturaDoDocumento, decimalComparavel, textoComparavel } from "../../lib/dirty-fields";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { Link, useNavigate } from "react-router-dom";
@@ -146,6 +148,29 @@ export function StockCountPage() {
       : null;
   const hasDifference = difference !== null && Number(difference) !== 0;
 
+  /**
+   * A contagem como ela está na tela, em forma comparável.
+   *
+   * É o que a pessoa DIGITA: a contagem física e o motivo da divergência.
+   *
+   * Item e lote ficam de fora porque são ESCOPO, não trabalho — escolhê-los
+   * custa um clique e não produz nada que se perca. Diferença, saldo do
+   * sistema e "há divergência" também: os três são calculados a partir do que
+   * já está aqui, e contá-los faria a mesma digitação pesar duas vezes.
+   */
+  const assinaturaAtual = assinaturaDoDocumento({
+    countedQuantity: decimalComparavel(countedQuantity),
+    reason: textoComparavel(reason),
+  });
+
+  const baseline = useRef<string | null>(null);
+  if (baseline.current === null) baseline.current = assinaturaAtual;
+  useUnsavedChangesGuard({
+    isDirty: baseline.current !== assinaturaAtual,
+    substantivo: "contagem",
+    genero: "a",
+  });
+
   async function handleConfirm() {
     if (!itemId || systemQuantity === null) return;
     if (contagem === null) {
@@ -161,7 +186,13 @@ export function StockCountPage() {
         countedQuantity: contagem,
         ...(hasDifference ? { reason: reason.trim() } : {}),
       });
+      /*
+       * Confirmou: a contagem virou documento e, havendo divergência, ajuste
+       * de estoque. O que está na tela passou a ser o que está gravado — sair
+       * daqui não perde mais nada.
+       */
       setResult(response);
+      baseline.current = assinaturaAtual;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao confirmar contagem");
     } finally {
@@ -174,6 +205,8 @@ export function StockCountPage() {
     setCountedQuantity("");
     setReason("");
     setResult(null);
+    // Nova contagem começa do zero: o ponto de partida é a tela limpa.
+    baseline.current = null;
   }
 
   const canConfirm =
@@ -198,6 +231,9 @@ export function StockCountPage() {
           <button
             type="button"
             className="btn btn--secondary"
+            /* A folha de contagem é IMPRESSÃO do que está no sistema, e sair
+               para ela é sair da tela: com contagem digitada, a guarda
+               pergunta, como em qualquer outra saída. */
             onClick={() => navigate("/print/contagem-fisica")}
           >
             Folha de contagem (FO-01)

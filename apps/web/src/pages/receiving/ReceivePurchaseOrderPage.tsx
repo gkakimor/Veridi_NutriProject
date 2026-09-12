@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
+import {
+  assinaturaDoDocumento,
+  decimalComparavel,
+  textoComparavel,
+} from "../../lib/dirty-fields";
 import { Decimal, type PurchaseOrderDTO } from "@veridi/shared";
 import { getPurchaseOrder, listPurchaseOrders } from "../../lib/purchase-orders-api";
 import { getItem } from "../../lib/items-api";
@@ -140,6 +146,14 @@ export function ReceivePurchaseOrderPage() {
   /** Quantas edições de linha já houve — para descartar resposta atrasada. */
   const edicoes = useRef(0);
 
+  /**
+   * A assinatura do recebimento de referência — o que sair daqui não se perde.
+   *
+   * `null` é "retome na próxima renderização": escolher a OC CARREGA as
+   * linhas, e carregar não é digitar.
+   */
+  const baseline = useRef<string | null>(null);
+
   const loadPurchaseOrder = useCallback(async (id: string) => {
     setLoadingPo(true);
     setError(null);
@@ -171,6 +185,8 @@ export function ReceivePurchaseOrderPage() {
           actualUnitCost: "",
         })),
       );
+      // Escolher a OC monta a tela; o que ela monta é ponto de partida.
+      baseline.current = null;
     } catch (err) {
       setError(apiErrorMessage(err, "Falha ao carregar ordem de compra"));
     } finally {
@@ -241,6 +257,35 @@ export function ReceivePurchaseOrderPage() {
   );
   const temLinhaInvalida = linhasPreenchidas.length !== linesToSubmit.length;
 
+  /**
+   * O recebimento como ele está na tela, em forma comparável.
+   *
+   * Só o que o operador digita. Pedido, recebido, saldo em aberto, preço da OC
+   * e as marcas de controle de lote e validade vêm do servidor; o veredito por
+   * linha e a conta do rodapé são derivados do que já está aqui. Qualquer um
+   * deles na assinatura faria a tela se declarar alterada por conta própria.
+   */
+  const assinaturaAtual = assinaturaDoDocumento({
+    receivedAt: textoComparavel(receivedAt),
+    invoiceNumber: textoComparavel(invoiceNumber),
+    documentReference: textoComparavel(documentReference),
+    notes: textoComparavel(notes),
+    lines: lines.map((line) => ({
+      id: line.purchaseOrderLineId,
+      receiveNow: decimalComparavel(line.receiveNow),
+      supplierLot: textoComparavel(line.supplierLot),
+      expiryDate: textoComparavel(line.expiryDate),
+      location: textoComparavel(line.location),
+      actualUnitCost: decimalComparavel(line.actualUnitCost),
+    })),
+  });
+
+  if (baseline.current === null) baseline.current = assinaturaAtual;
+  const { liberarGuarda } = useUnsavedChangesGuard({
+    isDirty: baseline.current !== assinaturaAtual,
+    substantivo: "recebimento",
+  });
+
   async function handleConfirmReceipt() {
     if (!po) return;
     setConfirmOpen(false);
@@ -283,7 +328,15 @@ export function ReceivePurchaseOrderPage() {
       };
 
       const receipt = await createReceipt(po.id, payload);
-      navigate(`/compras/recebimentos/${receipt.id}`, { replace: true });
+      /*
+       * Confirmou: a entrada virou documento e movimento de estoque. A troca
+       * de endereço acontece nesta mesma função, antes de qualquer
+       * renderização — sem isto a guarda leria a pendência de antes da
+       * confirmação e perguntaria se a pessoa quer descartar o que ela acabou
+       * de dar entrada.
+       */
+      baseline.current = assinaturaAtual;
+      liberarGuarda(() => navigate(`/compras/recebimentos/${receipt.id}`, { replace: true }));
     } catch (err) {
       /*
        * Resposta que chega depois de a pessoa já ter mexido no formulário fala

@@ -1269,6 +1269,38 @@ Fixtures de OP: `planning` faltava em duas que montavam o DTO com
 estado neutro legítimo — OP sem perfil. De 7 testes vermelhos no pacote web
 sobraram 1: o teto de palavras da ajuda (HELP-FORMULACAO-WORDCAP-01).
 
+## Doca, relação e contagem sob a guarda (UNSAVED-CHANGES-WAVE-02, 2026-09-11)
+
+Recebimento de OC, material do cliente, Item × Fornecedor (cadastro e detalhe)
+e Inventário Físico. Foundation intocada — nenhum provider, blocker ou diálogo
+novo; a correção de `onClose` como ref de leitura, feita na Wave 01, já cobre
+estes modais.
+
+Cada tela projeta o que o salvamento envia, normalizado por
+`lib/dirty-fields.ts`, que ganhou teste próprio: decimal em forma canônica,
+ausência e vazio como a mesma coisa, ilegível diferente de tudo, milhar ainda
+recusado, ordem das linhas fazendo parte do documento.
+
+**Três decisões que valem como regra para as próximas waves.**
+
+Escolher a OC no Recebimento e escolher o item no Inventário são ESCOPO, não
+digitação: carregam a tela, e a referência é retomada depois deles. Sair dali
+sem ter digitado nada não custa trabalho nenhum, e perguntar seria ruído.
+
+Derivado não pesa. A diferença do Inventário, o veredito por linha do
+Recebimento e a conta do rodapé saem do que já está na assinatura — contá-los
+faria a mesma digitação valer duas vezes.
+
+**Save parcial existe, e a pendência reflete só o que continua pendente.** O
+detalhe de Item × Fornecedor tem três salvamentos independentes — dados
+comerciais, nota da qualidade, oferta. Cada bloco compara contra o registro
+que voltou do servidor, então gravar um limpa aquele e só aquele: com o código
+salvo e o preço ainda digitado, a guarda continua perguntando.
+
+O Inventário Físico é contagem de UMA linha por vez — item, lote, contagem,
+motivo — e confirma criando o ajuste sem sair da tela. Não há contagem
+multi-linha nem save parcial por linha para proteger.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
