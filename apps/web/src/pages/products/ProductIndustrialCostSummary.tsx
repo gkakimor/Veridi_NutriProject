@@ -157,7 +157,7 @@ export function ProductIndustrialCostSummary({ productId }: { productId: string 
         </p>
       )}
 
-      <div className="line-actions">
+      <div className="form-actions">
         {/* Uma CTA principal: a pergunta do dia a dia é "quanto custa produzir
             X unidades", e é a tela de CMV que responde. */}
         <Link to={`/produtos/${productId}/cmv`} className="btn btn--accent btn--sm">

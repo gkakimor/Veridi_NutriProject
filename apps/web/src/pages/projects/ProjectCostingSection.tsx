@@ -149,7 +149,7 @@ export function ProjectCostingSection({
             </dd>
           </dl>
 
-          <div className="line-actions">
+          <div className="form-actions">
             {/* Identidade, não texto: busca aproximada podia trazer mais de
                 um produto ou esbarrar no filtro da visita anterior. */}
             <Link

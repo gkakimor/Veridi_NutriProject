@@ -192,8 +192,11 @@ function digitar(rotulo: string, valor: string) {
   fireEvent.change(screen.getByLabelText(rotulo), { target: { value: valor } });
 }
 
+/** O MESMO botão com a gravação no ar diz "Salvando…" (UX-ACTIONS-FEEDBACK-WAVE-02). */
 function botaoSalvar(): HTMLButtonElement {
-  return screen.getByRole("button", { name: "Salvar condições" }) as HTMLButtonElement;
+  return screen.getByRole("button", {
+    name: /^(Salvar condições|Salvando…)$/,
+  }) as HTMLButtonElement;
 }
 
 /** O aviso ao lado dos botões: é ele que responde "salvei?". */

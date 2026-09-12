@@ -216,7 +216,15 @@ export function FormulationTemplateDetailPage() {
   const [template, setTemplate] = useState<FormulationTemplateDTO | null>(null);
   const [items, setItems] = useState<ItemDTO[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  /*
+   * A ação em curso pelo nome, não um booleano — o mesmo desenho da Política
+   * de Precificação: só o botão clicado diz "Salvando…", e todos recusam o
+   * segundo clique enquanto a gravação está no ar.
+   */
+  const [acaoEmCurso, setAcaoEmCurso] = useState<string | null>(null);
+  const saving = acaoEmCurso !== null;
+  /** O que a última ação gravou, no bloco que a disparou — uma frase, nunca uma pilha. */
+  const [feito, setFeito] = useState<{ bloco: string; texto: string } | null>(null);
   const [linhas, setLinhas] = useState<LinhaEditavel[]>([]);
   const [base, setBase] = useState("1");
   const [unidade, setUnidade] = useState("un");
@@ -480,16 +488,24 @@ export function FormulationTemplateDetailPage() {
     ajustes.fechar(linha.chave);
   }
 
-  async function run(action: () => Promise<unknown>) {
-    setSaving(true);
+  async function run(
+    acao: string,
+    action: () => Promise<unknown>,
+    sucesso?: { bloco: string; texto: string },
+  ) {
+    setAcaoEmCurso(acao);
     setError(null);
+    setFeito(null);
     try {
       await action();
       load();
+      // Só depois de a ação passar: erro que caísse aqui deixaria a tela
+      // dizendo "salvo" sobre o que não foi gravado.
+      if (sucesso) setFeito(sucesso);
     } catch (err) {
       setError(apiErrorMessage(err, "Falha ao executar a ação"));
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
@@ -527,6 +543,30 @@ export function FormulationTemplateDetailPage() {
     isDirty: identificacaoAlterada || rascunhoAlterado || ajustePendente,
     substantivo: "modelo de formulação",
   });
+
+  /**
+   * A frase de estado do bloco: o que falta gravar, ou o que acabou de gravar.
+   *
+   * Pendência vem primeiro — confirmação de "salvo" ao lado de campo já
+   * alterado de novo mente sobre o que está no servidor.
+   */
+  function estadoDoBloco(bloco: string, alterado: boolean) {
+    if (alterado) {
+      return (
+        <span className="form-status form-status--dirty" role="status">
+          Alterações não salvas
+        </span>
+      );
+    }
+    if (feito?.bloco === bloco) {
+      return (
+        <span className="form-status" role="status">
+          {feito.texto}
+        </span>
+      );
+    }
+    return null;
+  }
 
   if (!template) {
     return (
@@ -637,32 +677,42 @@ export function FormulationTemplateDetailPage() {
             </div>
           </div>
           {canEdit && (
-            <div className="line-actions">
-              <button
-                type="button"
-                className="btn btn--secondary btn--sm"
-                disabled={saving}
-                onClick={() =>
-                  void run(() =>
-                    updateFormulationTemplate(template.id, {
-                      name: nome,
-                      description: descricao || null,
-                    }),
-                  )
-                }
-              >
-                Salvar identificação
-              </button>
-              <button
-                type="button"
-                className="btn btn--ghost btn--sm"
-                disabled={saving}
-                onClick={() =>
-                  void run(() => setFormulationTemplateArchived(template.id, !template.archived))
-                }
-              >
-                {template.archived ? "Desarquivar" : "Arquivar"}
-              </button>
+            <div className="form-actions form-actions--split">
+              <div className="form-actions__group">
+                <button
+                  type="button"
+                  className="btn btn--secondary btn--sm"
+                  disabled={saving}
+                  onClick={() =>
+                    void run(
+                      "identificacao",
+                      () =>
+                        updateFormulationTemplate(template.id, {
+                          name: nome,
+                          description: descricao || null,
+                        }),
+                      { bloco: "identificacao", texto: "Identificação salva." },
+                    )
+                  }
+                >
+                  {acaoEmCurso === "identificacao" ? "Salvando…" : "Salvar identificação"}
+                </button>
+                {estadoDoBloco("identificacao", identificacaoAlterada)}
+              </div>
+              <div className="form-actions__group">
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  disabled={saving}
+                  onClick={() =>
+                    void run("arquivar", () =>
+                      setFormulationTemplateArchived(template.id, !template.archived),
+                    )
+                  }
+                >
+                  {template.archived ? "Desarquivar" : "Arquivar"}
+                </button>
+              </div>
             </div>
           )}
         </FormSection>
@@ -681,16 +731,23 @@ export function FormulationTemplateDetailPage() {
                 Nenhuma delas muda quando este template muda.
               </p>
             )}
+            {/* A ativação é confirmada AQUI: ao dar certo, o bloco do rascunho
+                deixa de existir e levaria a frase junto. */}
             {canEdit && !rascunho && (
-              <div className="line-actions">
-                <button
-                  type="button"
-                  className="btn btn--accent btn--sm"
-                  disabled={saving}
-                  onClick={() => void run(() => createTemplateVersionFrom(ativa.id))}
-                >
-                  Criar nova versão
-                </button>
+              <div className="form-actions">
+                <div className="form-actions__group">
+                  <button
+                    type="button"
+                    className="btn btn--accent btn--sm"
+                    disabled={saving}
+                    onClick={() =>
+                      void run("nova-versao", () => createTemplateVersionFrom(ativa.id))
+                    }
+                  >
+                    {acaoEmCurso === "nova-versao" ? "Criando…" : "Criar nova versão"}
+                  </button>
+                  {estadoDoBloco("versao-ativa", false)}
+                </div>
               </div>
             )}
           </FormSection>
@@ -928,76 +985,94 @@ export function FormulationTemplateDetailPage() {
             </div>
 
             {editavel && (
-              <div className="line-actions">
-                <button
-                  type="button"
-                  className="btn btn--secondary btn--sm"
-                  onClick={() =>
-                    setLinhas((atual) => [
-                      ...atual,
-                      {
-                        chave: `nova-${atual.length}-${Date.now()}`,
-                        itemId: "",
-                        quantity: "",
-                        // A unidade vem do Item: antes dele, não há dimensão.
-                        unitCode: "",
-                        supplyResponsibility: "VERIDI",
-                      },
-                    ])
-                  }
-                >
-                  + Adicionar componente
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--secondary btn--sm"
-                  disabled={saving || temUnidadeInvalida}
-                  onClick={() => {
-                    // Ajuste aberto e não aplicado não vai junto — e não se perde
-                    // em silêncio: a tela diz qual linha espera decisão.
-                    const pendente = linhas.find((linha) =>
-                      ajustes.alterado(linha.chave, ajustesDoModelo(linha)),
-                    );
-                    if (pendente) {
-                      const codigo =
-                        items.find((item) => item.id === pendente.itemId)?.code ?? "componente";
-                      setError(`Aplique ou cancele os ajustes de ${codigo} antes de salvar.`);
-                      ajustes.avisar(pendente.chave);
-                      return;
+              <div className="form-actions form-actions--split">
+                <div className="form-actions__group">
+                  {/* Terciária: acrescentar componente não grava nada. */}
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={() =>
+                      setLinhas((atual) => [
+                        ...atual,
+                        {
+                          chave: `nova-${atual.length}-${Date.now()}`,
+                          itemId: "",
+                          quantity: "",
+                          // A unidade vem do Item: antes dele, não há dimensão.
+                          unitCode: "",
+                          supplyResponsibility: "VERIDI",
+                        },
+                      ])
                     }
-                    void run(() =>
-                      updateFormulationTemplateVersion(rascunho.id, {
-                        basisQuantity: exigirDecimal(base, "Base da formulação"),
-                        outputUnitCode: unidade,
-                        components: linhas
-                          .filter((linha) => linha.itemId && linha.quantity)
-                          .map(({ chave: _chave, ...resto }) => ({
-                            ...resto,
-                            quantity: exigirDecimal(resto.quantity, "Quantidade"),
-                            // Vazio = não informado (null), nunca 0% nem 100%.
-                            purityPercentApplied: exigirDecimalOpcional(
-                              resto.purityPercentApplied ?? "",
-                              "Pureza %",
-                            ),
-                            overagePercent: exigirDecimalOpcional(
-                              resto.overagePercent ?? "",
-                              "Overage %",
-                            ),
-                          })),
-                      }),
-                    );
-                  }}
-                >
-                  Salvar rascunho
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--accent btn--sm"
-                  disabled={saving || rascunho.components.length === 0}
-                  onClick={() => void run(() => activateFormulationTemplateVersion(rascunho.id))}
-                >
-                  Ativar versão
-                </button>
+                  >
+                    + Adicionar componente
+                  </button>
+                </div>
+                <div className="form-actions__group">
+                  {estadoDoBloco("rascunho", rascunhoAlterado || ajustePendente)}
+                  <button
+                    type="button"
+                    className="btn btn--secondary btn--sm"
+                    /* Sem alteração pendente não há o que gravar. Ajuste aberto
+                       e não aplicado CONTA como pendência aqui: é o clique que
+                       diz qual linha espera decisão. */
+                    disabled={saving || temUnidadeInvalida || (!rascunhoAlterado && !ajustePendente)}
+                    onClick={() => {
+                      // Ajuste aberto e não aplicado não vai junto — e não se perde
+                      // em silêncio: a tela diz qual linha espera decisão.
+                      const pendente = linhas.find((linha) =>
+                        ajustes.alterado(linha.chave, ajustesDoModelo(linha)),
+                      );
+                      if (pendente) {
+                        const codigo =
+                          items.find((item) => item.id === pendente.itemId)?.code ?? "componente";
+                        setFeito(null);
+                        setError(`Aplique ou cancele os ajustes de ${codigo} antes de salvar.`);
+                        ajustes.avisar(pendente.chave);
+                        return;
+                      }
+                      void run(
+                        "rascunho",
+                        () =>
+                          updateFormulationTemplateVersion(rascunho.id, {
+                            basisQuantity: exigirDecimal(base, "Base da formulação"),
+                            outputUnitCode: unidade,
+                            components: linhas
+                              .filter((linha) => linha.itemId && linha.quantity)
+                              .map(({ chave: _chave, ...resto }) => ({
+                                ...resto,
+                                quantity: exigirDecimal(resto.quantity, "Quantidade"),
+                                // Vazio = não informado (null), nunca 0% nem 100%.
+                                purityPercentApplied: exigirDecimalOpcional(
+                                  resto.purityPercentApplied ?? "",
+                                  "Pureza %",
+                                ),
+                                overagePercent: exigirDecimalOpcional(
+                                  resto.overagePercent ?? "",
+                                  "Overage %",
+                                ),
+                              })),
+                          }),
+                        { bloco: "rascunho", texto: "Rascunho salvo." },
+                      );
+                    }}
+                  >
+                    {acaoEmCurso === "rascunho" ? "Salvando…" : "Salvar rascunho"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--accent btn--sm"
+                    disabled={saving || rascunho.components.length === 0}
+                    onClick={() =>
+                      void run("ativar", () => activateFormulationTemplateVersion(rascunho.id), {
+                        bloco: "versao-ativa",
+                        texto: "Versão ativada.",
+                      })
+                    }
+                  >
+                    {acaoEmCurso === "ativar" ? "Ativando…" : "Ativar versão"}
+                  </button>
+                </div>
               </div>
             )}
           </FormSection>

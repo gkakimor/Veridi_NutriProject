@@ -82,7 +82,7 @@ export function QuoteClosingSection({
           liberá-los e o pedido poderá ser gerado a partir deste orçamento.
         </p>
       ) : canEdit ? (
-        <div className="line-actions">
+        <div className="form-actions">
           <button
             type="button"
             className="btn btn--accent"

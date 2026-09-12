@@ -169,7 +169,7 @@ export function CostCalculationSection({
           </div>
         </div>
 
-        <div className="line-actions">
+        <div className="form-actions">
           <button
             type="button"
             className="btn btn--accent btn--sm"

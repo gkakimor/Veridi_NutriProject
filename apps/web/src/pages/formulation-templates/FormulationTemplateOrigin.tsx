@@ -108,7 +108,7 @@ export function FormulationTemplateOrigin({ version, canEdit, onChanged }: Props
             <strong>V{novidade.latestVersionNumber}</strong>. Esta formulação continua na
             V{novidade.originVersionNumber} e não muda sozinha.
           </p>
-          <div className="line-actions">
+          <div className="form-actions">
             <button
               type="button"
               className="btn btn--secondary btn--sm"

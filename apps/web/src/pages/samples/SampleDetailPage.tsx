@@ -609,7 +609,7 @@ export function SampleDetailPage() {
               </p>
             )}
 
-            <div className="line-actions">
+            <div className="form-actions">
               {awaitingDecision && canDecide && (
                 <>
                   <button

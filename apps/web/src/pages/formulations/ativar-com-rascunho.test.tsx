@@ -240,8 +240,9 @@ describe("Ativar versão com alteração pendente", () => {
     const confirmar = screen.getByRole("button", { name: "Ativar" });
     await user.click(confirmar);
     // O diálogo fecha no primeiro clique; o segundo cai no botão da página,
-    // que é o caminho realmente alcançável por quem clica duas vezes.
-    await user.click(screen.getByRole("button", { name: /Ativar versão/ }));
+    // que é o caminho realmente alcançável por quem clica duas vezes — e que,
+    // com a ativação no ar, diz "Ativando…".
+    await user.click(screen.getByRole("button", { name: /Ativar versão|Ativando…/ }));
 
     liberar(versao({ basisQuantity: "2500" }));
 

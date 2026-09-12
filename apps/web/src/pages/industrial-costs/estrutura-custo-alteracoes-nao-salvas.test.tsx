@@ -288,6 +288,9 @@ describe("Estrutura de Custo — guarda de alterações não salvas", () => {
     getProductIndustrialCosts.mockResolvedValue(salva);
     await user.click(screen.getByRole("button", { name: "Salvar base" }));
     await waitFor(() => expect(updateIndustrialCostVersion).toHaveBeenCalled());
+    // Gravar responde, e só com a resposta (UX-ACTIONS-FEEDBACK-WAVE-02).
+    expect(await screen.findByText("Base salva.")).toHaveAttribute("role", "status");
+    expect(screen.queryByText("Alterações não salvas")).toBeNull();
 
     await user.click(menuPedidos());
 

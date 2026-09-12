@@ -78,7 +78,12 @@ interface Props {
   quote: QuoteVersionDTO;
   editable: boolean;
   saving: boolean;
-  onSave: (input: UpdateQuoteVersionInput) => void;
+  /**
+   * Grava as condições. Devolvendo a promessa, o botão diz "Salvando…"
+   * enquanto ELA está no ar — `saving` é o freio da seção inteira e acende
+   * também quando outra ação da proposta grava.
+   */
+  onSave: (input: UpdateQuoteVersionInput) => Promise<unknown> | void;
   /**
    * Avisa se há condição alterada e não salva — a mesma pendência que o
    * formulário mostra em "Alterações não salvas". Quem envia a proposta
@@ -97,6 +102,7 @@ export function QuoteConditionsForm({
   const [rascunho, setRascunho] = useState(() => rascunhoDe(quote));
   const [simulacao, setSimulacao] = useState<QuotePaymentScheduleDTO | null>(null);
   const [simulando, setSimulando] = useState(false);
+  const [salvando, setSalvando] = useState(false);
   const [erroSimulacao, setErroSimulacao] = useState<string | null>(null);
   /** A leitura da proposta que o rascunho já absorveu. */
   const [absorvida, setAbsorvida] = useState({ quote, editable });
@@ -214,9 +220,17 @@ export function QuoteConditionsForm({
     }
   }
 
-  function salvar() {
-    if (temCondicaoIlegivel) return;
-    onSave(paraEnvio(campos));
+  async function salvar() {
+    if (temCondicaoIlegivel || salvando) return;
+    const gravacao = onSave(paraEnvio(campos));
+    // Quem grava sem devolver promessa não tem andamento a mostrar.
+    if (!gravacao) return;
+    setSalvando(true);
+    try {
+      await gravacao;
+    } finally {
+      setSalvando(false);
+    }
   }
 
   // Simulação na tela vence o gravado: é o que a pessoa está decidindo agora.
@@ -358,38 +372,44 @@ export function QuoteConditionsForm({
       </div>
 
       {editable && (
-        <div className="line-actions">
-          {/* Aparece com a alteração: ver o efeito não pode custar salvar. */}
-          {sujo && (
+        <div className="form-actions form-actions--split">
+          {/* Ver o efeito de um lado; gravar ou desfazer do outro — simular
+              não grava nada, e não pode ficar colado em quem grava. */}
+          <div className="form-actions__group">
+            {/* Aparece com a alteração: ver o efeito não pode custar salvar. */}
+            {sujo && (
+              <button
+                type="button"
+                className="btn btn--secondary"
+                disabled={simulando || temCondicaoIlegivel}
+                onClick={() => void simular()}
+              >
+                {simulando ? "Simulando…" : "Simular"}
+              </button>
+            )}
+          </div>
+          <div className="form-actions__group">
             <button
               type="button"
               className="btn btn--secondary"
-              disabled={simulando || temCondicaoIlegivel}
-              onClick={() => void simular()}
+              disabled={saving || salvando || !sujo || temCondicaoIlegivel}
+              onClick={() => void salvar()}
             >
-              {simulando ? "Simulando…" : "Simular"}
+              {salvando ? "Salvando…" : "Salvar condições"}
             </button>
-          )}
-          <button
-            type="button"
-            className="btn btn--secondary"
-            disabled={saving || !sujo || temCondicaoIlegivel}
-            onClick={salvar}
-          >
-            Salvar condições
-          </button>
-          <button
-            type="button"
-            className="btn btn--ghost btn--sm"
-            disabled={saving || !sujo}
-            onClick={descartar}
-          >
-            Descartar alterações
-          </button>
-          {/* Sem isto, "salvei?" só se responde recarregando a página. */}
-          <span className={sujo ? "form-status form-status--dirty" : "form-status"} role="status">
-            {sujo ? "Alterações não salvas" : "Tudo salvo"}
-          </span>
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              disabled={saving || salvando || !sujo}
+              onClick={descartar}
+            >
+              Descartar alterações
+            </button>
+            {/* Sem isto, "salvei?" só se responde recarregando a página. */}
+            <span className={sujo ? "form-status form-status--dirty" : "form-status"} role="status">
+              {sujo ? "Alterações não salvas" : "Tudo salvo"}
+            </span>
+          </div>
         </div>
       )}
 

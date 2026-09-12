@@ -193,6 +193,8 @@ describe("detalhe de Item × Fornecedor — pendência por bloco", () => {
 
     await user.click(screen.getByRole("button", { name: "Salvar dados comerciais" }));
     await waitFor(() => expect(updateSupplierItem).toHaveBeenCalledTimes(1));
+    // Gravar responde, no bloco que gravou (UX-ACTIONS-FEEDBACK-WAVE-02).
+    expect(await screen.findByText("Dados comerciais salvos.")).toHaveAttribute("role", "status");
 
     // O código já está no servidor; o preço continua só na tela.
     await user.click(menuEstoque());

@@ -466,7 +466,17 @@ export function FormulationVersionPage() {
   const [activeItems, setActiveItems] = useState<ItemOption[]>([]);
   const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
 
-  const [saving, setSaving] = useState(false);
+  /*
+   * A ação em curso pelo nome: "Salvando…" aparecia no botão de salvar
+   * também durante a ativação e a criação de versão, que usam o mesmo freio
+   * de clique duplo. O freio continua um só (`saving`); o rótulo, não.
+   */
+  const [acaoEmCurso, setAcaoEmCurso] = useState<"rascunho" | "ativar" | "nova-versao" | null>(
+    null,
+  );
+  const saving = acaoEmCurso !== null;
+  /** O que a última gravação confirmou — uma frase, substituída pela próxima. */
+  const [feito, setFeito] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [activateDialogOpen, setActivateDialogOpen] = useState(false);
@@ -1110,12 +1120,15 @@ export function FormulationVersionPage() {
 
   async function handleSaveDraft() {
     if (!versionId || saving) return;
+    setFeito(null);
     if (bloqueadoPorAjustePendente("salvar")) return;
-    setSaving(true);
+    setAcaoEmCurso("rascunho");
     try {
-      await salvarRascunho();
+      // Só com a gravação confirmada: validação ou falha de rede nunca
+      // viram "salvo".
+      if (await salvarRascunho()) setFeito("Rascunho salvo.");
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
@@ -1125,6 +1138,7 @@ export function FormulationVersionPage() {
    */
   async function abrirDialogoDeAtivacao() {
     if (!versionId) return;
+    setFeito(null);
     if (bloqueadoPorAjustePendente("ativar")) return;
     setActivateDialogOpen(true);
     setImpact(null);
@@ -1155,8 +1169,9 @@ export function FormulationVersionPage() {
   async function handleActivate() {
     if (!versionId || saving) return;
     setActivateDialogOpen(false);
-    setSaving(true);
+    setAcaoEmCurso("ativar");
     setError(null);
+    setFeito(null);
     try {
       if (temAlteracaoPendente()) {
         const salvou = await salvarRascunho();
@@ -1166,24 +1181,26 @@ export function FormulationVersionPage() {
       setVersion(updated);
       syncFromServer(updated);
       carregarCustoEstimado();
+      setFeito("Versão ativada.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao ativar formulação");
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
   async function handleCreateNewVersion() {
     if (!versionId) return;
-    setSaving(true);
+    setAcaoEmCurso("nova-versao");
     setError(null);
+    setFeito(null);
     try {
       const created = await createNewFormulationVersion(versionId);
       navigate(`/producao/formulacoes/${productId}/versoes/${created.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao criar nova versão");
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
@@ -1962,9 +1979,23 @@ export function FormulationVersionPage() {
 
       <div className="doc-actions">
         <div className="doc-actions__primary">
+          {/* Pendência antes de confirmação: "salvo" ao lado de campo já
+              alterado de novo mentiria sobre o que está gravado. É a mesma
+              pendência da guarda de saída, não uma conta paralela. */}
+          {isDraft && (temAlteracaoPendente() || ajustePendente() !== undefined) ? (
+            <span className="form-status form-status--dirty" role="status">
+              Alterações não salvas
+            </span>
+          ) : (
+            feito && (
+              <span className="form-status" role="status">
+                {feito}
+              </span>
+            )
+          )}
           {isDraft && (
             <button type="button" className="btn btn--secondary" disabled={saving} onClick={handleSaveDraft}>
-              {saving ? "Salvando…" : "Salvar rascunho"}
+              {acaoEmCurso === "rascunho" ? "Salvando…" : "Salvar rascunho"}
             </button>
           )}
           {isDraft && (
@@ -1974,7 +2005,7 @@ export function FormulationVersionPage() {
               disabled={saving}
               onClick={() => void abrirDialogoDeAtivacao()}
             >
-              Ativar versão
+              {acaoEmCurso === "ativar" ? "Ativando…" : "Ativar versão"}
             </button>
           )}
           {version.status === "ACTIVE" && (
@@ -1984,7 +2015,7 @@ export function FormulationVersionPage() {
               disabled={saving}
               onClick={handleCreateNewVersion}
             >
-              Criar nova versão
+              {acaoEmCurso === "nova-versao" ? "Criando…" : "Criar nova versão"}
             </button>
           )}
         </div>

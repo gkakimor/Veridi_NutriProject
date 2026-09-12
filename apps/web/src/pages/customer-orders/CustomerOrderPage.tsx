@@ -323,7 +323,17 @@ export function CustomerOrderPage() {
 
   const [activeCustomers, setActiveCustomers] = useState<CustomerDTO[]>([]);
   const [activeProducts, setActiveProducts] = useState<ProductDTO[]>([]);
-  const [saving, setSaving] = useState(false);
+  /*
+   * A ação em curso pelo nome: "Salvando…" aparecia no botão de salvar
+   * também enquanto o pedido era confirmado ou cancelado. O freio de clique
+   * duplo continua um só (`saving`); o rótulo, não.
+   */
+  const [acaoEmCurso, setAcaoEmCurso] = useState<
+    "rascunho" | "prazo" | "confirmar" | "cancelar" | null
+  >(null);
+  const saving = acaoEmCurso !== null;
+  /** O que a última gravação confirmou — uma frase, substituída pela próxima. */
+  const [feito, setFeito] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -922,12 +932,13 @@ export function CustomerOrderPage() {
   }
 
   async function handleSaveDraft() {
+    setFeito(null);
     if (!customerId) {
       setError("Selecione um cliente.");
       return;
     }
 
-    setSaving(true);
+    setAcaoEmCurso("rascunho");
     setError(null);
     setFieldErrors({});
 
@@ -967,6 +978,8 @@ export function CustomerOrderPage() {
         const updated = await updateCustomerOrder(id, payload);
         setCustomerOrder(updated);
         syncFormFromServer(updated);
+        // Só com a resposta do servidor: validação ou rede nunca viram "salvo".
+        setFeito("Rascunho salvo.");
       }
     } catch (err) {
       if (err instanceof ApiValidationError) {
@@ -980,14 +993,15 @@ export function CustomerOrderPage() {
         setError(apiErrorMessage(err, "Falha ao salvar pedido"));
       }
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
   async function handleSaveNotesOnly() {
     if (!id) return;
-    setSaving(true);
+    setAcaoEmCurso("prazo");
     setError(null);
+    setFeito(null);
     try {
       const requestedIso = toIsoOrEmpty(requestedDeliveryDate);
       const updated = await updateCustomerOrder(id, {
@@ -996,18 +1010,20 @@ export function CustomerOrderPage() {
       });
       setCustomerOrder(updated);
       syncFormFromServer(updated);
+      setFeito("Prazo e observações salvos.");
     } catch (err) {
       setError(apiErrorMessage(err, "Falha ao salvar"));
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
   async function handleConfirm() {
     if (!id) return;
     setConfirmDialogOpen(false);
-    setSaving(true);
+    setAcaoEmCurso("confirmar");
     setError(null);
+    setFeito(null);
     try {
       const updated = await confirmCustomerOrder(id);
       setCustomerOrder(updated);
@@ -1015,14 +1031,15 @@ export function CustomerOrderPage() {
     } catch (err) {
       setError(apiErrorMessage(err, "Falha ao confirmar pedido"));
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
   async function handleCancelConfirm() {
     if (!id) return;
-    setSaving(true);
+    setAcaoEmCurso("cancelar");
     setError(null);
+    setFeito(null);
     try {
       const updated = await cancelCustomerOrder(id, { reason: cancelReason.trim() });
       setCancelDialogOpen(false);
@@ -1032,7 +1049,7 @@ export function CustomerOrderPage() {
     } catch (err) {
       setError(apiErrorMessage(err, "Falha ao cancelar pedido"));
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
@@ -2288,7 +2305,7 @@ options={customerOptions.map((customer) => ({
               </div>
             )}
 
-            <div className="line-actions">
+            <div className="form-actions">
               <button
                 type="button"
                 className="btn btn--secondary btn--sm"
@@ -2612,7 +2629,7 @@ options={customerOptions.map((customer) => ({
                         )
                         .join(" · ")}
                     </p>
-                    <div className="line-actions">
+                    <div className="form-actions">
                       {linhasComSaldoPendente.map((line) => (
                         <button
                           key={line.id}
@@ -2695,19 +2712,32 @@ options={customerOptions.map((customer) => ({
         )}
 
         <div className="doc-actions__primary">
+          {/* Pendência antes de confirmação, e a pendência é a MESMA da guarda
+              de saída — nunca uma conta paralela. */}
+          {temBotaoDeSalvar && baseline.current !== assinaturaAtual ? (
+            <span className="form-status form-status--dirty" role="status">
+              Alterações não salvas
+            </span>
+          ) : (
+            feito && (
+              <span className="form-status" role="status">
+                {feito}
+              </span>
+            )
+          )}
           {isDraft && (
             <button type="button" className="btn btn--secondary" disabled={saving} onClick={handleSaveDraft}>
-              {saving ? "Salvando…" : "Salvar rascunho"}
+              {acaoEmCurso === "rascunho" ? "Salvando…" : "Salvar rascunho"}
             </button>
           )}
           {!isDraft && status !== "CANCELLED" && !isNew && (
             <button type="button" className="btn btn--secondary" disabled={saving} onClick={handleSaveNotesOnly}>
-              {saving ? "Salvando…" : "Salvar prazo e observações"}
+              {acaoEmCurso === "prazo" ? "Salvando…" : "Salvar prazo e observações"}
             </button>
           )}
           {isConfirmable && (
             <button type="button" className="btn btn--accent" disabled={saving} onClick={() => setConfirmDialogOpen(true)}>
-              Confirmar pedido
+              {acaoEmCurso === "confirmar" ? "Confirmando…" : "Confirmar pedido"}
             </button>
           )}
         </div>

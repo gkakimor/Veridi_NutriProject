@@ -239,7 +239,7 @@ export function ProjectProductsSection({
                   indistinguíveis na produção.
                 </p>
               </div>
-              <div className="line-actions">
+              <div className="form-actions">
                 <button
                   type="button"
                   className="btn btn--accent"
@@ -272,7 +272,7 @@ export function ProjectProductsSection({
                     hint: LIFECYCLE_LABELS[product.lifecycle] ?? product.lifecycle,
                   }))}
               />
-              <div className="line-actions">
+              <div className="form-actions">
                 <button
                   type="button"
                   className="btn btn--accent"

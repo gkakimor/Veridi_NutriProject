@@ -792,7 +792,7 @@ export function QuoteVersionsSection({
                 Com outro rascunho em edição a ação fica indisponível e diz por
                 quê: o projeto tem uma proposta em edição por vez. */}
             {canEdit && projectOpen && open.status !== "DRAFT" && (
-              <div className="line-actions">
+              <div className="form-actions">
                 <button
                   type="button"
                   className="btn btn--secondary btn--sm"
@@ -1330,44 +1330,51 @@ export function QuoteVersionsSection({
             quote={open}
             editable={editable}
             saving={saving}
-            onSave={(input) => void run(() => updateQuoteVersion(open.id, input))}
+            onSave={(input) => run(() => updateQuoteVersion(open.id, input))}
             onPendenciaChange={reportarCondicoes}
           />
 
-          <div className="line-actions">
-            <button
-              type="button"
-              className="btn btn--secondary"
-              onClick={() => window.open(`/comercial/orcamentos/${open.id}/imprimir`, "_blank")}
-            >
-              PDF
-            </button>
-
-            {editable && (
+          {/* O documento de um lado, o passo do fluxo do outro. PDF só lê;
+              enviar, aceitar e recusar mudam a proposta — juntos por assunto e
+              longe o bastante de "PDF" para não se clicarem por engano. */}
+          <div className="form-actions form-actions--split">
+            <div className="form-actions__group">
               <button
                 type="button"
-                className="btn btn--accent"
-                /* Rascunho pode nao ter validade; documento do cliente, nao.
-                   A tela previne, e o servidor continua sendo a autoridade.
-                   Condição ou linha por salvar também bloqueia: o envio
-                   congela o gravado, e o gravado não é o que está nos campos. */
-                disabled={saving || open.lines.length === 0 || !open.validUntil || motivo !== null}
-                title={
-                  motivo
-                    ? motivo.titulo
-                    : !open.validUntil
-                      ? "Informe a validade da proposta antes de enviar ao cliente."
-                      : undefined
-                }
-                aria-describedby={motivo ? "quote-send-pending" : undefined}
-                onClick={() => void trySend(open)}
+                className="btn btn--secondary"
+                onClick={() => window.open(`/comercial/orcamentos/${open.id}/imprimir`, "_blank")}
               >
-                Enviar ao cliente
+                PDF
               </button>
+            </div>
+
+            {editable && (
+              <div className="form-actions__group">
+                <button
+                  type="button"
+                  className="btn btn--accent"
+                  /* Rascunho pode nao ter validade; documento do cliente, nao.
+                     A tela previne, e o servidor continua sendo a autoridade.
+                     Condição ou linha por salvar também bloqueia: o envio
+                     congela o gravado, e o gravado não é o que está nos campos. */
+                  disabled={saving || open.lines.length === 0 || !open.validUntil || motivo !== null}
+                  title={
+                    motivo
+                      ? motivo.titulo
+                      : !open.validUntil
+                        ? "Informe a validade da proposta antes de enviar ao cliente."
+                        : undefined
+                  }
+                  aria-describedby={motivo ? "quote-send-pending" : undefined}
+                  onClick={() => void trySend(open)}
+                >
+                  Enviar ao cliente
+                </button>
+              </div>
             )}
 
             {canEdit && open.status === "SENT" && (
-              <>
+              <div className="form-actions__group">
                 <button
                   type="button"
                   className="btn btn--secondary"
@@ -1389,7 +1396,7 @@ export function QuoteVersionsSection({
                 >
                   Registrar recusa
                 </button>
-              </>
+              </div>
             )}
           </div>
 

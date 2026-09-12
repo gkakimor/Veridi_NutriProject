@@ -122,7 +122,14 @@ export function IndustrialCostPage() {
 
   const [data, setData] = useState<ProductIndustrialCostResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  /*
+   * A ação em curso pelo nome: o freio de clique duplo continua um só
+   * (`saving`), mas "Salvando…" aparece só no botão que está gravando.
+   */
+  const [acaoEmCurso, setAcaoEmCurso] = useState<string | null>(null);
+  const saving = acaoEmCurso !== null;
+  /** O que a última ação confirmou — uma frase, substituída pela próxima. */
+  const [feito, setFeito] = useState<{ acao: string; texto: string } | null>(null);
 
   const [activateConfirm, setActivateConfirm] = useState(false);
   const [newVersionConfirm, setNewVersionConfirm] = useState(false);
@@ -300,16 +307,23 @@ export function IndustrialCostPage() {
    * que um valor decimal ilegível faz —, e a recusa chega aqui como
    * qualquer outra falha, sem que a requisição saia.
    */
-  async function run(action: () => Promise<unknown>) {
-    setSaving(true);
+  async function run(
+    action: () => Promise<unknown>,
+    retorno?: { acao: string; sucesso?: string },
+  ) {
+    setAcaoEmCurso(retorno?.acao ?? "acao");
     setError(null);
+    setFeito(null);
     try {
       await action();
       load();
+      // Só depois de a ação passar: recusa que caísse aqui deixaria a tela
+      // dizendo "salva" sobre o que não foi gravado.
+      if (retorno?.sucesso) setFeito({ acao: retorno.acao, texto: retorno.sucesso });
     } catch (err) {
       setError(apiErrorMessage(err, "Falha ao executar a ação"));
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
@@ -644,62 +658,88 @@ export function IndustrialCostPage() {
                       </span>
                     </div>
                   </div>
-                  <div className="line-actions">
-                    <button
-                      type="button"
-                      className="btn btn--secondary btn--sm"
-                      disabled={saving || !referenceQuantity.trim()}
-                      onClick={() =>
-                        void run(() =>
-                          updateIndustrialCostVersion(version.id, {
-                            referenceOutputQuantity: exigirDecimal(
-                              referenceQuantity,
-                              "Base de produção",
-                            ),
-                          }),
-                        )
-                      }
-                    >
-                      Salvar base
-                    </button>
-                    {/* Rascunho SEGUE a receita ativa por padrão. Só fica para
-                        trás quando o usuário escolheu outra versão de
-                        propósito — e aí o caminho de volta precisa existir,
-                        senão a fixação vira armadilha. */}
-                    {version.formulationPinned && data.activeFormulationVersionId && (
+                  {/* A base, perto do campo que ela grava; a estrutura inteira
+                      na outra ponta, com a ativação por último. */}
+                  <div className="form-actions form-actions--split">
+                    <div className="form-actions__group">
                       <button
                         type="button"
                         className="btn btn--secondary btn--sm"
-                        disabled={saving}
-                        title="Volta a acompanhar a formulação ativa do produto. As premissas e recursos informados aqui não são apagados."
+                        // Sem alteração pendente não há o que gravar.
+                        disabled={saving || !referenceQuantity.trim() || !baseAlterada}
                         onClick={() =>
-                          void run(() =>
-                            updateIndustrialCostVersion(version.id, {
-                              formulationVersionId: data.activeFormulationVersionId!,
-                            }),
+                          void run(
+                            () =>
+                              updateIndustrialCostVersion(version.id, {
+                                referenceOutputQuantity: exigirDecimal(
+                                  referenceQuantity,
+                                  "Base de produção",
+                                ),
+                              }),
+                            { acao: "base", sucesso: "Base salva." },
                           )
                         }
                       >
-                        Voltar a seguir a formulação ativa V
-                        {data.activeFormulationVersionNumber}
+                        {acaoEmCurso === "base" ? "Salvando…" : "Salvar base"}
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      className="btn btn--accent btn--sm"
-                      disabled={saving}
-                      onClick={() => {
-                        if (!version.complete) {
-                          setActivateConfirm(true);
-                          return;
-                        }
-                        void run(() =>
-                          activateIndustrialCostVersion(version.id, { confirmIncomplete: false }),
-                        );
-                      }}
-                    >
-                      Ativar estrutura
-                    </button>
+                      {/* Pendência antes de confirmação — a mesma que a guarda
+                          de saída já soma, não uma conta paralela. */}
+                      {baseAlterada ? (
+                        <span className="form-status form-status--dirty" role="status">
+                          Alterações não salvas
+                        </span>
+                      ) : (
+                        feito?.acao === "base" && (
+                          <span className="form-status" role="status">
+                            {feito.texto}
+                          </span>
+                        )
+                      )}
+                    </div>
+                    <div className="form-actions__group">
+                      {/* Rascunho SEGUE a receita ativa por padrão. Só fica para
+                          trás quando o usuário escolheu outra versão de
+                          propósito — e aí o caminho de volta precisa existir,
+                          senão a fixação vira armadilha. */}
+                      {version.formulationPinned && data.activeFormulationVersionId && (
+                        <button
+                          type="button"
+                          className="btn btn--secondary btn--sm"
+                          disabled={saving}
+                          title="Volta a acompanhar a formulação ativa do produto. As premissas e recursos informados aqui não são apagados."
+                          onClick={() =>
+                            void run(() =>
+                              updateIndustrialCostVersion(version.id, {
+                                formulationVersionId: data.activeFormulationVersionId!,
+                              }),
+                            )
+                          }
+                        >
+                          Voltar a seguir a formulação ativa V
+                          {data.activeFormulationVersionNumber}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="btn btn--accent btn--sm"
+                        disabled={saving}
+                        onClick={() => {
+                          if (!version.complete) {
+                            setActivateConfirm(true);
+                            return;
+                          }
+                          void run(
+                            () =>
+                              activateIndustrialCostVersion(version.id, {
+                                confirmIncomplete: false,
+                              }),
+                            { acao: "ativar" },
+                          );
+                        }}
+                      >
+                        {acaoEmCurso === "ativar" ? "Ativando…" : "Ativar estrutura"}
+                      </button>
+                    </div>
                   </div>
                 </>
               )}
@@ -1318,8 +1358,9 @@ options={selectableResources.map((resource) => ({
           onCancel={() => setActivateConfirm(false)}
           onConfirm={() => {
             setActivateConfirm(false);
-            void run(() =>
-              activateIndustrialCostVersion(version.id, { confirmIncomplete: true }),
+            void run(
+              () => activateIndustrialCostVersion(version.id, { confirmIncomplete: true }),
+              { acao: "ativar" },
             );
           }}
         />

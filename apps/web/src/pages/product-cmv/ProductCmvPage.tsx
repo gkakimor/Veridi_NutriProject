@@ -664,7 +664,7 @@ export function ProductCmvPage() {
             nenhuma precificação a cita, insistir nela é conviver com um
             retrato errado — a saída fica aqui, sem atravessar duas telas. */}
         {baseDefasada && data?.industrialCostVersionId && (
-          <div className="line-actions">
+          <div className="form-actions">
             <button
               type="button"
               className="btn btn--accent btn--sm"
@@ -762,7 +762,7 @@ export function ProductCmvPage() {
             {/* Os dois resumos continuam visíveis acima; aqui alterna só o
                 detalhe, e o subtítulo sempre nomeia qual está aberto. */}
             {simulation && live && (
-              <div className="line-actions">
+              <div className="form-actions">
                 <button
                   type="button"
                   className={

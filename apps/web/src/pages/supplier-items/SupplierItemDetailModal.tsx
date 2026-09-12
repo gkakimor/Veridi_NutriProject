@@ -49,7 +49,14 @@ export function SupplierItemDetailModal({
   const [supplierItem, setSupplierItem] = useState<SupplierItemDetailDTO | null>(null);
   const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  /*
+   * A ação em curso pelo nome: o freio de clique duplo continua um só
+   * (`saving`), mas "Salvando…" aparece só no botão que está gravando.
+   */
+  const [acaoEmCurso, setAcaoEmCurso] = useState<string | null>(null);
+  const saving = acaoEmCurso !== null;
+  /** O que a última ação confirmou — uma frase, substituída pela próxima. */
+  const [feito, setFeito] = useState<{ acao: string; texto: string } | null>(null);
   const [confirmarInativacao, setConfirmarInativacao] = useState(false);
 
   const [supplierItemCode, setSupplierItemCode] = useState("");
@@ -97,17 +104,24 @@ export function SupplierItemDetailModal({
       .catch(() => setUnits([]));
   }, [load]);
 
-  async function run(action: () => Promise<SupplierItemDetailDTO>, onDone?: () => void) {
-    setSaving(true);
+  async function run(
+    action: () => Promise<SupplierItemDetailDTO>,
+    onDone?: () => void,
+    retorno?: { acao: string; sucesso?: string },
+  ) {
+    setAcaoEmCurso(retorno?.acao ?? "acao");
     setError(null);
+    setFeito(null);
     try {
       const updated = await action();
       setSupplierItem(updated);
       onDone?.();
+      // Só com a resposta do servidor em mãos: falha nunca vira "salvos".
+      if (retorno?.sucesso) setFeito({ acao: retorno.acao, texto: retorno.sucesso });
     } catch (err) {
       setError(apiErrorMessage(err, "Falha ao executar a ação"));
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
@@ -275,65 +289,86 @@ export function SupplierItemDetailModal({
               </div>
             </div>
 
-            <div className="line-actions">
-              <button
-                type="button"
-                className="btn btn--secondary btn--sm"
-                disabled={saving}
-                onClick={() =>
-                  void run(() =>
-                    updateSupplierItem(supplierItem.id, {
-                      supplierItemCode: supplierItemCode.trim() || null,
-                      commercialNotes: commercialNotes.trim() || null,
-                    }),
-                  )
-                }
-              >
-                Salvar dados comerciais
-              </button>
+            <div className="form-actions form-actions--split">
+              <div className="form-actions__group">
+                <button
+                  type="button"
+                  className="btn btn--secondary btn--sm"
+                  // Sem alteração pendente não há o que gravar.
+                  disabled={saving || !comercialPendente}
+                  onClick={() =>
+                    void run(
+                      () =>
+                        updateSupplierItem(supplierItem.id, {
+                          supplierItemCode: supplierItemCode.trim() || null,
+                          commercialNotes: commercialNotes.trim() || null,
+                        }),
+                      undefined,
+                      { acao: "comercial", sucesso: "Dados comerciais salvos." },
+                    )
+                  }
+                >
+                  {acaoEmCurso === "comercial" ? "Salvando…" : "Salvar dados comerciais"}
+                </button>
 
-              {/* Preferencial é decisão operacional — não muda porque alguém baixou o preço. */}
-              <button
-                type="button"
-                className="btn btn--secondary btn--sm"
-                disabled={
-                  saving ||
-                  (!supplierItem.preferred &&
-                    (supplierItem.qualificationStatus !== "APPROVED" || !supplierItem.active))
-                }
-                onClick={() =>
-                  void run(() => setSupplierItemPreferred(supplierItem.id, !supplierItem.preferred))
-                }
-              >
-                {supplierItem.preferred ? "Remover preferencial" : "Marcar como preferencial"}
-              </button>
+                {/* Preferencial é decisão operacional — não muda porque alguém baixou o preço. */}
+                <button
+                  type="button"
+                  className="btn btn--secondary btn--sm"
+                  disabled={
+                    saving ||
+                    (!supplierItem.preferred &&
+                      (supplierItem.qualificationStatus !== "APPROVED" || !supplierItem.active))
+                  }
+                  onClick={() =>
+                    void run(() =>
+                      setSupplierItemPreferred(supplierItem.id, !supplierItem.preferred),
+                    )
+                  }
+                >
+                  {supplierItem.preferred ? "Remover preferencial" : "Marcar como preferencial"}
+                </button>
+
+                {/* No fim do grupo: aparecer e sumir não empurra botão nenhum
+                    para baixo do cursor. A pendência é a mesma da guarda. */}
+                {comercialPendente ? (
+                  <span className="form-status form-status--dirty" role="status">
+                    Alterações não salvas
+                  </span>
+                ) : (
+                  feito?.acao === "comercial" && (
+                    <span className="form-status" role="status">
+                      {feito.texto}
+                    </span>
+                  )
+                )}
+              </div>
 
               {/*
                   A ação menos reversível do painel tinha o menor peso visual:
                   texto puro ENTRE dois botões com borda. Ganhou a variante
                   destrutiva e a confirmação; o que faltava era sair do meio do
                   grupo de rotina — encostada em "Salvar" e "Preferencial" ela
-                  continuava vizinha de quem só queria salvar. Agora fica no fim
-                  da linha, separada. Reativar é construtivo e segue discreto.
+                  continuava vizinha de quem só queria salvar. Agora é um grupo
+                  próprio, na outra ponta da barra. Reativar é construtivo e
+                  segue discreto.
               */}
-              <button
-                type="button"
-                className={
-                  supplierItem.active
-                    ? "btn btn--danger btn--sm btn--set-apart"
-                    : "btn btn--ghost btn--sm btn--set-apart"
-                }
-                disabled={saving}
-                onClick={() => {
-                  if (supplierItem.active) {
-                    setConfirmarInativacao(true);
-                    return;
-                  }
-                  void run(() => updateSupplierItem(supplierItem.id, { active: true }));
-                }}
-              >
-                {supplierItem.active ? "Inativar relação" : "Reativar relação"}
-              </button>
+              <div className="form-actions__group">
+                <button
+                  type="button"
+                  className={supplierItem.active ? "btn btn--danger btn--sm" : "btn btn--ghost btn--sm"}
+                  disabled={saving}
+                  onClick={() => {
+                    if (supplierItem.active) {
+                      setConfirmarInativacao(true);
+                      return;
+                    }
+                    void run(() => updateSupplierItem(supplierItem.id, { active: true }));
+                  }}
+                >
+                  {supplierItem.active ? "Inativar relação" : "Reativar relação"}
+                </button>
+              </div>
             </div>
           </>
         )}
@@ -355,7 +390,7 @@ export function SupplierItemDetailModal({
           </div>
         )}
 
-        <div className="line-actions">
+        <div className="form-actions">
           {canQualify && (
             <>
               <button
