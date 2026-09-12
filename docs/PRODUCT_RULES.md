@@ -634,10 +634,17 @@ Rules that outlived the round that produced them. The UI side of them lives in
   filters", with a way to clear them — which is a different statement from
   "nothing registered".
 - **A checkbox is a promise that something can be done with the selection.**
-  Selection is page-local, the counter never refers to rows the person can no
-  longer see, and changing a filter clears it. Selection never implies bulk
-  mutation: approving, releasing quality, shipping, invoicing and cancelling
-  keep their own transactional rules and stay one record at a time.
+  The header checkbox selects **this page** — 20 of 327 results are 20.
+  Selecting every filtered result is a separate, explicit step ("Selecionar
+  todos os N resultados filtrados") offered only once the whole page is
+  selected, and it is kept as the filter plus the rows unchecked afterwards,
+  never as ids gathered in the browser. The counter is the real number
+  selected (filtered total minus exceptions). Changing page keeps the
+  selection; changing a filter clears it; selection never goes to the URL or
+  the session (BULK-SELECTION-FOUNDATION-01 — before it, selection was
+  page-local, as Items still is). Selection never implies bulk mutation:
+  approving, releasing quality, shipping, invoicing and cancelling keep their
+  own transactional rules and stay one record at a time.
 
 # 5.10 Project → Quotation → Cost/Price (capability 47)
 

@@ -1804,6 +1804,106 @@ td .entity-select {
   text-align: center;
 }
 
+/*
+ * Seleção em massa (BULK-SELECTION-FOUNDATION-01).
+ *
+ * A barra só existe com seleção e fica logo acima da tabela, que é para onde
+ * se olha depois de marcar. Dois grupos, como a barra de ações: o que está
+ * selecionado de um lado; o que fazer com isso, e a saída, do outro.
+ */
+.bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-3);
+  margin-bottom: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--v-green-700);
+  border-radius: var(--radius-sm);
+  background: var(--selected-bg);
+  font-size: var(--fs-sm);
+}
+
+.bulk-bar__group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  min-width: 0;
+}
+
+.bulk-bar__count {
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.bulk-bar__hint {
+  color: var(--ink-2);
+}
+
+/*
+ * "Selecionar todos os N resultados filtrados" quebra linha em vez de
+ * empurrar a página: com total de quatro dígitos o texto não cabe em 390px, e
+ * o `.btn` tem altura fixa.
+ */
+.bulk-bar__all {
+  height: auto;
+  min-height: 28px;
+  max-width: 100%;
+  padding-top: var(--sp-1);
+  padding-bottom: var(--sp-1);
+  color: var(--v-green-700);
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/*
+ * Coluna de seleção da foundation. O rótulo ocupa a célula: a caixa tem
+ * 16px, o alvo de clique e de toque tem 40px — sem engordar a linha.
+ */
+.table th.table__select--bulk,
+.table td.table__select--bulk {
+  width: 1%;
+  padding: 0 var(--sp-1);
+}
+
+.bulk-select {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 40px;
+  cursor: pointer;
+}
+
+.bulk-select input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--v-green-700);
+  cursor: pointer;
+}
+
+.bulk-select:has(input:disabled),
+.bulk-select input:disabled {
+  cursor: default;
+}
+
+/* Linha marcada se lê marcada — inclusive a coluna de ação fixa, que pinta fundo próprio. */
+.table tbody tr:has(> .table__select--bulk input:checked),
+.table--sticky-actions tbody tr:has(> .table__select--bulk input:checked) td:last-child {
+  background: var(--selected-bg);
+}
+
+/* 390px: cada grupo na própria linha; a contagem nunca some e a saída continua à mão. */
+@media (max-width: 480px) {
+  .bulk-bar__group {
+    width: 100%;
+  }
+}
+
 /* Diz a que a barra de filtros se aplica quando há mais de uma tabela. */
 .toolbar__scope {
   margin-bottom: var(--sp-2);

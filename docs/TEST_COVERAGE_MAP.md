@@ -105,6 +105,15 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Período da OC por data do pedido é DIA CIVIL em marcador (`intervaloDeDiasCivis`, fim exclusivo): "10/09" traz a OC de 10/09 e não a de 11/09; data inválida recusada; CSV com o mesmo recorte | FILTER-OPERATIONS-WAVE-03: `orderDate` é data de documento (meia-noite UTC); o intervalo de dias comerciais erraria o dia inteiro | `modules/purchase-orders/purchase-orders.test.ts` ("o mesmo dia nas duas pontas"), `lib/business-day.test.ts` ("intervaloDeDiasCivis"), `web pages/purchase-orders/oc-filtros.test.tsx` |
 | A lembrança de sessão guarda o que a PESSOA escolheu na tela, nunca o que um link entregou | um link de contexto reescrevia a visão padrão: depois de "Liberação de lotes", "Lotes" — o mesmo endereço sem query — abria na quarentena | `web lib/list-filters.test.tsx` ("a sessão guarda escolha, não contexto de link") |
 
+## Seleção em massa
+
+| Regra | Origem do risco | Proteção canônica |
+|---|---|---|
+| Cabeçalho marca a PÁGINA (20 de 327); "Selecionar todos os N resultados filtrados" só aparece com a página inteira e é o único caminho para o modo `filtered`; cabeçalho unchecked/indeterminate/checked | BULK-SELECTION-FOUNDATION-01: checkbox de cabeçalho lido como "tudo" seleciona registros que ninguém viu | `web components/bulk-selection.test.tsx` |
+| Modo `filtered` é filtro + `excludedIds`, nunca ids carregados: desmarcar vira exceção sem sair do modo, remarcar tira, contagem = total − exceções, desmarcar todos volta a nada | BULK-SELECTION-FOUNDATION-01 — juntar ids com `pageSize` grande ou varrendo páginas | `web components/bulk-selection.test.tsx`, `web pages/customer-orders/pedidos-selecao-em-massa.test.tsx`, `web pages/production-orders/op-selecao-em-massa.test.tsx` (nenhuma consulta nova, `pageSize` 20) |
+| Trocar de página preserva e restaura as caixas; trocar filtro limpa (por valor: objeto novo igual, `page` e campo vazio não limpam; voltar ao filtro antigo não ressuscita); nada em URL, sessão ou localStorage; id estável | BULK-SELECTION-FOUNDATION-01 | `web components/bulk-selection.test.tsx`, os dois pilotos acima |
+| Descritor de Pedidos e OP leva o recorte da consulta (status, cliente/produto, busca); caixa e Enter na célula não abrem o registro; gesto ignorado durante a consulta; `colSpan` do vazio cobre a coluna | BULK-SELECTION-FOUNDATION-01 | os dois pilotos acima, `web components/bulk-selection.test.tsx` |
+
 ## Comercial, expedição e faturamento
 
 | Regra | Origem do risco | Proteção canônica |

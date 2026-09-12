@@ -1,5 +1,11 @@
 import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  BulkSelectionBar,
+  BulkSelectionCell,
+  BulkSelectionHeaderCell,
+  useBulkSelection,
+} from "../../components/BulkSelection";
 import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { Link, useNavigate } from "react-router-dom";
@@ -178,6 +184,17 @@ export function ProductionOrdersPage() {
     reload();
   }, [reload]);
 
+  /*
+   * Seleção em massa sobre o MESMO recorte da consulta e do CSV. Ainda sem
+   * ação, e nada no ciclo de vida da OP muda por estar selecionada.
+   */
+  const selecao = useBulkSelection({
+    pageIds: productionOrders.map((op) => op.id),
+    total,
+    filters: filtrosDaConsulta,
+    loading,
+  });
+
   const chips: FilterChip[] = [];
   if (search) {
     chips.push({ label: "Busca", value: search, onRemove: () => set({ search: "" }) });
@@ -258,10 +275,13 @@ export function ProductionOrdersPage() {
 
       {error && <p className="form-alert" role="alert">{error}</p>}
 
+      <BulkSelectionBar selection={selecao} />
+
       <div className="table-container">
         <table className="table table--clickable-rows table--sticky-actions">
           <thead>
             <tr>
+              <BulkSelectionHeaderCell selection={selecao} />
               <th className="col-tight">OP</th>
               <th className="col-flex">Produto</th>
               <th className="col-flex">Cliente</th>
@@ -283,6 +303,11 @@ export function ProductionOrdersPage() {
                   if (event.key === "Enter") navigate(`/producao/ordens/${op.id}`);
                 }}
               >
+                <BulkSelectionCell
+                  selection={selecao}
+                  id={op.id}
+                  label={`Selecionar ordem de produção ${op.code}`}
+                />
                 <td className="col-tight is-code">
                   <EntityLink kind="productionOrder" id={op.id} code={op.code} />
                   {op.customerOrderId && (
@@ -339,7 +364,7 @@ export function ProductionOrdersPage() {
 
             {!loading && productionOrders.length === 0 && (
               <tr>
-                <td colSpan={9} className="table__empty">
+                <td colSpan={10} className="table__empty">
                   {isActive ? (
                     <>
                       Nenhuma ordem de produção encontrada para os filtros atuais.{" "}
