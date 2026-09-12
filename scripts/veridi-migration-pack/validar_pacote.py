@@ -2,12 +2,15 @@
 """
 Valida o pacote de revisão da migração — o gerado agora ou o devolvido pela Veridi.
 
-    python scripts/veridi-migration-pack/validar_pacote.py <pasta> [--devolucao] [--relatorio arquivo.txt]
+    python scripts/veridi-migration-pack/validar_pacote.py <pasta> [--devolucao]         [--referencia <pasta do pacote anterior>] [--relatorio arquivo.txt]
 
 ERRO reprova (exit 1); AVISO só informa. Na geração, todo registro nasce com
 STATUS_REVISAO = REVISAR e o custo de referência de cada item tem de bater com
 os preços dos arquivos 06/07. Com --devolucao, o que depende da decisão da
 Veridi (status, custo informado por ela, preço recalculado) vira AVISO.
+Com --referencia, compara o pacote com a revisão anterior: nenhuma CHAVE_MIGRACAO
+pode sumir, aparecer ou mudar, e nenhuma coluna obrigatória de antes pode ter
+sido apagada ou virado opcional. Colunas novas opcionais são permitidas.
 Só lê os .xlsx: não conecta em banco nenhum.
 """
 
@@ -213,6 +216,11 @@ def validar_arquivo(pasta: Path, arquivo: str, rel: Relatorio, devolucao: bool) 
                 p["PROBLEMA"] == "DOCUMENTO_INVALIDO" for p in pend_por_chave.get(chave, [])
             ):
                 (rel.aviso if devolucao else rel.erro)(arquivo, f"{chave}: CNPJ inválido")
+        if arquivo in (F.CLIENTES, F.FORNECEDORES) and linha.get("CEP") not in (None, ""):
+            if not R.cep_valido(str(linha["CEP"])):
+                rel.erro(arquivo, f"linha {numero} ({chave}): CEP {linha['CEP']!r} não tem 8 dígitos "
+                                  "(a máscara 00000-000 é aceita; formate a célula como TEXTO para não perder "
+                                  "o zero à esquerda)")
         if arquivo == F.PRECOS:
             _validar_preco(arquivo, linha, rel, devolucao)
         if arquivo == F.OFERTAS:
@@ -236,6 +244,8 @@ def validar_arquivo(pasta: Path, arquivo: str, rel: Relatorio, devolucao: bool) 
 
     return {
         "chaves": chaves,
+        "colunas": [s.nome for s in specs],
+        "obrigatorias": {s.nome for s in specs if s.obrigatorio},
         "linhas": linhas,
         "status": Counter(l.get(coluna_status) for l in linhas),
         "pendencias": len(pendencias),
@@ -382,19 +392,86 @@ def validar_relacoes(resultados: dict, rel: Relatorio, devolucao: bool) -> None:
             rel.erro(F.MAPA, f"chave {chave} do mapa não existe nos arquivos de cadastro")
 
 
+def comparar_com_referencia(pasta: Path, resultados: dict, rel: Relatorio) -> None:
+    """Confere o pacote contra a revisão anterior: chaves e colunas obrigatórias.
+
+    O contrato entre revisões é a CHAVE_MIGRACAO. Coluna nova opcional pode
+    entrar; chave não pode sumir, aparecer nem mudar, e coluna obrigatória de
+    antes não pode desaparecer nem virar opcional.
+    """
+    for arquivo in F.ARQUIVOS:
+        if arquivo not in resultados:
+            continue  # comparação parcial (um arquivo só) — não é arquivo ausente
+        atual = resultados[arquivo]
+        caminho = pasta / f"{arquivo}.xlsx"
+        if not caminho.exists():
+            rel.aviso(arquivo, f"sem arquivo correspondente na referência ({pasta}) — comparação não feita")
+            continue
+        if not atual:
+            rel.erro(arquivo, "não validado: comparação com a referência não é possível")
+            continue
+        try:
+            wb = load_workbook(caminho, read_only=True)
+        except Exception as falha:  # noqa: BLE001 — referência ilegível reprova a comparação
+            rel.erro(arquivo, f"referência não abre: {falha}")
+            continue
+        try:
+            ws = wb["DADOS"]
+            bruto = [str(c.value) if c.value is not None else "" for c in ws[LINHA_CABECALHO]]
+            cabecalho = [c.removesuffix(" *") for c in bruto]
+            obrigatorias = {c.removesuffix(" *") for c in bruto if c.endswith(" *")}
+            if "CHAVE_MIGRACAO" not in cabecalho:
+                rel.erro(arquivo, "referência sem coluna CHAVE_MIGRACAO")
+                continue
+            indice = cabecalho.index("CHAVE_MIGRACAO")
+            antes = {
+                str(valores[indice])
+                for valores in ws.iter_rows(min_row=PRIMEIRA_LINHA, values_only=True)
+                if valores[indice] not in (None, "")
+            }
+        finally:
+            wb.close()
+
+        for coluna in sorted(set(cabecalho) - set(atual["colunas"])):
+            if coluna:
+                rel.erro(arquivo, f"coluna {coluna} existia na referência e sumiu")
+        for coluna in sorted(obrigatorias - atual["obrigatorias"]):
+            if coluna in atual["colunas"]:
+                rel.erro(arquivo, f"coluna {coluna} era obrigatória na referência e deixou de ser")
+
+        sumiram = sorted(antes - atual["chaves"])
+        novas = sorted(atual["chaves"] - antes)
+        for chave in sumiram[:20]:
+            rel.erro(arquivo, f"CHAVE_MIGRACAO {chave} existia na referência e não está no pacote")
+        if len(sumiram) > 20:
+            rel.erro(arquivo, f"mais {len(sumiram) - 20} chave(s) da referência ausentes")
+        for chave in novas[:20]:
+            rel.erro(arquivo, f"CHAVE_MIGRACAO {chave} não existe na referência (chave nova)")
+        if len(novas) > 20:
+            rel.erro(arquivo, f"mais {len(novas) - 20} chave(s) novas")
+        if not sumiram and not novas:
+            rel.aviso(arquivo, f"{len(antes)} chaves conferem com a referência (nenhuma nova, nenhuma ausente)")
+
+
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("pasta", type=Path)
     parser.add_argument("--devolucao", action="store_true", help="valida arquivos já editados pela Veridi")
+    parser.add_argument("--referencia", type=Path,
+                        help="pasta do pacote anterior: confere chaves e colunas obrigatórias preservadas")
     parser.add_argument("--relatorio", type=Path, help="grava o relatório neste arquivo")
     args = parser.parse_args()
 
     rel = Relatorio()
     resultados = {arquivo: validar_arquivo(args.pasta, arquivo, rel, args.devolucao) for arquivo in F.ARQUIVOS}
     validar_relacoes(resultados, rel, args.devolucao)
+    if args.referencia:
+        comparar_com_referencia(args.referencia, resultados, rel)
 
     saida = [f"VALIDAÇÃO DO PACOTE — {args.pasta}", ""]
+    if args.referencia:
+        saida[1:1] = [f"Referência: {args.referencia}"]
     for arquivo, r in resultados.items():
         if r:
             saida.append(

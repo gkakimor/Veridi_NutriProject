@@ -253,7 +253,7 @@ def valores_permitidos(arquivo: str) -> list[dict]:
         F.MAPA: [("TIPO_ENTIDADE", "TIPO_ENTIDADE"), ("STATUS_VALIDACAO", "STATUS_VALIDACAO")],
         F.CLIENTES: [("PERFIL_TRIBUTARIO", "PERFIL_TRIBUTARIO"), ("UF", "UF"), ("ATIVO", "SIM_NAO"),
                      ("STATUS_REVISAO", "STATUS_REVISAO")],
-        F.FORNECEDORES: [("ATIVO", "SIM_NAO"), ("STATUS_REVISAO", "STATUS_REVISAO")],
+        F.FORNECEDORES: [("UF", "UF"), ("ATIVO", "SIM_NAO"), ("STATUS_REVISAO", "STATUS_REVISAO")],
         F.MATERIAS_PRIMAS: _BLOCOS_ITEM,
         F.EMBALAGENS: _BLOCOS_ITEM,
         F.PRODUTOS: [("UNIDADE_ESTOQUE", "UNIDADE"), ("EXIGE_COA_LAUDO", "SIM_NAO"),
@@ -327,6 +327,8 @@ OBS_REVISAO = Coluna(
 )
 
 _VAZIO_LEGADO = "vazio — não existe no legado; preencher se souber"
+_ENDERECO_MANUAL = "vazio — preenchimento manual na revisão (o legado só tem o nome do fornecedor)"
+_ENDERECO_OPCIONAL = "Opcional. O fornecedor pode ser aprovado sem endereço; deixar vazio não gera pendência."
 
 
 def colunas(arquivo: str) -> list[Coluna]:
@@ -404,6 +406,23 @@ def colunas(arquivo: str) -> list[Coluna]:
                    largura=28),
             _texto("TELEFONE", "Tela Fornecedor › Contato › Telefone.", _VAZIO_LEGADO, formato="(11) 99999-8888",
                    numero=TEXTO, largura=16),
+            _texto("CEP", "Tela Fornecedor › Endereço › CEP.", _ENDERECO_MANUAL, formato="00000-000",
+                   observacao=_ENDERECO_OPCIONAL + " Quando preenchido, precisa ter 8 dígitos.", numero=TEXTO,
+                   largura=11),
+            _texto("LOGRADOURO", "Tela Fornecedor › Endereço › Logradouro (rua, avenida, rodovia…).",
+                   _ENDERECO_MANUAL, observacao=_ENDERECO_OPCIONAL, quebra=True, largura=32),
+            _texto("NUMERO", "Tela Fornecedor › Endereço › Número.", _ENDERECO_MANUAL,
+                   observacao=_ENDERECO_OPCIONAL, numero=TEXTO, largura=10),
+            _texto("COMPLEMENTO", "Tela Fornecedor › Endereço › Complemento (sala, galpão, bloco…).",
+                   _ENDERECO_MANUAL, observacao=_ENDERECO_OPCIONAL, largura=16),
+            _texto("BAIRRO", "Tela Fornecedor › Endereço › Bairro.", _ENDERECO_MANUAL,
+                   observacao=_ENDERECO_OPCIONAL, largura=22),
+            _texto("CIDADE", "Tela Fornecedor › Endereço › Cidade.", _ENDERECO_MANUAL,
+                   observacao=_ENDERECO_OPCIONAL, largura=22),
+            Coluna("UF", "Tela Fornecedor › Endereço › UF (sigla do estado).", tipo="Lista", formato="2 letras",
+                   valores=_valores("UF"), origem=_ENDERECO_MANUAL,
+                   observacao=_ENDERECO_OPCIONAL + " Quando preenchida, precisa ser uma das siglas da lista.",
+                   largura=8),
             _texto("NOTAS_INTERNAS", "Tela Fornecedor › Observações › Notas internas.", _VAZIO_LEGADO, quebra=True,
                    largura=36),
             _sim_nao("ATIVO", "Tela Fornecedor › Status (Ativo/Inativo).", "padrão do sistema: SIM"),
@@ -743,9 +762,16 @@ REGRAS = {
     ],
     F.FORNECEDORES: [
         _REGRA_STATUS,
-        ("Campos", "Mesmos campos da tela Fornecedor (Identificação, Contato, Observações, Status)."),
+        ("Campos", "Mesmos campos da tela Fornecedor (Identificação, Contato, Endereço, Observações, Status)."),
         ("Legado", "fornecedores.csv (nomes distintos das compras + abas MP dos CMVs): só o nome. RAZAO_SOCIAL_NOME "
          "começa igual ao nome da planilha; os demais campos da tela vêm vazios (ATIVO = SIM). Nada foi inventado."),
+        ("Endereço", "CEP, LOGRADOURO, NUMERO, COMPLEMENTO, BAIRRO, CIDADE e UF chegam TODOS VAZIOS e são TODOS "
+         "OPCIONAIS. A planilha legada não tem endereço de fornecedor: não foi pesquisado, não foi deduzido e não "
+         "foi preenchido automaticamente. A Veridi preenche à mão o que souber, no todo ou em parte. Fornecedor sem "
+         "endereço pode ser aprovado normalmente — endereço vazio não é pendência e não impede a carga."),
+        ("Endereço — conferência", "Só o que estiver preenchido é conferido: CEP com 8 dígitos (a máscara "
+         "00000-000 é aceita) e UF entre as 27 siglas da aba VALORES_PERMITIDOS. Preencher apenas a cidade, "
+         "apenas a UF ou qualquer combinação parcial é válido."),
         ("Duplicidade", "Nomes parecidos são apontados (mesmo nome sem espaços ou sem anotação, um contido no outro, "
          "grafia quase igual, palavra própria em comum) com o uso de cada um em preços e compras. Nada foi fundido."),
     ],

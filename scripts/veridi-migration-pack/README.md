@@ -28,17 +28,27 @@ num ambiente próprio:
 python -m venv "$TEMP/veridi-pack"
 "$TEMP/veridi-pack/Scripts/pip" install -r scripts/veridi-migration-pack/requirements.txt
 "$TEMP/veridi-pack/Scripts/python" scripts/veridi-migration-pack/gerar_pacote.py
-"$TEMP/veridi-pack/Scripts/python" scripts/veridi-migration-pack/validar_pacote.py handoff/migracao-producao/revisao-01
+"$TEMP/veridi-pack/Scripts/python" scripts/veridi-migration-pack/validar_pacote.py handoff/migracao-producao/revisao-02
 "$TEMP/veridi-pack/Scripts/python" -m unittest discover -s scripts/veridi-migration-pack
 ```
 
 - `--dados` (padrão `../.local-data/veridi`) e `--saida` (padrão
-  `handoff/migracao-producao/revisao-01`) mudam as pastas.
+  `handoff/migracao-producao/revisao-<revisao>`) mudam as pastas.
+- `--revisao` (padrão `02`) só numera o pacote: pasta padrão, manifesto e aba
+  ORIGEM. Não muda dado nenhum — a `CHAVE_MIGRACAO` é a mesma em toda revisão.
 - `--pesquisa-nova` aponta a pesquisa pública complementar (padrão
   `market-reference/pesquisa-publica-2026-09-11.tsv` dentro de `--dados`).
 - `validar_pacote.py --devolucao` valida os arquivos já editados pela Veridi:
   as regras que dependem da decisão dela (STATUS × pendência, preço recalculado)
   viram aviso.
+- `validar_pacote.py --referencia <pacote anterior>` compara duas revisões:
+  chave que sumiu, chave nova, coluna que desapareceu e coluna obrigatória que
+  virou opcional reprovam. Coluna nova opcional passa.
+- `test_devolucao.py` roda os cenários de devolução do 02 (endereço vazio,
+  parcial e completo; CEP e UF inválidos; chave alterada; status inválido) numa
+  **cópia temporária** do workbook — o handoff nunca é tocado. Sem pacote
+  gerado, esses testes são pulados; `VERIDI_PACOTE` e `VERIDI_PACOTE_REFERENCIA`
+  apontam outras pastas.
 
 Nada disso conecta em banco. A saída tem dado real de cliente e fornecedor e fica
 fora do Git (`handoff/` e `.local-data/` estão no `.gitignore`).
@@ -72,6 +82,12 @@ foram montadas a partir de um banco DEV; a oferta do legado vem direto de
 - **Colunas = campos das telas do ERP** (Cliente, Fornecedor, Item, Produto,
   Item × Fornecedor), na ordem das seções. Campo sem dado no legado vem com o
   padrão do sistema ou vazio; só é obrigatório o que a tela exige.
+- **Endereço** (Cliente e Fornecedor): `CEP`, `LOGRADOURO`, `NUMERO`,
+  `COMPLEMENTO`, `BAIRRO`, `CIDADE`, `UF`. No Fornecedor saem todos vazios — o
+  legado só tem o nome — e são todos opcionais: fornecedor sem endereço é
+  aprovado normalmente, vazio não gera pendência. Preenchido, vale a regra do
+  runtime: CEP com 8 dígitos (máscara aceita) e UF entre as 27 siglas. Nenhum
+  endereço é pesquisado, deduzido ou preenchido automaticamente.
 - **Custo de referência** (03/04): mediana das ofertas de fornecedor do legado
   (07) na unidade do item; sem oferta utilizável, mediana dos preços públicos
   (06). Todas as ofertas e preços do item ficam listados na própria linha.
@@ -96,10 +112,11 @@ dimensões) e classifica a confiança (ALTA/MEDIA/BAIXA, critério na aba ORIGEM
 
 | Arquivo | Papel |
 | --- | --- |
-| `regras.py` | regras puras: chaves, CNPJ, endereço, família, pureza, preço, confiança, semelhança de nomes |
+| `regras.py` | regras puras: chaves, CNPJ, endereço (CEP, UF), família, pureza, preço, confiança, semelhança de nomes |
 | `fontes.py` | leitura das fontes e consolidação (registros, pendências, legado não importado) |
 | `layout.py` | colunas, dicionário, valores permitidos e textos de cada arquivo |
 | `planilha.py` | escrita padronizada dos .xlsx (estilo, tabela, listas suspensas) |
 | `gerar_pacote.py` | gera os 8 arquivos e o manifesto |
-| `validar_pacote.py` | valida o pacote gerado ou devolvido |
+| `validar_pacote.py` | valida o pacote gerado ou devolvido, e compara com a revisão anterior |
 | `test_regras.py` | testes das regras |
+| `test_devolucao.py` | cenários de devolução do 02 sobre cópia temporária do workbook |

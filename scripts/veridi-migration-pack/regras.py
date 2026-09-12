@@ -192,6 +192,16 @@ def extrair_cep(bruto: str) -> str:
     return f"{digitos[:5]}-{digitos[5:]}" if len(digitos) == 8 else ""
 
 
+def cep_valido(valor: str) -> bool:
+    """Espelha `optionalZipCode`: a máscara é aceita, o que vale são 8 dígitos."""
+    return len(so_digitos(valor)) == 8
+
+
+def uf_valida(valor: str) -> bool:
+    """Espelha `optionalBrState`: maiúscula e dentro da lista oficial."""
+    return (valor or "").strip().upper() in UFS
+
+
 def sem_cep_no_fim(valor: str) -> str:
     """Tira um "-CEP: 86.041-310" colado no fim do bairro (o parser legado o mantém)."""
     return _CEP_NO_FIM.sub("", valor or "").strip(" ,;-") if valor else valor

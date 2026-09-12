@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """
 Gera o pacote de revisão de cadastros para a migração de produção
-(PROD-MASTER-MIGRATION-PACK-01, revisão 01).
+(PROD-MASTER-MIGRATION-PACK-01).
 
     python scripts/veridi-migration-pack/gerar_pacote.py
-        [--dados ../.local-data/veridi] [--saida handoff/migracao-producao/revisao-01]
+        [--dados ../.local-data/veridi] [--revisao 02] [--saida handoff/migracao-producao/revisao-02]
         [--pesquisa-nova market-reference/pesquisa-publica-2026-09-11.tsv]
+
+`--revisao` só numera o pacote (pasta padrão, manifesto e aba ORIGEM). Não muda
+nenhum dado: a CHAVE_MIGRACAO é a mesma em todas as revisões.
 
 Só LÊ as fontes locais (nenhum banco, nenhuma rede) e só ESCREVE os .xlsx e o
 MANIFESTO na pasta de saída. A pasta de saída tem dado real de cliente e
@@ -30,7 +33,8 @@ from planilha import Tabela, salvar_workbook  # noqa: E402
 
 REPO = AQUI.parents[1]
 DADOS_PADRAO = REPO.parent / ".local-data" / "veridi"
-SAIDA_PADRAO = REPO / "handoff" / "migracao-producao" / "revisao-01"
+REVISAO_PADRAO = "02"
+PASTA_REVISOES = REPO / "handoff" / "migracao-producao"
 PESQUISA_PADRAO = Path("market-reference") / "pesquisa-publica-2026-09-11.tsv"
 
 ORDEM_ENTIDADES = ["CLIENTE", "FORNECEDOR", "MATERIA_PRIMA", "EMBALAGEM", "PRODUTO", "ITEM_PRODUTO_ACABADO"]
@@ -169,7 +173,7 @@ def linhas_origem(arquivo: str, pac: F.Pacote, info: dict, registros: list[dict]
         linhas.append({"SECAO": secao, "ITEM": item, "DETALHE": detalhe})
 
     incluir("PACOTE", "Situação", L.AVISO)
-    incluir("PACOTE", "Identificação", f"PROD-MASTER-MIGRATION-PACK-01 · revisão 01 · {arquivo}")
+    incluir("PACOTE", "Identificação", f"PROD-MASTER-MIGRATION-PACK-01 · revisão {info['revisao']} · {arquivo}")
     incluir("PACOTE", "Gerado em", info["gerado_em"].strftime("%d/%m/%Y %H:%M"))
     incluir("PACOTE", "Gerador", f"scripts/veridi-migration-pack/gerar_pacote.py · commit {info['commit']}")
     incluir("PACOTE", "Registros na aba DADOS", str(len(registros)))
@@ -288,7 +292,7 @@ def escrever_manifesto(saida: Path, pac: F.Pacote, info: dict, resumo: dict[str,
          if p["SITUACAO_PESQUISA"] in ("SEM_REFERENCIA", "PESQUISA_PENDENTE") and p["CHAVE_ITEM"] not in com_preco}
     )
     linhas = [
-        "# PACOTE DE REVISÃO DA MIGRAÇÃO — manifesto (revisão 01)",
+        f"# PACOTE DE REVISÃO DA MIGRAÇÃO — manifesto (revisão {info['revisao']})",
         "",
         f"> **{L.AVISO}**",
         "",
@@ -417,7 +421,10 @@ def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--dados", type=Path, default=DADOS_PADRAO, help="pasta .local-data/veridi")
-    parser.add_argument("--saida", type=Path, default=SAIDA_PADRAO, help="pasta de saída dos .xlsx")
+    parser.add_argument("--revisao", default=REVISAO_PADRAO,
+                        help=f"número da revisão do pacote (padrão: {REVISAO_PADRAO})")
+    parser.add_argument("--saida", type=Path, default=None,
+                        help="pasta de saída dos .xlsx (padrão: handoff/migracao-producao/revisao-<revisao>)")
     parser.add_argument("--pesquisa-nova", type=Path, default=None,
                         help=f"TSV da pesquisa complementar (padrão: <dados>/{PESQUISA_PADRAO.as_posix()}, se existir)")
     args = parser.parse_args()
@@ -428,9 +435,9 @@ def main() -> int:
         return 1
     pesquisa = args.pesquisa_nova or (dados / PESQUISA_PADRAO)
     pac = F.consolidar(dados, pesquisa if pesquisa.exists() else None)
-    info = {"gerado_em": datetime.now(), "commit": commit_atual()}
+    info = {"gerado_em": datetime.now(), "commit": commit_atual(), "revisao": args.revisao}
 
-    saida = args.saida.resolve()
+    saida = (args.saida or PASTA_REVISOES / f"revisao-{args.revisao}").resolve()
     saida.mkdir(parents=True, exist_ok=True)
     resumo = {}
     for arquivo, linhas in linhas_por_arquivo(pac).items():

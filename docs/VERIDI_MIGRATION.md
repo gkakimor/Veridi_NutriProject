@@ -234,10 +234,12 @@ sobrescrita silenciosa).
 
 Antes da carga de produção, os cadastros passam por revisão humana em Excel
 (PROD-MASTER-MIGRATION-PACK-01). `scripts/veridi-migration-pack/` gera, a partir
-do mesmo corpus, oito arquivos em `handoff/migracao-producao/revisao-01/`
+do mesmo corpus, oito arquivos em `handoff/migracao-producao/revisao-<nn>/`
 (fora do Git): mapa de chaves, clientes, fornecedores, matérias-primas,
 embalagens, produtos acabados, referência de mercado e ofertas do legado. Como
 rodar e as regras: [`scripts/veridi-migration-pack/README.md`](../scripts/veridi-migration-pack/README.md).
+A revisão corrente é a **02**; `--revisao` só numera o pacote (pasta, manifesto e
+aba ORIGEM) — a `CHAVE_MIGRACAO` é a mesma em todas as revisões.
 
 - A chave entre os arquivos é a `CHAVE_MIGRACAO`, derivada só do código legado
   (`CLI-LEG-0013`, `ITEM-LEG-0157`, `PROD-LEG-0001PL`…). O código do ERP sai do
@@ -250,11 +252,33 @@ rodar e as regras: [`scripts/veridi-migration-pack/README.md`](../scripts/veridi
 - O custo de referência dos materiais (referência manual) é a mediana das
   ofertas do legado ou, sem elas, dos preços públicos; a referência de mercado
   (arquivo 06) nunca entra como custo de aquisição.
+- **Endereço do fornecedor** (revisão 02, arquivo 02): `CEP`, `LOGRADOURO`,
+  `NUMERO`, `COMPLEMENTO`, `BAIRRO`, `CIDADE` e `UF` — os mesmos campos do
+  Cliente. Saem todos vazios e são todos **opcionais**: o legado deriva o
+  fornecedor só pelo nome e não tem endereço, então nada é pesquisado nem
+  deduzido. Endereço vazio não vira pendência e não impede a carga; a Veridi
+  enriquece à mão o que souber. Só o que estiver preenchido é conferido — CEP
+  com 8 dígitos e UF entre as 27 siglas, as mesmas regras de `optionalZipCode`
+  e `optionalBrState` do runtime.
+- `validar_pacote.py --referencia <pacote anterior>` compara duas revisões:
+  nenhuma `CHAVE_MIGRACAO` pode sumir, aparecer ou mudar, e nenhuma coluna
+  obrigatória de antes pode ter sido apagada ou virado opcional. Coluna nova
+  opcional pode entrar — foi assim que o endereço entrou.
 
 Pontos que a carga a partir do Excel precisa decidir (achados na geração):
 
 - `Supplier` não tem `externalCode`: a `CHAVE_MIGRACAO` do fornecedor deriva do
-  nome, e a idempotência hoje é por `legalName`.
+  nome, e a idempotência hoje é por `legalName`. Dentro do pacote isso é
+  determinístico (113 chaves, nenhuma colisão), mas o reencontro depois do APPLY
+  passa por `supplier.findFirst({ where: { legalName } })`, casamento exato de
+  string, enquanto o mapa em memória usa `normalizeSupplierName`. Duas grafias
+  que normalizam igual viram dois `Supplier` no banco e um só no mapa — é o que
+  as 38 pendências `DUPLICIDADE` do arquivo 02 antecipam.
+- O APPLY ainda não lê o pacote devolvido: `mapSuppliers` monta o fornecedor a
+  partir de `fornecedores.csv` e `supplier.create` grava só `code`, `legalName` e
+  `active`. Enquanto for assim, correção de razão social, `NAO_IMPORTAR` e o
+  endereço novo não chegam a produção. Fechar essa ponte é pré-requisito do
+  APPLY real — não do pacote de revisão.
 - O importador atual não reconhece a família `MINERAIS` (plural) e gravaria
   `OTHER_RAW_MATERIAL`; o pacote já propõe `MINERAL`.
 - Há itens com código só no CMV ou só na planilha de preços, e produtos cuja

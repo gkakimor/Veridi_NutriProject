@@ -74,6 +74,30 @@ class Endereco(unittest.TestCase):
         self.assertEqual(R.sem_cep_no_fim("Monte Belo-CEP: 86.041-310"), "Monte Belo")
 
 
+class EnderecoOpcional(unittest.TestCase):
+    """Endereço de Cliente e Fornecedor: vazio é válido; preenchido tem regra."""
+
+    def test_cep_espelha_o_runtime(self):
+        self.assertTrue(R.cep_valido("13010-000"))
+        self.assertTrue(R.cep_valido("13010000"))
+        self.assertTrue(R.cep_valido("13.010-000"))
+        self.assertFalse(R.cep_valido("1301"))
+        self.assertFalse(R.cep_valido("130100000"))
+        self.assertFalse(R.cep_valido(""))
+
+    def test_uf_espelha_o_runtime(self):
+        self.assertTrue(R.uf_valida("SP"))
+        self.assertTrue(R.uf_valida("sp"))
+        self.assertTrue(R.uf_valida(" DF "))
+        self.assertFalse(R.uf_valida("XX"))
+        self.assertFalse(R.uf_valida("CA"))
+        self.assertFalse(R.uf_valida(""))
+
+    def test_lista_de_uf_tem_as_27(self):
+        self.assertEqual(len(R.UFS), 27)
+        self.assertEqual(R.UFS, sorted(R.UFS))
+
+
 class Item(unittest.TestCase):
     def test_familia(self):
         self.assertEqual(R.familia_do_pacote("MINERAIS"), ("MINERAL", True))

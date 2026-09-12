@@ -443,6 +443,16 @@ def _fornecedores(pac: Pacote, fontes: dict) -> None:
                 "CNPJ": "",
                 "EMAIL": "",
                 "TELEFONE": "",
+                # Endereço: o legado deriva o fornecedor só pelo nome e não tem
+                # endereço confiável. Nasce vazio e é opcional — a Veridi
+                # preenche à mão na revisão. Nada é pesquisado nem deduzido.
+                "CEP": "",
+                "LOGRADOURO": "",
+                "NUMERO": "",
+                "COMPLEMENTO": "",
+                "BAIRRO": "",
+                "CIDADE": "",
+                "UF": "",
                 "NOTAS_INTERNAS": "",
                 "ATIVO": "SIM",
                 "ITENS_FORNECIDOS": itens_fornecidos,
