@@ -308,6 +308,55 @@ operator had to relearn which button commits on every screen. The rule:
     read as "dismiss", which is the opposite action — the ambiguity would
     land on the irreversible button.
 
+### Linha de escolha (`.selection-row`)
+
+Uma opção de radio ou checkbox é uma **linha**, não uma bolinha com texto ao
+lado e o campo dela do outro lado da tela. `.selection-group` empilha as
+linhas com um teto de leitura; `.selection-row` põe rótulo e campo lado a
+lado, e `.selection-row__label` cobre a coluna do rótulo inteira — clicar no
+texto escolhe, sem precisar acertar o controle.
+
+Escolhida (`.selection-row--selected`) muda **três** coisas ao mesmo tempo:
+fundo (`--selected-bg`), borda (`--v-green-700`) e peso do rótulo. Cor
+sozinha não comunica estado, e o próprio radio/checkbox continua sendo o
+indicador que teclado e leitor de tela usam — nada de `aria-label`
+inventado por cima do label. O campo de valor de um modo não escolhido fica
+desabilitado, **com o valor preservado**: desligar não apaga.
+
+Variantes: `--plain` (sem caixa, para lista de marcação simples, quando o
+que falta é alinhamento e não um card) e `.selection-row__hint` (a
+explicação da opção dentro da própria linha, ligada por
+`aria-describedby` em vez de engolida pelo nome acessível do controle).
+
+### Barra de ações de formulário (`.form-actions`)
+
+Ações **dentro** de um formulário usam `.form-actions`, com o mesmo
+`gap: var(--sp-3)` e a mesma quebra da `.doc-actions` do cabeçalho do
+documento. `--split` separa os assuntos nas pontas e
+`.form-actions__group` junta o que pertence ao mesmo; em 480px os grupos
+ocupam a linha inteira e os botões esticam — a fonte do botão **nunca**
+encolhe para caber.
+
+Nunca resolver isso com regra genérica (`button + button { margin… }`):
+espaçamento de ação é classe explícita, aplicada onde se quis aplicar.
+
+`.line-actions` é o padrão **antigo** — só `margin-top`, sem gap nenhum —
+e continua em ~27 blocos com botões irmãos encostados. Tela tocada migra
+para `.form-actions`; migração em massa é trabalho de onda própria.
+
+### Gravou? A tela responde
+
+Botão que grava troca o rótulo para `Salvando…` enquanto a chamada está no
+ar e fica desabilitado — clique duplo não grava duas vezes. No sucesso, uma
+frase curta ao lado do botão (`role="status"`), **uma só**: um estado, não
+uma pilha de avisos, e nada de `alert()` ou modal. A frase nomeia o que foi
+gravado — "Rascunho salvo." nunca pode ser lida como "Versão ativada.".
+
+Pendência vem antes de confirmação: enquanto o bloco está sujo a mesma faixa
+diz `Alterações não salvas`. Sem alteração pendente o botão de gravar fica
+desabilitado — a pendência é a que a guarda de alterações não salvas já
+calcula, nunca um `dirty` paralelo.
+
 ---
 
 # 4. Navigation baseline

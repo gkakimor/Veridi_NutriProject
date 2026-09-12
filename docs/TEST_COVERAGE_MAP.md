@@ -335,6 +335,17 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Entrega com expedição em rascunho não cancela nem reprograma; confirmada não bloqueia | alterar a promessa por baixo de uma separação em curso | `api customer-orders/delivery-schedule.test.ts` |
 | Confirmação recusa quando a promessa encolheu, e não realoca a linha | realocação silenciosa apagando a evidência do que se preparava | `api customer-orders/delivery-schedule.test.ts` |
 
+## Ações e feedback de formulário
+
+| Regra | Origem do risco | Proteção canônica |
+|---|---|---|
+| Opção escolhida marca a LINHA (fundo + borda + peso do rótulo), a anterior perde o estado, e o rótulo continua sendo o label do próprio radio | UX-ACTIONS-FEEDBACK-01: só a bolinha dizia o que estava escolhido, e o campo do modo ficava na outra metade da tela | `web pages/cost-templates/ux-acoes-e-feedback.test.tsx` |
+| Campo do modo escolhido habilita; o dos outros fica desabilitado **com o valor preservado** — trocar de modo não apaga | UX-ACTIONS-FEEDBACK-01 | `web pages/cost-templates/ux-acoes-e-feedback.test.tsx`, `web pages/cost-templates/pricing-policies.test.tsx` |
+| Barra de ações tem grupos e gap, as três ações têm pesos diferentes, e em 480px empilha sem encolher a fonte | UX-ACTIONS-FEEDBACK-01: `.line-actions` não tem gap nenhum, e os três botões saíam colados e equivalentes | `web pages/cost-templates/ux-acoes-e-feedback.test.tsx` |
+| Gravar diz `Salvando…` no botão clicado, recusa o segundo clique, confirma com `Rascunho salvo.` **uma vez**, e erro nunca vira sucesso | UX-ACTIONS-FEEDBACK-01: clicava-se e não se sabia se salvou | `web pages/cost-templates/ux-acoes-e-feedback.test.tsx` |
+| Sem alteração pendente não há o que gravar (botão desabilitado); gravar limpa a pendência do bloco salvo e **não** a do outro | UX-ACTIONS-FEEDBACK-01 · save parcial do UNSAVED-CHANGES-WAVE-04 | `web pages/cost-templates/ux-acoes-e-feedback.test.tsx`, `web pages/cost-templates/politica-precificacao-alteracoes-nao-salvas.test.tsx` |
+| `Ativar versão` independe de rascunho pendente e confirma com frase PRÓPRIA | UX-ACTIONS-FEEDBACK-01: "Rascunho salvo." e "Versão ativada." não podem se confundir | `web pages/cost-templates/ux-acoes-e-feedback.test.tsx` |
+
 ## Permissões
 
 | Regra | Proteção canônica |

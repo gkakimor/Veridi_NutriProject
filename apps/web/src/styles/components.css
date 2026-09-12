@@ -890,6 +890,157 @@
   background: var(--canvas);
 }
 
+/* ---------------- Linha de escolha (radio/checkbox) ----------------
+ *
+ * Uma opcao e uma LINHA inteira, nao uma bolinha solta com texto ao lado e o
+ * campo dela do outro lado da tela. O grid encosta rotulo e valor: o campo a
+ * direita pertence, visualmente, a opcao que o habilita.
+ *
+ * Selecionado nunca depende so de cor — fundo, borda E peso do rotulo mudam
+ * juntos, e o proprio radio continua sendo o indicador semantico.
+ */
+
+.selection-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  /* Teto de leitura: em monitor largo a opcao e o campo dela acabavam em
+     pontas opostas de 1300px, e a linha deixava de se ler como uma linha. */
+  max-width: 640px;
+}
+
+.selection-row {
+  display: grid;
+  /* A coluna do valor nao cresce: campo decimal nao fica mais legivel com
+     400px, e o vazio entre rotulo e campo era o que separava os dois. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 180px);
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  transition: border-color var(--transition), background var(--transition);
+}
+
+/* Opcao sem campo proprio ("Nao considerar"): o rotulo ocupa a linha toda, e
+   com ela toda a area clicavel. */
+.selection-row__label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 28px;
+  cursor: pointer;
+  user-select: none;
+  /* Vence `.field label`, que e rotulo de campo (12,5px, cinza): aqui o texto
+     e a propria opcao, nao a etiqueta dela. */
+  font-size: var(--fs-base);
+  font-weight: var(--fw-regular);
+  color: var(--ink);
+}
+
+.selection-row__label--full {
+  grid-column: 1 / -1;
+}
+
+/* Explicacao da opcao dentro da propria linha, recuada para a coluna do
+   rotulo: e a opcao que ela explica, nao o bloco inteiro. */
+.selection-row__hint {
+  grid-column: 1 / -1;
+  padding-left: calc(16px + var(--sp-2));
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+.selection-row__label input {
+  accent-color: var(--v-green-700);
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin: 0;
+}
+
+.selection-row--selected {
+  border-color: var(--v-green-700);
+  background: var(--selected-bg);
+}
+
+.selection-row--selected .selection-row__label {
+  font-weight: var(--fw-semibold);
+}
+
+.selection-row--disabled {
+  opacity: 0.65;
+}
+
+.selection-row--disabled .selection-row__label {
+  cursor: not-allowed;
+}
+
+/* Variante sem caixa: lista de marcacao simples (perfis tributarios), onde o
+   que faltava era alinhamento, nao um card. */
+.selection-row--plain {
+  grid-template-columns: minmax(0, 1fr);
+  padding: var(--sp-1) 0;
+  border-color: transparent;
+  background: transparent;
+}
+
+.selection-row--plain.selection-row--selected {
+  border-color: transparent;
+  background: transparent;
+}
+
+@media (max-width: 480px) {
+  .selection-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---------------- Acoes de formulario ----------------
+ *
+ * Barra de acoes DENTRO de um formulario, com o mesmo gap e a mesma quebra da
+ * `.doc-actions` do cabecalho do documento. Classe explicita: nada de
+ * `button + button` pegando o ERP inteiro sem controle.
+ */
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+
+/* Acoes da esquerda e as de commit nas pontas — juntas por assunto, longe o
+   bastante para nao se clicarem por engano. */
+.form-actions--split {
+  justify-content: space-between;
+}
+
+.form-actions__group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* 390px: quebra e empilha mantendo o gap e a ordem; fonte do botao nao encolhe
+   para caber. */
+@media (max-width: 480px) {
+  .form-actions {
+    align-items: stretch;
+  }
+
+  .form-actions__group {
+    width: 100%;
+  }
+
+  .form-actions__group .btn {
+    flex: 1 1 auto;
+  }
+}
+
 /* ---------------- Formulario ---------------- */
 
 .field {
