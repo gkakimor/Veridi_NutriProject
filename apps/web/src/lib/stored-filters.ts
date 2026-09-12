@@ -83,3 +83,57 @@ export function clearStoredFilters(userId: string | null, scope: string): void {
     // Sem storage não há o que limpar.
   }
 }
+
+/**
+ * O conjunto de filtros guardado de uma tela.
+ *
+ * Mesmas chaves por campo de `usePersistentFilter` — um valor por chave —,
+ * então `clearStoredFilters` continua limpando os dois jeitos e um campo que
+ * deixa de existir na tela some sozinho.
+ */
+export function readStoredFilterSet(
+  userId: string | null,
+  scope: string,
+): Record<string, string> {
+  const prefix = `${PREFIX}:${userId ?? "anon"}:${scope}:`;
+  const guardado: Record<string, string> = {};
+  try {
+    for (const key of Object.keys(sessionStorage)) {
+      if (!key.startsWith(prefix)) continue;
+      const raw = sessionStorage.getItem(key);
+      if (raw === null) continue;
+      const value = JSON.parse(raw) as unknown;
+      if (typeof value === "string" && value !== "") guardado[key.slice(prefix.length)] = value;
+    }
+  } catch {
+    // Sessão sem storage, ou valor gravado por uma versão anterior da tela:
+    // a lista abre no default em vez de falhar.
+  }
+  return guardado;
+}
+
+/**
+ * Guarda os filtros ATIVOS de uma tela e apaga o que voltou ao default.
+ *
+ * Só o que está fora do default entra: gravar o default faria a tela lembrar
+ * de um filtro que ninguém aplicou.
+ */
+export function writeStoredFilterSet(
+  userId: string | null,
+  scope: string,
+  values: Record<string, string>,
+): void {
+  const prefix = `${PREFIX}:${userId ?? "anon"}:${scope}:`;
+  try {
+    for (const key of Object.keys(sessionStorage)) {
+      if (key.startsWith(prefix) && !(key.slice(prefix.length) in values)) {
+        sessionStorage.removeItem(key);
+      }
+    }
+    for (const [field, value] of Object.entries(values)) {
+      sessionStorage.setItem(`${prefix}${field}`, JSON.stringify(value));
+    }
+  } catch {
+    // Mesmo caso: a tela funciona, só não lembra.
+  }
+}

@@ -12,6 +12,7 @@ import {
   BILLING_CODE_PREFIX,
   calcularApropriacaoComercialDoFaturamento,
   calcularTotaisFaturamento,
+  intervaloDeDiasComerciais,
 } from "@veridi/shared";
 import type { ApropriacaoComercial } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
@@ -414,10 +415,25 @@ export async function listBillings(
   // O cliente vive no pedido de origem; filtrar por ele é a pergunta mais
   // frequente desta tela e não exige coluna nova.
   if (query.customerId) where["customerOrder"] = { customerId: query.customerId };
-  if (query.dateFrom || query.dateTo) {
+  /*
+   * Período por DIA COMERCIAL, com fim EXCLUSIVO.
+   *
+   * "De 10/09 até 10/09" pergunta pelo dia inteiro de 10/09 na operação da
+   * Veridi. O que o filtro recebe é um dia de calendário; quem o transforma
+   * nos dois instantes é `intervaloDeDiasComerciais`, em `@veridi/shared` —
+   * a única conversão, e a mesma que a tela usa. O fim é `lt` a meia-noite de
+   * 11/09, nunca `lte` 23:59:59.999: fim inventado depende da precisão da
+   * coluna, e fim exclusivo não.
+   *
+   * Antes, `dateTo` chegava aqui como `2026-09-10T00:00:00.000Z` (fruto de
+   * `z.coerce.date`) e ia num `lte` — o dia terminava às 21h de 09/09 em São
+   * Paulo, e nenhum faturamento do próprio dia 10 aparecia.
+   */
+  const periodo = intervaloDeDiasComerciais(query.dateFrom, query.dateTo);
+  if (periodo.inicio || periodo.fimExclusivo) {
     where["issuedAt"] = {
-      ...(query.dateFrom ? { gte: query.dateFrom } : {}),
-      ...(query.dateTo ? { lte: query.dateTo } : {}),
+      ...(periodo.inicio ? { gte: periodo.inicio } : {}),
+      ...(periodo.fimExclusivo ? { lt: periodo.fimExclusivo } : {}),
     };
   }
   if (query.search) {

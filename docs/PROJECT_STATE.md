@@ -1346,6 +1346,47 @@ CEP. Nenhum PDF mudou, e nenhum dado legado foi preenchido — o workbook de
 Fornecedores será regenerado em MIGRATION-PACK-REVIEW-02 para a Veridi
 enriquecer os campos à mão.
 
+## Fundação de filtros, e o período do Faturamento (FILTER-FOUNDATION-01, 2026-09-12)
+
+A auditoria de filtros apontou que o período do Faturamento interpretava
+`yyyy-mm-dd` como INSTANTE. A causa era `z.coerce.date()` em
+`listBillingsQuerySchema`: `2026-09-10` virava `2026-09-10T00:00:00.000Z` —
+21h do dia 09 em São Paulo — e a consulta fechava o intervalo com
+`issuedAt lte` disso. "De 10/09 até 10/09" não devolvia nada do dia 10, e o
+CSV errava igual porque usa o mesmo schema.
+
+**Regra.** Data de filtro operacional é DIA COMERCIAL, não instante digitado.
+O filtro viaja como `YYYY-MM-DD` (string validada por `diaCivilDeFiltroSchema`,
+que recusa `10/09/2026`, `2026-02-30` e ISO completo em vez de reinterpretá-los)
+e só vira instante uma vez, no serviço, por `intervaloDeDiasComerciais` —
+`@veridi/shared/business-timezone.ts`, a mesma definição de fuso do resto do
+sistema. O intervalo usa **fim exclusivo** (`gte início`, `lt início do dia
+seguinte`): `23:59:59.999` é um fim inventado que depende da precisão da
+coluna. `limitesDoDiaComercial` passou a DERIVAR dele (`-1ms`) e não mudou de
+comportamento. Nenhuma conta de fuso no frontend: `resolveListPeriod` resolve o
+"hoje" por `hojeComercial`, então o operador fora do Brasil obtém a mesma
+consulta.
+
+**Foundation** (`lib/list-filters.ts`, `lib/list-period.ts`,
+`components/filters/`): `useListFilters` põe o estado dos filtros na URL —
+default não ocupa a URL, nenhum parâmetro duplicado, trocar filtro volta para
+a página 1 —, `DateRangeFilter` dá os atalhos de período, `ActiveFilterChips`
+mostra `Filtros (N)` com × por filtro, e `ClearFilters` é a saída única.
+Precedência: URL (quando traz qualquer filtro da tela) > lembrança da sessão
+(`persistScope`, chaves compatíveis com `usePersistentFilter`) > default. O
+passo da URL é tudo ou nada, senão um endereço colado num chamado mostraria
+listas diferentes para duas pessoas. Suporta status, busca, entidade, período
+e paginação; agrupamento de status fica para quando uma tela precisar.
+
+**Faturamento é a tela de referência.** Default operacional **Mês atual**
+(decisão de Product Ownership), com Hoje, Últimos 7 dias, Últimos 30 dias e
+Personalizado — este sem limite de recuo, para o relatório histórico. Busca,
+status e cliente continuam como eram, agora com endereço. O CSV lê o MESMO
+objeto de filtros da consulta da tela, não uma segunda lista de campos.
+
+Nenhuma migration. As outras 51 telas não foram convertidas — próximo é
+FILTER-OPERATIONS-WAVE-01.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

@@ -4,11 +4,15 @@ import {
   diaCivil,
   diaComercialCompacto,
   diaDoInstantePorExtenso,
+  ehDiaCivil,
+  fimExclusivoDoDiaComercial,
   hojeComercial,
   instanteComercialPorExtenso,
+  intervaloDeDiasComerciais,
   limitesDeDiasComerciais,
   limitesDeHojeComercial,
   limitesDoDiaComercial,
+  primeiroDiaDoMesComercial,
 } from "./business-timezone.js";
 
 /**
@@ -111,5 +115,99 @@ describe("leitura dos dias", () => {
 
   it("a data por extenso é a que o cliente leu, sem deslocar um dia", () => {
     expect(QUINZE_DE_SETEMBRO.toLocaleDateString("pt-BR", { timeZone: "UTC" })).toBe("15/09/2026");
+  });
+});
+
+/**
+ * FILTER-FOUNDATION-01 — o intervalo de um filtro por período.
+ *
+ * "De 10/09 até 10/09" é o dia comercial INTEIRO de 10/09. O que quebrava
+ * isso era interpretar `2026-09-10` como instante: `new Date("2026-09-10")` e
+ * `z.coerce.date()` devolvem a meia-noite UTC, que em São Paulo é 21h do dia
+ * 09 — e num `lte` o dia acabava antes de começar.
+ */
+describe("intervalo de dias comerciais — fim exclusivo", () => {
+  it("o mesmo dia nas duas pontas cobre o dia comercial inteiro", () => {
+    const { inicio, fimExclusivo } = intervaloDeDiasComerciais("2026-09-10", "2026-09-10");
+    expect(inicio?.toISOString()).toBe("2026-09-10T03:00:00.000Z");
+    expect(fimExclusivo?.toISOString()).toBe("2026-09-11T03:00:00.000Z");
+  });
+
+  it("um faturamento das 23:30 de 10/09 em São Paulo entra no filtro do dia 10", () => {
+    const { inicio, fimExclusivo } = intervaloDeDiasComerciais("2026-09-10", "2026-09-10");
+    // 23:30 de 10/09 em São Paulo já é 11/09 em UTC.
+    const emitido = new Date("2026-09-11T02:30:00.000Z");
+    expect(emitido >= inicio! && emitido < fimExclusivo!).toBe(true);
+  });
+
+  it("o instante que a versão com bug usava ficava FORA do dia pedido", () => {
+    // `z.coerce.date("2026-09-10")` = 2026-09-10T00:00:00.000Z, e `lte` disso
+    // exclui tudo o que aconteceu no dia 10 em São Paulo.
+    const fimAntigo = new Date("2026-09-10T00:00:00.000Z");
+    const emitido = new Date("2026-09-10T13:00:00.000Z"); // 10h de 10/09 em SP
+    expect(emitido <= fimAntigo).toBe(false);
+    expect(emitido < intervaloDeDiasComerciais(null, "2026-09-10").fimExclusivo!).toBe(true);
+  });
+
+  it("período cruzando o mês vai do início de 25/08 ao início de 06/09", () => {
+    const { inicio, fimExclusivo } = intervaloDeDiasComerciais("2026-08-25", "2026-09-05");
+    expect(inicio?.toISOString()).toBe("2026-08-25T03:00:00.000Z");
+    expect(fimExclusivo?.toISOString()).toBe("2026-09-06T03:00:00.000Z");
+  });
+
+  it("cada ponta é independente: só `de`, ou só `até`", () => {
+    expect(intervaloDeDiasComerciais("2026-09-10", null).fimExclusivo).toBeUndefined();
+    expect(intervaloDeDiasComerciais(null, "2026-09-10").inicio).toBeUndefined();
+    expect(intervaloDeDiasComerciais("", "").inicio).toBeUndefined();
+  });
+
+  it("o fim exclusivo é exatamente 1ms depois do fim inclusivo", () => {
+    expect(fimExclusivoDoDiaComercial("2026-09-10").getTime()).toBe(
+      limitesDoDiaComercial("2026-09-10").fim.getTime() + 1,
+    );
+  });
+
+  it("o horário de verão entra pela base de fusos, não por offset fixo", () => {
+    // Novembro de 2018: São Paulo era GMT-2.
+    expect(fimExclusivoDoDiaComercial("2018-11-15").toISOString()).toBe(
+      "2018-11-16T02:00:00.000Z",
+    );
+  });
+
+  it("o intervalo é o mesmo em qualquer TZ do processo", () => {
+    const original = process.env.TZ;
+    const medidos: string[] = [];
+    try {
+      for (const fuso of ["UTC", "America/Vancouver", "America/Sao_Paulo", "Asia/Tokyo"]) {
+        process.env.TZ = fuso;
+        const { inicio, fimExclusivo } = intervaloDeDiasComerciais("2026-09-10", "2026-09-10");
+        medidos.push(`${inicio?.toISOString()}..${fimExclusivo?.toISOString()}`);
+      }
+    } finally {
+      if (original === undefined) delete process.env.TZ;
+      else process.env.TZ = original;
+    }
+    expect(new Set(medidos).size).toBe(1);
+    expect(medidos[0]).toBe("2026-09-10T03:00:00.000Z..2026-09-11T03:00:00.000Z");
+  });
+});
+
+describe("dia civil de filtro", () => {
+  it("aceita `YYYY-MM-DD` e recusa o resto", () => {
+    expect(ehDiaCivil("2026-09-10")).toBe(true);
+    expect(ehDiaCivil("2026-02-29")).toBe(false); // 2026 não é bissexto
+    expect(ehDiaCivil("2026-02-30")).toBe(false);
+    expect(ehDiaCivil("2026-13-01")).toBe(false);
+    expect(ehDiaCivil("10/09/2026")).toBe(false);
+    expect(ehDiaCivil("2026-09-10T00:00:00.000Z")).toBe(false);
+    expect(ehDiaCivil("")).toBe(false);
+  });
+});
+
+describe("primeiro dia do mês comercial", () => {
+  it("é o dia 1 do mês da OPERAÇÃO, não do relógio UTC", () => {
+    // 01/10 01:00Z ainda é 30/09 às 22h em São Paulo: o mês é setembro.
+    expect(primeiroDiaDoMesComercial(new Date("2026-10-01T01:00:00.000Z"))).toBe("2026-09-01");
+    expect(primeiroDiaDoMesComercial(new Date("2026-10-01T03:00:00.000Z"))).toBe("2026-10-01");
   });
 });

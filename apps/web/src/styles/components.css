@@ -1671,6 +1671,138 @@ td .entity-select {
   font-size: var(--fs-sm);
 }
 
+/* ---------------- Filtros: período e filtros ativos ---------------- */
+
+/**
+ * Atalhos de período — linha própria, acima da barra de filtros.
+ *
+ * Fora da `.toolbar` de propósito: são o filtro que a operação troca dez
+ * vezes por dia, e disputar espaço com busca, status e cliente empurrava os
+ * atalhos para a segunda linha justamente quando a tela é estreita. Quebram
+ * para a linha seguinte em vez de esticar a página.
+ */
+.filter-period {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+.filter-period__custom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* Campo de data não é `input[type="search"]` nem `select`, então não pegava
+   nada da regra da toolbar: vinha com a caixa nativa do navegador ao lado de
+   campos do sistema. */
+.filter-period input[type="date"],
+.toolbar input[type="date"] {
+  height: 34px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--fs-base);
+  font-family: inherit;
+}
+
+.filter-period input[type="date"]:focus-visible,
+.toolbar input[type="date"]:focus-visible {
+  outline: none;
+  border-color: var(--v-green-700);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--v-green-700);
+}
+
+/* O que a lista está escondendo. Discreto: mesma família do `.context-chip`,
+   sem borda colorida em volta da barra inteira. */
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+  font-size: var(--fs-sm);
+}
+
+.filter-chips__count {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 2px var(--sp-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--canvas);
+}
+
+.filter-chip__label {
+  color: var(--ink-2);
+}
+
+.filter-chip__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Alvo de toque: o × visual é pequeno, a área clicável não. */
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--fs-base);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.filter-chip__remove:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.filter-chip__remove:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--v-green-700);
+}
+
+/**
+ * 390px.
+ *
+ * Nenhum controle de filtro fica mais estreito que o dedo, e nenhum força a
+ * PÁGINA a rolar na horizontal: os que têm largura mínima em pixel passam a
+ * ocupar a linha inteira, e o resto quebra. Rolagem horizontal continua
+ * existindo onde ela é honesta — dentro de `.table-container`.
+ */
+@media (max-width: 640px) {
+  .toolbar__search,
+  .toolbar__entity {
+    min-width: 100%;
+  }
+
+  .filter-period__custom {
+    width: 100%;
+  }
+
+  .filter-period input[type="date"],
+  .toolbar input[type="date"] {
+    flex: 1 1 140px;
+    min-width: 0;
+  }
+}
+
 /**
  * Orçamento multilinha.
  *
