@@ -88,19 +88,75 @@ function meiaNoiteComercial(diaISO: string): Date {
 }
 
 /**
+ * O instante em que um dia comercial começa — a fronteira `>=` de um filtro.
+ */
+export function inicioDoDiaComercial(diaISO: string): Date {
+  return meiaNoiteComercial(diaISO);
+}
+
+/**
+ * O instante em que o dia comercial SEGUINTE começa — a fronteira `<` de um
+ * filtro por período.
+ *
+ * Fim EXCLUSIVO é a forma canônica de fechar um intervalo, e o inclusivo se
+ * deriva dele (`-1ms`), nunca o contrário. `23:59:59.999` é um fim inventado:
+ * ele depende da precisão da coluna, e num `TIMESTAMP` de microssegundos um
+ * evento das 23:59:59.9995 fica fora do próprio dia em que aconteceu. O dia
+ * seguinte, esse, não tem precisão nem arredondamento — é o mesmo instante em
+ * qualquer coluna.
+ */
+export function fimExclusivoDoDiaComercial(diaISO: string): Date {
+  return meiaNoiteComercial(diaCivilDeslocado(diaISO, 1));
+}
+
+/**
  * Os instantes que limitam um dia comercial — início e fim, fim inclusivo.
  *
  * É o que "hoje" significa numa consulta: de 00:00:00.000 a 23:59:59.999 em
  * São Paulo, expressos nos instantes que o banco entende. Sem isto, "hoje"
  * resolvido no servidor é o dia do RELÓGIO DA MÁQUINA — em Railway, UTC —, e o
  * KPI do dia passa a incluir a noite anterior.
+ *
+ * Preferir `intervaloDeDiasComerciais` em consulta nova: o fim exclusivo não
+ * depende da precisão da coluna. Esta forma continua para quem já a lê.
  */
 export function limitesDoDiaComercial(diaISO: string): { inicio: Date; fim: Date } {
-  const inicio = meiaNoiteComercial(diaISO);
-  const [ano, mes, dia] = diaISO.split("-").map(Number) as [number, number, number];
-  const seguinte = new Date(Date.UTC(ano, mes - 1, dia + 1));
-  const diaSeguinte = seguinte.toISOString().slice(0, 10);
-  return { inicio, fim: new Date(meiaNoiteComercial(diaSeguinte).getTime() - 1) };
+  return {
+    inicio: inicioDoDiaComercial(diaISO),
+    fim: new Date(fimExclusivoDoDiaComercial(diaISO).getTime() - 1),
+  };
+}
+
+/** `YYYY-MM-DD` bem formado E existente no calendário — `2026-02-30` não é. */
+export function ehDiaCivil(valor: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
+  const [ano, mes, dia] = valor.split("-").map(Number) as [number, number, number];
+  const reconstruido = new Date(Date.UTC(ano, mes - 1, dia));
+  return reconstruido.toISOString().slice(0, 10) === valor;
+}
+
+/**
+ * O intervalo de um período de dias comerciais — `[inicio, fimExclusivo)`.
+ *
+ * É a ÚNICA conversão de filtro por período do sistema: o usuário escolhe
+ * dois dias de calendário (`<input type="date">` manda `YYYY-MM-DD`) e a
+ * consulta recebe dois instantes. Cada ponta é independente — filtrar só
+ * "a partir de" ou só "até" é pergunta legítima.
+ *
+ * "De 10/09 até 10/09" cobre o dia comercial INTEIRO de 10/09, porque o fim
+ * é a meia-noite de 11/09 e ele é exclusivo. Interpretar `2026-09-10` como um
+ * instante (`new Date`, `z.coerce.date`) devolve a meia-noite UTC — que em São
+ * Paulo é 21h do dia 09 — e com `lte` o filtro terminava o dia antes de ele
+ * começar. Foi essa a causa do bug do período do Faturamento.
+ */
+export function intervaloDeDiasComerciais(
+  deDiaISO: string | null | undefined,
+  ateDiaISO: string | null | undefined,
+): { inicio?: Date; fimExclusivo?: Date } {
+  const intervalo: { inicio?: Date; fimExclusivo?: Date } = {};
+  if (deDiaISO) intervalo.inicio = inicioDoDiaComercial(deDiaISO);
+  if (ateDiaISO) intervalo.fimExclusivo = fimExclusivoDoDiaComercial(ateDiaISO);
+  return intervalo;
 }
 
 /** Os limites do dia comercial que contém `agora`. */
@@ -120,6 +176,11 @@ export function limitesDeHojeComercial(agora: Date = new Date()): { inicio: Date
 export function diaCivilDeslocado(diaISO: string, dias: number): string {
   const [ano, mes, dia] = diaISO.split("-").map(Number) as [number, number, number];
   return new Date(Date.UTC(ano, mes - 1, dia + dias)).toISOString().slice(0, 10);
+}
+
+/** `YYYY-MM-01` — o primeiro dia do mês comercial corrente. */
+export function primeiroDiaDoMesComercial(agora: Date = new Date()): string {
+  return `${hojeComercial(agora).slice(0, 7)}-01`;
 }
 
 /** Janela de `dias` dias comerciais terminando hoje — `1` é só hoje. */

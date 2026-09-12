@@ -758,3 +758,147 @@ describe("Faturamento — progresso do Pedido", () => {
     await app.close();
   });
 });
+
+/**
+ * FILTER-FOUNDATION-01 — o período do Faturamento é DIA COMERCIAL.
+ *
+ * A auditoria de filtros achou o defeito aqui: `dateFrom`/`dateTo` chegavam
+ * por `z.coerce.date()`, que materializa `2026-09-10` como a meia-noite UTC —
+ * 21h do dia 09 em São Paulo — e a consulta fechava o intervalo com `lte`
+ * disso. "De 10/09 até 10/09" não devolvia nada do dia 10.
+ *
+ * O carimbo é reposicionado à mão no banco de propósito: é o instante de
+ * borda que interessa, e ele não se produz emitindo um documento agora.
+ */
+describe("Faturamento — filtro por dia comercial", () => {
+  /** Emite um faturamento e crava `issuedAt` no instante pedido. */
+  async function faturamentoEmitidoEm(app: App, instante: Date) {
+    const finishedItem = await createFinishedItem();
+    await stockFinishedLot(finishedItem.id, "400");
+    const product = await createProduct(app, finishedItem.id);
+    const order = await createOrderInFulfillment(app, product.id, "400", "400");
+    const shipment = await shipQuantity(app, order.id);
+    const billing = (await createBilling(app, shipment.id)).json();
+    await app.inject({ method: "POST", url: `/billings/${billing.id}/issue` });
+    const atualizado = await getPrisma().billing.update({
+      where: { id: billing.id },
+      data: { issuedAt: instante },
+    });
+    return atualizado;
+  }
+
+  async function codigosDoPeriodo(app: App, dateFrom: string, dateTo: string) {
+    const resposta = await app.inject({
+      method: "GET",
+      url: `/billings?dateFrom=${dateFrom}&dateTo=${dateTo}&pageSize=100`,
+    });
+    expect(resposta.statusCode).toBe(200);
+    return (resposta.json().billings as { code: string }[]).map((billing) => billing.code);
+  }
+
+  it("o mesmo dia nas duas pontas cobre o dia comercial inteiro", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    // 23:30 de 10/09 em São Paulo — em UTC já é 11/09 às 02:30.
+    const fimDoDia = await faturamentoEmitidoEm(app, new Date("2026-09-11T02:30:00.000Z"));
+    // 00:15 de 10/09 em São Paulo — em UTC ainda é 10/09 às 03:15.
+    const inicioDoDia = await faturamentoEmitidoEm(app, new Date("2026-09-10T03:15:00.000Z"));
+
+    const dentro = await codigosDoPeriodo(app, "2026-09-10", "2026-09-10");
+    expect(dentro).toContain(fimDoDia.code);
+    expect(dentro).toContain(inicioDoDia.code);
+
+    await app.close();
+  });
+
+  it("a fronteira é real: o dia anterior não traz o dia seguinte", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const dezDeSetembro = await faturamentoEmitidoEm(app, new Date("2026-09-11T02:30:00.000Z"));
+
+    expect(await codigosDoPeriodo(app, "2026-09-09", "2026-09-09")).not.toContain(
+      dezDeSetembro.code,
+    );
+    // A meia-noite comercial de 11/09 é 03:00Z: 02:30Z ainda é dia 10.
+    expect(await codigosDoPeriodo(app, "2026-09-11", "2026-09-11")).not.toContain(
+      dezDeSetembro.code,
+    );
+
+    await app.close();
+  });
+
+  it("o fim é exclusivo: 00:00 do dia seguinte fica fora", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    // Exatamente a meia-noite comercial de 11/09.
+    const meiaNoiteDeOnze = await faturamentoEmitidoEm(app, new Date("2026-09-11T03:00:00.000Z"));
+
+    expect(await codigosDoPeriodo(app, "2026-09-10", "2026-09-10")).not.toContain(
+      meiaNoiteDeOnze.code,
+    );
+    expect(await codigosDoPeriodo(app, "2026-09-11", "2026-09-11")).toContain(
+      meiaNoiteDeOnze.code,
+    );
+
+    await app.close();
+  });
+
+  it("período cruzando o mês inclui as duas pontas", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const agosto = await faturamentoEmitidoEm(app, new Date("2026-08-25T18:00:00.000Z"));
+    const setembro = await faturamentoEmitidoEm(app, new Date("2026-09-05T18:00:00.000Z"));
+
+    const codigos = await codigosDoPeriodo(app, "2026-08-25", "2026-09-05");
+    expect(codigos).toContain(agosto.code);
+    expect(codigos).toContain(setembro.code);
+
+    await app.close();
+  });
+
+  it("o CSV exporta o MESMO recorte da tela — e não mais um dia", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const dezDeSetembro = await faturamentoEmitidoEm(app, new Date("2026-09-11T02:30:00.000Z"));
+    const onzeDeSetembro = await faturamentoEmitidoEm(app, new Date("2026-09-11T15:00:00.000Z"));
+
+    const csv = await app.inject({
+      method: "GET",
+      url: "/billings/export.csv?dateFrom=2026-09-10&dateTo=2026-09-10",
+    });
+    expect(csv.statusCode).toBe(200);
+    expect(csv.body).toContain(dezDeSetembro.code);
+    expect(csv.body).not.toContain(onzeDeSetembro.code);
+
+    // O que a tela mostra com os mesmos filtros é o que o arquivo traz.
+    const tela = await codigosDoPeriodo(app, "2026-09-10", "2026-09-10");
+    expect(tela).toContain(dezDeSetembro.code);
+    expect(tela).not.toContain(onzeDeSetembro.code);
+
+    await app.close();
+  });
+
+  it("data que não é dia civil é recusada em vez de virar outro dia", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    for (const valor of ["10/09/2026", "2026-02-30", "2026-09-10T00:00:00.000Z", "ontem"]) {
+      const resposta = await app.inject({
+        method: "GET",
+        url: `/billings?dateTo=${encodeURIComponent(valor)}`,
+      });
+      expect(resposta.statusCode).toBe(400);
+    }
+
+    // Filtro em branco continua sendo "sem filtro", não erro.
+    const vazio = await app.inject({ method: "GET", url: "/billings?dateFrom=&dateTo=" });
+    expect(vazio.statusCode).toBe(200);
+
+    await app.close();
+  });
+});

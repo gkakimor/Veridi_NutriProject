@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
+import { diaCivilDeFiltroSchema } from "../../lib/date-schema.js";
 import {
   CASAS_PRECO_COMERCIAL,
   casasDecimais,
@@ -77,8 +78,14 @@ export const listBillingsQuerySchema = z.object({
   customerOrderId: z.string().trim().min(1).optional(),
   shipmentId: z.string().trim().min(1).optional(),
   status: z.enum(["DRAFT", "ISSUED", "CANCELLED"]).optional(),
-  dateFrom: z.coerce.date().optional(),
-  dateTo: z.coerce.date().optional(),
+  /*
+   * Período = DIA COMERCIAL, não instante UTC digitado. As duas pontas
+   * viajam como `YYYY-MM-DD` e só viram instante em `listBillings`, por
+   * `intervaloDeDiasComerciais`. Sobre a troca de `z.coerce.date()`, ver
+   * `diaCivilDeFiltroSchema`.
+   */
+  dateFrom: diaCivilDeFiltroSchema,
+  dateTo: diaCivilDeFiltroSchema,
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });

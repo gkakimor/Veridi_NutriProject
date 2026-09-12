@@ -1,6 +1,6 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import type { CustomerDTO } from "@veridi/shared";
 import { listCustomers } from "../../lib/customers-api";
 import { EntityLink } from "../../components/EntityLink";
@@ -13,15 +13,46 @@ import {
   BILLING_STATUS_LABELS,
   SHIPMENT_BILLING_STATUS_LABELS,
 } from "@veridi/shared";
+import type { ListBillingsParams } from "../../lib/billings-api";
 import { createBilling, listAwaitingBilling, listBillings } from "../../lib/billings-api";
 import { formatBRL } from "../../lib/currency";
 import { formatDate } from "../../lib/dates";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
+import { useListFilters } from "../../lib/list-filters";
+import type { ListPeriodPreset } from "../../lib/list-period";
+import {
+  LIST_PERIOD_PRESET_LABELS,
+  ehListPeriodPreset,
+  formatListPeriod,
+  resolveListPeriod,
+} from "../../lib/list-period";
+import { ActiveFilterChips } from "../../components/filters/ActiveFilterChips";
+import type { FilterChip } from "../../components/filters/ActiveFilterChips";
+import { ClearFilters } from "../../components/filters/ClearFilters";
+import { DateRangeFilter } from "../../components/filters/DateRangeFilter";
+import { useAuth } from "../../app/AuthProvider";
 
 type ActiveFilter = BillingStatus | "all";
 
 const PAGE_SIZE = 20;
+
+/**
+ * Os filtros desta lista e o que cada um significa quando está limpo.
+ *
+ * `period: "mes-atual"` é decisão de Product Ownership: a pergunta operacional
+ * do Faturamento é "o que faturamos neste mês", e abrir a base inteira faz a
+ * primeira página envelhecer junto com a empresa. `Personalizado` continua
+ * aberto para o relatório histórico, sem limite de recuo.
+ */
+const FILTROS_PADRAO = {
+  search: "",
+  status: "all",
+  customerId: "",
+  period: "mes-atual",
+  dateFrom: "",
+  dateTo: "",
+};
 
 function statusBadgeClass(status: BillingStatus): string {
   switch (status) {
@@ -38,28 +69,33 @@ function statusBadgeClass(status: BillingStatus): string {
 /**
  * Comercial → Faturamento. Foco operacional: primeiro o que está
  * aguardando faturamento, depois os documentos já criados.
+ *
+ * Tela de referência da fundação de filtros: `useListFilters` (URL como
+ * estado), `DateRangeFilter` (período em dia comercial) e
+ * `ActiveFilterChips`. O período resolvido é UM objeto, e a lista e o CSV
+ * leem o mesmo — é o que garante que o arquivo baixado seja o que está na
+ * tela.
  */
 export function BillingsPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [awaiting, setAwaiting] = useState<AwaitingBillingRowDTO[]>([]);
   const [billings, setBillings] = useState<BillingDTO[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [preparingShipmentId, setPreparingShipmentId] = useState<string | null>(null);
-
-  // Contexto explícito na URL manda: chegar aqui pelo cliente tem que abrir a
-  // tela já filtrada por ele.
-  const [params] = useSearchParams();
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<ActiveFilter>("all");
-  const [customerFilter, setCustomerFilter] = useState(params.get("customerId") ?? "");
-  const [dateFrom, setDateFrom] = useState(params.get("dateFrom") ?? "");
-  const [dateTo, setDateTo] = useState(params.get("dateTo") ?? "");
   const [customers, setCustomers] = useState<CustomerDTO[]>([]);
+
+  const { values, page, set, setPage, clear, isActive } = useListFilters({
+    defaults: FILTROS_PADRAO,
+    persistScope: "billings",
+    userId: user?.id ?? null,
+  });
+  const { search, customerId } = values;
+  const status = values.status as ActiveFilter;
+  const period: ListPeriodPreset = ehListPeriodPreset(values.period) ? values.period : "mes-atual";
 
   useEffect(() => {
     listCustomers({ pageSize: 1000 })
@@ -67,26 +103,49 @@ export function BillingsPage() {
       .catch(() => setCustomers([]));
   }, []);
 
-  const hasFilters =
-    Boolean(search) || statusFilter !== "all" || Boolean(customerFilter) || Boolean(dateFrom) || Boolean(dateTo);
+  /*
+   * O período em dias comerciais — `YYYY-MM-DD`, nunca instante. O servidor
+   * abre cada dia nos dois instantes que o limitam, com o fim exclusivo:
+   * "de 10/09 até 10/09" é o dia 10 inteiro em São Paulo, e o resultado é o
+   * mesmo para quem abre a tela de outro fuso.
+   */
+  const periodo = useMemo(
+    () => resolveListPeriod(period, values.dateFrom, values.dateTo),
+    [period, values.dateFrom, values.dateTo],
+  );
 
-  function clearFilters() {
-    setSearchInput("");
-    setSearch("");
-    setStatusFilter("all");
-    setCustomerFilter("");
-    setDateFrom("");
-    setDateTo("");
-  }
+  /*
+   * UM conjunto de filtros para a consulta e para o CSV. Duas listas de
+   * campos lado a lado é como a tela e o arquivo passam a discordar sem
+   * ninguém notar — o CSV não tem tela para conferir.
+   */
+  const filtrosDaConsulta = useMemo(() => {
+    const filtros: Omit<ListBillingsParams, "page" | "pageSize"> = {};
+    if (search) filtros.search = search;
+    if (status !== "all") filtros.status = status;
+    if (customerId) filtros.customerId = customerId;
+    if (periodo.dateFrom) filtros.dateFrom = periodo.dateFrom;
+    if (periodo.dateTo) filtros.dateTo = periodo.dateTo;
+    return filtros;
+  }, [search, status, customerId, periodo.dateFrom, periodo.dateTo]);
+
+  /*
+   * A busca é digitada; a URL é o estado. Escrever a cada tecla faria uma
+   * consulta por letra, então o campo tem estado local e só o resultado
+   * debounced chega à URL — e o campo volta a seguir a URL quando ela muda
+   * por fora (chip removido, "Limpar filtros", sessão restaurada).
+   */
+  const [searchInput, setSearchInput] = useState(search);
 
   useEffect(() => {
-    const handle = setTimeout(() => setSearch(searchInput), 300);
+    setSearchInput(search);
+  }, [search]);
+
+  useEffect(() => {
+    if (searchInput === search) return;
+    const handle = setTimeout(() => set({ search: searchInput }), 300);
     return () => clearTimeout(handle);
-  }, [searchInput]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, statusFilter, customerFilter, dateFrom, dateTo]);
+  }, [searchInput, search, set]);
 
   const reloadAwaiting = useCallback(() => {
     listAwaitingBilling()
@@ -98,14 +157,7 @@ export function BillingsPage() {
     setLoading(true);
     setError(null);
 
-    const query: Parameters<typeof listBillings>[0] = { page, pageSize: PAGE_SIZE };
-    if (search) query.search = search;
-    if (statusFilter !== "all") query.status = statusFilter;
-    if (customerFilter) query.customerId = customerFilter;
-    if (dateFrom) query.dateFrom = dateFrom;
-    if (dateTo) query.dateTo = dateTo;
-
-    listBillings(query)
+    listBillings({ ...filtrosDaConsulta, page, pageSize: PAGE_SIZE })
       .then((result) => {
         setBillings(result.billings);
         setTotal(result.total);
@@ -114,7 +166,7 @@ export function BillingsPage() {
         setError(err instanceof Error ? err.message : "Falha ao carregar faturamentos");
       })
       .finally(() => setLoading(false));
-  }, [page, search, statusFilter, customerFilter, dateFrom, dateTo]);
+  }, [filtrosDaConsulta, page]);
 
   useEffect(() => {
     reload();
@@ -123,6 +175,43 @@ export function BillingsPage() {
   useEffect(() => {
     reloadAwaiting();
   }, [reloadAwaiting]);
+
+  const customerName = (id: string) => {
+    const customer = customers.find((candidate) => candidate.id === id);
+    return customer ? (customer.tradeName ?? customer.legalName) : id;
+  };
+
+  /*
+   * Os chips saem do que está FORA do default — e o período personalizado é
+   * um chip só, embora sejam três campos na URL. O × devolve o filtro ao
+   * default, que no período é "Mês atual" e não "tudo".
+   */
+  const chips: FilterChip[] = [];
+  if (search) {
+    chips.push({ label: "Busca", value: search, onRemove: () => set({ search: "" }) });
+  }
+  if (status !== "all") {
+    chips.push({
+      label: "Status",
+      value: BILLING_STATUS_LABELS[status],
+      onRemove: () => set({ status: "all" }),
+    });
+  }
+  if (customerId) {
+    chips.push({
+      label: "Cliente",
+      value: customerName(customerId),
+      onRemove: () => set({ customerId: "" }),
+    });
+  }
+  if (period !== FILTROS_PADRAO.period) {
+    chips.push({
+      label: "Período",
+      value: period === "custom" ? formatListPeriod(periodo) : LIST_PERIOD_PRESET_LABELS[period],
+      onRemove: () =>
+        set({ period: FILTROS_PADRAO.period, dateFrom: "", dateTo: "" }),
+    });
+  }
 
   async function handlePrepare(row: AwaitingBillingRowDTO) {
     if (row.billingId) {
@@ -152,13 +241,7 @@ export function BillingsPage() {
             Faturamento comercial/operacional do que foi realmente expedido — não emite Nota Fiscal.
           </p>
         </div>
-        <ExportCsvButton path="/billings/export.csv" filters={{
-            search,
-            status: statusFilter === "all" ? undefined : statusFilter,
-            customerId: customerFilter,
-            dateFrom,
-            dateTo,
-          }} />
+        <ExportCsvButton path="/billings/export.csv" filters={filtrosDaConsulta} />
 </div>
 
       <ContextHelp topic={helpTopics["faturamento.lista"]} />
@@ -247,6 +330,14 @@ export function BillingsPage() {
           é mais barato do que deixar o usuário deduzir pela posição. */}
       <p className="toolbar__scope">Filtrar documentos de faturamento</p>
 
+      <DateRangeFilter
+        idPrefix="billing"
+        value={{ period, dateFrom: values.dateFrom, dateTo: values.dateTo }}
+        fromLabel="Emitido a partir de"
+        toLabel="Emitido até"
+        onChange={(next) => set(next)}
+      />
+
       <div className="toolbar">
         <div className="toolbar__search">
           <label className="sr-only" htmlFor="billing-search">
@@ -266,13 +357,13 @@ export function BillingsPage() {
         </label>
         <select
           id="billing-status-filter"
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as ActiveFilter)}
+          value={status}
+          onChange={(event) => set({ status: event.target.value })}
         >
           <option value="all">Todos os status</option>
-          {BILLING_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {BILLING_STATUS_LABELS[status]}
+          {BILLING_STATUSES.map((option) => (
+            <option key={option} value={option}>
+              {BILLING_STATUS_LABELS[option]}
             </option>
           ))}
         </select>
@@ -283,8 +374,8 @@ export function BillingsPage() {
           </label>
           <SearchableEntitySelect
             id="billing-customer-filter"
-            value={customerFilter}
-            onChange={setCustomerFilter}
+            value={customerId}
+            onChange={(value) => set({ customerId: value })}
             placeholder="Todos os clientes"
             options={customers.map((customer) => ({
               id: customer.id,
@@ -293,32 +384,9 @@ export function BillingsPage() {
             }))}
           />
         </div>
-
-        <label className="sr-only" htmlFor="billing-date-from">
-          Emitido a partir de
-        </label>
-        <input
-          id="billing-date-from"
-          type="date"
-          value={dateFrom}
-          onChange={(event) => setDateFrom(event.target.value)}
-        />
-        <label className="sr-only" htmlFor="billing-date-to">
-          Emitido até
-        </label>
-        <input
-          id="billing-date-to"
-          type="date"
-          value={dateTo}
-          onChange={(event) => setDateTo(event.target.value)}
-        />
-
-        {hasFilters && (
-          <button type="button" className="btn btn--ghost btn--sm" onClick={clearFilters}>
-            Limpar filtros
-          </button>
-        )}
       </div>
+
+      <ActiveFilterChips chips={chips} onClear={clear} />
 
       <div className="table-container">
         <table className="table table--clickable-rows table--sticky-actions">
@@ -393,12 +461,10 @@ export function BillingsPage() {
             {!loading && billings.length === 0 && (
               <tr>
                 <td colSpan={9} className="table__empty">
-                  {hasFilters ? (
+                  {isActive ? (
                     <>
                       Nenhum faturamento encontrado para os filtros atuais.{" "}
-                      <button type="button" className="btn btn--ghost btn--sm" onClick={clearFilters}>
-                        Limpar filtros
-                      </button>
+                      <ClearFilters onClear={clear} />
                     </>
                   ) : (
                     "Nenhum faturamento cadastrado."
@@ -422,7 +488,7 @@ export function BillingsPage() {
             type="button"
             className="btn btn--secondary btn--sm"
             disabled={page <= 1}
-            onClick={() => setPage((current) => current - 1)}
+            onClick={() => setPage(page - 1)}
           >
             Anterior
           </button>
@@ -430,7 +496,7 @@ export function BillingsPage() {
             type="button"
             className="btn btn--secondary btn--sm"
             disabled={page >= totalPages}
-            onClick={() => setPage((current) => current + 1)}
+            onClick={() => setPage(page + 1)}
           >
             Próxima
           </button>
