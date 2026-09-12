@@ -41,6 +41,14 @@ export const updateProductionCalendarSchema = z.object({
     .int("Informe minutos inteiros")
     .min(0, "O intervalo nunca é negativo")
     .max(MINUTOS_DO_DIA, "O intervalo não passa de 24:00"),
+  /*
+   * ONDE o intervalo cai. Os dois campos são opcionais e viajam juntos: a
+   * coerência entre eles — e com `breakMinutes` — é cobrada por
+   * `validarConfiguracaoDeCalendario`, a MESMA regra que a tela usa e que o
+   * banco confirma em CHECK. Aqui só se garante o formato.
+   */
+  breakStartMinuteOfDay: minutoDoDiaSchema.nullish().transform((v) => v ?? null),
+  breakEndMinuteOfDay: minutoDoDiaSchema.nullish().transform((v) => v ?? null),
   weekdays: diasOperantesSchema,
 });
 

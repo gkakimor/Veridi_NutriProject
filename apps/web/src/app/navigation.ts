@@ -149,6 +149,20 @@ export const navGroups: NavGroup[] = [
         ],
       },
       {
+        id: "production-board",
+        label: "Planejamento de Produção",
+        path: "/planejamento/quadro",
+        implemented: true,
+        aliases: [
+          "quadro de produção",
+          "agenda",
+          "programação",
+          "capacidade",
+          "conflito",
+          "quando produzir",
+        ],
+      },
+      {
         id: "production-calendar",
         label: "Calendário de Produção",
         path: "/planejamento/calendario",

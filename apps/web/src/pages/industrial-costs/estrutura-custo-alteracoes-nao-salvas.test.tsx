@@ -66,6 +66,7 @@ function recurso(): IndustrialResourceDTO {
     description: null,
     defaultUsageUom: "HOUR",
     powerKw: null,
+    capacityQuantity: null,
     notes: null,
     active: true,
     currentRate: null,

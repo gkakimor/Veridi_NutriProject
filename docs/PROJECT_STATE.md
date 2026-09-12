@@ -1690,6 +1690,52 @@ vem com o salvamento deixou de reescrever o nome ainda não salvo.
 **Próximo:** FILTER-OPERATIONS-WAVE-03 ou PLANNING-CAPACITY-BOARD-01, a
 critério do Product Owner.
 
+## Planejamento virou operação (PLANNING-CAPACITY-BOARD-01, 2026-09-12)
+
+Roteiro + Calendário + capacidade viraram uma resposta: **quando cada ordem
+está prevista e onde a fábrica aperta**. Regra durável em `PRODUCT_RULES.md`
+§91. Duas migrations aditivas, sem backfill.
+
+**O intervalo ganhou horário, e foi ele que destravou tudo.** O calendário
+sabia QUANTO o intervalo dura e não ONDE ele cai — com isso não há como dizer
+que uma etapa termina às 13:20. `breakStartMinuteOfDay`/`breakEndMinuteOfDay`
+entram nulos para todo calendário existente, e nada é inferido: 12:00–13:00
+seria a jornada de uma fábrica que ninguém consultou. Sem a posição, a agenda
+com hora exata **recusa** e diz o que falta; o calendário segue válido para o
+resto.
+
+**Capacidade do recurso.** `capacityQuantity` em mão de obra e equipamento —
+energia recusada por CHECK. NULL é "não cadastrada", nunca zero: o
+planejamento avisa a lacuna em vez de acusar sobrecarga sobre um número que
+ninguém informou. O recurso continua POOL.
+
+**Agenda da OP.** `ProductionOrderSchedule`, 1:1, snapshot por valor, com
+`workSegments` dentro de `steps`. **Envelope não é ocupação**: uma etapa que
+começa sexta 16:00 e termina segunda 09:00 não ocupa recurso no fim de semana,
+e é pelos segmentos que conflito e carga se contam. Mudar jornada, intervalo
+ou feriado depois não reescreve agenda gravada; excluir a exceção que a
+motivou também não. Recalcular é definir o início de novo.
+
+**O início é humano.** Nada de autoagendamento: início fora da jornada é
+recusado com o motivo E com a sugestão do próximo horário válido, e usá-la é
+outro clique. `RELEASED` só move com confirmação explícita; em produção,
+concluída, cancelada ou bloqueada a agenda vira histórico. Conflito é AVISO —
+a programação grava do mesmo jeito.
+
+**Tela nova:** `Planejamento → Planejamento de Produção`
+(`/planejamento/quadro`), visão Dia/Semana, filtros de situação, produto e
+recurso na URL, ordens programadas, "sem programação", carga por recurso e os
+conflitos. A ação "Definir início previsto" é UMA só, com prévia antes de
+confirmar, usada pela ordem e pelo quadro.
+
+**De quebra:** o Calendário de Produção ganhou o "Como funciona" que faltava
+desde o PLANNING-CALENDAR-01 — o contrato de ajuda estava vermelho havia três
+rodadas.
+
+**Próximo:** FILTER-OPERATIONS-WAVE-03, ou a onda de ações do
+UX-ACTIONS-FEEDBACK-WAVE-02, a critério do Product Owner. Autoagendamento
+continua fora de escopo.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

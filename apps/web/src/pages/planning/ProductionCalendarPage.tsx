@@ -15,6 +15,7 @@ import {
   diaDaSemanaComercial,
   formatarDuracaoEmMinutos,
   formatarMinutoDoDia,
+  intervaloPosicionado,
   hojeComercial,
   lerMinutoDoDia,
   minutosUteisPorDia,
@@ -29,6 +30,8 @@ import {
   updateProductionCalendarException,
 } from "../../lib/production-calendar-api";
 import { apiErrorMessage } from "../../lib/api-errors";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 import { useAuth } from "../../app/AuthProvider";
 import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import "./planning.css";
@@ -58,6 +61,8 @@ function mesmaJornada(a: ProductionCalendarDTO | null, b: FormularioDeJornada): 
     a.startMinuteOfDay === b.startMinuteOfDay &&
     a.endMinuteOfDay === b.endMinuteOfDay &&
     a.breakMinutes === b.breakMinutes &&
+    a.breakStartMinuteOfDay === b.breakStartMinuteOfDay &&
+    a.breakEndMinuteOfDay === b.breakEndMinuteOfDay &&
     DIAS_DA_SEMANA.every((dia) => a.weekdays[dia] === b.weekdays[dia])
   );
 }
@@ -66,6 +71,8 @@ interface FormularioDeJornada {
   startMinuteOfDay: number;
   endMinuteOfDay: number;
   breakMinutes: number;
+  breakStartMinuteOfDay: number | null;
+  breakEndMinuteOfDay: number | null;
   weekdays: DiasOperantes;
 }
 
@@ -74,6 +81,8 @@ function jornadaDoDTO(dto: ProductionCalendarDTO): FormularioDeJornada {
     startMinuteOfDay: dto.startMinuteOfDay,
     endMinuteOfDay: dto.endMinuteOfDay,
     breakMinutes: dto.breakMinutes,
+    breakStartMinuteOfDay: dto.breakStartMinuteOfDay,
+    breakEndMinuteOfDay: dto.breakEndMinuteOfDay,
     weekdays: { ...dto.weekdays },
   };
 }
@@ -130,6 +139,29 @@ export function ProductionCalendarPage() {
     const minuto = lerMinutoDoDia(texto);
     if (minuto === null) return;
     setJornada((atual) => ({ ...atual, [campo]: minuto }));
+  }
+
+  /*
+   * O horário do intervalo MANDA nos minutos dele.
+   *
+   * Enquanto "60 min" era a única verdade, o dia sabia quanto rendia e não em
+   * que momento a linha parava — e por isso nenhuma etapa podia ter horário
+   * exato. Com as duas pontas preenchidas, os minutos passam a ser derivados:
+   * duas verdades sobre a mesma pausa fariam o rendimento divergir do relógio.
+   *
+   * Campo em branco devolve a posição para "não configurada", e aí os minutos
+   * voltam a ser digitáveis — é assim que se diz "a fábrica não para".
+   */
+  function alterarIntervalo(campo: "breakStartMinuteOfDay" | "breakEndMinuteOfDay", texto: string) {
+    const minuto = texto.trim() === "" ? null : lerMinutoDoDia(texto);
+    if (texto.trim() !== "" && minuto === null) return;
+    setJornada((atual) => {
+      const proxima = { ...atual, [campo]: minuto };
+      const de = proxima.breakStartMinuteOfDay;
+      const ate = proxima.breakEndMinuteOfDay;
+      if (de !== null && ate !== null && ate > de) proxima.breakMinutes = ate - de;
+      return proxima;
+    });
   }
 
   function alternarDia(dia: DiaDaSemana) {
@@ -227,14 +259,27 @@ export function ProductionCalendarPage() {
           <p className="page__subtitle">
             Em que dias e em que horário a fábrica opera, e quais datas não operam. É um
             calendário só: mão de obra e equipamento seguem esta mesma jornada. Não define
-            capacidade de recurso nem agenda Ordem de Produção.
+            capacidade de recurso — isso é do cadastro de Recursos industriais — e não programa
+            Ordem de Produção, que é o Planejamento de Produção.
           </p>
         </div>
       </div>
 
+      <ContextHelp topic={helpTopics["planejamento.calendario"]} />
+
       {erro && (
         <p className="form-alert" role="alert">
           {erro}
+        </p>
+      )}
+
+      {calendario?.breakPositionWarning && (
+        <p className="pendency-panel" role="status">
+          <span className="pendency-panel__title">{calendario.breakPositionWarning}</span>
+          <span className="pendency-panel__sub">
+            O calendário continua valendo para o resto. Só a programação com horas exatas é que
+            espera por isto.
+          </span>
         </p>
       )}
 
@@ -245,8 +290,8 @@ export function ProductionCalendarPage() {
           <section className="form-section calendar-section" aria-label="Jornada padrão">
             <h3>Jornada padrão</h3>
             <p className="form-section__sub">
-              Horário civil da fábrica, no fuso de São Paulo. O intervalo é o total do dia — sem
-              turnos e sem pausa nomeada nesta fase.
+              Horário civil da fábrica, no fuso de São Paulo. O intervalo tem hora de início e de
+              fim — é ela que permite dizer que uma etapa começa às 11:40 e termina às 13:20.
               {calendario && !calendario.configured && (
                 <>
                   {" "}
@@ -280,13 +325,47 @@ export function ProductionCalendarPage() {
                 />
               </div>
               <div className="field">
+                <label htmlFor="calendar-break-start">Intervalo — início</label>
+                <input
+                  id="calendar-break-start"
+                  type="time"
+                  step={60}
+                  disabled={!canEdit}
+                  value={
+                    jornada.breakStartMinuteOfDay === null
+                      ? ""
+                      : formatarMinutoDoDia(jornada.breakStartMinuteOfDay)
+                  }
+                  onChange={(event) => alterarIntervalo("breakStartMinuteOfDay", event.target.value)}
+                />
+                <p className="field__hint">
+                  Em branco: intervalo sem horário — a produção não recebe horas exatas.
+                </p>
+              </div>
+              <div className="field">
+                <label htmlFor="calendar-break-end">Intervalo — fim</label>
+                <input
+                  id="calendar-break-end"
+                  type="time"
+                  step={60}
+                  disabled={!canEdit}
+                  value={
+                    jornada.breakEndMinuteOfDay === null
+                      ? ""
+                      : formatarMinutoDoDia(jornada.breakEndMinuteOfDay)
+                  }
+                  onChange={(event) => alterarIntervalo("breakEndMinuteOfDay", event.target.value)}
+                />
+              </div>
+              <div className="field">
                 <label htmlFor="calendar-break">Intervalo (minutos)</label>
                 <input
                   id="calendar-break"
                   type="number"
                   min={0}
                   step={5}
-                  disabled={!canEdit}
+                  /* Com horário, os minutos são DERIVADOS da diferença. */
+                  disabled={!canEdit || intervaloPosicionado(jornada)}
                   value={jornada.breakMinutes}
                   onChange={(event) =>
                     setJornada((atual) => ({

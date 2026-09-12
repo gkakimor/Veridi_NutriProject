@@ -5,6 +5,7 @@ import {
   INDUSTRIAL_RATE_SOURCE_LABELS,
   INDUSTRIAL_RATE_UOM_LABELS,
   INDUSTRIAL_RESOURCE_TYPE_LABELS,
+  isCapacityResourceType,
 } from "@veridi/shared";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -40,6 +41,8 @@ export function IndustrialResourceDetailPage() {
   const [rateValue, setRateValue] = useState("");
   const [effectiveAt, setEffectiveAt] = useState("");
   const [powerKw, setPowerKw] = useState("");
+  /** Vazio = capacidade não cadastrada. Nunca zero. */
+  const [capacidade, setCapacidade] = useState("");
 
   const canEdit = user?.role === "ADMIN";
 
@@ -49,6 +52,7 @@ export function IndustrialResourceDetailPage() {
       .then((result) => {
         setResource(result);
         setPowerKw(result.powerKw ?? "");
+        setCapacidade(result.capacityQuantity === null ? "" : String(result.capacityQuantity));
       })
       .catch((err: unknown) =>
         setError(err instanceof Error ? err.message : "Falha ao carregar o recurso"),
@@ -153,6 +157,14 @@ export function IndustrialResourceDetailPage() {
             <dd>{rateUomLabel}</dd>
             <dt>Potência</dt>
             <dd>{resource.powerKw ? `${resource.powerKw} kW` : "Não informada"}</dd>
+            {isCapacityResourceType(resource.type) && (
+              <>
+                <dt>Quantidade disponível para planejamento</dt>
+                {/* "Não cadastrada" NUNCA vira "nenhum": a primeira é lacuna de
+                    cadastro, a segunda seria afirmação sobre a fábrica. */}
+                <dd>{resource.capacityQuantity ?? "Não cadastrada"}</dd>
+              </>
+            )}
             <dt>Tarifa vigente</dt>
             <dd>
               {resource.currentRate
@@ -168,6 +180,50 @@ export function IndustrialResourceDetailPage() {
               Recurso inativo não entra em estrutura de custos nova. As estruturas ativas que já o
               usam continuam válidas com os valores congelados.
             </p>
+          )}
+
+          {canEdit && isCapacityResourceType(resource.type) && (
+            <>
+              <div className="field-grid-2">
+                <div className="field">
+                  <label htmlFor="resource-capacity">Quantidade disponível para planejamento</label>
+                  <input
+                    id="resource-capacity"
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={capacidade}
+                    onChange={(event) => setCapacidade(event.target.value)}
+                    placeholder="Deixe vazio se ainda não souber"
+                  />
+                  <span className="field__hint">
+                    Quantidade deste recurso que pode trabalhar ao mesmo tempo na produção. Ex.:
+                    Operadores de Produção = 5. Vazio significa não cadastrada — nunca zero, e o
+                    planejamento avisa a lacuna em vez de acusar sobrecarga.
+                  </span>
+                </div>
+              </div>
+              <div className="form-actions">
+                <div className="form-actions__group">
+                  <button
+                    type="button"
+                    className="btn btn--secondary btn--sm"
+                    disabled={saving}
+                    onClick={() =>
+                      void run(() =>
+                        updateIndustrialResource(resource.id, {
+                          // Vazio volta para "não cadastrada" — é resposta
+                          // legítima, e diferente de não mexer no campo.
+                          capacityQuantity: capacidade.trim() === "" ? null : Number(capacidade),
+                        }),
+                      )
+                    }
+                  >
+                    Salvar capacidade
+                  </button>
+                </div>
+              </div>
+            </>
           )}
 
           {canEdit && resource.type === "EQUIPMENT" && (

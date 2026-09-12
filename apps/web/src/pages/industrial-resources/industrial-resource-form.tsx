@@ -5,6 +5,7 @@ import {
   INDUSTRIAL_RATE_UOM_LABELS,
   INDUSTRIAL_RESOURCE_TYPES,
   INDUSTRIAL_RESOURCE_TYPE_LABELS,
+  isCapacityResourceType,
   usageUomForResourceType,
 } from "@veridi/shared";
 import { FormSection } from "../../components/FormSection";
@@ -29,6 +30,8 @@ interface FormState {
   type: IndustrialResourceType;
   description: string;
   powerKw: string;
+  /** Vazio = capacidade não cadastrada. Nunca zero. */
+  capacityQuantity: string;
 }
 
 export function useIndustrialResourceForm({
@@ -41,6 +44,7 @@ export function useIndustrialResourceForm({
     type: "LABOR",
     description: "",
     powerKw: "",
+    capacityQuantity: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +63,10 @@ export function useIndustrialResourceForm({
         // Potência só vai quando informada — desconhecida continua desconhecida.
         ...(form.type === "EQUIPMENT" && form.powerKw.trim()
           ? { powerKw: form.powerKw.trim() }
+          : {}),
+        // Energia não ocupa capacidade; vazio mantém "não cadastrada".
+        ...(isCapacityResourceType(form.type) && form.capacityQuantity.trim()
+          ? { capacityQuantity: Number(form.capacityQuantity.trim()) }
           : {}),
       });
       onSaved(created);
@@ -172,6 +180,29 @@ export function IndustrialResourceFormFields({
               }
             />
           </div>
+
+          {isCapacityResourceType(form.type) && (
+            <div className="field">
+              <label htmlFor="resource-capacity">Quantidade disponível para planejamento</label>
+              <input
+                id="resource-capacity"
+                type="number"
+                min={1}
+                step={1}
+                value={form.capacityQuantity}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, capacityQuantity: event.target.value }))
+                }
+                placeholder="Deixe vazio se ainda não souber"
+                {...fieldProps("capacityQuantity")}
+              />
+              <span className="field__hint">
+                Quantidade deste recurso que pode trabalhar ao mesmo tempo na produção. Ex.:
+                Operadores de Produção = 5. Vazio significa não cadastrada — nunca zero.
+              </span>
+              {fieldError("capacityQuantity")}
+            </div>
+          )}
 
           {form.type === "EQUIPMENT" && (
             <div className="field">

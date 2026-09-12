@@ -5599,3 +5599,70 @@ PLANNING-CAPACITY-BOARD-01.
   Perfis de Produção. Excluir uma exceção é seguro enquanto nenhum planejamento
   depende do calendário; a regra para data que já participou de planejamento
   calculado nasce com PLANNING-CAPACITY-BOARD-01.
+- **O intervalo ganhou HORÁRIO em PLANNING-CAPACITY-BOARD-01** (§91):
+  `breakStartMinuteOfDay`/`breakEndMinuteOfDay`, e `breakMinutes` passa a ser
+  derivado da diferença quando a posição existe. Calendário anterior chega com
+  as duas colunas NULAS e continua válido — só a agenda com hora exata é que
+  recusa até alguém configurar.
+
+---
+
+## §91 — Programação de Produção: quando a ordem acontece, e onde a fábrica aperta
+
+PLANNING-CAPACITY-BOARD-01, 2026-09-12. Junta o Roteiro (§89), o Calendário
+(§90) e a capacidade do recurso numa resposta operacional: quando cada ordem
+está prevista e onde há conflito.
+
+**Capacidade é do POOL, e `null` não é zero.**
+`IndustrialResource.capacityQuantity` diz quantos daquele recurso podem
+trabalhar AO MESMO TEMPO — "Operadores de Produção = 5" são cinco operadores
+quaisquer, nunca cinco cadastros de pessoa. NULL significa **capacidade ainda
+não cadastrada**: o planejamento avisa a lacuna e não confere sobrecarga, em
+vez de acusar excesso sobre um número que ninguém informou. Só mão de obra e
+equipamento têm capacidade; energia não ocupa recurso e é recusada no banco
+(CHECK) e na API.
+
+**O início é HUMANO. O sistema projeta, e nunca escolhe.** Não há busca de
+primeiro horário livre, prioridade automática, paralelização de etapas nem
+reprogramação por causa de conflito. Início fora da jornada — domingo,
+feriado, antes de abrir, dentro do intervalo — é **recusado com o motivo e com
+a sugestão do próximo horário válido**; usar a sugestão é outro clique.
+Deslocar em silêncio faria a pessoa programar um turno e descobrir outro.
+
+**Envelope não é ocupação.** A agenda guarda duas grandezas diferentes:
+`plannedStartAt`…`plannedEndAt` é o ENVELOPE (inclui noite, fim de semana e
+feriado no meio) e `workSegments` são os trechos EFETIVAMENTE trabalhados.
+Capacidade, conflito e carga se contam pelos segmentos. Uma etapa que começa
+sexta às 16:00 e termina segunda às 09:00 tem três dias de envelope e duas
+horas de ocupação — contar pelo envelope diria que a encapsuladora passou o
+fim de semana ligada.
+
+**Agenda gravada é SNAPSHOT.** Alterar jornada, intervalo, feriado ou recesso
+depois NÃO reescreve programação existente, e excluir a exceção que motivou
+uma agenda também não a altera (decisão do PO: manutenção do calendário não
+fica presa ao histórico). Recalcular é ação explícita — definir o início de
+novo. Nada é recalculado sozinho.
+
+**O ciclo de vida da ordem manda.** `DRAFT` e `PLANNED` definem e movem;
+`RELEASED` move **só com confirmação explícita**, porque já há separação em
+curso do outro lado; `IN_PRODUCTION`, `COMPLETED`, `CANCELLED` e `BLOCKED`
+travam — a agenda vira referência histórica e continua legível.
+`ProductionOrderSchedule` é 1:1 com a OP e **não reaproveita `plannedAt`**,
+que continua sendo o carimbo do ATO de planejar.
+
+**Conflito é AVISO, nunca bloqueio.** Demanda simultânea acima da capacidade
+cadastrada vira sobrecarga na tela e na resposta; a programação é gravada do
+mesmo jeito. Os avisos são explícitos e nunca corrigidos em silêncio:
+capacidade não cadastrada, recurso inativo, sobrecarga, ordem sem roteiro,
+etapa sem recurso, etapa sem duração, calendário sem horário de intervalo, e
+prazo do cliente em risco quando a ordem vem de um Pedido com
+`requestedDeliveryDate` — **sem mover promessa, pedido nem data** (§75).
+
+**Duração vem do motor de sempre.** `planProductionProfileSnapshot` sobre a
+cópia congelada do Roteiro (§89), para a quantidade da ordem. Não existe um
+segundo cálculo de duração de OP neste repositório.
+
+**Fora de escopo, e deliberadamente:** autoagendamento, otimizador, grafo de
+dependências, etapas em paralelo, arrastar e soltar, calendário por recurso,
+turnos múltiplos, pessoa ou máquina individual, manutenção e reprogramação em
+massa.

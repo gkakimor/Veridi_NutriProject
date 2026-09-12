@@ -6,8 +6,10 @@ import type {
   ProductionCalendarExceptionListResponse,
 } from "@veridi/shared";
 import {
+  AVISO_INTERVALO_SEM_HORARIO,
   CALENDARIO_PADRAO,
   PRODUCTION_CALENDAR_EXCEPTION_TYPE_LABELS,
+  intervaloPosicionado,
   minutosUteisPorDia,
   validarConfiguracaoDeCalendario,
 } from "@veridi/shared";
@@ -57,6 +59,8 @@ function toCalendarDTO(linha: ProductionCalendar | null): ProductionCalendarDTO 
         startMinuteOfDay: linha.startMinuteOfDay,
         endMinuteOfDay: linha.endMinuteOfDay,
         breakMinutes: linha.breakMinutes,
+        breakStartMinuteOfDay: linha.breakStartMinuteOfDay,
+        breakEndMinuteOfDay: linha.breakEndMinuteOfDay,
         weekdays: {
           monday: linha.monday,
           tuesday: linha.tuesday,
@@ -72,6 +76,15 @@ function toCalendarDTO(linha: ProductionCalendar | null): ProductionCalendarDTO 
   return {
     ...config,
     configured: linha !== null,
+    /*
+     * O calendário continua válido sem a posição do intervalo — só a agenda
+     * com horário exato é que não sai daqui. A tela avisa com esta frase em
+     * vez de inventar 12:00–13:00 (PLANNING-CAPACITY-BOARD-01).
+     */
+    breakPositionWarning:
+      config.breakMinutes > 0 && !intervaloPosicionado(config)
+        ? AVISO_INTERVALO_SEM_HORARIO
+        : null,
     workingMinutesPerDay: minutosUteisPorDia(config),
     updatedAt: linha ? linha.updatedAt.toISOString() : null,
     updatedBy: linha?.updatedBy ?? null,
@@ -117,6 +130,8 @@ export async function updateProductionCalendar(
     startMinuteOfDay: entrada.startMinuteOfDay,
     endMinuteOfDay: entrada.endMinuteOfDay,
     breakMinutes: entrada.breakMinutes,
+    breakStartMinuteOfDay: entrada.breakStartMinuteOfDay,
+    breakEndMinuteOfDay: entrada.breakEndMinuteOfDay,
     ...entrada.weekdays,
     updatedBy: actor?.name ?? null,
   };

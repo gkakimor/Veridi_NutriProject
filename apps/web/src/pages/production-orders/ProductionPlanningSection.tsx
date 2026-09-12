@@ -1,5 +1,9 @@
-import { useMemo, useState } from "react";
-import type { ProductionOrderDTO, ProductionPlan } from "@veridi/shared";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type {
+  ProductionOrderDTO,
+  ProductionOrderScheduleDTO,
+  ProductionPlan,
+} from "@veridi/shared";
 import {
   PRODUCTION_STEP_SCALING_MODE_LABELS,
   planProductionProfileSnapshot,
@@ -8,8 +12,14 @@ import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { applyProductionProfile } from "../../lib/production-orders-api";
 import { apiErrorMessage } from "../../lib/api-errors";
+import { formatDateTime } from "../../lib/dates";
 import { formatMinutes } from "../../lib/duration";
 import { formatQuantity } from "../../lib/quantity";
+import {
+  getProductionOrderSchedule,
+  unscheduleProductionOrder,
+} from "../../lib/production-schedules-api";
+import { ScheduleOrderDialog } from "../planning/ScheduleOrderDialog";
 import "../planning/planning.css";
 
 /**
@@ -36,6 +46,31 @@ export function ProductionPlanningSection({ order, quantityDraft, onApplied }: P
   const [confirmarAtualizacao, setConfirmarAtualizacao] = useState(false);
   const [aplicando, setAplicando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+
+  /*
+   * A PROGRAMAÇÃO da ordem — quando ela está prevista para acontecer
+   * (PLANNING-CAPACITY-BOARD-01). Fica ao lado do planejamento previsto
+   * porque responde à pergunta seguinte: o roteiro diz quanto trabalho há,
+   * a programação diz quando ele acontece.
+   */
+  /*
+   * Gate por SITUAÇÃO, como o resto desta tela — o perfil de acesso é
+   * cobrado pelo servidor (ADMIN e PRODUCTION), que é onde a regra mora.
+   * Ler a sessão aqui obrigaria toda a árvore da Ordem a viver dentro do
+   * AuthProvider, e ela não vive.
+   */
+  const podeProgramar = ["DRAFT", "PLANNED", "RELEASED"].includes(order.status);
+  const [agenda, setAgenda] = useState<ProductionOrderScheduleDTO | null>(null);
+  const [abrindoAgenda, setAbrindoAgenda] = useState(false);
+  const [feitoAgenda, setFeitoAgenda] = useState<string | null>(null);
+
+  const carregarAgenda = useCallback(() => {
+    getProductionOrderSchedule(order.id)
+      .then((resposta) => setAgenda(resposta.schedule))
+      .catch(() => setAgenda(null));
+  }, [order.id]);
+
+  useEffect(() => carregarAgenda(), [carregarAgenda]);
 
   /*
    * Rascunho recalcula ao vivo: mudar a quantidade refaz a projeção usando a
@@ -79,6 +114,93 @@ export function ProductionPlanningSection({ order, quantityDraft, onApplied }: P
       }
     >
       {erro && <p className="form-error">{erro}</p>}
+
+      {/* A programação só existe quando há roteiro: sem etapas não há o que
+          posicionar no tempo. */}
+      {snapshot && (
+        <div className="schedule-block">
+          <h4 className="profile-subtitle">Programação</h4>
+          {agenda ? (
+            <dl className="profile-summary" role="group" aria-label="Programação da ordem">
+              <div>
+                <dt>Início previsto</dt>
+                <dd>{formatDateTime(agenda.plannedStartAt)}</dd>
+              </div>
+              <div>
+                <dt>Fim previsto</dt>
+                <dd>{formatDateTime(agenda.plannedEndAt)}</dd>
+              </div>
+              <div>
+                <dt>Duração útil</dt>
+                <dd>{formatMinutes(agenda.workingMinutes)}</dd>
+              </div>
+              <div>
+                <dt>Programada em</dt>
+                <dd>
+                  {formatDateTime(agenda.scheduledAt)}
+                  {agenda.scheduledBy ? ` por ${agenda.scheduledBy}` : ""}
+                </dd>
+              </div>
+            </dl>
+          ) : (
+            <p className="field__hint">
+              Sem início previsto. Definir o início projeta as etapas sobre a jornada da fábrica.
+            </p>
+          )}
+
+          <div className="form-actions">
+            <div className="form-actions__group">
+              {podeProgramar && (
+                <button
+                  type="button"
+                  className="btn btn--secondary btn--sm"
+                  onClick={() => setAbrindoAgenda(true)}
+                >
+                  {agenda ? "Reprogramar" : "Definir início previsto"}
+                </button>
+              )}
+              {podeProgramar && agenda && (
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  onClick={() =>
+                    void unscheduleProductionOrder(order.id)
+                      .then(() => {
+                        setAgenda(null);
+                        setFeitoAgenda("Programação removida.");
+                      })
+                      .catch((err: unknown) =>
+                        setErro(apiErrorMessage(err, "Não foi possível remover a programação.")),
+                      )
+                  }
+                >
+                  Tirar programação
+                </button>
+              )}
+              {feitoAgenda && (
+                <span className="form-status" role="status">
+                  {feitoAgenda}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {abrindoAgenda && (
+            <ScheduleOrderDialog
+              orderId={order.id}
+              orderCode={order.code}
+              status={order.status}
+              currentStartAt={agenda?.plannedStartAt ?? null}
+              onClose={() => setAbrindoAgenda(false)}
+              onSaved={(gravada) => {
+                setAgenda(gravada);
+                setAbrindoAgenda(false);
+                setFeitoAgenda("Programação salva.");
+              }}
+            />
+          )}
+        </div>
+      )}
 
       {!snapshot && (
         <>

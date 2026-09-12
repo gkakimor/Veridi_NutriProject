@@ -5,10 +5,12 @@ import type {
   IndustrialResourceDetailDTO,
   IndustrialResourceListResponse,
   IndustrialResourceRateDTO,
+  IndustrialResourceType,
 } from "@veridi/shared";
 import {
   DEFAULT_RESOURCE_RATE_CURRENCY,
   INDUSTRIAL_RESOURCE_CODE_PREFIX,
+  isCapacityResourceType,
   isValidCurrencyCode,
   normalizeCurrencyCode,
   usageUomForResourceType,
@@ -20,6 +22,7 @@ import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import {
   IndustrialResourceNotFoundError,
+  InvalidResourceCapacityError,
   InvalidResourcePowerError,
   InvalidResourceRateError,
   InvalidResourceRateUomError,
@@ -145,6 +148,8 @@ export function toResourceDTO(
     defaultUsageUom: resource.defaultUsageUom,
     // Potência desconhecida continua `null` — nunca zero.
     powerKw: resource.powerKw ? resource.powerKw.toString() : null,
+    // Capacidade não cadastrada continua `null` — e não se lê como zero.
+    capacityQuantity: resource.capacityQuantity,
     notes: resource.notes,
     active: resource.active,
     currentRate: current ? toRateDTO(current, reference) : null,
@@ -210,6 +215,22 @@ export async function listIndustrialResources(
   };
 }
 
+/**
+ * Capacidade só existe onde há capacidade a ocupar.
+ *
+ * Energia não entra em etapa de roteiro e não disputa recurso com ninguém:
+ * guardar um número aqui criaria uma capacidade que nenhuma tela consulta e
+ * que a primeira leitura distraída usaria como se valesse.
+ */
+function assertCapacity(type: string, capacity: number | null | undefined): void {
+  if (capacity === null || capacity === undefined) return;
+  if (!isCapacityResourceType(type as IndustrialResourceType)) {
+    throw new InvalidResourceCapacityError(
+      "Capacidade é informação de mão de obra e equipamento — energia não ocupa recurso.",
+    );
+  }
+}
+
 /** Potência só faz sentido em equipamento, e nunca é inventada. */
 function assertPower(type: string, powerKw: string | null | undefined): void {
   if (powerKw === null || powerKw === undefined) return;
@@ -227,6 +248,7 @@ export async function createIndustrialResource(
 ): Promise<IndustrialResourceDetailDTO> {
   const prisma = getPrisma();
   assertPower(input.type, input.powerKw);
+  assertCapacity(input.type, input.capacityQuantity);
 
   const code = await nextSequenceCode(prisma, CODE_SEQUENCE, CODE_PREFIX);
   const created = await prisma.industrialResource.create({
@@ -238,6 +260,9 @@ export async function createIndustrialResource(
       defaultUsageUom: usageUomForResourceType(input.type),
       ...(input.description !== undefined ? { description: input.description } : {}),
       ...(input.powerKw ? { powerKw: new Prisma.Decimal(input.powerKw) } : {}),
+      ...(input.capacityQuantity !== undefined && input.capacityQuantity !== null
+        ? { capacityQuantity: input.capacityQuantity }
+        : {}),
       ...(input.notes !== undefined ? { notes: input.notes } : {}),
       createdByUserId: actor.id,
       createdByNameSnapshot: actor.name,
@@ -261,6 +286,9 @@ export async function updateIndustrialResource(
   if (input.powerKw !== undefined && input.powerKw !== null) {
     assertPower(resource.type, input.powerKw);
   }
+  if (input.capacityQuantity !== undefined && input.capacityQuantity !== null) {
+    assertCapacity(resource.type, input.capacityQuantity);
+  }
 
   await prisma.industrialResource.update({
     where: { id },
@@ -269,6 +297,11 @@ export async function updateIndustrialResource(
       ...(input.description !== undefined ? { description: input.description } : {}),
       ...(input.powerKw !== undefined
         ? { powerKw: input.powerKw === null ? null : new Prisma.Decimal(input.powerKw) }
+        : {}),
+      // `null` explícito APAGA a capacidade: voltar a "não cadastrada" é uma
+      // resposta legítima, e diferente de deixar o campo de fora.
+      ...(input.capacityQuantity !== undefined
+        ? { capacityQuantity: input.capacityQuantity }
         : {}),
       ...(input.notes !== undefined ? { notes: input.notes } : {}),
       ...(input.active !== undefined ? { active: input.active } : {}),

@@ -13,6 +13,14 @@ export class InvalidResourcePowerError extends Error {
   }
 }
 
+/** Energia não ocupa capacidade: ela não entra em etapa de roteiro. */
+export class InvalidResourceCapacityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidResourceCapacityError";
+  }
+}
+
 export class InvalidResourceRateError extends Error {
   constructor(message: string) {
     super(message);

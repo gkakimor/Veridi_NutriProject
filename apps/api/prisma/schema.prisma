@@ -1153,6 +1153,16 @@ model IndustrialResource {
   /// causa disso.
   powerKw Decimal? @db.Decimal(12, 4)
 
+  /// Quantos deste recurso podem trabalhar AO MESMO TEMPO na producao
+  /// (PLANNING-CAPACITY-BOARD-01). NULL = capacidade ainda nao cadastrada, e
+  /// NUNCA se le como zero: sem o numero o planejamento avisa a lacuna em vez
+  /// de acusar sobrecarga que ninguem pode conferir.
+  ///
+  /// O recurso continua sendo POOL: "Operadores de Producao = 5" sao cinco
+  /// operadores quaisquer, nao cinco cadastros de pessoa. Energia nao ocupa
+  /// capacidade e nao participa — CHECK no banco.
+  capacityQuantity Int?
+
   notes  String?
   active Boolean @default(true)
 
@@ -3113,6 +3123,10 @@ model ProductionOrder {
   /// situacao legitima: produto sem perfil, ou OP anterior a esta migration.
   planningSnapshot ProductionOrderPlanningSnapshot?
 
+  /// A PROGRAMACAO da ordem — quando ela esta prevista para acontecer. No
+  /// maximo uma por OP, e so existe depois que alguem definiu o inicio.
+  schedule ProductionOrderSchedule?
+
   /// Lotes de produto acabado gerados por esta OP (origin=PRODUCTION).
   finishedLots Lot[]
 
@@ -4583,6 +4597,56 @@ model ProductionOrderPlanningSnapshot {
   @@map("production_order_planning_snapshots")
 }
 
+/// PROGRAMACAO DE UMA ORDEM DE PRODUCAO (PLANNING-CAPACITY-BOARD-01).
+///
+/// Quando a ordem esta prevista para acontecer, projetada sobre as janelas em
+/// que a fabrica realmente trabalha. Nasce de uma escolha HUMANA de inicio: o
+/// sistema nao procura horario livre, nao prioriza ordem e nao empurra agenda
+/// por causa de conflito — conflito e AVISO.
+///
+/// SNAPSHOT POR VALOR, como o planejamento previsto. Alterar jornada,
+/// intervalo, feriado ou recesso depois NAO reescreve agenda gravada: o que
+/// esta aqui e o que foi calculado no dia em que alguem programou, e
+/// recalcular e uma acao explicita. Excluir a excecao de calendario que
+/// motivou uma agenda tambem nao a altera (decisao do PO).
+///
+/// "plannedAt" da propria OP continua sendo outra coisa: o carimbo do ATO de
+/// planejar (a transicao para PLANNED). Reaproveitar aquele campo faria um
+/// instante responder por duas perguntas diferentes.
+model ProductionOrderSchedule {
+  id String @id @default(uuid())
+
+  productionOrderId String          @unique
+  productionOrder   ProductionOrder @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
+
+  /// ENVELOPE da ordem: do inicio da primeira etapa ao fim da ultima. Inclui
+  /// noite e fim de semana no meio — nao e ocupacao.
+  plannedStartAt DateTime
+  plannedEndAt   DateTime
+
+  /// Minutos efetivamente trabalhados — a soma dos "workSegments". E esta a
+  /// grandeza que responde "quanto trabalho ha aqui".
+  workingMinutes Int
+
+  /// Etapas com recursos e "workSegments", congeladas. Formato:
+  /// "AgendaEtapa[]" do @veridi/shared. CAPACIDADE SE CONTA PELOS SEGMENTOS,
+  /// nunca pelo envelope: uma etapa que comeca sexta 16:00 e termina segunda
+  /// 09:00 nao ocupa a encapsuladora durante o fim de semana.
+  steps Json
+
+  notes String?
+
+  scheduledAt DateTime @default(now())
+  scheduledBy String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([plannedStartAt])
+  @@index([plannedEndAt])
+  @@map("production_order_schedules")
+}
+
 /// Motivo de um dia NAO operacional no calendario de producao
 /// (PLANNING-CALENDAR-01). Lista fechada: o texto livre fica em `reason`.
 enum ProductionCalendarExceptionType {
@@ -4622,10 +4686,20 @@ model ProductionCalendar {
   startMinuteOfDay Int @default(480)
   endMinuteOfDay   Int @default(1020)
 
-  /// Intervalo TOTAL do dia, em minutos — uma soma, nao um horario: o
-  /// primeiro corte nao tem pausa nomeada nem parada parcial por hora.
+  /// Intervalo TOTAL do dia, em minutos. Continua respondendo "quanto rende
+  /// um dia" e, quando a pausa tem horario, e DERIVADO dele.
   /// CHECK: 0 <= intervalo < (fim - inicio).
   breakMinutes Int @default(60)
+
+  /// ONDE a pausa cai no dia (PLANNING-CAPACITY-BOARD-01). Null nos dois =
+  /// posicao ainda nao configurada, e e assim que um calendario antigo chega
+  /// aqui: a coluna nasce nula e nada e inferido. Sem posicao, a agenda com
+  /// horario exato RECUSA em vez de chutar 12:00-13:00 — o calendario segue
+  /// valido para tudo o mais.
+  /// CHECK: os dois nulos ou os dois preenchidos; inicio < fim; dentro da
+  /// janela do dia; e a diferenca bate com "breakMinutes".
+  breakStartMinuteOfDay Int?
+  breakEndMinuteOfDay   Int?
 
   /// Dias em que a fabrica opera. Sete colunas, e nao um array: cada dia e
   /// uma pergunta independente, e "nenhum dia selecionado" vira CHECK de uma

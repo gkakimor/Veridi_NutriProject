@@ -64,6 +64,7 @@ function recurso(id: string, name: string): IndustrialResourceDTO {
     description: null,
     defaultUsageUom: "HOUR",
     powerKw: null,
+    capacityQuantity: null,
     notes: null,
     active: true,
     currentRate: null,
