@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import type {
   ProjectDTO,
   ProjectStatus,
@@ -213,6 +214,16 @@ export function QuoteVersionsSection({
     condicoesPendentesRef.current = pendente;
     setCondicoesPendentes(pendente);
   }, []);
+
+  /*
+   * A MESMA pendência alimenta a guarda de saída — nunca uma terceira
+   * comparação. Quem decide se há condição alterada continua sendo
+   * `condicoesAlteradas`, dentro do formulário.
+   *
+   * As linhas ficam de fora de propósito: elas gravam ao sair do campo, então
+   * o que está na tela já está no servidor e não há o que perder na saída.
+   */
+  useUnsavedChangesGuard({ isDirty: condicoesPendentes, substantivo: "orçamento" });
   const [addProductId, setAddProductId] = useState("");
   const [sendConfirm, setSendConfirm] = useState<{
     quote: QuoteVersionDTO;

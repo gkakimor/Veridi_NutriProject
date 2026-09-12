@@ -17,8 +17,19 @@ import type { RefObject } from "react";
  *
  * `inert` cobre foco, ponteiro e leitor de tela; `aria-hidden` fica junto
  * para navegadores que ainda não implementam `inert`.
+ *
+ * @param manterAtivo seletor CSS do que continua alcançável atrás do diálogo.
+ *   Nasceu da navegação: com um cadastro aberto em modal de workspace, a
+ *   sidebar inerte não era proteção, era beco sem saída — a pessoa só podia
+ *   voltar fechando o modal. Quem passa o seletor assume que aquele controle é
+ *   uma SAÍDA, e que sair dali é seguro ou passa pela guarda de alterações não
+ *   salvas.
  */
-export function useInertBackground(open: boolean, ref: RefObject<HTMLElement | null>): void {
+export function useInertBackground(
+  open: boolean,
+  ref: RefObject<HTMLElement | null>,
+  manterAtivo?: string,
+): void {
   useEffect(() => {
     if (!open) return;
     const dialog = ref.current;
@@ -44,6 +55,7 @@ export function useInertBackground(open: boolean, ref: RefObject<HTMLElement | n
          * de leitor de tela também não faria sentido: não há nada para ler ali.
          */
         if (sibling.classList.contains("confirm-overlay")) continue;
+        if (manterAtivo && sibling.matches(manterAtivo)) continue;
         sibling.setAttribute("inert", "");
         sibling.setAttribute("aria-hidden", "true");
         marked.push(sibling);
@@ -57,5 +69,5 @@ export function useInertBackground(open: boolean, ref: RefObject<HTMLElement | n
         element.removeAttribute("aria-hidden");
       }
     };
-  }, [open, ref]);
+  }, [open, ref, manterAtivo]);
 }

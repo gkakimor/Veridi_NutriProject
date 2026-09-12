@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import type {
   IndustrialResourceType,
   ProductDTO,
@@ -573,6 +574,19 @@ export function ProductionProfileDetailPage() {
     return opcoes;
   }, []);
 
+  /*
+   * A mesma assinatura que desenha "Alterações não salvas" alimenta a guarda
+   * de saída — base, unidade, etapas, recursos e tempos, tudo numa string.
+   *
+   * Fica ACIMA do retorno de carregamento porque hook não pode nascer depois
+   * de um `return`, e sem perfil carregado ela dá `false`: sem rascunho não há
+   * o que perder. Salvar recarrega o perfil e a assinatura gravada volta a ser
+   * a da tela.
+   */
+  const alteradoNaTela =
+    profile?.draftVersion != null && assinatura(base, unidade, etapas) !== salvo;
+  useUnsavedChangesGuard({ isDirty: alteradoNaTela, substantivo: "perfil de produção" });
+
   if (!profile) {
     return (
       <div className="doc-body">
@@ -590,7 +604,7 @@ export function ProductionProfileDetailPage() {
   const rascunho = profile.draftVersion;
   const ativa = profile.activeVersion;
   const editavel = canEdit && rascunho !== null;
-  const alterado = rascunho !== null && assinatura(base, unidade, etapas) !== salvo;
+  const alterado = alteradoNaTela;
   const recurso = (id: string) => conhecidos.get(id);
   const nomeDoRecurso = (id: string) => recurso(id)?.name ?? "recurso";
   const baseLida = parseDecimalInput(base);
