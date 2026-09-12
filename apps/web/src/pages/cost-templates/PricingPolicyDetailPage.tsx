@@ -1,5 +1,5 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type {
   PricingPolicyDTO,
@@ -29,10 +29,13 @@ import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
 import { useAuth } from "../../app/AuthProvider";
 import {
   PricingModelEditor,
+  assinaturaDoModelo,
   modeloDoRascunho,
   rascunhoDoModelo,
   type PricingModelDraft,
 } from "./PricingModelEditor";
+import { assinaturaDoDocumento, decimalComparavel, textoComparavel } from "../../lib/dirty-fields";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import { PricingModelSummary } from "./PricingModelSummary";
 
 /**
@@ -46,6 +49,51 @@ import { PricingModelSummary } from "./PricingModelSummary";
 
 interface LinhaFaixa extends PricingPolicyTierInput {
   chave: string;
+}
+
+/** As faixas da versão, na forma que a tela edita. */
+function linhasDaVersao(version: PricingPolicyVersionDTO): LinhaFaixa[] {
+  return version.tiers.map((tier, index) => ({
+    chave: `${tier.id}-${index}`,
+    quantity: tier.quantity,
+    uomCode: tier.uomCode,
+    targetContributionMarginPercent: tier.targetContributionMarginPercent ?? "",
+    commissionPercent: tier.commissionPercent,
+  }));
+}
+
+/**
+ * A assinatura do rascunho — Modelo e faixas numa string.
+ *
+ * A chave da linha fica de fora: é identidade de renderização e muda a cada
+ * recarga. Faixa em branco também — "+ Adicionar faixa" sem preencher nada não
+ * é trabalho a perder, e é o que o próprio salvamento já descarta.
+ */
+function assinaturaDasFaixas(linhas: LinhaFaixa[]): string {
+  return assinaturaDoDocumento(
+    linhas
+      /* Quantidade ou margem em branco nas DUAS é faixa que ainda não começou
+         — a comissão nasce em 5% e não é digitação de ninguém. É também o que
+         o próprio salvamento descarta. */
+      .filter(
+        (linha) =>
+          linha.quantity.trim() !== "" ||
+          (linha.targetContributionMarginPercent ?? "").trim() !== "",
+      )
+      .map((linha) => ({
+        quantidade: decimalComparavel(linha.quantity),
+        unidade: linha.uomCode,
+        margem: decimalComparavel(linha.targetContributionMarginPercent),
+        comissao: decimalComparavel(linha.commissionPercent),
+      })),
+  );
+}
+
+function assinaturaDoRascunho(modelo: PricingModelDraft | null, linhas: LinhaFaixa[]): string {
+  return assinaturaDoDocumento({
+    modelo: modelo ? assinaturaDoModelo(modelo) : null,
+    faixas: assinaturaDasFaixas(linhas),
+  });
 }
 
 export function PricingPolicyDetailPage() {
@@ -63,26 +111,52 @@ export function PricingPolicyDetailPage() {
   const [diff, setDiff] = useState<TemplateDiffDTO | null>(null);
   const [modelo, setModelo] = useState<PricingModelDraft | null>(null);
 
+  /*
+   * O que o servidor devolveu na última leitura, bloco a bloco.
+   *
+   * Identificação e rascunho gravam separado, e as duas ações terminam em
+   * `load()`: salvar a identificação reescrevia as faixas e o Modelo com o que
+   * está gravado, e a edição pendente do outro bloco sumia sem aviso. Com a
+   * leitura anterior em mãos dá para separar "ainda está como o servidor
+   * deixou" de "a pessoa mexeu" — e só o primeiro recebe a leitura nova.
+   *
+   * Começa nos MESMOS valores iniciais do estado: na primeira carga ninguém
+   * digitou nada e tudo tem de ser substituído.
+   */
+  const lido = useRef<{
+    nome: string;
+    descricao: string;
+    modelo: string | null;
+    faixas: string;
+  }>({ nome: "", descricao: "", modelo: null, faixas: assinaturaDasFaixas([]) });
+
   const load = useCallback(() => {
     if (!policyId) return;
     getPricingPolicy(policyId)
       .then((result) => {
         setPolicy(result);
-        setNome(result.name);
-        setDescricao(result.description ?? "");
+        const anterior = lido.current;
         const rascunho = result.draftVersion;
-        setModelo(
-          rascunho ? rascunhoDoModelo(rascunho.pricingModel, rascunho.applicableTaxProfiles) : null,
+        const novoModelo = rascunho
+          ? rascunhoDoModelo(rascunho.pricingModel, rascunho.applicableTaxProfiles)
+          : null;
+        const novasFaixas = rascunho ? linhasDaVersao(rascunho) : [];
+        lido.current = {
+          nome: result.name,
+          descricao: result.description ?? "",
+          modelo: novoModelo ? assinaturaDoModelo(novoModelo) : null,
+          faixas: rascunho ? assinaturaDasFaixas(novasFaixas) : anterior.faixas,
+        };
+        setNome((atual) => (atual === anterior.nome ? result.name : atual));
+        setDescricao((atual) =>
+          atual === anterior.descricao ? (result.description ?? "") : atual,
+        );
+        setModelo((atual) =>
+          (atual ? assinaturaDoModelo(atual) : null) === anterior.modelo ? novoModelo : atual,
         );
         if (rascunho) {
-          setLinhas(
-            rascunho.tiers.map((tier, index) => ({
-              chave: `${tier.id}-${index}`,
-              quantity: tier.quantity,
-              uomCode: tier.uomCode,
-              targetContributionMarginPercent: tier.targetContributionMarginPercent ?? "",
-              commissionPercent: tier.commissionPercent,
-            })),
+          setLinhas((atual) =>
+            assinaturaDasFaixas(atual) === anterior.faixas ? novasFaixas : atual,
           );
         }
       })
@@ -105,6 +179,38 @@ export function PricingPolicyDetailPage() {
       setSaving(false);
     }
   }
+
+  /*
+   * Dois blocos gravam separado aqui — identificação e rascunho —, cada um com
+   * o seu botão, e a guarda soma os dois: "Salvar identificação" não absolve a
+   * faixa meio digitada, e "Salvar rascunho" não absolve o nome trocado.
+   *
+   * Ativar e arquivar gravam na hora e não deixam pendência; a comparação
+   * entre versões e o histórico são leitura. Preço não existe nesta tela: ele
+   * nasce quando a política é aplicada a um produto.
+   */
+  const rascunhoDoServidor = policy?.draftVersion ?? null;
+  const identificacaoAlterada =
+    policy !== null &&
+    canEdit &&
+    (textoComparavel(nome) !== textoComparavel(policy.name) ||
+      textoComparavel(descricao) !== textoComparavel(policy.description));
+  const rascunhoAlterado =
+    rascunhoDoServidor !== null &&
+    canEdit &&
+    assinaturaDoRascunho(modelo, linhas) !==
+      assinaturaDoRascunho(
+        rascunhoDoModelo(
+          rascunhoDoServidor.pricingModel,
+          rascunhoDoServidor.applicableTaxProfiles,
+        ),
+        linhasDaVersao(rascunhoDoServidor),
+      );
+  useUnsavedChangesGuard({
+    isDirty: identificacaoAlterada || rascunhoAlterado,
+    substantivo: "política de precificação",
+    genero: "a",
+  });
 
   if (!policy) {
     return (
