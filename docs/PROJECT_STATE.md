@@ -1969,7 +1969,7 @@ novo não alcança OP antiga, troca com motivo, kg × g = 2 h, Comercial vê e l
 seletor atrás do diálogo (60 × 101) — corrigido em `components.css`.
 
 Achados sem correção: a tabela de "Documentos" alarga o modal do Produto em
-390px (anterior à rodada); mudar a quantidade em DRAFT não refaz a programação
+390px (anterior à rodada — fechado em MOBILE-UX-CLEANUP-WAVE-01); mudar a quantidade em DRAFT não refaz a programação
 gravada (anterior — fechado em OP-SCHEDULE-STALE-ON-QUANTITY-01); picking, receita e apontamentos seguem sem `requireRole`;
 cancelar a OP ainda grava `SYSTEM_ACTOR`; E2E do golden path e da busca de
 produto ajustados (`scripts/e2e/lib/roteiro.mjs`) e não rodados.
@@ -2098,7 +2098,7 @@ com `take: 100` e `ALL_ROWS` com teto 1000 falham). Gate web 288 (relacionados) 
 portas isolados, 1440 e 390: 31/31, console limpo, fixtures apagadas.
 
 Achados: o seletor escolhido corta o rótulo em 240px com o "✕" por cima (visual
-da foundation, igual nas listagens); relatórios não guardam filtro na URL
+da foundation, igual nas listagens — fechado em MOBILE-UX-CLEANUP-WAVE-01); relatórios não guardam filtro na URL
 (padrão atual mantido); na troca de filtro a tabela anterior fica visível com
 "Carregando…" (`useReport`); o resumo do R-15 lê as linhas de todos os
 faturamentos filtrados em memória — correto, candidato a agregação no banco se o
@@ -2269,7 +2269,8 @@ massa apagada.
 Achados, sem correção: `POST /receipts/customer-supplied` NÃO recusa item inativo
 (só a tela o esconde, antes e agora — corrigido em CUSTOMER-MATERIAL-INACTIVE-GATE-01,
 abaixo); em 1440 a tabela de linhas ainda rola 28 px
-dentro do contêiner (antes 484 px, com o `<select>` de 696 px); seguem com
+dentro do contêiner (antes 484 px, com o `<select>` de 696 px — fechado em
+MOBILE-UX-CLEANUP-WAVE-01); seguem com
 `pageSize: 1000` em seletor, fora deste escopo, `CustomerMaterialsPage`,
 `ProjectsPage`, `ProductsPage`, `BillingsPage`, `SupplierItemsPage`,
 `CustomerOrderPage` e `ProjectProductsSection` — fechados em
@@ -2899,6 +2900,48 @@ da faixa serial passaram no banco de teste já com o corpus.
 
 **Fora do escopo.** A massa antiga do `veridi_dev` — usuários `USR-TEST-*`,
 sessões, bancos `veridi_apply_check_*` — fica para FRESH-DATA-E2E-BASELINE-01.
+
+## Três transbordos conhecidos (MOBILE-UX-CLEANUP-WAVE-01, 2026-09-13)
+
+Os três achados seguiam vivos na main (reproduzidos no Chromium em 390×844 e
+1440×900 antes de mexer). Só CSS e uma classe; sem API, sem migration.
+
+**Modal de workspace.** A coluna do formulário era `max-width: 880px` com trilha
+`auto`, que cresce até o conteúdo mínimo do item sem olhar a tela: a tabela de
+Documentos levava o modal do Produto a rolar 203px de lado em 390px, com toda
+seção cortada — e o mesmo no Fornecedor (543px) e no Item (363px), e em 1024
+(209px e 29px). Agora `width: min-content`, `min-width: min(880px, 100%)`,
+`max-width: 100%` e trilha `minmax(auto, 100%)`: o máximo em porcentagem prende
+o mínimo automático do item à coluna, e a tabela rola dentro do
+`.table-container`. Em 1280 e 1440 as larguras são as de antes — 880px, e 964px
+no Fornecedor, cuja tabela cabe inteira —, agora centradas (em 1280 o
+Fornecedor passava 35px do corpo).
+
+**Seletor por entidade.** O ✕ é absoluto sobre o campo e o padding direito era o
+de campo sem botão: o nome escolhido corria 14px por baixo dele, cortado seco,
+nas onze telas medidas. `.entity-select:has(.entity-select__clear) input`
+reserva 36px, o campo termina em reticências e o ✕ passou de 19×21 a 28×28, com
+anel de foco. Vale para `EntityFilterSelect` e `SearchableEntitySelect`; largura
+do controle (240px, linha inteira em 390px), rótulo acessível, Tab até o ✕ e
+limpar sem mudança. Contrato de SELECTOR-CUTOFF-WAVE-01 intocado.
+
+**Receber material do cliente.** Em 1440 a tabela de linhas rolava 28px vazia,
+45px com item e 324px com o aviso de item sem lote, e o ✕ de remover saía da
+vista. `.table--customer-material-lines`: quantidade em 7,5rem, lote do
+fabricante e localização a 100% da coluna (mínimo 6rem), cabeçalho e aviso
+quebrando linha — 0px em 1440 e 1280. Em 390px segue rolando dentro do
+contêiner (535px), por desenho; a lista de Materiais de Clientes rola por dentro
+(140px em 1440) como toda listagem, sem transbordo de página.
+
+**Validação.** Web: 4 arquivos novos (22 testes); 9 mutações, todas derrubadas.
+Gate: 61 arquivos, 676 testes (componentes, Produtos, Recebimento, Estoque,
+Faturamento, cadastros com modal, filtros, relatórios sem corte, criação no
+contexto, guarda) e typecheck. Smoke Playwright (web do worktree contra a API
+dev, nada gravado), antes na main e depois no worktree, em 390 e 1440: documento
+sem rolagem lateral em todas as telas; corpo dos sete modais com 0px (também em
+1024 e 1280); seletor com 0px sob o ✕ em onze telas, limpando por Tab + Enter e
+pela borda do ✕; linhas do material do cliente com 0px também em 1280; console
+limpo.
 
 ## Próxima prioridade
 

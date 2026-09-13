@@ -731,10 +731,30 @@
   padding: var(--sp-8);
 }
 
+/*
+ * Coluna do formulário: 880px, mais larga só quando o conteúdo exige, e nunca
+ * mais larga que o corpo do modal.
+ *
+ * Era `max-width: 880px` com a trilha implícita `auto`, que cresce até o
+ * conteúdo mínimo do item sem olhar para a tela. A tabela de Documentos do
+ * Produto tem sete cabeçalhos que não quebram linha: em 390px ela levava o
+ * formulário a 576px dentro de um corpo de 357px, o modal rolava 203px de lado
+ * e toda seção ficava cortada à direita (Fornecedor, 543px; Item, 363px).
+ *
+ * Em 1440 a mesma trilha deixa "Itens fornecidos" alargar o Fornecedor a
+ * 964px, e isso fica: ali cabe, e tabela inteira à vista não pode virar
+ * rolagem. `width: min-content` guarda esse crescimento, `max-width: 100%`
+ * põe o teto, e o máximo em porcentagem da trilha prende o mínimo automático
+ * do item à coluna — sem ele a trilha passaria do teto do mesmo jeito. Acima
+ * do teto, a tabela rola dentro do próprio `.table-container`.
+ */
 .modal-fullscreen__form-wrap {
-  max-width: 880px;
+  width: min-content;
+  min-width: min(880px, 100%);
+  max-width: 100%;
   margin: 0 auto;
   display: grid;
+  grid-template-columns: minmax(auto, 100%);
   gap: var(--sp-5);
 }
 
@@ -1646,20 +1666,53 @@ td .entity-select {
   color: var(--ink);
   font-size: var(--fs-base);
   font-family: inherit;
+  /* Nome maior que o campo termina em reticências — corte seco no meio da
+     palavra não diz que o nome continua. */
+  text-overflow: ellipsis;
+}
+
+/*
+ * Com o ✕ presente, o texto para antes dele.
+ *
+ * O botão é absoluto sobre o campo, e o padding direito era o de campo sem
+ * botão: o nome escolhido corria 14px por baixo do ✕ — nas barras de filtro
+ * em 240px, em 390px e na linha do Receber material do cliente. `:has` segue
+ * o próprio botão, então a reserva some junto com ele (lista aberta, nada
+ * escolhido) e o campo volta a usar a largura inteira.
+ */
+.entity-select:has(.entity-select__clear) input {
+  padding-right: calc(28px + var(--sp-2));
 }
 
 .entity-select__clear {
   position: absolute;
-  right: var(--sp-2);
+  right: 3px;
   top: 50%;
   transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Alvo de 28px dentro do campo de 34px — o anterior media 19 × 21. */
+  width: 28px;
+  height: 28px;
   border: 0;
+  border-radius: var(--radius-sm);
   background: none;
   color: var(--ink-2);
   cursor: pointer;
   font-size: var(--fs-sm);
   line-height: 1;
-  padding: var(--sp-1);
+  padding: 0;
+}
+
+.entity-select__clear:hover:not(:disabled) {
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+.entity-select__clear:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .entity-select__list {
@@ -1959,6 +2012,38 @@ body:has(.confirm-dialog) .entity-select__list {
 
 .table--order-lines .col-unit {
   width: 90px;
+}
+
+/*
+ * Linhas do Receber material do cliente: seis colunas que cabem em 1440 com a
+ * sidebar aberta (contêiner de 1088px).
+ *
+ * Os campos de texto tinham a largura nativa do navegador, ~180px cada, e a
+ * soma passava do contêiner em 28px — 45px com a unidade do item escolhido. O
+ * que saía da vista era o ✕ de remover a linha. Quantidade é número curto e
+ * ganha largura própria; lote do fabricante e localização acompanham a coluna,
+ * e o cabeçalho quebra linha quando falta espaço. Em tela estreita a tabela
+ * continua rolando dentro do `.table-container`: seis campos lado a lado não
+ * cabem em 390px, e fingir que cabem espremeria cada um abaixo do legível.
+ */
+.table--customer-material-lines th {
+  white-space: normal;
+}
+
+.table--customer-material-lines td > input[type="text"] {
+  width: 100%;
+  min-width: 6rem;
+}
+
+.table--customer-material-lines td.is-numeric > input {
+  width: 7.5rem;
+  min-width: 0;
+}
+
+/* Aviso de item sem controle de lote: prosa sob o campo, dentro da coluna. */
+.table--customer-material-lines td .field__error {
+  white-space: normal;
+  margin-top: var(--sp-1);
 }
 
 /* Diz por que a lista está mostrando um recorte — filtro vindo de um link. */
