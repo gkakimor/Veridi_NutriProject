@@ -1216,6 +1216,29 @@ CHECKs, depois de a jornada semanal estar em produção e o backup lógico
 conferido. Sem impacto funcional até lá — o risco é alguém ler a coluna velha
 achando que ela é a jornada.
 
+### 17. TEST-SCRIPTS-DB-ISOLATION-01 — a suíte de scripts ainda escreve no banco da `.env` — MEDIUM
+
+TEST-SUPPORT-ISOLATION-WAVE-01 (2026-09-13) tirou a suíte da API do banco da
+`DATABASE_URL`; a de scripts (`vitest.scripts.config.ts`, rodada por `pnpm
+test` da raiz) continua nele. Com o corpus em `.local-data/veridi/csv` —
+presente na máquina do laboratório —, `scripts/veridi-import/importer.test.ts`
+roda `runPipeline({ write: true })` e grava o master data do corpus no banco de
+quem usa o sistema (no DEV, o `veridi_dev`: 581 itens com `externalCode` em
+2026-09-13), e o caso de abertura de estoque cria item, lote e movimento.
+Correção provável: a mesma resolução de `apps/api/src/test-support/banco-de-teste.ts`
+— mas antes decidir se o corpus pode morar no banco de teste que a API usa, ou
+se os scripts ganham banco de teste próprio. Fora do escopo daquela rodada
+(só API).
+
+### 18. TEST-USERS-LEGACY-RESIDUE-01 — usuários de teste antigos no `veridi_dev` — LOW
+
+Rodadas anteriores a TEST-SUPPORT-ISOLATION-WAVE-01 deixaram 683 usuários
+`USR-TEST-*` e ~808 sessões no `veridi_dev` (2026-09-13). A suíte não escreve
+mais lá e ninguém os usa, mas eles aparecem na lista de usuários do DEV. Limpar
+é escrita destrutiva no banco do DEV, só com pedido do PO: sessões e
+preferências saem em cascata; anexo, pesagem ou consumo de amostra feito por
+eles segura o usuário (RESTRICT); as demais autorias viram NULL.
+
 ---
 
 ## E. Watchlist — observado, sem ação conhecida

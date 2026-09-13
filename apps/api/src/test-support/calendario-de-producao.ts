@@ -5,12 +5,15 @@ import { getPrisma } from "../db/prisma.js";
  * O Calendário de Produção emprestado a um arquivo de teste — e devolvido
  * como estava.
  *
- * O calendário é UM, global, e os testes da API rodam no banco da `.env`: no
- * DEV, é o calendário de quem usa o sistema. Provar "ainda não configurado"
- * exige tirá-lo do banco; provar a agenda exige regravar a semana. Antes daqui,
- * a limpeza apagava o calendário e as exceções do ano de teste existissem
- * antes ou não, e depois da faixa serial o DEV ficava sem jornada — toda
- * programação recusava (TEST-ISOLATION-CALENDAR-01).
+ * O calendário é UM, global. Provar "ainda não configurado" exige tirá-lo do
+ * banco; provar a agenda exige regravar a semana. Antes daqui, a limpeza
+ * apagava o calendário e as exceções do ano de teste existissem antes ou não,
+ * e — com a suíte no banco da `.env` — depois da faixa serial o DEV ficava sem
+ * jornada: toda programação recusava (TEST-ISOLATION-CALENDAR-01). Desde
+ * TEST-SUPPORT-ISOLATION-WAVE-01 a suíte escreve só no banco de teste
+ * (`banco-de-teste.ts`) e nunca empresta o calendário de quem usa o DEV; a
+ * devolução ficou como defesa a mais, e mantém o banco de teste estável entre
+ * rodadas.
  *
  * `guardarCalendarioDeProducao` lê, ANTES de qualquer escrita e numa consulta
  * só, a linha do calendário, os dias da semana e as exceções do ano reservado
@@ -24,7 +27,9 @@ import { getPrisma } from "../db/prisma.js";
  * É isolamento no TEMPO: enquanto o arquivo roda, o calendário é dele — por
  * isso os arquivos que o usam ficam na faixa serial. A devolução roda no
  * `afterAll`, que o Vitest executa com teste falhando e com `beforeAll`
- * falhando; processo morto no meio (kill) não chega lá.
+ * falhando; processo morto no meio (kill) não chega lá — e o que ficou
+ * alterado é o banco de teste, que a próxima rodada guarda e recoloca no
+ * ponto de partida do arquivo.
  */
 export interface CalendarioGuardado {
   readonly ano: number;
@@ -85,7 +90,7 @@ export async function devolverCalendarioDeProducao({ ano, linhas }: CalendarioGu
   const devolvidas = await lerLinhas(prisma, ano);
   if (JSON.stringify(devolvidas) !== JSON.stringify(linhas)) {
     throw new Error(
-      "O Calendário de Produção voltou diferente do que o teste encontrou — confira o banco da .env antes de programar.",
+      "O Calendário de Produção voltou diferente do que o teste encontrou — confira o banco de teste.",
     );
   }
 }

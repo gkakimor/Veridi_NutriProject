@@ -174,7 +174,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Primeiro o calendário: é o estado de quem usa o banco, e não depende das
+  // Primeiro o calendário: é estado global do banco de teste, e não depende das
   // fixtures abaixo. As exceções que o arquivo criou em ANO saem aqui.
   if (calendarioDeAntes) await devolverCalendarioDeProducao(calendarioDeAntes);
   const prisma = getPrisma();

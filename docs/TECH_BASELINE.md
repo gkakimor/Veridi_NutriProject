@@ -343,6 +343,41 @@ Prioritize automated tests for:
 
 Simple CRUD can initially rely more heavily on integration/manual checks when reasonable.
 
+## API test database (TEST-SUPPORT-ISOLATION-WAVE-01)
+
+API tests (`apps/api`, both `vitest.config.ts` and `vitest.serial.config.ts`)
+write for real — they delete the Production Calendar, rewrite the weekly
+schedule, create users and sessions. They never run on the `DATABASE_URL`
+database:
+
+- `TEST_DATABASE_URL` set (environment or `.env`) → that database. This is the
+  CI contract: provide it; any name works as long as it contains the word
+  `test` (`veridi_test`, `ci_4821_test`, `test_4821`);
+- unset → `<DATABASE_URL database>_test` on the same server with the same
+  credentials (`veridi_dev` → `veridi_dev_test`). The global setup creates it
+  when missing (needs `CREATEDB`); a worktree with its own database gets its
+  own test database.
+
+The run refuses before any test (fail closed) when the resolved database name
+lacks the word `test`, carries a production mark (`prod`, `production`,
+`producao`, `live`, `railway`), sits on a managed-provider host, is the
+`DATABASE_URL` database itself, or when production credentials
+(`DATABASE_PUBLIC_URL`, `RAILWAY_*`) are in the environment. The check runs in
+the config, in the global setup and in every worker
+(`apps/api/src/test-support/banco-de-teste.ts`).
+
+The global setup applies pending migrations (`prisma migrate deploy`: applies,
+never creates) and refuses a test database holding migrations this checkout
+does not know — drop it and the next run recreates it. Users and sessions made
+by `buildTestApp` are removed at the end of each file; the ones a killed run
+left behind are removed by the next run, when no other connection is open on
+the test database. The test database is disposable; nothing a test does, or a
+kill leaves half-done, reaches the database people use.
+
+The root scripts suite (`vitest.scripts.config.ts`) is not covered yet: with
+the corpus present, `scripts/veridi-import/importer.test.ts` still writes to
+the `DATABASE_URL` database (BACKLOG TEST-SCRIPTS-DB-ISOLATION-01).
+
 ---
 
 # Future hardening phase

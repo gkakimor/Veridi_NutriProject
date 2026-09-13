@@ -1,4 +1,5 @@
 import { defineConfig, loadEnv } from "vite";
+import { ambienteComBancoDeTeste } from "./src/test-support/banco-de-teste.js";
 
 /**
  * Faixa serial da suíte da API.
@@ -45,6 +46,12 @@ import { defineConfig, loadEnv } from "vite";
  * o devolve no fim (`src/test-support/calendario-de-producao.ts`) — o que não
  * dispensa a faixa: enquanto o arquivo roda, o calendário é só dele.
  *
+ * Desde TEST-SUPPORT-ISOLATION-WAVE-01 esse calendário é o do BANCO DE TESTE,
+ * nunca o de quem usa o DEV (`src/test-support/banco-de-teste.ts`): a faixa
+ * não depende mais de devolver nada para não estragar dado de ninguém, e um
+ * kill antes do `afterAll` só deixa rastro no banco de teste. A devolução
+ * continua, como defesa a mais.
+ *
  * `dashboard-retrato-unico.test.ts` (DASHBOARD-SNAPSHOT-CONSISTENCY-01) entrou
  * pelo critério do painel: compara o Painel inteiro antes, durante e depois de
  * uma escrita — com vizinho escrevendo, "antes" e "durante" diferem sem nada
@@ -55,7 +62,10 @@ import { defineConfig, loadEnv } from "vite";
  */
 export default defineConfig(({ mode }) => ({
   test: {
-    env: loadEnv(mode, "../../", ""),
+    env: ambienteComBancoDeTeste(loadEnv(mode, "../../", "")),
+    // Os mesmos da faixa paralela — ver `vitest.config.ts`.
+    globalSetup: ["./src/test-support/preparar-banco-de-teste.ts"],
+    setupFiles: ["./src/test-support/ciclo-do-arquivo-de-teste.ts"],
     include: [
       "src/modules/dashboard/dashboard.test.ts",
       "src/modules/dashboard/dashboard-retrato-unico.test.ts",
