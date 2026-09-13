@@ -245,6 +245,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     screenPath: "/relatorios/custos/precificacao-por-produto",
     // Preço, margem e contribuição: documento interno, como o R-20.
     internal: true,
+    roles: PRICING_PROVENANCE_ROLES,
     primaryColumns: [
       "Produto",
       "Nome",

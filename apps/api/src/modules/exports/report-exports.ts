@@ -539,6 +539,8 @@ const r19 = defineCsvExport({
   path: "/reports/costs/pricing-by-product/export.csv",
   slug: "r19_precificacao_por_produto",
   schema: pricingByProductQuerySchema,
+  // Margem e markup por faixa: os perfis da rota JSON, e só eles.
+  roles: PRICING_PROVENANCE_ROLES,
   fetch: async (query: PricingByProductQuery) =>
     (await getPricingByProductReport(query, ALL_ROWS)).rows,
   columns: [

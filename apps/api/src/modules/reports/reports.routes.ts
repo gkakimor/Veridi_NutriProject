@@ -29,6 +29,7 @@ import {
   getPricingByProductReport,
   getQuotePricingAuditReport,
 } from "./cost-reports.service.js";
+import type { UserRole } from "@veridi/shared";
 import { PRICING_PROVENANCE_ROLES } from "@veridi/shared";
 import { ALL_ROWS } from "../../lib/pagination.js";
 import { requireRole } from "../../lib/current-user.js";
@@ -75,8 +76,24 @@ export const reportsRoutes: FastifyPluginAsync = async (app) => {
     path: string,
     schema: TSchema,
     handler: (query: TSchema["_output"], pagination?: Pagination) => Promise<unknown>,
+    /**
+     * Perfis do relatório restrito — a MESMA lista que a exportação dele
+     * declara (`roles` em `report-exports.ts`). Conferida antes do filtro.
+     */
+    roles?: readonly UserRole[],
   ) {
     app.get(path, async (request, reply) => {
+      if (roles) {
+        try {
+          requireRole(request, ...roles);
+        } catch (error) {
+          if (error instanceof ForbiddenError) {
+            return reply.status(403).send({ error: "forbidden", message: error.message });
+          }
+          throw error;
+        }
+      }
+
       const parsed = schema.safeParse(request.query);
       if (!parsed.success) {
         return reply
@@ -133,7 +150,14 @@ export const reportsRoutes: FastifyPluginAsync = async (app) => {
     industrialCostByProductQuerySchema,
     getIndustrialCostByProductReport,
   );
-  register("/reports/costs/pricing-by-product", pricingByProductQuerySchema, getPricingByProductReport);
+  // R-19 expõe margem e markup das faixas ativas: a autoridade da proveniência
+  // econômica, a mesma do R-20 (R19-REPORT-AUTHORIZATION-01).
+  register(
+    "/reports/costs/pricing-by-product",
+    pricingByProductQuerySchema,
+    getPricingByProductReport,
+    PRICING_PROVENANCE_ROLES,
+  );
 
   // R-20 expõe custo e margem por proposta: acesso restrito a quem negocia.
   // A MESMA lista guarda o CSV (`report-exports.ts`) — e o PDF, que lê o CSV.

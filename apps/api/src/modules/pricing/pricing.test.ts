@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { UomDimension } from "@prisma/client";
+import type { UomDimension, UserRole } from "@prisma/client";
+import { PRICING_PROVENANCE_ROLES, USER_ROLES } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
-import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { buildTestApp, createAuthenticatedUser } from "../../test-support/authenticated-app.js";
 import { instanteNoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 
@@ -1266,6 +1267,75 @@ describe("R-19 — precificação por produto", () => {
     expect(csv.statusCode).toBe(200);
     expect(csv.body).toContain("Margem de contribuição (%)");
     expect(csv.body).toContain(pricing.code);
+
+    await app.close();
+  });
+
+  /**
+   * R19-REPORT-AUTHORIZATION-01: margem e markup das faixas são proveniência
+   * econômica. O R-19 respondia 200 em JSON e CSV a quem `/pricing-versions`
+   * recusava. A autoridade é a do R-20 — `PRICING_PROVENANCE_ROLES` —, e as
+   * chamadas vão direto ao servidor, nos seis perfis reais.
+   */
+  it("perfil × formato: JSON, CSV e o CSV do PDF respondem aos perfis da proveniência econômica", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const scenario = await createScenario(app, { materialUnitCost: "10", materialQuantityPerUnit: "1" });
+    const pricing = await createPricing(app, scenario.product.id, scenario.calculation.id);
+    await addTier(app, pricing.id, {
+      quantity: "500",
+      priceMode: "MANUAL_PRICE",
+      manualUnitPrice: "25",
+      commissionPercent: "5",
+    });
+    await app.inject({ method: "POST", url: `/pricing-versions/${pricing.id}/activate`, payload: {} });
+
+    const busca = `search=${scenario.product.code}`;
+    const pedidos = {
+      json: `/reports/costs/pricing-by-product?${busca}`,
+      csv: `/reports/costs/pricing-by-product/export.csv?${busca}`,
+      // O PDF pede o CSV com os filtros da tela, paginação incluída.
+      pdf: `/reports/costs/pricing-by-product/export.csv?${busca}&page=1&pageSize=25`,
+    };
+    const proibido = { error: "forbidden", message: "Seu perfil não permite esta ação." };
+    expect([...PRICING_PROVENANCE_ROLES].sort()).toEqual(["ADMIN", "COMMERCIAL"]);
+
+    for (const papel of USER_ROLES as readonly UserRole[]) {
+      const { cookie } = await createAuthenticatedUser(papel);
+      const como = (url: string) => app.inject({ method: "GET", url, headers: { cookie } });
+      const [json, csv, pdf] = [await como(pedidos.json), await como(pedidos.csv), await como(pedidos.pdf)];
+
+      if (PRICING_PROVENANCE_ROLES.includes(papel)) {
+        expect([json.statusCode, csv.statusCode, pdf.statusCode], papel).toEqual([200, 200, 200]);
+        const [faixa] = json.json().rows as { pricingLabel: string; contributionMarginPercent: string | null; markupPercent: string | null }[];
+        expect(faixa?.pricingLabel, papel).toContain(pricing.code);
+        expect(faixa?.contributionMarginPercent, papel).not.toBeNull();
+        expect(faixa?.markupPercent, papel).not.toBeNull();
+        for (const arquivo of [csv, pdf]) {
+          expect(arquivo.body, papel).toContain("Markup (%)");
+          expect(arquivo.body, papel).toContain(pricing.code);
+        }
+        continue;
+      }
+
+      expect([json.statusCode, csv.statusCode, pdf.statusCode], papel).toEqual([403, 403, 403]);
+      for (const resposta of [json, csv, pdf]) {
+        expect(resposta.json(), papel).toEqual(proibido);
+        expect(resposta.body, papel).not.toContain(pricing.code);
+        expect(resposta.headers["content-disposition"], papel).toBeUndefined();
+      }
+    }
+
+    // Perfil antes do filtro: quem não pode ver não aprende nada do contrato.
+    const { cookie: producao } = await createAuthenticatedUser("PRODUCTION");
+    for (const url of [
+      "/reports/costs/pricing-by-product?pageSize=0",
+      "/reports/costs/pricing-by-product/export.csv?pageSize=0",
+    ]) {
+      const resposta = await app.inject({ method: "GET", url, headers: { cookie: producao } });
+      expect(resposta.statusCode, url).toBe(403);
+    }
 
     await app.close();
   });

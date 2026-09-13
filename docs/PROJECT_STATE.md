@@ -2307,7 +2307,42 @@ bloqueadas sem requisição — 26/26, console limpo.
 Achado, sem correção (decisão de perfil): **R-19 mostra margem e markup a todos** —
 PRODUCTION leva 403 em `/pricing-versions` (COMMERCIAL, PURCHASING e ADMIN) e 200
 no R-19 em JSON e CSV. Não é bypass por formato; é o relatório mais aberto que a
-origem.
+origem. (Corrigido em R19-REPORT-AUTHORIZATION-01, abaixo.)
+
+## R-19 é da proveniência econômica (R19-REPORT-AUTHORIZATION-01, 2026-09-13)
+
+P0, decisão de PO: o R-19 (faixas ativas com margem de contribuição e markup)
+usa a mesma autoridade do R-20, `PRICING_PROVENANCE_ROLES` (COMMERCIAL e ADMIN;
+constante inalterada). Antes o R-19 respondia 200 em JSON, CSV e PDF a qualquer
+perfil. Agora: o `register` dos relatórios aceita `roles` (conferido antes do filtro,
+403 padrão) e o R-19 os declara; o CSV declara os mesmos `roles` pelo mecanismo da
+R20-EXPORT-AUTHORIZATION-01; o catálogo, a tela (componente `ReportForbidden`) e a
+impressão usam a mesma lista e não fazem requisição para perfil negado. PURCHASING
+continua lendo `/pricing-versions`, mas não o R-19 — é o que a constante diz.
+Conteúdo, fórmulas e R-20 sem mudança. Sem migration.
+
+**Guarda automática estendida.** Além de "JSON 403 ⇒ CSV 403", toda exportação que
+declara `roles` exige a rota JSON restrita aos MESMOS perfis — proteger só o arquivo
+deixaria a tela aberta.
+
+**R-18 (não alterado).** Mostra o último cálculo de custo industrial salvo por
+produto: estrutura ativa, CALC, datas, qualidade, base, custo total, subtotal
+conhecido, custo por unidade e por 1.000 — sem preço, margem ou markup. Origens
+(`/products/:id/cost-calculations`, `/industrial-cost-calculations/:id`,
+`/industrial-costs/:id`, `/products/:id/industrial-costs`) e o R-18 em JSON, CSV,
+PDF e catálogo são abertos a qualquer perfil autenticado; o PDF sai marcado como
+documento interno.
+
+**Validação.** API: matriz dos seis perfis × JSON, CSV e CSV do PDF com precificação
+ativa real (`pricing.test.ts`, "perfil × formato") e a guarda nos dois sentidos
+(`r20-autorizacao.test.ts`); mutação: tirar `roles` do JSON ou do CSV derruba 3.
+Web: tela e catálogo nos seis perfis (`r19-autorizacao.test.tsx`), impressão negada
+em quatro perfis e gerada para COMMERCIAL e ADMIN (`report-content.test.tsx`);
+mutação: a UI da main derruba 12. Gate API 188, web 139, shared 29, typecheck.
+Smoke com banco e portas isolados e precificação ativa criada pela API: COMMERCIAL
+vê, abre com margem e markup, baixa CSV e gera PDF; PRODUCTION leva 403 em JSON, CSV
+e CSV do PDF, sem R-19 no catálogo, URL direta e impressão bloqueadas sem requisição
+— 13/13, console limpo.
 
 ## Próxima prioridade
 

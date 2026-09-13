@@ -711,8 +711,9 @@ Rules that outlived the round that produced them. The UI side of them lives in
   the margin was not calculable.
 - **The customer-facing quotation never shows cost, margin, markup,
   commission, CALC or PREC.** That provenance is internal, delivered only to
-  commercial and administration roles; the R-20 audit report carries the same
-  restriction and prints marked as an internal document. The restriction holds
+  commercial and administration roles; the R-19 pricing-by-product report
+  (active tiers with contribution margin and markup) and the R-20 audit report
+  carry the same restriction and print marked as internal documents. The restriction holds
   in **every output format** — screen, JSON, CSV and the PDF built from the CSV:
   an export or print path never widens who can read the data.
 - A new quotation version copies the commercial values but never the pricing
