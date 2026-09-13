@@ -8,6 +8,7 @@ import type {
 import { getPrisma } from "../../db/prisma.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
+import { periodoDeInstante } from "./report-period.js";
 import type { AwaitingBillingQuery, BillingPeriodQuery } from "./reports.schemas.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -27,19 +28,13 @@ export async function getBillingPeriodReport(
   pagination: Pagination = query,
 ): Promise<BillingPeriodReportDTO> {
   const prisma = getPrisma();
+  const periodo = periodoDeInstante(query);
 
   const where: Prisma.BillingWhereInput = {
     status: "ISSUED",
     ...(query.customerOrderId ? { customerOrderId: query.customerOrderId } : {}),
     ...(query.customerId ? { customerOrder: { is: { customerId: query.customerId } } } : {}),
-    ...(query.from || query.to
-      ? {
-          issuedAt: {
-            ...(query.from ? { gte: query.from } : {}),
-            ...(query.to ? { lte: query.to } : {}),
-          },
-        }
-      : {}),
+    ...(periodo ? { issuedAt: periodo } : {}),
     ...(query.search
       ? {
           OR: [

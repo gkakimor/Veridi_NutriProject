@@ -17,6 +17,7 @@ import {
 import { diasCivisAte, marcadorDeHojeComercial } from "../../lib/business-day.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta, slicePage } from "../../lib/pagination.js";
+import { periodoDeDataCivil, periodoDeInstante } from "./report-period.js";
 import type { ExpiryQuery, InventoryPositionQuery, MovementsQuery } from "./reports.schemas.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -189,10 +190,8 @@ export async function getExpiryReport(
       expiryFilter = { gte: hoje, lte: new Date(hoje.getTime() + 60 * DAY_MS) };
       break;
     case "CUSTOM":
-      expiryFilter = {
-        ...(query.from ? { gte: query.from } : {}),
-        ...(query.to ? { lte: query.to } : {}),
-      };
+      // Os dias escolhidos, em marcadores — a mesma espécie da validade.
+      expiryFilter = periodoDeDataCivil(query) ?? {};
       break;
   }
 
@@ -271,6 +270,7 @@ export async function getMovementsReport(
   pagination: Pagination = query,
 ): Promise<ReportPageDTO<MovementReportRowDTO>> {
   const prisma = getPrisma();
+  const periodo = periodoDeInstante(query);
 
   // Objeto montado dinamicamente e tipado no fim: `exactOptionalPropertyTypes`
   // nao aceita spread condicional direto sobre campos de enum do Prisma.
@@ -279,14 +279,7 @@ export async function getMovementsReport(
     ...(query.lotId ? { lotId: query.lotId } : {}),
     ...(query.type ? { type: query.type } : {}),
     ...(query.sourceType ? { sourceType: query.sourceType } : {}),
-    ...(query.from || query.to
-      ? {
-          occurredAt: {
-            ...(query.from ? { gte: query.from } : {}),
-            ...(query.to ? { lte: query.to } : {}),
-          },
-        }
-      : {}),
+    ...(periodo ? { occurredAt: periodo } : {}),
     ...(query.search
       ? {
           OR: [

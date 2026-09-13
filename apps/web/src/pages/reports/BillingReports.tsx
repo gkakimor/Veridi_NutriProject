@@ -20,7 +20,7 @@ import {
   ReportTable,
 } from "./ReportPage";
 import { useReport } from "./useReport";
-import { dateInputValueOffset } from "../../lib/period";
+import { diaDoRelatorio } from "./report-period";
 import { formatBRL } from "../../lib/currency";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
@@ -57,16 +57,16 @@ function CustomerFilter({
 export function BillingPeriodReportPage() {
   const [search, setSearch] = useState("");
   const [customerId, setCustomerId] = useState("");
-  const [from, setFrom] = useState(dateInputValueOffset(-29));
-  const [to, setTo] = useState(dateInputValueOffset(0));
+  const [from, setFrom] = useState(diaDoRelatorio(-29));
+  const [to, setTo] = useState(diaDoRelatorio(0));
   const [page, setPage] = useState(1);
 
   const filters = useMemo(
     () => ({
       search,
       customerId,
-      from: new Date(`${from}T00:00:00`).toISOString(),
-      to: new Date(`${to}T23:59:59.999`).toISOString(),
+      from,
+      to,
       page,
       pageSize: PAGE_SIZE,
     }),

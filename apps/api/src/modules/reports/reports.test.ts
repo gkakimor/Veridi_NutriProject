@@ -2,7 +2,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { aplicarRoteiroDeTeste } from "../../test-support/fixture-route.js";
-import { marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
+import {
+  diaComercialDeTeste,
+  marcadorDoDiaComercialDeTeste,
+} from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
@@ -559,8 +562,8 @@ describe("Relatórios — Estoque", () => {
     const personalizado = await report(app, "inventory/expiry", {
       itemId: item.id,
       window: "CUSTOM",
-      from: new Date(Date.now() + 30 * DAY_MS).toISOString(),
-      to: new Date(Date.now() + 60 * DAY_MS).toISOString(),
+      from: diaComercialDeTeste(30),
+      to: diaComercialDeTeste(60),
     });
     expect(personalizado.rows.map((row: { lotId: string }) => row.lotId)).toEqual([inFortyDays.id]);
 
@@ -625,8 +628,8 @@ describe("Relatórios — Estoque", () => {
 
     const outOfWindow = await report(app, "inventory/movements", {
       itemId: rawMaterial.id,
-      from: new Date(Date.now() - 40 * DAY_MS).toISOString(),
-      to: new Date(Date.now() - 30 * DAY_MS).toISOString(),
+      from: diaComercialDeTeste(-40),
+      to: diaComercialDeTeste(-30),
     });
     expect(outOfWindow.total).toBe(0);
 
@@ -800,8 +803,8 @@ describe("Relatórios — Produção", () => {
 
     const outOfWindow = await report(app, "production/consumption", {
       productionOrderId: pricedOrderId,
-      from: new Date(Date.now() - 40 * DAY_MS).toISOString(),
-      to: new Date(Date.now() - 30 * DAY_MS).toISOString(),
+      from: diaComercialDeTeste(-40),
+      to: diaComercialDeTeste(-30),
     });
     expect(outOfWindow.total).toBe(0);
 
@@ -1173,15 +1176,11 @@ describe("Relatórios — Comercial e Faturamento", () => {
     expect(customerB.summary.totalAmount).toBeNull();
 
     // Uma janela cobrindo os dois documentos: total agregado indisponível.
-    const window = { from: new Date(Date.UTC(1995, 0, 10)), to: new Date(Date.UTC(1995, 0, 11)) };
     await prisma.billing.updateMany({
       where: { id: { in: [billingA.id, billingB.id] } },
       data: { issuedAt: new Date(Date.UTC(1995, 0, 10, 12)) },
     });
-    const mixed = await report(app, "billing/period", {
-      from: window.from.toISOString(),
-      to: window.to.toISOString(),
-    });
+    const mixed = await report(app, "billing/period", { from: "1995-01-10", to: "1995-01-11" });
     expect(mixed.summary.billingCount).toBe(2);
     expect(mixed.summary.billingsWithCompletePricing).toBe(1);
     // Nunca R$ 100,00 apresentado como total do período.

@@ -10,6 +10,7 @@ import { calcularTotaisOrdemCompra } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta, slicePage } from "../../lib/pagination.js";
+import { periodoDeDataCivil, periodoDeInstante } from "./report-period.js";
 import type { OnOrderQuery, PurchaseOrdersQuery, ReceiptsQuery } from "./reports.schemas.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -19,27 +20,22 @@ const OPEN_STATUSES = ["ORDERED", "PARTIALLY_RECEIVED"] as const;
 
 /**
  * R-08 — Ordens de Compra. Periodo por `orderDate` (a data comercial do
- * documento). O valor previsto so existe quando TODAS as linhas tem preco —
- * uma soma parcial nunca e apresentada como total da OC.
+ * documento, gravada como marcador — o mesmo recorte da lista de OCs). O
+ * valor previsto so existe quando TODAS as linhas tem preco — uma soma
+ * parcial nunca e apresentada como total da OC.
  */
 export async function getPurchaseOrdersReport(
   query: PurchaseOrdersQuery,
   pagination: Pagination = query,
 ): Promise<ReportPageDTO<PurchaseOrderReportRowDTO>> {
   const prisma = getPrisma();
+  const periodo = periodoDeDataCivil(query);
 
   const where: Prisma.PurchaseOrderWhereInput = {
     ...(query.supplierId ? { supplierId: query.supplierId } : {}),
     ...(query.status ? { status: query.status } : {}),
     ...(query.origin ? { origin: query.origin } : {}),
-    ...(query.from || query.to
-      ? {
-          orderDate: {
-            ...(query.from ? { gte: query.from } : {}),
-            ...(query.to ? { lte: query.to } : {}),
-          },
-        }
-      : {}),
+    ...(periodo ? { orderDate: periodo } : {}),
     ...(query.search
       ? {
           OR: [
@@ -117,24 +113,18 @@ export async function getReceiptsReport(
   pagination: Pagination = query,
 ): Promise<ReportPageDTO<ReceiptReportRowDTO>> {
   const prisma = getPrisma();
+  const periodo = periodoDeInstante(query);
 
   const where: Prisma.ReceiptLineWhereInput = {
     ...(query.itemId ? { itemId: query.itemId } : {}),
     ...(query.purchaseOrderId ? { receipt: { is: { purchaseOrderId: query.purchaseOrderId } } } : {}),
-    ...(query.supplierId || query.from || query.to
+    ...(query.supplierId || periodo
       ? {
           receipt: {
             is: {
               ...(query.supplierId ? { supplierId: query.supplierId } : {}),
               ...(query.purchaseOrderId ? { purchaseOrderId: query.purchaseOrderId } : {}),
-              ...(query.from || query.to
-                ? {
-                    receivedAt: {
-                      ...(query.from ? { gte: query.from } : {}),
-                      ...(query.to ? { lte: query.to } : {}),
-                    },
-                  }
-                : {}),
+              ...(periodo ? { receivedAt: periodo } : {}),
             },
           },
         }

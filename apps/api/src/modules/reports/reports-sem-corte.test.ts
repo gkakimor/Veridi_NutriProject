@@ -26,13 +26,13 @@ const PAGINA = 25;
 const ACIMA_DE_MIL = 1005;
 
 /**
- * Um dia comercial fixo. `from`/`to` são os instantes que a tela manda — o
- * começo e o último milissegundo do dia em São Paulo; a regra de fuso não é
- * reaberta aqui, só usada como borda.
+ * Um dia comercial fixo. `from`/`to` são o DIA que a tela manda; `inicio` e
+ * `fim` são o começo e o último milissegundo dele em São Paulo, usados como
+ * borda — a regra de fuso não é reaberta aqui (REPORTS-BUSINESS-DATE-01).
  */
 const DIA = "2026-03-10";
 const { inicio, fim } = limitesDoDiaComercial(DIA);
-const PERIODO = { from: inicio.toISOString(), to: fim.toISOString() };
+const PERIODO = { from: DIA, to: DIA };
 
 const criados = {
   clientes: [] as string[],

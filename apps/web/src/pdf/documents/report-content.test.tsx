@@ -174,6 +174,20 @@ describe("relatórios R-01…R-20 em PDF", () => {
     ]);
   });
 
+  it("R-15: o período do papel é o dia da tela, repassado ao CSV sem conversão", async () => {
+    apiFetch.mockResolvedValue(respostaCsv([["Faturamento", "Data"], ["FAT-000001", "12/09/2026"]]));
+    // O que o botão PDF da tela manda desde REPORTS-BUSINESS-DATE-01.
+    abrir("/print/relatorios/R-15?from=2026-09-12&to=2026-09-12");
+
+    const documento = await documentoGerado("R-15-2026-09-11.pdf");
+    // Mesmo endpoint, mesmo dia: o PDF é o CSV, e o CSV é o mesmo recorte da tela.
+    expect(apiFetch).toHaveBeenCalledWith(
+      `${API_URL}/reports/billing/period/export.csv?from=2026-09-12&to=2026-09-12`,
+    );
+    expect(campo(documento, "De")).toBe("2026-09-12");
+    expect(campo(documento, "Até")).toBe("2026-09-12");
+  });
+
   it("sem registros para o filtro: a folha diz isso e o total é 0", async () => {
     apiFetch.mockResolvedValue(respostaCsv([["OC", "Fornecedor", "Status"]]));
     abrir("/print/relatorios/R-08?status=CANCELLED");

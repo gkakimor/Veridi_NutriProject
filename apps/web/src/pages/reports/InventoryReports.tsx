@@ -14,7 +14,7 @@ import {
 } from "../../lib/reports-api";
 import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
-import { dateInputValueOffset } from "../../lib/period";
+import { diaDoRelatorio } from "./report-period";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate, formatDateTime } from "../../lib/dates";
 
@@ -156,8 +156,8 @@ export function InventoryPositionReportPage() {
 export function ExpiryReportPage() {
   const [window, setWindow] = useState("D30");
   const [search, setSearch] = useState("");
-  const [from, setFrom] = useState(dateInputValueOffset(0));
-  const [to, setTo] = useState(dateInputValueOffset(60));
+  const [from, setFrom] = useState(diaDoRelatorio(0));
+  const [to, setTo] = useState(diaDoRelatorio(60));
   const [page, setPage] = useState(1);
 
   const filters = useMemo(
@@ -166,12 +166,7 @@ export function ExpiryReportPage() {
       search,
       page,
       pageSize: PAGE_SIZE,
-      ...(window === "CUSTOM"
-        ? {
-            from: new Date(`${from}T00:00:00`).toISOString(),
-            to: new Date(`${to}T23:59:59.999`).toISOString(),
-          }
-        : {}),
+      ...(window === "CUSTOM" ? { from, to } : {}),
     }),
     [window, search, from, to, page],
   );
@@ -291,16 +286,16 @@ const MOVEMENT_DOCUMENT_PATHS: Record<string, string> = {
 export function MovementsReportPage() {
   const [search, setSearch] = useState("");
   const [type, setType] = useState("");
-  const [from, setFrom] = useState(dateInputValueOffset(-29));
-  const [to, setTo] = useState(dateInputValueOffset(0));
+  const [from, setFrom] = useState(diaDoRelatorio(-29));
+  const [to, setTo] = useState(diaDoRelatorio(0));
   const [page, setPage] = useState(1);
 
   const filters = useMemo(
     () => ({
       search,
       type,
-      from: new Date(`${from}T00:00:00`).toISOString(),
-      to: new Date(`${to}T23:59:59.999`).toISOString(),
+      from,
+      to,
       page,
       pageSize: PAGE_SIZE,
     }),

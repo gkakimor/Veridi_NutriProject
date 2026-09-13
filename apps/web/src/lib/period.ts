@@ -5,10 +5,13 @@ import {
 } from "@veridi/shared";
 
 /**
- * Resolução de período — estratégia ÚNICA de datas do frontend, usada pelo
- * Dashboard e pelos Relatórios. O cliente resolve os limites e envia em ISO,
- * então "hoje" é o dia do operador e não o fuso do servidor, e não existe
- * off-by-one na virada do dia.
+ * Resolução de período do Dashboard. O cliente resolve os limites no dia
+ * comercial e envia em ISO, então "hoje" é o dia da Veridi e não o fuso do
+ * servidor, e não existe off-by-one na virada do dia.
+ *
+ * Listas e Relatórios NÃO passam por aqui: mandam o DIA (`YYYY-MM-DD`) e o
+ * servidor o abre em instantes — `lib/list-period.ts` e
+ * `pages/reports/report-period.ts`.
  */
 
 export type PeriodPreset = "today" | "7d" | "30d" | "custom";

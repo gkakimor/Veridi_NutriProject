@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { requiredDateSchema } from "../../lib/date-schema.js";
+import { diaCivilDeFiltroSchema } from "../../lib/date-schema.js";
 
 /**
  * Flag booleana vinda da query string. `z.coerce.boolean()` nao serve aqui:
@@ -37,13 +37,16 @@ export const paginationFields = {
 };
 
 /**
- * Intervalo temporal explícito. O frontend resolve os limites e envia em
- * ISO — mesma estratégia do Dashboard, sem segunda interpretação de datas
- * nem dependência silenciosa do fuso do servidor.
+ * Período dos relatórios — dois DIAS (`YYYY-MM-DD`), nunca instantes.
+ *
+ * O mesmo contrato das listas: o dia viaja como a pessoa o escolheu e vira
+ * instante uma vez, no serviço (`report-period.ts`). Instante ISO é recusado
+ * em vez de reinterpretado — era a meia-noite do navegador de quem abriu a
+ * tela, e cada fuso pedia outro recorte (REPORTS-BUSINESS-DATE-01).
  */
 export const periodFields = {
-  from: requiredDateSchema.optional(),
-  to: requiredDateSchema.optional(),
+  from: diaCivilDeFiltroSchema,
+  to: diaCivilDeFiltroSchema,
 };
 
 /* ── Estoque ── */
