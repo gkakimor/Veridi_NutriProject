@@ -301,6 +301,30 @@ export type PdfDocumentProps = {
 };
 
 /**
+ * Arquivo com VÁRIOS documentos oficiais — BULK-DOCUMENTS-01.
+ *
+ * Dentro do pacote, cada `PdfDocument` entrega só as próprias folhas: o mesmo
+ * cabeçalho, corpo e rodapé do documento individual, um depois do outro. A
+ * numeração "Página X de Y" é de cada documento (`subPageNumber`), como no
+ * arquivo avulso — não do pacote inteiro.
+ */
+const DentroDoPacote = createContext(false);
+
+export function PdfBundle({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <Document
+      title={pdfSafe(title)}
+      author="Veridi Nutrition"
+      creator="Veridi Nutrition"
+      producer="Veridi Nutrition"
+      language="pt-BR"
+    >
+      <DentroDoPacote.Provider value={true}>{children}</DentroDoPacote.Provider>
+    </Document>
+  );
+}
+
+/**
  * A folha: A4, margens da casa, cabeçalho na página 1, cabeçalho corrido nas
  * seguintes e rodapé com "Página X de Y" em todas.
  */
@@ -317,6 +341,41 @@ export function PdfDocument({
   children,
 }: PdfDocumentProps) {
   const linhas = headerLines.filter((linha): linha is string => Boolean(linha));
+  const noPacote = useContext(DentroDoPacote);
+  const folhas = (
+    <Page size={PDF_PAGE.size} orientation={landscape ? "landscape" : "portrait"} style={s.page}>
+      <RunningHeader title={title} code={code} />
+
+      <View style={s.header}>
+        <Image src={logoPng} style={s.logo} />
+        <View style={s.identity}>
+          <Text style={s.title}>{pdfSafe(title)}</Text>
+          <Text style={s.code}>{pdfSafe(code)}</Text>
+          {documentCode ? <Text style={s.headerLine}>{pdfSafe(documentCode)}</Text> : null}
+          {linhas.map((linha, indice) => (
+            <Text key={`${indice}-${linha}`} style={s.headerLine}>
+              {pdfSafe(linha)}
+            </Text>
+          ))}
+          {status ? <Text style={s.headerLine}>Status: {pdfSafe(status)}</Text> : null}
+          {isDraft ? (
+            <Text style={s.draft} data-pdf-role="draft">
+              Rascunho
+            </Text>
+          ) : null}
+        </View>
+      </View>
+
+      {children}
+
+      <Footer
+        code={[code, documentCode].filter(Boolean).join(" · ")}
+        note={footerNote}
+        generatedAt={generatedAt}
+      />
+    </Page>
+  );
+  if (noPacote) return folhas;
   return (
     <Document
       title={pdfSafe(`${title} ${code}`)}
@@ -325,49 +384,23 @@ export function PdfDocument({
       producer="Veridi Nutrition"
       language="pt-BR"
     >
-      <Page size={PDF_PAGE.size} orientation={landscape ? "landscape" : "portrait"} style={s.page}>
-        <RunningHeader title={title} code={code} />
-
-        <View style={s.header}>
-          <Image src={logoPng} style={s.logo} />
-          <View style={s.identity}>
-            <Text style={s.title}>{pdfSafe(title)}</Text>
-            <Text style={s.code}>{pdfSafe(code)}</Text>
-            {documentCode ? <Text style={s.headerLine}>{pdfSafe(documentCode)}</Text> : null}
-            {linhas.map((linha, indice) => (
-              <Text key={`${indice}-${linha}`} style={s.headerLine}>
-                {pdfSafe(linha)}
-              </Text>
-            ))}
-            {status ? <Text style={s.headerLine}>Status: {pdfSafe(status)}</Text> : null}
-            {isDraft ? (
-              <Text style={s.draft} data-pdf-role="draft">
-                Rascunho
-              </Text>
-            ) : null}
-          </View>
-        </View>
-
-        {children}
-
-        <Footer
-          code={[code, documentCode].filter(Boolean).join(" · ")}
-          note={footerNote}
-          generatedAt={generatedAt}
-        />
-      </Page>
+      {folhas}
     </Document>
   );
 }
 
-/** Da página 2 em diante: de que documento é a folha que se soltou da pilha. */
+/**
+ * Da página 2 DO DOCUMENTO em diante: de que documento é a folha que se soltou
+ * da pilha. `subPageNumber` conta dentro do documento — num pacote, a primeira
+ * folha do segundo pedido abre com o cabeçalho cheio, não com o corrido.
+ */
 function RunningHeader({ title, code }: { title: string; code: string }) {
   return (
     <View
       fixed
       style={s.runningHeader}
-      render={({ pageNumber }) =>
-        pageNumber > 1 ? (
+      render={({ subPageNumber }) =>
+        subPageNumber > 1 ? (
           <View style={s.runningHeaderBar}>
             <Text style={s.runningHeaderTitle}>{pdfSafe(title)}</Text>
             <Text style={s.runningHeaderCode}>{pdfSafe(code)}</Text>
@@ -397,7 +430,7 @@ function Footer({
         <Text style={s.footerCode}>{pdfSafe(code)}</Text>
         <Text
           style={s.footerPage}
-          render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`}
+          render={({ subPageNumber, subPageTotalPages }) => `Página ${subPageNumber} de ${subPageTotalPages}`}
         />
       </View>
     </View>

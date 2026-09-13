@@ -5,17 +5,23 @@ import {
   BulkSelectionHeaderCell,
   useBulkSelection,
 } from "../../components/BulkSelection";
+import { BulkDocumentActions } from "../../components/BulkDocumentActions";
 import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
-import type { CustomerOrderDTO, CustomerOrderStatus } from "@veridi/shared";
+import type { BulkSelectionDescriptor, CustomerOrderDTO, CustomerOrderStatus } from "@veridi/shared";
 import {
   CUSTOMER_ORDER_BILLING_STATUS_LABELS,
   CUSTOMER_ORDER_STATUSES,
   CUSTOMER_ORDER_STATUS_LABELS,
 } from "@veridi/shared";
-import type { ListCustomerOrdersParams } from "../../lib/customer-orders-api";
-import { listCustomerOrders } from "../../lib/customer-orders-api";
+import type { CustomerOrderListFilters, ListCustomerOrdersParams } from "../../lib/customer-orders-api";
+import {
+  exportCustomerOrderSelectionCsv,
+  getCustomerOrderSelectionDocuments,
+  listCustomerOrders,
+} from "../../lib/customer-orders-api";
+import { downloadFile } from "../../lib/download-file";
 import { useAuth } from "../../app/AuthProvider";
 import { useListFilters } from "../../lib/list-filters";
 import { clienteFilterSource } from "../../lib/filter-sources";
@@ -108,6 +114,27 @@ function grupoValido(valor: string): string {
  */
 const FILTER_SCOPE = "customer-orders";
 
+/**
+ * Documentos da seleção (BULK-DOCUMENTS-01). O servidor resolve o conjunto —
+ * ids ou todos os filtrados menos as exceções — e o arquivo é UM: o documento
+ * oficial de cada pedido, um depois do outro. O motor de PDF só chega aqui no
+ * clique.
+ */
+async function baixarPdfDaSelecao(selecao: BulkSelectionDescriptor<CustomerOrderListFilters>) {
+  const { documents } = await getCustomerOrderSelectionDocuments(selecao);
+  const [{ CustomerOrdersSelectionPdf, selectionPdfFileName }, { renderPdfBlob, downloadPdf }] = await Promise.all([
+    import("../../pdf/documents/SelectionPdf"),
+    import("../../pdf/render"),
+  ]);
+  const blob = await renderPdfBlob(<CustomerOrdersSelectionPdf orders={documents} generatedAt={new Date()} />);
+  downloadPdf(blob, selectionPdfFileName("pedidos-selecionados"));
+}
+
+async function exportarCsvDaSelecao(selecao: BulkSelectionDescriptor<CustomerOrderListFilters>) {
+  const { blob, fileName } = await exportCustomerOrderSelectionCsv(selecao);
+  downloadFile(blob, fileName);
+}
+
 export function CustomerOrdersPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -168,8 +195,8 @@ export function CustomerOrdersPage() {
   }, [reload]);
 
   /*
-   * Seleção em massa sobre o MESMO recorte da consulta e do CSV. Ainda sem
-   * ação: os documentos em lote chegam em BULK-DOCUMENTS-01.
+   * Seleção em massa sobre o MESMO recorte da consulta e do CSV. As ações são
+   * só documentais (BULK-DOCUMENTS-01): PDF e CSV da seleção, nada que grave.
    */
   const selecao = useBulkSelection({
     pageIds: customerOrders.map((order) => order.id),
@@ -262,7 +289,13 @@ export function CustomerOrdersPage() {
 
       {error && <p className="form-alert" role="alert">{error}</p>}
 
-      <BulkSelectionBar selection={selecao} />
+      <BulkSelectionBar selection={selecao}>
+        <BulkDocumentActions
+          descriptor={selecao.descriptor}
+          onDownloadPdf={baixarPdfDaSelecao}
+          onExportCsv={exportarCsvDaSelecao}
+        />
+      </BulkSelectionBar>
 
       <div className="table-container">
         <table className="table table--sticky-actions table--clickable-rows">

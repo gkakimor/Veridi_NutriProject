@@ -44,6 +44,7 @@ import {
   INDUSTRIAL_RATE_UOM_LABELS,
   INDUSTRIAL_RESOURCE_TYPE_LABELS,
 } from "@veridi/shared";
+import type { CsvColumn } from "../../lib/csv.js";
 import { csvBoolean, csvCode, csvDate, csvDateTime, csvDecimal, csvEventDate, csvMoney, csvText, csvUnitPrice } from "../../lib/csv.js";
 import { ALL_ROWS } from "../../lib/pagination.js";
 import { listCustomers } from "../customers/customers.service.js";
@@ -502,26 +503,29 @@ const formulationsExport = defineCsvExport({
   ],
 });
 
+/** Colunas do CSV de OPs — as mesmas na listagem e na seleção em massa. */
+export const productionOrderCsvColumns: CsvColumn<ProductionOrderDTO>[] = [
+  { header: "OP", value: (row) => csvCode(row.code) },
+  { header: "Produto", value: (row) => csvCode(row.productCode) },
+  { header: "Nome do produto", value: (row) => csvText(row.productName) },
+  { header: "Formulação", value: (row) => csvText(row.formulationVersionLabel) },
+  { header: "Status", value: (row) => PRODUCTION_ORDER_STATUS_LABELS[row.status] },
+  { header: "Planejado", value: (row) => csvDecimal(row.plannedQuantity) },
+  { header: "Produzido", value: (row) => csvDecimal(row.producedQuantity) },
+  { header: "Falta produzir", value: (row) => csvDecimal(row.remainingQuantity) },
+  { header: "Unidade", value: (row) => csvText(row.outputUnitCode) },
+  { header: "Itens com falta", value: (row) => String(row.shortageItemCount) },
+  { header: "Pedido do cliente", value: (row) => csvCode(row.customerOrderCode) },
+  { header: "Início", value: (row) => csvEventDate(row.startedAt) },
+  { header: "Conclusão", value: (row) => csvEventDate(row.completedAt) },
+];
+
 const productionOrdersExport = defineCsvExport({
   path: "/production-orders/export.csv",
   slug: "ordens_de_producao",
   schema: listProductionOrdersQuerySchema,
   fetch: async (query: ListProductionOrdersQuery) => (await listProductionOrders(query, ALL_ROWS)).productionOrders,
-  columns: [
-    { header: "OP", value: (row: ProductionOrderDTO) => csvCode(row.code) },
-    { header: "Produto", value: (row: ProductionOrderDTO) => csvCode(row.productCode) },
-    { header: "Nome do produto", value: (row: ProductionOrderDTO) => csvText(row.productName) },
-    { header: "Formulação", value: (row: ProductionOrderDTO) => csvText(row.formulationVersionLabel) },
-    { header: "Status", value: (row: ProductionOrderDTO) => PRODUCTION_ORDER_STATUS_LABELS[row.status] },
-    { header: "Planejado", value: (row: ProductionOrderDTO) => csvDecimal(row.plannedQuantity) },
-    { header: "Produzido", value: (row: ProductionOrderDTO) => csvDecimal(row.producedQuantity) },
-    { header: "Falta produzir", value: (row: ProductionOrderDTO) => csvDecimal(row.remainingQuantity) },
-    { header: "Unidade", value: (row: ProductionOrderDTO) => csvText(row.outputUnitCode) },
-    { header: "Itens com falta", value: (row: ProductionOrderDTO) => String(row.shortageItemCount) },
-    { header: "Pedido do cliente", value: (row: ProductionOrderDTO) => csvCode(row.customerOrderCode) },
-    { header: "Início", value: (row: ProductionOrderDTO) => csvEventDate(row.startedAt) },
-    { header: "Conclusão", value: (row: ProductionOrderDTO) => csvEventDate(row.completedAt) },
-  ],
+  columns: productionOrderCsvColumns,
 });
 
 const finishedGoodsExport = defineCsvExport({
@@ -549,24 +553,27 @@ const finishedGoodsExport = defineCsvExport({
   ],
 });
 
+/** Colunas do CSV de Pedidos — as mesmas na listagem e na seleção em massa. */
+export const customerOrderCsvColumns: CsvColumn<CustomerOrderDTO>[] = [
+  { header: "Pedido", value: (row) => csvCode(row.code) },
+  { header: "Cliente", value: (row) => csvText(row.customerName) },
+  { header: "CNPJ do cliente", value: (row) => csvCode(row.customerCnpj) },
+  { header: "Data", value: (row) => csvDate(row.orderDate) },
+  { header: "Entrega solicitada", value: (row) => csvDate(row.requestedDeliveryDate) },
+  { header: "Status", value: (row) => CUSTOMER_ORDER_STATUS_LABELS[row.status] },
+  { header: "Linhas", value: (row) => String(row.lines.length) },
+  // Produtos listados, nunca somados entre unidades diferentes.
+  { header: "Produtos", value: (row) => csvText(row.lines.map((line) => line.productCode).join(", ")) },
+  { header: "Expedições", value: (row) => String(row.shipments.length) },
+  { header: "Faturamentos", value: (row) => String(row.billings.length) },
+];
+
 const customerOrdersExport = defineCsvExport({
   path: "/customer-orders/export.csv",
   slug: "pedidos",
   schema: listCustomerOrdersQuerySchema,
   fetch: async (query: ListCustomerOrdersQuery) => (await listCustomerOrders(query, ALL_ROWS)).customerOrders,
-  columns: [
-    { header: "Pedido", value: (row: CustomerOrderDTO) => csvCode(row.code) },
-    { header: "Cliente", value: (row: CustomerOrderDTO) => csvText(row.customerName) },
-    { header: "CNPJ do cliente", value: (row: CustomerOrderDTO) => csvCode(row.customerCnpj) },
-    { header: "Data", value: (row: CustomerOrderDTO) => csvDate(row.orderDate) },
-    { header: "Entrega solicitada", value: (row: CustomerOrderDTO) => csvDate(row.requestedDeliveryDate) },
-    { header: "Status", value: (row: CustomerOrderDTO) => CUSTOMER_ORDER_STATUS_LABELS[row.status] },
-    { header: "Linhas", value: (row: CustomerOrderDTO) => String(row.lines.length) },
-    // Produtos listados, nunca somados entre unidades diferentes.
-    { header: "Produtos", value: (row: CustomerOrderDTO) => csvText(row.lines.map((line) => line.productCode).join(", ")) },
-    { header: "Expedições", value: (row: CustomerOrderDTO) => String(row.shipments.length) },
-    { header: "Faturamentos", value: (row: CustomerOrderDTO) => String(row.billings.length) },
-  ],
+  columns: customerOrderCsvColumns,
 });
 
 const shipmentsExport = defineCsvExport({

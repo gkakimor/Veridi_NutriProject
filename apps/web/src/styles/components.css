@@ -1906,6 +1906,23 @@ body:has(.confirm-dialog) .entity-select__list {
   background: var(--selected-bg);
 }
 
+/*
+ * Resposta das ações documentais (BULK-DOCUMENTS-01): linha própria no fim do
+ * grupo, depois de "Limpar seleção" — o recado não separa os botões.
+ */
+.bulk-bar__feedback {
+  order: 1;
+  flex-basis: 100%;
+  color: var(--ink-3);
+}
+
+.bulk-bar__feedback--error {
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-sm);
+  background: var(--err-bg);
+  color: var(--err-fg);
+}
+
 /* 390px: cada grupo na própria linha; a contagem nunca some e a saída continua à mão. */
 @media (max-width: 480px) {
   .bulk-bar__group {

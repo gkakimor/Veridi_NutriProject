@@ -645,6 +645,22 @@ Rules that outlived the round that produced them. The UI side of them lives in
   page-local, as Items still is). Selection never implies bulk mutation:
   approving, releasing quality, shipping, invoicing and cancelling keep their
   own transactional rules and stay one record at a time.
+- **Documents of a selection (BULK-DOCUMENTS-01).** The first selection
+  actions are documentary only — one PDF and one CSV of exactly the selection
+  (pilots: Customer Orders and Production Orders). The descriptor crosses the
+  API by POST and the SERVER resolves the set at click time with the same
+  filter rule as the listing: ids, or the listing filters minus the
+  exceptions. A filtered selection is the filter of now, not a snapshot of
+  ids; an unknown filter field is rejected, so the set never grows beyond
+  what the screen shows. Order is the listing's canonical order (code
+  descending), for ids too. Fail-closed: a chosen id that no longer exists
+  refuses the whole generation (with a sample), an empty set refuses, and the
+  combined PDF refuses above 500 documents ("A seleção contém mais de 500
+  documentos. Refine os filtros e tente novamente.") — never the first 500.
+  The CSV has no such cap and uses the listing export's columns. Each record
+  enters the PDF as its own official document (the one its "PDF" button
+  makes), with its own header, footer and "Página X de Y", in ONE file built
+  by the existing browser-side PDF system. Generating changes nothing.
 
 # 5.10 Project → Quotation → Cost/Price (capability 47)
 

@@ -56,6 +56,7 @@ import { dashboardRoutes } from "./modules/dashboard/dashboard.routes.js";
 import { finishedGoodsRoutes } from "./modules/finished-goods/finished-goods.routes.js";
 import { reportsRoutes } from "./modules/reports/reports.routes.js";
 import { exportsRoutes } from "./modules/exports/exports.routes.js";
+import { bulkDocumentsRoutes } from "./modules/bulk-documents/bulk-documents.routes.js";
 
 /**
  * Monta a instancia Fastify.
@@ -76,6 +77,8 @@ export function buildApp() {
     origin: env.NODE_ENV === "production" ? env.WEB_ORIGIN : true,
     // Sessao vive em cookie HttpOnly: o browser so envia com credenciais.
     credentials: true,
+    // O CSV da selecao chega por POST: a tela le o nome do arquivo daqui.
+    exposedHeaders: ["Content-Disposition"],
   });
 
   // Upload de documentos (laudo/CoA, NF, arte) — limite de 10 MB por
@@ -133,6 +136,7 @@ export function buildApp() {
   app.register(finishedGoodsRoutes);
   app.register(reportsRoutes);
   app.register(exportsRoutes);
+  app.register(bulkDocumentsRoutes);
 
   /**
    * Implantação de origem única: a API entrega o build do frontend.

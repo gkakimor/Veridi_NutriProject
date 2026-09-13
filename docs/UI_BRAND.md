@@ -427,6 +427,14 @@ contagem, alcance, ações do consumidor (`children`) e "Limpar seleção"; a
 célula de seleção não abre a linha. Pilotos: Pedidos e Ordens de Produção.
 Itens segue com a seleção só de página (`TableSelection`).
 
+**Ações documentais (BULK-DOCUMENTS-01).** `BulkDocumentActions` na barra:
+"Baixar PDF" e "Exportar CSV", secundárias — leem, não gravam, e não competem
+com as ações de commit. "Gerando PDF…"/"Gerando CSV…" só no botão clicado,
+clique duplo roda uma vez, "PDF gerado."/"CSV exportado." em `role="status"`
+numa linha própria no fim do grupo, recusa em `role="alert"`; a seleção
+fica. Arquivos: `pedidos-selecionados-<dia>.pdf|csv` e
+`ordens-producao-selecionadas-<dia>.pdf|csv`, com o dia comercial.
+
 ---
 
 # 4. Navigation baseline

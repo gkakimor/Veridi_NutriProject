@@ -37,6 +37,8 @@ import {
 import { getPrisma } from "../../db/prisma.js";
 import { isPending, reconciliationStatus, unreconciledQuantity } from "./reconciliation.js";
 import { assertProductOperational } from "../../lib/product-lifecycle.js";
+import type { BulkSelectionInput } from "../../lib/bulk-selection.js";
+import { resolverSelecao } from "../../lib/bulk-selection.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { statusDoWhere } from "../../lib/status-list-schema.js";
@@ -733,11 +735,69 @@ async function toProductionOrderDTO(
   };
 }
 
+/** Os filtros da listagem de OPs, sem paginação. */
+export type ProductionOrderListFilters = Omit<ListProductionOrdersQuery, "page" | "pageSize">;
+
 export async function listProductionOrders(
   query: ListProductionOrdersQuery,
   pagination: Pagination = query,
 ): Promise<ProductionOrderListResponse> {
   const prisma = getPrisma();
+  const where = whereDaListaDeOrdens(query);
+
+  const [orders, total, units] = await Promise.all([
+    prisma.productionOrder.findMany({
+      where,
+      include: productionOrderInclude,
+      orderBy: { code: "desc" },
+      ...pageArgs(pagination),
+    }),
+    prisma.productionOrder.count({ where }),
+    unidadesDeMedida(prisma),
+  ]);
+
+  return {
+    productionOrders: await Promise.all(orders.map((order) => toProductionOrderDTO(order, units))),
+    ...pageMeta(pagination, total),
+  };
+}
+
+/**
+ * As OPs de uma seleção em massa, resolvidas no banco agora — ids escolhidos
+ * ou o filtro da listagem (inclusive "sem roteiro") menos as exceções —, na
+ * ordem da listagem. `limite` é do PDF; o CSV não passa limite.
+ */
+export async function resolveProductionOrderSelection(
+  selecao: BulkSelectionInput<ProductionOrderListFilters>,
+  limite?: number,
+): Promise<ProductionOrderDTO[]> {
+  const prisma = getPrisma();
+  const [ordens, units] = await Promise.all([
+    resolverSelecao(
+      selecao,
+      whereDaListaDeOrdens,
+      {
+        contar: (where) => prisma.productionOrder.count({ where }),
+        buscar: (where, take) =>
+          prisma.productionOrder.findMany({
+            where,
+            include: productionOrderInclude,
+            orderBy: { code: "desc" },
+            ...(take === undefined ? {} : { take }),
+          }),
+      },
+      limite,
+    ),
+    unidadesDeMedida(prisma),
+  ]);
+  return Promise.all(ordens.map((ordem) => toProductionOrderDTO(ordem, units)));
+}
+
+/**
+ * O recorte da listagem de OPs — UMA regra para a tela, o CSV e a seleção em
+ * massa (BULK-DOCUMENTS-01). Ordem canônica: código decrescente.
+ */
+export function whereDaListaDeOrdens(query: ProductionOrderListFilters): Record<string, unknown> {
   const where: Record<string, unknown> = {};
 
   // Um status vira igualdade; vários viram `in`. A fila operacional pede
@@ -765,22 +825,7 @@ export async function listProductionOrders(
   } else if (query.semRoteiro === false) {
     where["planningSnapshot"] = { isNot: null };
   }
-
-  const [orders, total, units] = await Promise.all([
-    prisma.productionOrder.findMany({
-      where,
-      include: productionOrderInclude,
-      orderBy: { code: "desc" },
-      ...pageArgs(pagination),
-    }),
-    prisma.productionOrder.count({ where }),
-    unidadesDeMedida(prisma),
-  ]);
-
-  return {
-    productionOrders: await Promise.all(orders.map((order) => toProductionOrderDTO(order, units))),
-    ...pageMeta(pagination, total),
-  };
+  return where;
 }
 
 export async function getProductionOrderById(id: string): Promise<ProductionOrderDTO | null> {

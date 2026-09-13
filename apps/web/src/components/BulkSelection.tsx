@@ -1,5 +1,6 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import type { BulkSelectionDescriptor } from "@veridi/shared";
 
 /**
  * Seleção em massa de uma listagem paginada e filtrada
@@ -24,10 +25,11 @@ import type { ReactNode } from "react";
  * `TableSelection.tsx` continua sendo a seleção só da página, de Itens.
  */
 
-/** O que uma ação em lote recebe. Não conhece ação nenhuma. */
-export type BulkSelectionDescriptor<F> =
-  | { mode: "ids"; ids: string[] }
-  | { mode: "filtered"; filters: F; excludedIds: string[] };
+/**
+ * O que uma ação em lote recebe. Não conhece ação nenhuma. O tipo mora no
+ * `@veridi/shared` desde BULK-DOCUMENTS-01: é o contrato que a API valida.
+ */
+export type { BulkSelectionDescriptor };
 
 export type BulkPageState = "none" | "some" | "all";
 

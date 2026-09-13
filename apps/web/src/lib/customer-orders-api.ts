@@ -1,9 +1,11 @@
 import type {
   ApplyFulfillmentPlanInput,
+  BulkSelectionDescriptor,
   CancelCustomerOrderInput,
   CreateCustomerOrderInput,
   CustomerOrderDTO,
   CustomerOrderListResponse,
+  CustomerOrderSelectionDocumentsResponse,
   CustomerOrderStatus,
   FulfillmentPlanDTO,
   GeneratePurchaseDraftsInput,
@@ -13,6 +15,7 @@ import type {
 } from "@veridi/shared";
 import { API_URL, apiFetch } from "./api";
 import { parseJsonOrThrow } from "./api-errors";
+import { postSelection, postSelectionForFile } from "./bulk-selection-api";
 
 export interface ListCustomerOrdersParams {
   search?: string;
@@ -145,4 +148,21 @@ export async function createRemainderProductionOrder(
     },
   );
   return (await parseJsonOrThrow(response)) as CustomerOrderDTO;
+}
+
+/** Os filtros da listagem de Pedidos, sem paginação — o recorte da seleção em massa. */
+export type CustomerOrderListFilters = Omit<ListCustomerOrdersParams, "page" | "pageSize">;
+
+/** Os Pedidos da seleção, já resolvidos no servidor, para o PDF único (BULK-DOCUMENTS-01). */
+export function getCustomerOrderSelectionDocuments(
+  selection: BulkSelectionDescriptor<CustomerOrderListFilters>,
+): Promise<CustomerOrderSelectionDocumentsResponse> {
+  return postSelection(`/customer-orders/bulk/documents`, selection);
+}
+
+/** O CSV da seleção, montado no servidor com as colunas da exportação de Pedidos. */
+export function exportCustomerOrderSelectionCsv(
+  selection: BulkSelectionDescriptor<CustomerOrderListFilters>,
+): Promise<{ blob: Blob; fileName: string }> {
+  return postSelectionForFile(`/customer-orders/bulk/export.csv`, selection, "pedidos-selecionados.csv");
 }

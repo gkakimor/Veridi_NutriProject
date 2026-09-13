@@ -38,6 +38,11 @@ import { ProductionOrderPdf, productionOrderPdfFileName } from "./ProductionOrde
 import { PurchaseOrderPdf, purchaseOrderPdfFileName } from "./PurchaseOrderPdf";
 import { ReceiptPdf, receiptPdfFileName } from "./ReceiptPdf";
 import { RecipeSheetPdf, recipeSheetPdfFileName } from "./RecipeSheetPdf";
+import {
+  CustomerOrdersSelectionPdf,
+  ProductionOrdersSelectionPdf,
+  selectionPdfFileName,
+} from "./SelectionPdf";
 import { ShipmentPdf, shipmentPdfFileName } from "./ShipmentPdf";
 
 /**
@@ -1234,6 +1239,98 @@ describe("nome do arquivo sai do código real", () => {
     expect(billingPdfFileName({ code: "FAT-000123" })).toBe("FAT-000123.pdf");
     expect(lotTraceabilityPdfFileName({ code: "LT-20260903-000101" })).toBe(
       "Rastreabilidade-LT-20260903-000101.pdf",
+    );
+  });
+});
+
+/**
+ * PDF da seleção em massa (BULK-DOCUMENTS-01): UM arquivo, e cada registro
+ * entra como o SEU documento oficial. A prova é folha a folha: a folha do
+ * pacote é a folha do documento avulso — mesmo texto, mesmo cabeçalho e a
+ * numeração "Página X de Y" do próprio documento, não a do pacote.
+ */
+function conferirPacote(pacote: PdfLido, avulsos: PdfLido[], codigos: string[]) {
+  expect(pacote.bruto.startsWith("%PDF-")).toBe(true);
+  expect(pacote.paginas).toHaveLength(avulsos.reduce((soma, pdf) => soma + pdf.paginas.length, 0));
+  let folha = 0;
+  avulsos.forEach((avulso, indice) => {
+    avulso.paginas.forEach((texto, pagina) => {
+      const doPacote = pacote.paginas[folha]!;
+      expect(doPacote, `${codigos[indice]} folha ${pagina + 1}`).toBe(texto);
+      expect(doPacote).toContain(`Página ${pagina + 1} de ${avulso.paginas.length}`);
+      expect(doPacote).toContain(codigos[indice]!);
+      folha += 1;
+    });
+  });
+}
+
+describe("PDF da seleção em massa — um arquivo com os documentos oficiais", () => {
+  it(
+    "Pedidos: cada pedido com as suas folhas e a sua numeração, na ordem recebida",
+    async () => {
+      const longo = pedidoDoCliente();
+      const curto = (id: string, code: string): CustomerOrderDTO => ({
+        ...longo,
+        id,
+        code,
+        lines: longo.lines.slice(0, 3),
+        notes: null,
+      });
+      const pedidos = [curto("ord-47", "PED-000047"), longo, curto("ord-46", "PED-000046")];
+
+      const avulsos = await Promise.all(
+        pedidos.map((pedido) => gerar(<CustomerOrderPdf order={pedido} generatedAt={GERADO_EM} />, `avulso-${pedido.code}.pdf`)),
+      );
+      const pacote = await gerar(
+        <CustomerOrdersSelectionPdf orders={pedidos} generatedAt={GERADO_EM} />,
+        "pedidos-selecionados-2026-09-11.pdf",
+      );
+
+      expect(avulsos[1]!.paginas.length, "o pedido longo passa de uma folha").toBeGreaterThanOrEqual(2);
+      conferirPacote(pacote, avulsos, ["PED-000047", "PED-000045", "PED-000046"]);
+      expect(pacote.folhas.every((folha) => ehA4(folha, "retrato"))).toBe(true);
+      // A folha 2 do pacote é a primeira do pedido longo: cabeçalho cheio, não o corrido.
+      expect(pacote.paginas[1]).toContain("Status: Em atendimento");
+    },
+    TEMPO,
+  );
+
+  it(
+    "Ordens de produção: o documento controlado de cada OP, com o custo que veio de cada uma",
+    async () => {
+      const longa = ordemDeProducao();
+      const curta: ProductionOrderDTO = {
+        ...longa,
+        id: "op-11",
+        code: "OP-000011",
+        officialNumber: null,
+        requirements: longa.requirements.slice(0, 2),
+      };
+      const documentos = [
+        { order: curta, cost: null },
+        { order: longa, cost: CUSTO_REAL },
+      ];
+
+      const avulsos = await Promise.all(
+        documentos.map(({ order, cost }) =>
+          gerar(<ProductionOrderPdf order={order} cost={cost} generatedAt={GERADO_EM} />, `avulso-${order.code}.pdf`),
+        ),
+      );
+      const pacote = await gerar(
+        <ProductionOrdersSelectionPdf documents={documentos} generatedAt={GERADO_EM} />,
+        "ordens-producao-selecionadas-2026-09-11.pdf",
+      );
+
+      conferirPacote(pacote, avulsos, ["OP-000011", "007/26"]);
+      for (const texto of pacote.paginas) expect(texto).toContain("R.PRO.002");
+    },
+    TEMPO,
+  );
+
+  it("o arquivo da seleção leva o dia de quem opera no nome", () => {
+    expect(selectionPdfFileName("pedidos-selecionados", "2026-09-12")).toBe("pedidos-selecionados-2026-09-12.pdf");
+    expect(selectionPdfFileName("ordens-producao-selecionadas", "2026-09-12")).toBe(
+      "ordens-producao-selecionadas-2026-09-12.pdf",
     );
   });
 });

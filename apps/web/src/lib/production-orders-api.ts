@@ -1,16 +1,19 @@
 import type {
   ApplyProductionRouteInput,
+  BulkSelectionDescriptor,
   CancelProductionOrderInput,
   CompleteProductionOrderInput,
   CreateProductionOrderInput,
   ProductionOrderDTO,
   ProductionOrderListResponse,
+  ProductionOrderSelectionDocumentsResponse,
   ProductionOrderStatus,
   RegisterProductionOutputInput,
   UpdateProductionOrderInput,
 } from "@veridi/shared";
 import { API_URL, apiFetch } from "./api";
 import { parseJsonOrThrow } from "./api-errors";
+import { postSelection, postSelectionForFile } from "./bulk-selection-api";
 
 export interface ListProductionOrdersParams {
   search?: string;
@@ -220,4 +223,21 @@ export async function addExtraReservation(
     },
   );
   return (await parseJsonOrThrow(response)) as ProductionOrderDTO;
+}
+
+/** Os filtros da listagem de OPs, sem paginação — o recorte da seleção em massa. */
+export type ProductionOrderListFilters = Omit<ListProductionOrdersParams, "page" | "pageSize">;
+
+/** As OPs da seleção, já resolvidas no servidor, com o custo complementar, para o PDF único (BULK-DOCUMENTS-01). */
+export function getProductionOrderSelectionDocuments(
+  selection: BulkSelectionDescriptor<ProductionOrderListFilters>,
+): Promise<ProductionOrderSelectionDocumentsResponse> {
+  return postSelection(`/production-orders/bulk/documents`, selection);
+}
+
+/** O CSV da seleção, montado no servidor com as colunas da exportação de OPs. */
+export function exportProductionOrderSelectionCsv(
+  selection: BulkSelectionDescriptor<ProductionOrderListFilters>,
+): Promise<{ blob: Blob; fileName: string }> {
+  return postSelectionForFile(`/production-orders/bulk/export.csv`, selection, "ordens-producao-selecionadas.csv");
 }

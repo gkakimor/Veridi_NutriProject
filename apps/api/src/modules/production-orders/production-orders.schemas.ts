@@ -2,6 +2,7 @@ import { z } from "zod";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import { quantityDecimalSchema } from "../../lib/decimal-schema.js";
 import { listaDeStatusSchema } from "../../lib/status-list-schema.js";
+import { bulkSelectionSchema, filtrosDaListagem } from "../../lib/bulk-selection.js";
 
 const statusEnum = z.enum([
   "DRAFT",
@@ -84,6 +85,14 @@ export const applyProductionRouteSchema = z.object({
   confirmScheduleRemoval: z.boolean().optional(),
   expectedSourceVersionId: z.string().trim().min(1).nullable().optional(),
 });
+
+/**
+ * Seleção em massa de OPs (BULK-DOCUMENTS-01): ids, ou os filtros DA LISTAGEM
+ * — busca, status, produto e roteiro, sem paginação — menos as exceções.
+ */
+export const productionOrderSelectionSchema = bulkSelectionSchema(
+  filtrosDaListagem(listProductionOrdersQuerySchema.omit({ page: true, pageSize: true })),
+);
 
 export type ListProductionOrdersQuery = z.infer<typeof listProductionOrdersQuerySchema>;
 export type CreateProductionOrderInput = z.infer<typeof createProductionOrderSchema>;
