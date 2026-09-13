@@ -21,3 +21,14 @@ import { diaCivilDeslocado, hojeComercial } from "@veridi/shared";
 export function diaDoRelatorio(dias: number, agora: Date = new Date()): string {
   return diaCivilDeslocado(hojeComercial(agora), dias);
 }
+
+/** Onde o esqueleto do relatório escreve a recusa do período (`ReportPage`). */
+export const ID_DA_RECUSA_DO_PERIODO = "report-period-error";
+
+/**
+ * Os `aria-*` dos campos De/até enquanto o período está recusado
+ * (PERIOD-RANGE-VALIDATION-WAVE-01): inválidos e descritos pela frase.
+ */
+export function ariaDoPeriodoRecusado(recusa: string | null) {
+  return recusa ? { "aria-invalid": true, "aria-describedby": ID_DA_RECUSA_DO_PERIODO } : {};
+}

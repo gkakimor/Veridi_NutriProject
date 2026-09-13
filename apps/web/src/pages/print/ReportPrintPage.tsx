@@ -3,6 +3,7 @@ import type { UserRole } from "@veridi/shared";
 import { PRICING_PROVENANCE_ROLES } from "@veridi/shared";
 import { useOptionalAuth } from "../../app/AuthProvider";
 import { API_URL, apiFetch } from "../../lib/api";
+import { apiErrorMessage, parseJsonOrThrow } from "../../lib/api-errors";
 import { clienteFilterSource } from "../../lib/filter-sources";
 import { PdfScreen } from "../../pdf/PdfScreen";
 
@@ -337,6 +338,22 @@ async function customerFilterLabel(customerId: string | null): Promise<string | 
   return cliente ? `${cliente.code} · ${cliente.name}` : null;
 }
 
+/**
+ * Por que o CSV não veio. Recusa de validação — período invertido, dia mal
+ * formado — chega com a frase do servidor, a mesma que a tela mostra
+ * (PERIOD-RANGE-VALIDATION-WAVE-01), e não como "(400)".
+ */
+async function motivoDaFalha(response: Response): Promise<string> {
+  if (response.status === 400) {
+    const frase = await parseJsonOrThrow(response).then(
+      () => "",
+      (err: unknown) => apiErrorMessage(err, ""),
+    );
+    if (frase) return frase;
+  }
+  return `Falha ao carregar o relatório (${response.status})`;
+}
+
 /** Parser do CSV gerado pela API (`;`, aspas duplas, BOM). */
 export function parseReportCsv(content: string): { header: string[]; rows: string[][] } {
   const text = content.replace(/^﻿/, "");
@@ -409,7 +426,7 @@ export function ReportPrintPage() {
           throw new Error("Seu perfil não permite ver este relatório.");
         }
         const response = await apiFetch(`${API_URL}${definition.csvPath}${query ? `?${query}` : ""}`);
-        if (!response.ok) throw new Error(`Falha ao carregar o relatório (${response.status})`);
+        if (!response.ok) throw new Error(await motivoDaFalha(response));
         return {
           definition,
           ...parseReportCsv(await response.text()),

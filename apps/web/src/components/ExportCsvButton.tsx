@@ -12,6 +12,7 @@ export function ExportCsvButton({
   path,
   filters,
   label = "Exportar CSV",
+  disabled = false,
 }: {
   /** Rota explícita, ex.: `/customers/export.csv`. */
   path: string;
@@ -24,7 +25,20 @@ export function ExportCsvButton({
    */
   filters?: Record<string, string | number | boolean | readonly string[] | undefined>;
   label?: string;
+  /**
+   * Filtro que a tela recusa (período invertido) não vira arquivo: o botão fica
+   * sem link, em vez de baixar a recusa do servidor como se fosse o CSV.
+   */
+  disabled?: boolean;
 }) {
+  if (disabled) {
+    return (
+      <button type="button" className="btn btn--secondary btn--sm" disabled>
+        {label}
+      </button>
+    );
+  }
+
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(filters ?? {})) {
     if (value === undefined || value === "") continue;

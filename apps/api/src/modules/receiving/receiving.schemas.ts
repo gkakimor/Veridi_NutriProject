@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import { quantityDecimalSchema } from "../../lib/decimal-schema.js";
-import { diaCivilDeFiltroSchema, requiredDateSchema } from "../../lib/date-schema.js";
+import { diaCivilDeFiltroSchema, recusarPeriodoInvertido, requiredDateSchema } from "../../lib/date-schema.js";
 
 const receiptLineInputSchema = z.object({
   purchaseOrderLineId: z.string().trim().min(1, "Linha da OC é obrigatória"),
@@ -31,24 +31,26 @@ export const createReceiptSchema = z.object({
   lines: z.array(receiptLineInputSchema).min(1, "Informe ao menos uma linha recebida"),
 });
 
-export const listReceiptsQuerySchema = z.object({
-  search: z.string().trim().min(1).optional(),
-  purchaseOrderId: z.string().trim().min(1).optional(),
-  supplierId: z.string().trim().min(1).optional(),
-  sourceType: z.enum(["PURCHASE_ORDER", "CUSTOMER_SUPPLIED"]).optional(),
-  customerId: z.string().trim().min(1).optional(),
-  /*
-   * Período = DIA COMERCIAL. `Receipt.receivedAt` é INSTANTE (§81) e o que a
-   * pessoa escolhe no filtro é um dia de calendário; `requiredDateSchema`
-   * (= `z.coerce.date`) lia `2026-09-10` como meia-noite UTC — 21h do dia 09
-   * em São Paulo — e o `lte` encerrava o dia antes de ele começar. Quem abre
-   * o dia nos dois instantes é `intervaloDeDiasComerciais`, no serviço.
-   */
-  dateFrom: diaCivilDeFiltroSchema,
-  dateTo: diaCivilDeFiltroSchema,
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
-});
+export const listReceiptsQuerySchema = z
+  .object({
+    search: z.string().trim().min(1).optional(),
+    purchaseOrderId: z.string().trim().min(1).optional(),
+    supplierId: z.string().trim().min(1).optional(),
+    sourceType: z.enum(["PURCHASE_ORDER", "CUSTOMER_SUPPLIED"]).optional(),
+    customerId: z.string().trim().min(1).optional(),
+    /*
+     * Período = DIA COMERCIAL. `Receipt.receivedAt` é INSTANTE (§81) e o que a
+     * pessoa escolhe no filtro é um dia de calendário; `requiredDateSchema`
+     * (= `z.coerce.date`) lia `2026-09-10` como meia-noite UTC — 21h do dia 09
+     * em São Paulo — e o `lte` encerrava o dia antes de ele começar. Quem abre
+     * o dia nos dois instantes é `intervaloDeDiasComerciais`, no serviço.
+     */
+    dateFrom: diaCivilDeFiltroSchema,
+    dateTo: diaCivilDeFiltroSchema,
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  })
+  .superRefine(recusarPeriodoInvertido("dateFrom", "dateTo"));
 
 export type ReceiptLineInput = z.infer<typeof receiptLineInputSchema>;
 export type CreateReceiptInput = z.infer<typeof createReceiptSchema>;

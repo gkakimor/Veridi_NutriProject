@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { diaCivilDeFiltroSchema } from "../../lib/date-schema.js";
+import { diaCivilDeFiltroSchema, recusarPeriodoInvertido } from "../../lib/date-schema.js";
 
 /**
  * Flag booleana vinda da query string. `z.coerce.boolean()` nao serve aqui:
@@ -49,6 +49,13 @@ export const periodFields = {
   to: diaCivilDeFiltroSchema,
 };
 
+/**
+ * De depois de até é 400, não relatório vazio (PERIOD-RANGE-VALIDATION-WAVE-01).
+ * Todo schema com `periodFields` passa por aqui — e o JSON, o CSV e o PDF (que
+ * lê o CSV) usam os mesmos schemas. Ponta ausente continua aberta.
+ */
+const recusarPeriodoDoRelatorioInvertido = recusarPeriodoInvertido("from", "to");
+
 /* ── Estoque ── */
 
 export const inventoryPositionQuerySchema = z.object({
@@ -64,26 +71,33 @@ export const inventoryPositionQuerySchema = z.object({
   ...paginationFields,
 });
 
-export const expiryQuerySchema = z.object({
-  search: z.string().trim().min(1).optional(),
-  itemId: z.string().trim().min(1).optional(),
-  itemType: z.enum(["RAW_MATERIAL", "PACKAGING", "FINISHED_PRODUCT"]).optional(),
-  /** Janelas prontas; `CUSTOM` usa `from`/`to`. */
-  window: z.enum(["EXPIRED", "D7", "D30", "D60", "CUSTOM"]).default("D30"),
-  onlyWithBalance: booleanFlag(true),
-  ...periodFields,
-  ...paginationFields,
-});
+export const expiryQuerySchema = z
+  .object({
+    search: z.string().trim().min(1).optional(),
+    itemId: z.string().trim().min(1).optional(),
+    itemType: z.enum(["RAW_MATERIAL", "PACKAGING", "FINISHED_PRODUCT"]).optional(),
+    /** Janelas prontas; `CUSTOM` usa `from`/`to`. */
+    window: z.enum(["EXPIRED", "D7", "D30", "D60", "CUSTOM"]).default("D30"),
+    onlyWithBalance: booleanFlag(true),
+    ...periodFields,
+    ...paginationFields,
+  })
+  .superRefine((query, ctx) => {
+    // As pontas só são filtro na janela personalizada; nas prontas nem se leem.
+    if (query.window === "CUSTOM") recusarPeriodoDoRelatorioInvertido(query, ctx);
+  });
 
-export const movementsQuerySchema = z.object({
-  search: z.string().trim().min(1).optional(),
-  itemId: z.string().trim().min(1).optional(),
-  lotId: z.string().trim().min(1).optional(),
-  type: z.string().trim().min(1).optional(),
-  sourceType: z.string().trim().min(1).optional(),
-  ...periodFields,
-  ...paginationFields,
-});
+export const movementsQuerySchema = z
+  .object({
+    search: z.string().trim().min(1).optional(),
+    itemId: z.string().trim().min(1).optional(),
+    lotId: z.string().trim().min(1).optional(),
+    type: z.string().trim().min(1).optional(),
+    sourceType: z.string().trim().min(1).optional(),
+    ...periodFields,
+    ...paginationFields,
+  })
+  .superRefine(recusarPeriodoDoRelatorioInvertido);
 
 /* ── Produção ── */
 
@@ -96,52 +110,60 @@ export const requirementsQuerySchema = z.object({
   ...paginationFields,
 });
 
-export const plannedActualQuerySchema = z.object({
-  search: z.string().trim().min(1).optional(),
-  productId: z.string().trim().min(1).optional(),
-  productionOrderId: z.string().trim().min(1).optional(),
-  /**
-   * Padrão `COMPLETED`: o período usa `completedAt`. Com outro status o
-   * período passa a usar `createdAt` — nunca misturado em silêncio.
-   */
-  status: z.enum(["DRAFT", "PLANNED", "RELEASED", "IN_PRODUCTION", "COMPLETED", "CANCELLED"]).optional(),
-  includeCost: booleanFlag(false),
-  ...periodFields,
-  ...paginationFields,
-});
+export const plannedActualQuerySchema = z
+  .object({
+    search: z.string().trim().min(1).optional(),
+    productId: z.string().trim().min(1).optional(),
+    productionOrderId: z.string().trim().min(1).optional(),
+    /**
+     * Padrão `COMPLETED`: o período usa `completedAt`. Com outro status o
+     * período passa a usar `createdAt` — nunca misturado em silêncio.
+     */
+    status: z.enum(["DRAFT", "PLANNED", "RELEASED", "IN_PRODUCTION", "COMPLETED", "CANCELLED"]).optional(),
+    includeCost: booleanFlag(false),
+    ...periodFields,
+    ...paginationFields,
+  })
+  .superRefine(recusarPeriodoDoRelatorioInvertido);
 
 export const productionTraceabilityQuerySchema = z.object({
   productionOrderId: z.string().trim().min(1, "Informe a Ordem de Produção"),
 });
 
-export const consumptionQuerySchema = z.object({
-  search: z.string().trim().min(1).optional(),
-  itemId: z.string().trim().min(1).optional(),
-  productId: z.string().trim().min(1).optional(),
-  productionOrderId: z.string().trim().min(1).optional(),
-  ...periodFields,
-  ...paginationFields,
-});
+export const consumptionQuerySchema = z
+  .object({
+    search: z.string().trim().min(1).optional(),
+    itemId: z.string().trim().min(1).optional(),
+    productId: z.string().trim().min(1).optional(),
+    productionOrderId: z.string().trim().min(1).optional(),
+    ...periodFields,
+    ...paginationFields,
+  })
+  .superRefine(recusarPeriodoDoRelatorioInvertido);
 
 /* ── Compras ── */
 
-export const purchaseOrdersQuerySchema = z.object({
-  search: z.string().trim().min(1).optional(),
-  supplierId: z.string().trim().min(1).optional(),
-  status: z.enum(["DRAFT", "ORDERED", "PARTIALLY_RECEIVED", "RECEIVED", "CANCELLED"]).optional(),
-  origin: z.enum(["MANUAL", "CUSTOMER_ORDER"]).optional(),
-  ...periodFields,
-  ...paginationFields,
-});
+export const purchaseOrdersQuerySchema = z
+  .object({
+    search: z.string().trim().min(1).optional(),
+    supplierId: z.string().trim().min(1).optional(),
+    status: z.enum(["DRAFT", "ORDERED", "PARTIALLY_RECEIVED", "RECEIVED", "CANCELLED"]).optional(),
+    origin: z.enum(["MANUAL", "CUSTOMER_ORDER"]).optional(),
+    ...periodFields,
+    ...paginationFields,
+  })
+  .superRefine(recusarPeriodoDoRelatorioInvertido);
 
-export const receiptsQuerySchema = z.object({
-  search: z.string().trim().min(1).optional(),
-  supplierId: z.string().trim().min(1).optional(),
-  itemId: z.string().trim().min(1).optional(),
-  purchaseOrderId: z.string().trim().min(1).optional(),
-  ...periodFields,
-  ...paginationFields,
-});
+export const receiptsQuerySchema = z
+  .object({
+    search: z.string().trim().min(1).optional(),
+    supplierId: z.string().trim().min(1).optional(),
+    itemId: z.string().trim().min(1).optional(),
+    purchaseOrderId: z.string().trim().min(1).optional(),
+    ...periodFields,
+    ...paginationFields,
+  })
+  .superRefine(recusarPeriodoDoRelatorioInvertido);
 
 export const onOrderQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
@@ -152,27 +174,31 @@ export const onOrderQuerySchema = z.object({
 
 /* ── Comercial ── */
 
-export const customerOrdersQuerySchema = z.object({
-  search: z.string().trim().min(1).optional(),
-  customerId: z.string().trim().min(1).optional(),
-  status: z
-    .enum(["DRAFT", "CONFIRMED", "IN_FULFILLMENT", "PARTIALLY_SHIPPED", "SHIPPED", "CANCELLED"])
-    .optional(),
-  ...periodFields,
-  ...paginationFields,
-});
+export const customerOrdersQuerySchema = z
+  .object({
+    search: z.string().trim().min(1).optional(),
+    customerId: z.string().trim().min(1).optional(),
+    status: z
+      .enum(["DRAFT", "CONFIRMED", "IN_FULFILLMENT", "PARTIALLY_SHIPPED", "SHIPPED", "CANCELLED"])
+      .optional(),
+    ...periodFields,
+    ...paginationFields,
+  })
+  .superRefine(recusarPeriodoDoRelatorioInvertido);
 
-export const fulfillmentQuerySchema = z.object({
-  search: z.string().trim().min(1).optional(),
-  customerId: z.string().trim().min(1).optional(),
-  customerOrderId: z.string().trim().min(1).optional(),
-  productId: z.string().trim().min(1).optional(),
-  status: z
-    .enum(["DRAFT", "CONFIRMED", "IN_FULFILLMENT", "PARTIALLY_SHIPPED", "SHIPPED", "CANCELLED"])
-    .optional(),
-  ...periodFields,
-  ...paginationFields,
-});
+export const fulfillmentQuerySchema = z
+  .object({
+    search: z.string().trim().min(1).optional(),
+    customerId: z.string().trim().min(1).optional(),
+    customerOrderId: z.string().trim().min(1).optional(),
+    productId: z.string().trim().min(1).optional(),
+    status: z
+      .enum(["DRAFT", "CONFIRMED", "IN_FULFILLMENT", "PARTIALLY_SHIPPED", "SHIPPED", "CANCELLED"])
+      .optional(),
+    ...periodFields,
+    ...paginationFields,
+  })
+  .superRefine(recusarPeriodoDoRelatorioInvertido);
 
 export const orderOperationQuerySchema = z.object({
   customerOrderId: z.string().trim().min(1, "Informe o Pedido"),
@@ -180,13 +206,15 @@ export const orderOperationQuerySchema = z.object({
 
 /* ── Faturamento ── */
 
-export const billingPeriodQuerySchema = z.object({
-  search: z.string().trim().min(1).optional(),
-  customerId: z.string().trim().min(1).optional(),
-  customerOrderId: z.string().trim().min(1).optional(),
-  ...periodFields,
-  ...paginationFields,
-});
+export const billingPeriodQuerySchema = z
+  .object({
+    search: z.string().trim().min(1).optional(),
+    customerId: z.string().trim().min(1).optional(),
+    customerOrderId: z.string().trim().min(1).optional(),
+    ...periodFields,
+    ...paginationFields,
+  })
+  .superRefine(recusarPeriodoDoRelatorioInvertido);
 
 export const awaitingBillingQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
@@ -220,14 +248,16 @@ export const pricingByProductQuerySchema = z.object({
   ...paginationFields,
 });
 
-export const quotePricingAuditQuerySchema = z.object({
-  search: z.string().trim().min(1).optional(),
-  customerId: z.string().trim().min(1).optional(),
-  priceSource: z.enum(["MANUAL", "PRICING_TIER"]).optional(),
-  status: z.enum(["DRAFT", "SENT", "ACCEPTED", "REJECTED", "SUPERSEDED"]).optional(),
-  ...periodFields,
-  ...paginationFields,
-});
+export const quotePricingAuditQuerySchema = z
+  .object({
+    search: z.string().trim().min(1).optional(),
+    customerId: z.string().trim().min(1).optional(),
+    priceSource: z.enum(["MANUAL", "PRICING_TIER"]).optional(),
+    status: z.enum(["DRAFT", "SENT", "ACCEPTED", "REJECTED", "SUPERSEDED"]).optional(),
+    ...periodFields,
+    ...paginationFields,
+  })
+  .superRefine(recusarPeriodoDoRelatorioInvertido);
 
 export type QuotePricingAuditQuery = z.infer<typeof quotePricingAuditQuerySchema>;
 export type PricingByProductQuery = z.infer<typeof pricingByProductQuerySchema>;

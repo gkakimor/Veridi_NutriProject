@@ -12,6 +12,7 @@ import {
   BILLING_STATUSES,
   BILLING_STATUS_LABELS,
   SHIPMENT_BILLING_STATUS_LABELS,
+  recusaDoPeriodo,
 } from "@veridi/shared";
 import type { ListBillingsParams } from "../../lib/billings-api";
 import { createBilling, listAwaitingBilling, listBillings } from "../../lib/billings-api";
@@ -23,6 +24,7 @@ import { useListFilters } from "../../lib/list-filters";
 import type { ListPeriodPreset } from "../../lib/list-period";
 import {
   LIST_PERIOD_PRESET_LABELS,
+  TABELA_COM_PERIODO_RECUSADO,
   ehListPeriodPreset,
   formatListPeriod,
   resolveListPeriod,
@@ -117,6 +119,13 @@ export function BillingsPage() {
   );
 
   /*
+   * Data inicial depois da final não se consulta (PERIOD-RANGE-VALIDATION-WAVE-01):
+   * a lista vazia se leria como "nada faturado no período". A frase fica no
+   * filtro de período; tabela, total, páginas e CSV não respondem a ela.
+   */
+  const periodoRecusado = recusaDoPeriodo(periodo.dateFrom, periodo.dateTo);
+
+  /*
    * UM conjunto de filtros para a consulta e para o CSV. Duas listas de
    * campos lado a lado é como a tela e o arquivo passam a discordar sem
    * ninguém notar — o CSV não tem tela para conferir.
@@ -156,8 +165,12 @@ export function BillingsPage() {
   }, []);
 
   const reload = useCallback(() => {
-    setLoading(true);
     setError(null);
+    if (periodoRecusado) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
 
     listBillings({ ...filtrosDaConsulta, page, pageSize: PAGE_SIZE })
       .then((result) => {
@@ -168,7 +181,7 @@ export function BillingsPage() {
         setError(err instanceof Error ? err.message : "Falha ao carregar faturamentos");
       })
       .finally(() => setLoading(false));
-  }, [filtrosDaConsulta, page]);
+  }, [filtrosDaConsulta, page, periodoRecusado]);
 
   useEffect(() => {
     reload();
@@ -238,6 +251,7 @@ export function BillingsPage() {
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const linhas = periodoRecusado ? [] : billings;
 
   return (
     <>
@@ -248,7 +262,11 @@ export function BillingsPage() {
             Faturamento comercial/operacional do que foi realmente expedido — não emite Nota Fiscal.
           </p>
         </div>
-        <ExportCsvButton path="/billings/export.csv" filters={filtrosDaConsulta} />
+        <ExportCsvButton
+          path="/billings/export.csv"
+          filters={filtrosDaConsulta}
+          disabled={periodoRecusado !== null}
+        />
 </div>
 
       <ContextHelp topic={helpTopics["faturamento.lista"]} />
@@ -412,7 +430,7 @@ export function BillingsPage() {
             </tr>
           </thead>
           <tbody>
-            {billings.map((billing) => (
+            {linhas.map((billing) => (
               <tr
                 key={billing.id}
                 tabIndex={0}
@@ -462,10 +480,12 @@ export function BillingsPage() {
               </tr>
             ))}
 
-            {!loading && billings.length === 0 && (
+            {!loading && linhas.length === 0 && (
               <tr>
                 <td colSpan={9} className="table__empty">
-                  {isActive ? (
+                  {periodoRecusado ? (
+                    TABELA_COM_PERIODO_RECUSADO
+                  ) : isActive ? (
                     <>
                       Nenhum faturamento encontrado para os filtros atuais.{" "}
                       <ClearFilters onClear={clear} />
@@ -478,34 +498,38 @@ export function BillingsPage() {
             )}
           </tbody>
         </table>
-        <div className="table-foot">
-          {total} {total === 1 ? "faturamento" : "faturamentos"}
-        </div>
+        {!periodoRecusado && (
+          <div className="table-foot">
+            {total} {total === 1 ? "faturamento" : "faturamentos"}
+          </div>
+        )}
       </div>
 
-      <div className="pagination">
-        <span>
-          Página {page} de {totalPages}
-        </span>
-        <div className="table__actions">
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page <= 1}
-            onClick={() => setPage(page - 1)}
-          >
-            Anterior
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage(page + 1)}
-          >
-            Próxima
-          </button>
+      {!periodoRecusado && (
+        <div className="pagination">
+          <span>
+            Página {page} de {totalPages}
+          </span>
+          <div className="table__actions">
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Próxima
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

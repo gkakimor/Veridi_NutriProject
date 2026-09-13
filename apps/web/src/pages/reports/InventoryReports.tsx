@@ -5,6 +5,7 @@ import {
   INVENTORY_MOVEMENT_TYPE_LABELS,
   ITEM_TYPE_LABELS,
   LOT_STATUS_LABELS,
+  recusaDoPeriodo,
 } from "@veridi/shared";
 import type { InventoryMovementType, ItemType } from "@veridi/shared";
 import {
@@ -14,7 +15,7 @@ import {
 } from "../../lib/reports-api";
 import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
-import { diaDoRelatorio } from "./report-period";
+import { ariaDoPeriodoRecusado, diaDoRelatorio } from "./report-period";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate, formatDateTime } from "../../lib/dates";
 
@@ -170,7 +171,9 @@ export function ExpiryReportPage() {
     }),
     [window, search, from, to, page],
   );
-  const { data, loading, error } = useReport(getExpiryReport, filters);
+  // As datas só são filtro na janela personalizada (PERIOD-RANGE-VALIDATION-WAVE-01).
+  const periodoRecusado = window === "CUSTOM" ? recusaDoPeriodo(from, to) : null;
+  const { data, loading, error } = useReport(getExpiryReport, filters, { enabled: periodoRecusado === null });
 
   return (
     <ReportPage
@@ -182,6 +185,7 @@ export function ExpiryReportPage() {
       subtitle="Lotes vencidos e vencendo, considerando a validade efetiva e o saldo atual."
       loading={loading}
       error={error}
+      periodRefusal={periodoRecusado}
       filters={
         <>
           <select
@@ -205,6 +209,7 @@ export function ExpiryReportPage() {
                 id="expiry-from"
                 type="date"
                 value={from}
+                {...ariaDoPeriodoRecusado(periodoRecusado)}
                 onChange={(event) => {
                   setPage(1);
                   setFrom(event.target.value);
@@ -215,6 +220,7 @@ export function ExpiryReportPage() {
                 id="expiry-to"
                 type="date"
                 value={to}
+                {...ariaDoPeriodoRecusado(periodoRecusado)}
                 onChange={(event) => {
                   setPage(1);
                   setTo(event.target.value);
@@ -312,7 +318,8 @@ export function MovementsReportPage() {
     }),
     [search, type, from, to, page],
   );
-  const { data, loading, error } = useReport(getMovementsReport, filters);
+  const periodoRecusado = recusaDoPeriodo(from, to);
+  const { data, loading, error } = useReport(getMovementsReport, filters, { enabled: periodoRecusado === null });
 
   return (
     <ReportPage
@@ -324,6 +331,7 @@ export function MovementsReportPage() {
       subtitle="Toda entrada e saída de estoque no período, com o documento que a originou."
       loading={loading}
       error={error}
+      periodRefusal={periodoRecusado}
       filters={
         <>
           <label htmlFor="mov-from">De</label>
@@ -331,6 +339,7 @@ export function MovementsReportPage() {
             id="mov-from"
             type="date"
             value={from}
+            {...ariaDoPeriodoRecusado(periodoRecusado)}
             onChange={(event) => {
               setPage(1);
               setFrom(event.target.value);
@@ -341,6 +350,7 @@ export function MovementsReportPage() {
             id="mov-to"
             type="date"
             value={to}
+            {...ariaDoPeriodoRecusado(periodoRecusado)}
             onChange={(event) => {
               setPage(1);
               setTo(event.target.value);

@@ -84,6 +84,16 @@ export function resolveListPeriod(
   }
 }
 
+/**
+ * O que a tabela diz enquanto o período está recusado — as duas pontas
+ * preenchidas e invertidas (`recusaDoPeriodo`, PERIOD-RANGE-VALIDATION-WAVE-01).
+ *
+ * Nunca "nenhum registro encontrado": período invertido é pergunta inválida,
+ * não resposta vazia. A frase da recusa fica junto dos campos; aqui só o que
+ * fazer, curto, porque a célula de relatório não quebra linha em 390px.
+ */
+export const TABELA_COM_PERIODO_RECUSADO = "Corrija o período para consultar.";
+
 /** `10/09/2026 – 30/09/2026` — o período como a pessoa o lê no chip. */
 export function formatListPeriod({ dateFrom, dateTo }: ListPeriodDays): string {
   const porExtenso = (dia: string) => dia.split("-").reverse().join("/");

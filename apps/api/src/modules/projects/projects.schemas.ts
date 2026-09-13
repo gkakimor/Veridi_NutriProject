@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { LIMITES_INTEIROS_DAS_CONDICOES, QUOTE_DUPLICATE_PRICE_STRATEGIES } from "@veridi/shared";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
-import { requiredDateSchema } from "../../lib/date-schema.js";
+import { recusarPeriodoInvertido, requiredDateSchema } from "../../lib/date-schema.js";
 import { CASAS_PRECO_COMERCIAL, optionalDecimalStringSchema } from "../../lib/decimal-schema.js";
 
 const statusEnum = z.enum(["WAITING", "SAMPLE", "APPROVED", "CANCELLED", "STAND_BY"]);
@@ -89,18 +89,20 @@ export const approveProjectSchema = z.object({
   finishedUnitCode: z.string().trim().min(1).optional(),
 });
 
-export const listProjectsQuerySchema = z.object({
-  search: z.string().trim().min(1).optional(),
-  customerId: z.string().trim().min(1).optional(),
-  status: statusEnum.optional(),
-  channel: z.string().trim().min(1).optional(),
-  concept: z.string().trim().min(1).optional(),
-  responsibleUserId: z.string().trim().min(1).optional(),
-  entryFrom: requiredDateSchema.optional(),
-  entryTo: requiredDateSchema.optional(),
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
-});
+export const listProjectsQuerySchema = z
+  .object({
+    search: z.string().trim().min(1).optional(),
+    customerId: z.string().trim().min(1).optional(),
+    status: statusEnum.optional(),
+    channel: z.string().trim().min(1).optional(),
+    concept: z.string().trim().min(1).optional(),
+    responsibleUserId: z.string().trim().min(1).optional(),
+    entryFrom: requiredDateSchema.optional(),
+    entryTo: requiredDateSchema.optional(),
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  })
+  .superRefine(recusarPeriodoInvertido("entryFrom", "entryTo"));
 
 /** Cabeçalho da proposta: condições comerciais. Preço vive na linha. */
 /** Percentual opcional com teto — desconto de 100% não é desconto, é doação. */

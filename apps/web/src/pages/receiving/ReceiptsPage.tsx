@@ -3,7 +3,7 @@ import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { Link, useNavigate } from "react-router-dom";
 import { EntityLink } from "../../components/EntityLink";
 import type { ReceiptDTO, ReceiptSourceType } from "@veridi/shared";
-import { RECEIPT_SOURCE_TYPES, RECEIPT_SOURCE_TYPE_LABELS } from "@veridi/shared";
+import { RECEIPT_SOURCE_TYPES, RECEIPT_SOURCE_TYPE_LABELS, recusaDoPeriodo } from "@veridi/shared";
 import type { ListReceiptsParams } from "../../lib/receiving-api";
 import { listReceipts } from "../../lib/receiving-api";
 import { formatDate } from "../../lib/dates";
@@ -13,6 +13,7 @@ import { useListFilters } from "../../lib/list-filters";
 import type { ListPeriodPreset } from "../../lib/list-period";
 import {
   LIST_PERIOD_PRESET_LABELS,
+  TABELA_COM_PERIODO_RECUSADO,
   ehListPeriodPreset,
   formatListPeriod,
   resolveListPeriod,
@@ -92,6 +93,9 @@ export function ReceiptsPage() {
     [period, values.dateFrom, values.dateTo],
   );
 
+  /* Data inicial depois da final não se consulta (PERIOD-RANGE-VALIDATION-WAVE-01). */
+  const periodoRecusado = recusaDoPeriodo(periodo.dateFrom, periodo.dateTo);
+
   /* UM conjunto de filtros para a consulta e para o CSV. */
   const filtrosDaConsulta = useMemo(() => {
     const filtros: Omit<ListReceiptsParams, "page" | "pageSize"> = {};
@@ -118,8 +122,12 @@ export function ReceiptsPage() {
   }, [searchInput, search, set]);
 
   const reload = useCallback(() => {
-    setLoading(true);
     setError(null);
+    if (periodoRecusado) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
 
     listReceipts({ ...filtrosDaConsulta, page, pageSize: PAGE_SIZE })
       .then((result) => {
@@ -130,7 +138,7 @@ export function ReceiptsPage() {
         setError(err instanceof Error ? err.message : "Falha ao carregar recebimentos");
       })
       .finally(() => setLoading(false));
-  }, [filtrosDaConsulta, page]);
+  }, [filtrosDaConsulta, page, periodoRecusado]);
 
   useEffect(() => {
     reload();
@@ -177,6 +185,7 @@ export function ReceiptsPage() {
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const linhas = periodoRecusado ? [] : receipts;
 
   return (
     <>
@@ -201,7 +210,11 @@ export function ReceiptsPage() {
         >
           Receber material do cliente
         </button>
-        <ExportCsvButton path="/receipts/export.csv" filters={filtrosDaConsulta} />
+        <ExportCsvButton
+          path="/receipts/export.csv"
+          filters={filtrosDaConsulta}
+          disabled={periodoRecusado !== null}
+        />
 </div>
 
       {/* Duas entradas muito diferentes moram na mesma lista — compra da
@@ -277,7 +290,7 @@ export function ReceiptsPage() {
             </tr>
           </thead>
           <tbody>
-            {receipts.map((receipt) => (
+            {linhas.map((receipt) => (
               <tr
                 key={receipt.id}
                 tabIndex={0}
@@ -322,10 +335,12 @@ export function ReceiptsPage() {
               </tr>
             ))}
 
-            {!loading && receipts.length === 0 && (
+            {!loading && linhas.length === 0 && (
               <tr>
                 <td colSpan={8} className="table__empty">
-                  {isActive ? (
+                  {periodoRecusado ? (
+                    TABELA_COM_PERIODO_RECUSADO
+                  ) : isActive ? (
                     <>
                       Nenhum recebimento encontrado para os filtros atuais.{" "}
                       <ClearFilters onClear={clear} />
@@ -338,34 +353,38 @@ export function ReceiptsPage() {
             )}
           </tbody>
         </table>
-        <div className="table-foot">
-          {total} {total === 1 ? "recebimento" : "recebimentos"}
-        </div>
+        {!periodoRecusado && (
+          <div className="table-foot">
+            {total} {total === 1 ? "recebimento" : "recebimentos"}
+          </div>
+        )}
       </div>
 
-      <div className="pagination">
-        <span>
-          Página {page} de {totalPages}
-        </span>
-        <div className="table__actions">
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page <= 1}
-            onClick={() => setPage(page - 1)}
-          >
-            Anterior
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage(page + 1)}
-          >
-            Próxima
-          </button>
+      {!periodoRecusado && (
+        <div className="pagination">
+          <span>
+            Página {page} de {totalPages}
+          </span>
+          <div className="table__actions">
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Próxima
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

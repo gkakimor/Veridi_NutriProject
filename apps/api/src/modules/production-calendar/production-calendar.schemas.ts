@@ -12,6 +12,7 @@ import {
   ehDiaCivil,
 } from "@veridi/shared";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
+import { recusarPeriodoInvertido } from "../../lib/date-schema.js";
 
 /**
  * Contrato de entrada do Calendário de Produção (PLANNING-CALENDAR-01, jornada
@@ -111,10 +112,12 @@ const diaCivilSchema = z
   .trim()
   .refine(ehDiaCivil, "Informe uma data existente, no formato AAAA-MM-DD");
 
-export const listProductionCalendarExceptionsQuerySchema = z.object({
-  from: diaCivilSchema.optional(),
-  to: diaCivilSchema.optional(),
-});
+export const listProductionCalendarExceptionsQuerySchema = z
+  .object({
+    from: diaCivilSchema.optional(),
+    to: diaCivilSchema.optional(),
+  })
+  .superRefine(recusarPeriodoInvertido("from", "to"));
 
 /** Sem `operation`, a exceção é SEM_OPERACAO — o que toda exceção era até aqui. */
 export const createProductionCalendarExceptionSchema = z.object({
