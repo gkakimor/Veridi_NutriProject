@@ -1,4 +1,5 @@
 import type {
+  ApplyProductionRouteInput,
   CancelProductionOrderInput,
   CompleteProductionOrderInput,
   CreateProductionOrderInput,
@@ -23,6 +24,8 @@ export interface ListProductionOrdersParams {
    */
   status?: ProductionOrderStatus | ProductionOrderStatus[];
   productId?: string;
+  /** `true`: pendentes de roteiro; `false`: com roteiro; ausente: todas. */
+  semRoteiro?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -35,6 +38,7 @@ export async function listProductionOrders(
   const status = Array.isArray(params.status) ? params.status.join(",") : params.status;
   if (status) query.set("status", status);
   if (params.productId) query.set("productId", params.productId);
+  if (params.semRoteiro !== undefined) query.set("semRoteiro", params.semRoteiro ? "1" : "0");
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 20));
 
@@ -71,13 +75,17 @@ export async function updateProductionOrder(
 }
 
 /**
- * Aplica o Perfil de Produção padrão do Produto na OP — cópia por valor.
- * A mesma chamada atende "Aplicar" (OP sem perfil) e "Atualizar" (cópia
- * antiga); só rascunho, e o servidor recusa fora dele.
+ * Aplica ou troca o roteiro da OP — cópia por valor. Corpo vazio aplica o
+ * padrão atual do Produto; situação, motivo e confirmações o servidor decide.
  */
-export async function applyProductionProfile(id: string): Promise<ProductionOrderDTO> {
+export async function applyProductionProfile(
+  id: string,
+  input: ApplyProductionRouteInput = {},
+): Promise<ProductionOrderDTO> {
   const response = await apiFetch(`${API_URL}/production-orders/${id}/production-profile`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
   });
   return (await parseJsonOrThrow(response)) as ProductionOrderDTO;
 }

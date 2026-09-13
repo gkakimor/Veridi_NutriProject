@@ -195,6 +195,11 @@ export interface CustomerOrderGeneratedProductionOrderDTO {
   producedQuantity: string;
   outputUnitCode: string;
   status: ProductionOrderStatus;
+  /**
+   * A ordem ainda não tem roteiro de produção. Informativo para o Comercial:
+   * o Pedido segue, e quem resolve é a Produção.
+   */
+  routePending: boolean;
 }
 
 /**

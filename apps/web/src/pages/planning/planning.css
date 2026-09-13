@@ -507,3 +507,64 @@
     width: 100%;
   }
 }
+
+/* ────────────── Roteiro na Ordem de Produção (PRODUCTION-ROUTE-ASSIGNMENT-01) */
+
+/* O seletor mostra resumo e etapas: mais largo que a confirmação simples, e
+   rolando por dentro quando a tela é baixa — nunca a página por trás. */
+.confirm-dialog:has(.route-chooser) {
+  /* Largura para os três botões numa linha só no desktop. */
+  width: min(680px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.route-chooser {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.route-chooser__summary {
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--canvas);
+}
+
+.route-chooser__steps {
+  margin: 0;
+  padding-left: var(--sp-5);
+  font-size: var(--fs-sm);
+}
+
+.route-chooser__steps li + li {
+  margin-top: var(--sp-1);
+}
+
+.route-chooser__actions {
+  flex-wrap: wrap;
+}
+
+.route-block__facts {
+  margin-bottom: var(--sp-3);
+}
+
+.route-block__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+/* 390px: os três botões do seletor viram coluna, cada um na linha inteira. */
+@media (max-width: 480px) {
+  .route-chooser__actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .route-block__actions .btn {
+    width: 100%;
+  }
+}

@@ -30,7 +30,10 @@ function v2(id: keyof typeof helpTopics): HelpTopicV2 {
   return topico;
 }
 
-vi.mock("../app/AuthProvider", () => ({ useAuth: () => ({ user: { role: "ADMIN" } }) }));
+vi.mock("../app/AuthProvider", () => ({
+  useAuth: () => ({ user: { role: "ADMIN" } }),
+  useOptionalAuth: () => ({ user: { role: "ADMIN" } }),
+}));
 vi.mock("../components/AttachmentsSection", () => ({ AttachmentsSection: () => null }));
 
 vi.mock("../lib/products-api", () => ({

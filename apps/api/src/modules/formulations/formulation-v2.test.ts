@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Prisma } from "@prisma/client";
 import type { UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { aplicarRoteiroDeTeste } from "../../test-support/fixture-route.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 import { applyPurityAndOverage, computeComponentRequirement } from "../../lib/formulation-math.js";
@@ -265,6 +266,7 @@ describe("Formulação v2 — versão e Ordem de Produção", () => {
       })
     ).json();
     fixtureProductionOrderIds.push(order.id);
+    await aplicarRoteiroDeTeste(order.id);
     const planned = (
       await app.inject({ method: "POST", url: `/production-orders/${order.id}/plan` })
     ).json();
@@ -333,6 +335,7 @@ describe("Formulação v2 — versão e Ordem de Produção", () => {
       })
     ).json();
     fixtureProductionOrderIds.push(order.id);
+    await aplicarRoteiroDeTeste(order.id);
     await app.inject({ method: "POST", url: `/production-orders/${order.id}/plan` });
 
     // Cadastro muda depois — snapshot da formulação não pode acompanhar.
@@ -448,6 +451,7 @@ describe("Formulação v2 — versão e Ordem de Produção", () => {
       })
     ).json();
     fixtureProductionOrderIds.push(order.id);
+    await aplicarRoteiroDeTeste(order.id);
     const planned = (
       await app.inject({ method: "POST", url: `/production-orders/${order.id}/plan` })
     ).json();

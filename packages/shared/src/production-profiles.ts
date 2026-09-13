@@ -1,6 +1,8 @@
 import { Decimal } from "./decimal-config.js";
 import type { DecimalInstance } from "./decimal-config.js";
 import type { TemplateVersionStatus } from "./cost-pricing-templates.js";
+import { converterQuantidadeDeUnidade } from "./formulation-quantity.js";
+import type { UomFactorLike } from "./formulation-quantity.js";
 import type { IndustrialResourceType } from "./industrial-resources.js";
 
 /**
@@ -466,6 +468,109 @@ export function planProductionProfileSnapshot(
     },
     quantity,
   );
+}
+
+// ─────────────────────────── quantidade da ordem e compatibilidade do roteiro
+
+/**
+ * A quantidade da ordem não chega à unidade de referência do roteiro por um
+ * caminho seguro: unidade desconhecida, ou de outra dimensão.
+ */
+export class ProductionRouteUomError extends Error {
+  constructor(
+    readonly orderUnitCode: string,
+    readonly referenceUomCode: string,
+    readonly motivo: "UOM_DESCONHECIDA" | "UOM_INCOMPATIVEL",
+  ) {
+    super(
+      motivo === "UOM_INCOMPATIVEL"
+        ? `A ordem está em ${orderUnitCode} e o roteiro em ${referenceUomCode}: unidades de dimensões diferentes não se convertem.`
+        : `Não há conversão conhecida entre ${orderUnitCode} e ${referenceUomCode}.`,
+    );
+    this.name = "ProductionRouteUomError";
+  }
+}
+
+export interface OrderQuantityInput {
+  quantity: string | number;
+  /** Unidade em que a ordem está — a do item de produto acabado. */
+  unitCode: string;
+}
+
+/**
+ * A quantidade da ordem NA UNIDADE DE REFERÊNCIA do roteiro, pela conversão
+ * canônica (`converterQuantidadeDeUnidade`). 2 kg numa referência em g são
+ * 2000 g — nunca "2" contra uma referência de 1000 g, que daria um tempo mil
+ * vezes menor. Sem caminho seguro, recusa: quantidade crua não entra na conta.
+ */
+export function quantidadeNaUnidadeDoRoteiro(
+  referenceUomCode: string,
+  order: OrderQuantityInput,
+  units: readonly UomFactorLike[],
+): string {
+  const quantidade = lerDecimal(order.quantity, "Quantidade");
+  const convertida = converterQuantidadeDeUnidade(
+    quantidade,
+    order.unitCode,
+    referenceUomCode,
+    units,
+  );
+  if (typeof convertida === "string") {
+    throw new ProductionRouteUomError(order.unitCode, referenceUomCode, convertida);
+  }
+  return convertida.toFixed();
+}
+
+/**
+ * A projeção do roteiro congelado para a quantidade DA ORDEM — convertida para
+ * a unidade de referência antes da conta. É a porta de toda duração de OP: a
+ * leitura da ordem, a tela e a agenda passam por aqui, e nenhuma delas chama
+ * `planProductionProfileSnapshot` com a quantidade crua.
+ */
+export function planProductionProfileSnapshotForOrder(
+  snapshot: ProductionProfileSnapshot,
+  order: OrderQuantityInput,
+  units: readonly UomFactorLike[],
+): ProductionPlan {
+  return planProductionProfileSnapshot(
+    snapshot,
+    quantidadeNaUnidadeDoRoteiro(snapshot.referenceUomCode, order, units),
+  );
+}
+
+/** Por que uma versão de roteiro não serve para quem pediu. */
+export type ProductionRouteCompatibilityBlock =
+  | "VERSAO_NAO_ATIVA"
+  | "SEM_UNIDADE"
+  | "UOM_DESCONHECIDA"
+  | "UOM_INCOMPATIVEL";
+
+/**
+ * A REGRA de compatibilidade entre uma versão de roteiro e quem vai usá-la — o
+ * padrão de um Produto ou a quantidade de uma Ordem de Produção.
+ *
+ * Três perguntas, nesta ordem: a versão está ativa (rascunho ninguém aprovou;
+ * arquivada já foi substituída); existe unidade para comparar; e essa unidade
+ * chega à unidade de referência pela conversão canônica. Mesma dimensão com
+ * fator conhecido converte; qualquer outra coisa recusa.
+ *
+ * `null` é compatível. A API trava a versão e decide por esta função; a tela lê
+ * o mesmo resultado para oferecer, ou não, a ação.
+ */
+export function compatibilidadeDoRoteiro(
+  version: { status: string; referenceUomCode: string },
+  quantityUnitCode: string | null,
+  units: readonly UomFactorLike[],
+): ProductionRouteCompatibilityBlock | null {
+  if (version.status !== "ACTIVE") return "VERSAO_NAO_ATIVA";
+  if (!quantityUnitCode) return "SEM_UNIDADE";
+  const conversao = converterQuantidadeDeUnidade(
+    1,
+    quantityUnitCode,
+    version.referenceUomCode,
+    units,
+  );
+  return typeof conversao === "string" ? conversao : null;
 }
 
 /** Rascunho ainda muda: copiar um seria congelar um roteiro que ninguém aprovou. */

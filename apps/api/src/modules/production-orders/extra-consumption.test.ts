@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LotStatus, UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { aplicarRoteiroDeTeste } from "../../test-support/fixture-route.js";
 import {
   diaComercialDeTeste,
   marcadorDoDiaComercialDeTeste,
@@ -205,6 +206,7 @@ async function criarOrdemLiberada(app: App, productId: string, plannedQuantity =
   if (criadaResp.statusCode >= 400) throw new Error(`create OP ${criadaResp.statusCode}: ${criadaResp.body}`);
   const criada = criadaResp.json();
   fixtureProductionOrderIds.push(criada.id);
+  await aplicarRoteiroDeTeste(criada.id);
   const plan = await app.inject({ method: "POST", url: `/production-orders/${criada.id}/plan` });
   if (plan.statusCode >= 400) throw new Error(`plan ${plan.statusCode}: ${plan.body}`);
   const rel = await app.inject({ method: "POST", url: `/production-orders/${criada.id}/release` });

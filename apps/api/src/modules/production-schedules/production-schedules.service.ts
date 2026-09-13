@@ -12,12 +12,16 @@ import type {
   ProductionBoardResourceDTO,
   ProductionBoardResponse,
   ProductionOrderScheduleDTO,
+  ProductionPlanningPendencyDTO,
   ProductionSchedulePreviewDTO,
+  UomFactorLike,
 } from "@veridi/shared";
 import {
   FUSO_COMERCIAL,
   ProductionCalendarInputError,
+  ProductionRouteUomError,
   ProductionScheduleInputError,
+  ROUTE_PENDING_STATUSES,
   avaliarInicio,
   avisosDaAgenda,
   cargaPorRecursoEDia,
@@ -30,20 +34,23 @@ import {
   minutoDoDiaComercial,
   minutosUteisDoDia,
   ocupacoesDaAgenda,
-  planProductionProfileSnapshot,
+  planProductionProfileSnapshotForOrder,
   programarEtapas,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { getProductionCalendarForPlanning } from "../production-calendar/production-calendar.service.js";
 import { readPlanningSnapshot } from "../production-orders/planning-snapshot.js";
+import { unidadesDeMedida } from "../production-profiles/production-profiles.service.js";
 import {
   CalendarBreakNotPositionedError,
   CalendarNotConfiguredError,
   ProductionOrderNotFoundError,
+  ProductionOrderRouteUomError,
   ProductionOrderWithoutRouteError,
   ScheduleLockedError,
   ScheduleNeedsConfirmationError,
   ScheduleNotFoundError,
+  ScheduleRouteChangedError,
   ScheduleStartNotOperationalError,
 } from "./production-schedules.errors.js";
 import type {
@@ -122,18 +129,32 @@ async function capacidadesDeCapacidade(): Promise<CapacidadeDoRecurso[]> {
 }
 
 /** As etapas da ordem, já com a duração da quantidade dela. */
-function etapasDaOrdem(ordem: {
-  code: string;
-  plannedQuantity: { toString(): string };
-  planningSnapshot: { steps: unknown } | null;
-}): EtapaParaAgendar[] {
+function etapasDaOrdem(
+  ordem: {
+    code: string;
+    plannedQuantity: { toString(): string };
+    outputUnitCode: string;
+    planningSnapshot: { steps: unknown } | null;
+  },
+  unidades: readonly UomFactorLike[],
+): EtapaParaAgendar[] {
   if (!ordem.planningSnapshot) throw new ProductionOrderWithoutRouteError(ordem.code);
   const snapshot = readPlanningSnapshot(
     ordem.planningSnapshot as Parameters<typeof readPlanningSnapshot>[0],
   );
-  // O MESMO motor da tela do Roteiro e do Planejamento previsto. Duração de
-  // OP não tem um segundo cálculo neste repositório.
-  const plano = planProductionProfileSnapshot(snapshot, ordem.plannedQuantity.toString());
+  // O MESMO motor da tela da ordem e do Roteiro, com a quantidade CONVERTIDA
+  // para a unidade de referência. Duração de OP não tem um segundo cálculo.
+  let plano: ReturnType<typeof planProductionProfileSnapshotForOrder>;
+  try {
+    plano = planProductionProfileSnapshotForOrder(
+      snapshot,
+      { quantity: ordem.plannedQuantity.toString(), unitCode: ordem.outputUnitCode },
+      unidades,
+    );
+  } catch (erro) {
+    if (erro instanceof ProductionRouteUomError) throw new ProductionOrderRouteUomError(erro.message);
+    throw erro;
+  }
   const porSequencia = new Map(snapshot.steps.map((etapa) => [etapa.sequence, etapa]));
   return plano.steps.map((etapa) => {
     const origem = porSequencia.get(etapa.sequence);
@@ -201,6 +222,10 @@ export async function previewProductionOrderSchedule(
   });
   if (!ordem) throw new ProductionOrderNotFoundError(orderId);
 
+  // Roteiro PRIMEIRO: sem etapas não há o que programar, e reclamar do
+  // calendário antes mandaria a pessoa arrumar a coisa errada.
+  const etapas = etapasDaOrdem(ordem, await unidadesDeMedida(prisma));
+
   const calendario = await jornadaConfigurada();
   const inicio = new Date(startAtISO);
 
@@ -214,7 +239,6 @@ export async function previewProductionOrderSchedule(
     throw new ScheduleStartNotOperationalError(avaliacao.motivo!, avaliacao.sugestaoAt);
   }
 
-  const etapas = etapasDaOrdem(ordem);
   let agenda: AgendaCalculada;
   try {
     agenda = programarEtapas({
@@ -319,12 +343,35 @@ export async function scheduleProductionOrder(
     scheduledBy: actor?.name ?? null,
   };
 
-  const linha = await prisma.productionOrderSchedule.upsert({
-    where: { productionOrderId: orderId },
-    create: { productionOrderId: orderId, ...dados },
-    // Reprogramar carimba de novo: quem olhar a agenda depois precisa saber
-    // quando ela passou a ser esta.
-    update: { ...dados, scheduledAt: new Date() },
+  /*
+   * Grava com a ordem travada e conferindo que o roteiro é o MESMO da prévia:
+   * trocar o roteiro remove a programação na transação dele, e uma gravação
+   * que calculou sobre a cópia anterior não pode ressuscitar agenda velha.
+   */
+  const linha = await prisma.$transaction(async (tx) => {
+    const travadas = await tx.$queryRaw<{ status: string }[]>`
+      SELECT status FROM production_orders WHERE id = ${orderId} FOR UPDATE
+    `;
+    const situacao = travadas[0]?.status;
+    if (!situacao) throw new ProductionOrderNotFoundError(orderId);
+    if (!EDITAVEIS.has(situacao)) {
+      throw new ScheduleLockedError(ordem.code, SITUACAO_TRAVADA[situacao] ?? situacao);
+    }
+    const roteiro = await tx.productionOrderPlanningSnapshot.findUnique({
+      where: { productionOrderId: orderId },
+      select: { id: true },
+    });
+    if (!roteiro || roteiro.id !== ordem.planningSnapshot?.id) {
+      throw new ScheduleRouteChangedError(ordem.code);
+    }
+
+    return tx.productionOrderSchedule.upsert({
+      where: { productionOrderId: orderId },
+      create: { productionOrderId: orderId, ...dados },
+      // Reprogramar carimba de novo: quem olhar a agenda depois precisa saber
+      // quando ela passou a ser esta.
+      update: { ...dados, scheduledAt: new Date() },
+    });
   });
   return toScheduleDTO(linha, ordem.code);
 }
@@ -481,6 +528,47 @@ export async function getProductionBoard(
         ],
   }));
 
+  /*
+   * PENDÊNCIAS DE PLANEJAMENTO (PRODUCTION-ROUTE-ASSIGNMENT-01), derivadas:
+   * nada é gravado para elas existirem. O primeiro tipo é a ordem sem roteiro
+   * numa situação que ainda recebe um — a mesma regra da lista de OPs, do
+   * Dashboard e do Pedido. Não dependem do período: pendência não tem dia.
+   * Produto e situação escolhidos no quadro valem aqui também.
+   */
+  const situacoesPendentes = ROUTE_PENDING_STATUSES.filter(
+    (situacao) => !query.status || query.status === situacao,
+  );
+  const ondePendente = {
+    planningSnapshot: { is: null },
+    status: { in: [...situacoesPendentes] },
+    ...(query.productId ? { productId: query.productId } : {}),
+  };
+  const [pendentes, pendenciesTotal] = await Promise.all([
+    prisma.productionOrder.findMany({
+      where: ondePendente,
+      include: {
+        product: { select: { code: true, name: true } },
+        customerOrder: { select: { id: true, code: true, requestedDeliveryDate: true } },
+      },
+      orderBy: { createdAt: "asc" },
+      take: 50,
+    }),
+    prisma.productionOrder.count({ where: ondePendente }),
+  ]);
+  const pendencies: ProductionPlanningPendencyDTO[] = pendentes.map((ordem) => ({
+    tipo: "SEM_ROTEIRO",
+    productionOrderId: ordem.id,
+    code: ordem.code,
+    productCode: ordem.productCode ?? ordem.product.code,
+    productName: ordem.productName ?? ordem.product.name,
+    plannedQuantity: ordem.plannedQuantity.toString(),
+    outputUnitCode: ordem.outputUnitCode,
+    status: ordem.status,
+    customerOrderId: ordem.customerOrder?.id ?? null,
+    customerOrderCode: ordem.customerOrder?.code ?? null,
+    customerPromiseAt: ordem.customerOrder?.requestedDeliveryDate?.toISOString() ?? null,
+  }));
+
   // Minutos-recurso disponíveis no período: capacidade × a jornada DE CADA DIA
   // — sexta curta rende menos que quinta, e horário especial conta o que ele
   // declara. Só faz sentido onde a capacidade está cadastrada.
@@ -528,5 +616,7 @@ export async function getProductionBoard(
     unscheduled,
     resources: recursos,
     conflicts: conflitos,
+    pendencies,
+    pendenciesTotal,
   };
 }

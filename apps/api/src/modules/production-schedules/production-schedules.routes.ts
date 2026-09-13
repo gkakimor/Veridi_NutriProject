@@ -7,7 +7,9 @@ import {
   CalendarBreakNotPositionedError,
   CalendarNotConfiguredError,
   ProductionOrderNotFoundError,
+  ProductionOrderRouteUomError,
   ProductionOrderWithoutRouteError,
+  ScheduleRouteChangedError,
   ScheduleLockedError,
   ScheduleNeedsConfirmationError,
   ScheduleNotFoundError,
@@ -50,6 +52,12 @@ function mapDomainError(error: unknown): { status: number; body: Record<string, 
   }
   if (error instanceof ProductionOrderWithoutRouteError) {
     return { status: 409, body: { error: "order_without_route", message: error.message } };
+  }
+  if (error instanceof ProductionOrderRouteUomError) {
+    return { status: 409, body: { error: "route_uom_incompatible", message: error.message } };
+  }
+  if (error instanceof ScheduleRouteChangedError) {
+    return { status: 409, body: { error: "route_changed", message: error.message } };
   }
   // Fail-closed do calendário: a recusa diz o que falta configurar.
   if (error instanceof CalendarBreakNotPositionedError) {

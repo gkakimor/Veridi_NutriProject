@@ -6,6 +6,7 @@ import { addMonths, suggestedExpiryDate } from "../../lib/date-months.js";
 import { splitDecimal } from "../../lib/part-split.js";
 import { suggestBusinessLotNumber } from "../../lib/business-lot.js";
 import { buildTestApp, createAuthenticatedUser } from "../../test-support/authenticated-app.js";
+import { aplicarRoteiroDeTeste } from "../../test-support/fixture-route.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 
 /**
@@ -222,6 +223,7 @@ async function createReleasedOrder(
     })
   ).json();
   fixtureProductionOrderIds.push(created.id);
+  await aplicarRoteiroDeTeste(created.id);
   await app.inject({ method: "POST", url: `/production-orders/${created.id}/plan` });
   const released = await app.inject({ method: "POST", url: `/production-orders/${created.id}/release` });
   return released.json();
@@ -343,6 +345,7 @@ describe("Ordem de Produção industrial", () => {
     // Rascunho não gasta numeração oficial.
     expect(draft.officialNumber).toBeNull();
 
+    await aplicarRoteiroDeTeste(draft.id);
     await app.inject({ method: "POST", url: `/production-orders/${draft.id}/plan` });
     const releasedA = (
       await app.inject({ method: "POST", url: `/production-orders/${draft.id}/release` })
@@ -387,6 +390,7 @@ describe("Ordem de Produção industrial", () => {
           })
         ).json();
         fixtureProductionOrderIds.push(created.id);
+        await aplicarRoteiroDeTeste(created.id);
         await app.inject({ method: "POST", url: `/production-orders/${created.id}/plan` });
         return created.id;
       }),
@@ -456,6 +460,7 @@ describe("Ordem de Produção industrial", () => {
     fixtureProductionOrderIds.push(created.id);
     expect(created.numberOfParts).toBe(3);
 
+    await aplicarRoteiroDeTeste(created.id);
     await app.inject({ method: "POST", url: `/production-orders/${created.id}/plan` });
     await app.inject({ method: "POST", url: `/production-orders/${created.id}/release` });
 

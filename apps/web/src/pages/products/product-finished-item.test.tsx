@@ -25,6 +25,7 @@ vi.mock("../../app/AuthProvider", () => ({ useAuth: vi.fn() }));
 vi.mock("../../components/AttachmentsSection", () => ({
   AttachmentsSection: () => null,
 }));
+vi.mock("./ProductDefaultRouteSection", () => ({ ProductDefaultRouteSection: () => null }));
 vi.mock("./ProductIndustrialCostSummary", () => ({
   ProductIndustrialCostSummary: () => null,
 }));

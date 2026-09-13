@@ -21,7 +21,7 @@ import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect"
 import { useAuth } from "../../app/AuthProvider";
 import { useListFilters } from "../../lib/list-filters";
 import { apiErrorMessage } from "../../lib/api-errors";
-import { formatDateTime } from "../../lib/dates";
+import { formatDate, formatDateTime } from "../../lib/dates";
 import { formatMinutes } from "../../lib/duration";
 import { formatQuantity } from "../../lib/quantity";
 import { getProductionBoard } from "../../lib/production-schedules-api";
@@ -409,6 +409,93 @@ export function ProductionBoardPage() {
                 </tbody>
               </table>
             </div>
+          </section>
+
+          {/*
+            PENDÊNCIAS DE PLANEJAMENTO (PRODUCTION-ROUTE-ASSIGNMENT-01): derivadas,
+            nunca gravadas. Vêm antes de "Sem programação" porque são o que
+            impede programar. "Resolver" leva à própria ordem, no bloco do
+            roteiro — não existe um segundo editor aqui.
+          */}
+          <section className="form-section" aria-label="Pendências de planejamento">
+            <h3>Pendências de planejamento</h3>
+            <p className="form-section__sub">
+              Ordens em rascunho, planejadas ou liberadas sem roteiro de produção. Sem roteiro não há etapas,
+              tempos nem recursos: a ordem não planeja, não programa e não libera.
+            </p>
+            <div className="table-container">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>OP</th>
+                    <th>Produto</th>
+                    <th className="is-numeric">Quantidade</th>
+                    <th>Pedido de origem</th>
+                    <th>Prazo do cliente</th>
+                    <th>Situação</th>
+                    <th aria-hidden="true" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {quadro.pendencies.map((pendencia) => (
+                    <tr key={pendencia.productionOrderId}>
+                      <td>
+                        <Link to={`/producao/ordens/${pendencia.productionOrderId}`}>
+                          <code>{pendencia.code}</code>
+                        </Link>
+                        <span className="cell-sub">
+                          <span className="badge badge--warn">Sem roteiro</span>
+                        </span>
+                      </td>
+                      <td>
+                        <code>{pendencia.productCode}</code> {pendencia.productName}
+                      </td>
+                      <td className="is-numeric">
+                        {formatQuantity(pendencia.plannedQuantity)} {pendencia.outputUnitCode}
+                      </td>
+                      <td>
+                        {pendencia.customerOrderId ? (
+                          <Link to={`/comercial/pedidos/${pendencia.customerOrderId}`}>
+                            <code>{pendencia.customerOrderCode}</code>
+                          </Link>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td>{formatDate(pendencia.customerPromiseAt)}</td>
+                      <td>
+                        {PRODUCTION_ORDER_STATUS_LABELS[
+                          pendencia.status as keyof typeof PRODUCTION_ORDER_STATUS_LABELS
+                        ] ?? pendencia.status}
+                      </td>
+                      <td>
+                        {canEdit && (
+                          <Link
+                            className="btn btn--secondary btn--sm"
+                            to={`/producao/ordens/${pendencia.productionOrderId}?foco=roteiro`}
+                          >
+                            Resolver
+                          </Link>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {quadro.pendencies.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="table__empty">
+                        Nenhuma pendência de planejamento.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {quadro.pendenciesTotal > quadro.pendencies.length && (
+              <p className="field__hint">
+                Mostrando {quadro.pendencies.length} de {quadro.pendenciesTotal}.{" "}
+                <Link to="/producao/ordens?semRoteiro=1">Ver todas na lista de ordens de produção</Link>
+              </p>
+            )}
           </section>
 
           <section className="form-section" aria-label="Sem programação">

@@ -11,6 +11,7 @@ const fixtureCustomerOrderIds: string[] = [];
 const fixtureProductIds: string[] = [];
 const fixtureItemIds: string[] = [];
 const fixtureCustomerIds: string[] = [];
+const fixtureProfileIds: string[] = [];
 
 type App = ReturnType<typeof buildTestApp>;
 
@@ -39,6 +40,9 @@ afterAll(async () => {
   if (fixtureProductIds.length > 0) {
     await prisma.formulationVersion.deleteMany({ where: { productId: { in: fixtureProductIds } } });
     await prisma.product.deleteMany({ where: { id: { in: fixtureProductIds } } });
+  }
+  if (fixtureProfileIds.length > 0) {
+    await prisma.productionProfile.deleteMany({ where: { id: { in: fixtureProfileIds } } });
   }
   if (fixtureItemIds.length > 0) {
     await prisma.lot.deleteMany({ where: { itemId: { in: fixtureItemIds } } });
@@ -518,6 +522,82 @@ describe("Plano de Atendimento — aplicação", () => {
     expect(opDetail.customerCode).toBeTruthy();
 
     await app.close();
+  });
+
+  it("Comercial aplica o Plano sem roteiro: o Pedido segue, a OP nasce em rascunho sem roteiro e o Pedido avisa — com padrão, a OP já nasce com roteiro", async () => {
+    const admin = buildTestApp();
+    const comercial = buildTestApp("COMMERCIAL");
+    await admin.ready();
+    await comercial.ready();
+
+    const rawMaterial = await createItem("RAW_MATERIAL");
+    const { product: semRoteiro } = await createProductWithFormulation(admin, [
+      { itemId: rawMaterial.id, quantity: "1", unitCode: "kg" },
+    ]);
+    const { product: comRoteiro } = await createProductWithFormulation(admin, [
+      { itemId: rawMaterial.id, quantity: "1", unitCode: "kg" },
+    ]);
+
+    // Roteiro padrão só no segundo produto, definido pela Produção.
+    const perfil = (
+      await admin.inject({
+        method: "POST",
+        url: "/production-profiles",
+        payload: { name: `Roteiro Plano ${marker()}`, referenceQuantity: "100", referenceUomCode: "kg" },
+      })
+    ).json();
+    fixtureProfileIds.push(perfil.id);
+    const versaoId = perfil.draftVersion.id as string;
+    await admin.inject({
+      method: "PATCH",
+      url: `/production-profile-versions/${versaoId}`,
+      payload: { steps: [{ name: "Mistura", setupDurationMinutes: 0, runDurationMinutes: 60, scalingMode: "PROPORTIONAL", resources: [] }] },
+    });
+    expect((await admin.inject({ method: "POST", url: `/production-profile-versions/${versaoId}/activate` })).statusCode).toBe(200);
+    expect(
+      (await admin.inject({ method: "PUT", url: `/products/${comRoteiro.id}/production-profile`, payload: { productionProfileVersionId: versaoId } })).statusCode,
+    ).toBe(200);
+
+    const customer = await createCustomer();
+    const order = await createConfirmedOrder(comercial, customer.id, [
+      { productId: semRoteiro.id, orderedQuantity: "30" },
+      { productId: comRoteiro.id, orderedQuantity: "40" },
+    ]);
+    expect(order.status).toBe("CONFIRMED");
+
+    const applied = await comercial.inject({
+      method: "POST",
+      url: `/customer-orders/${order.id}/apply-fulfillment-plan`,
+      payload: {
+        lines: order.lines.map((line: { id: string; orderedQuantity: string }) => ({
+          customerOrderLineId: line.id,
+          reserveQuantity: "0",
+          produceQuantity: line.orderedQuantity,
+        })),
+      },
+    });
+    expect(applied.statusCode).toBe(200);
+    const pedido = applied.json();
+    expect(pedido.status).toBe("IN_FULFILLMENT");
+
+    const geradas = pedido.generatedProductionOrders as { id: string; productId: string; status: string; routePending: boolean }[];
+    expect(geradas).toHaveLength(2);
+    const pendente = geradas.find((op) => op.productId === semRoteiro.id)!;
+    const pronta = geradas.find((op) => op.productId === comRoteiro.id)!;
+    expect(pendente.status).toBe("DRAFT");
+    expect(pendente.routePending).toBe(true);
+    expect(pronta.routePending).toBe(false);
+
+    const detalhePronta = (await admin.inject(`/production-orders/${pronta.id}`)).json();
+    expect(detalhePronta.planning.applicationSource).toBe("AUTO_PRODUCT_DEFAULT");
+    expect(detalhePronta.planning.snapshot.sourceVersionId).toBe(versaoId);
+
+    // O Comercial gera a necessidade; planejar é da Produção.
+    const planejarComercial = await comercial.inject({ method: "POST", url: `/production-orders/${pronta.id}/plan` });
+    expect(planejarComercial.statusCode).toBe(403);
+
+    await comercial.close();
+    await admin.close();
   });
 
   it("pedido em atendimento bloqueia cancelamento simples (reserva/OP já existem)", async () => {

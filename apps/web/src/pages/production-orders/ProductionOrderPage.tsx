@@ -1,7 +1,8 @@
 import { formatQuantity } from "../../lib/quantity";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useOptionalAuth } from "../../app/AuthProvider";
 import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import {
   assinaturaDoDocumento,
@@ -252,6 +253,18 @@ export function ProductionOrderPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const isNew = !id;
+  /* "Resolver" das pendências chega com `?foco=roteiro`: o bloco do roteiro entra em foco. */
+  const [searchParams] = useSearchParams();
+  const focoNoRoteiro = searchParams.get("foco") === "roteiro";
+  /*
+   * Quem OPERA a ordem: Produção e Administração (PRODUCTION-ROUTE-ASSIGNMENT-01).
+   * Os outros perfis leem — as ações nem aparecem, e o servidor recusa igual.
+   * Fora do AuthProvider (teste de tela, pré-visualização isolada) não há
+   * sessão para julgar, e a tela se comporta como antes.
+   */
+  const sessao = useOptionalAuth();
+  const canOperate =
+    sessao === null || sessao.user?.role === "ADMIN" || sessao.user?.role === "PRODUCTION";
 
   const [productionOrder, setProductionOrder] = useState<ProductionOrderDTO | null>(null);
   const [loading, setLoading] = useState(!isNew);
@@ -462,9 +475,12 @@ export function ProductionOrderPage() {
   // hoje, e apresentar isso como pendência gera compra indevida.
   const ordemEncerrada = status === "COMPLETED" || status === "CANCELLED";
   const isDraft = isNew || status === "DRAFT";
-  const isCancellable = !isNew && (status === "DRAFT" || status === "PLANNED" || status === "RELEASED");
-  const isPlannable = !isNew && status === "DRAFT";
-  const isReleasable = !isNew && status === "PLANNED";
+  const isCancellable =
+    canOperate && !isNew && (status === "DRAFT" || status === "PLANNED" || status === "RELEASED");
+  const isPlannable = !isNew && status === "DRAFT" && canOperate;
+  const isReleasable = !isNew && status === "PLANNED" && canOperate;
+  /* Sem roteiro a ordem não planeja nem libera — o botão diz o porquê antes do clique. */
+  const roteiroPendente = productionOrder?.planning.routePending ?? false;
   const hasShortage = (productionOrder?.shortageItemCount ?? 0) > 0;
 
   /**
@@ -1161,6 +1177,8 @@ export function ProductionOrderPage() {
             order={productionOrder}
             quantityDraft={plannedQuantity}
             onApplied={setProductionOrder}
+            canOperate={canOperate}
+            focus={focoNoRoteiro}
           />
         )}
 
@@ -2160,7 +2178,7 @@ export function ProductionOrderPage() {
         )}
 
         <div className="doc-actions__primary">
-          {isDraft && (
+          {isDraft && canOperate && (
             <button
               type="button"
               className="btn btn--secondary"
@@ -2170,7 +2188,7 @@ export function ProductionOrderPage() {
               {saving ? "Salvando…" : "Salvar rascunho"}
             </button>
           )}
-          {!isDraft && status !== "CANCELLED" && !isNew && (
+          {!isDraft && status !== "CANCELLED" && !isNew && canOperate && (
             <button
               type="button"
               className="btn btn--secondary"
@@ -2181,17 +2199,30 @@ export function ProductionOrderPage() {
             </button>
           )}
           {isPlannable && (
-            <button type="button" className="btn btn--accent" disabled={saving || planning || releasing} onClick={handlePlan}>
-              {planning ? "Planejando…" : "Planejar OP"}
-            </button>
+            <div className="line-actions">
+              {roteiroPendente && (
+                <p className="field__hint">Aplique um roteiro de produção antes de planejar.</p>
+              )}
+              <button
+                type="button"
+                className="btn btn--accent"
+                disabled={saving || planning || releasing || roteiroPendente}
+                onClick={handlePlan}
+              >
+                {planning ? "Planejando…" : "Planejar OP"}
+              </button>
+            </div>
           )}
           {isReleasable && (
             <div className="line-actions">
+              {roteiroPendente && (
+                <p className="field__hint">Aplique um roteiro de produção antes de liberar.</p>
+              )}
               {hasShortage && <p className="field__hint">Não é possível liberar: falta material.</p>}
               <button
                 type="button"
                 className="btn btn--accent"
-                disabled={saving || planning || releasing || hasShortage}
+                disabled={saving || planning || releasing || hasShortage || roteiroPendente}
                 onClick={() => setReleaseDialogOpen(true)}
               >
                 {releasing ? "Liberando…" : "Liberar OP"}

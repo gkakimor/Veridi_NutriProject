@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type {
   IndustrialResource,
+  PrismaClient,
   ProductionProfile,
   ProductionProfileStep,
   ProductionProfileStepResource,
@@ -15,9 +16,11 @@ import type {
   ProductionProfileListResponse,
   ProductionProfileSummaryDTO,
   ProductionProfileVersionDTO,
+  UomFactorLike,
 } from "@veridi/shared";
 import {
   PRODUCTION_PROFILE_CODE_PREFIX,
+  compatibilidadeDoRoteiro,
   isCapacityResourceType,
   planProductionProfile,
 } from "@veridi/shared";
@@ -64,7 +67,7 @@ type StepResourceWithResource = ProductionProfileStepResource & {
   industrialResource: IndustrialResource;
 };
 type StepWithResources = ProductionProfileStep & { resources: StepResourceWithResource[] };
-type VersionWithRelations = ProductionProfileVersion & {
+export type VersionWithRelations = ProductionProfileVersion & {
   productionProfile: ProductionProfile;
   steps: StepWithResources[];
   _count?: { defaultForProducts: number };
@@ -237,6 +240,13 @@ export async function listProductionProfiles(
         }
       : {}),
   };
+
+  /*
+   * `activeOnly`: só roteiro com versão ATIVA — é o que se escolhe para um
+   * Produto ou para uma ordem. Filtro de existência, não de compatibilidade:
+   * servir para a unidade de quem pediu é a autoridade que decide, na gravação.
+   */
+  if (query.activeOnly) where.versions = { some: { status: "ACTIVE" } };
 
   const [total, profiles] = await Promise.all([
     prisma.productionProfile.count({ where }),
@@ -412,8 +422,10 @@ export async function updateProductionProfileVersion(
 
 /**
  * Ativa o rascunho: ele fica congelado e a ativa anterior é ARQUIVADA, nunca
- * apagada — produtos que a escolheram como padrão continuam apontando para
- * ela, e ativar não move esse ponteiro sozinho (§89).
+ * apagada. Os produtos que tinham a ativa anterior DESTE perfil como padrão
+ * avançam para a versão nova na mesma transação (§89); produto de outro perfil
+ * ou sem perfil não muda, e ordem de produção existente nunca muda — ela tem
+ * cópia.
  */
 export async function activateProductionProfileVersion(
   id: string,
@@ -596,43 +608,123 @@ export async function getProductProductionProfile(
   };
 }
 
+type Db = PrismaClient | Prisma.TransactionClient;
+
+/** As unidades com fator — a conversão canônica precisa das duas pontas. */
+export async function unidadesDeMedida(db: Db): Promise<UomFactorLike[]> {
+  const unidades = await db.unitOfMeasure.findMany({
+    select: { code: true, dimension: true, toBaseFactor: true },
+  });
+  return unidades.map((unidade) => ({
+    code: unidade.code,
+    dimension: unidade.dimension,
+    toBaseFactor: unidade.toBaseFactor.toString(),
+  }));
+}
+
 /**
- * Define (ou tira) o Perfil de Produção padrão do produto.
+ * O que a AUTORIDADE decidiu: a versão carregada e, quando não serve, o motivo.
+ * `null` em `version` é versão inexistente.
+ */
+export interface RouteCompatibilityCheck {
+  version: VersionWithRelations | null;
+  bloqueio: ReturnType<typeof compatibilidadeDoRoteiro>;
+}
+
+/**
+ * A AUTORIDADE de compatibilidade entre uma versão de roteiro e quem vai
+ * usá-la — o padrão do Produto, a escolha explícita numa ordem e "definir padrão
+ * e aplicar". Todas passam por aqui; a regra em si é `compatibilidadeDoRoteiro`
+ * (`@veridi/shared`): versão ATIVA e unidade que chega à de referência pela
+ * conversão canônica.
  *
- * Só versão ATIVA, e só com a base na mesma dimensão da unidade do produto —
- * nada se converte entre dimensões. `null` tira o padrão: produto sem perfil
- * continua válido. Formulação, custo e OP não são tocados. Depois disso o
+ * Trava a linha da versão para leitura (FOR SHARE) dentro da transação de quem
+ * chama: uma ativação concorrente só arquiva esta versão depois que a gravação
+ * terminar, e aí o ponteiro do Produto avança junto com as outras.
+ */
+export async function verificarRoteiroCompativel(
+  tx: Prisma.TransactionClient,
+  versionId: string,
+  quantityUnitCode: string | null,
+): Promise<RouteCompatibilityCheck> {
+  const travada = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM production_profile_versions WHERE id = ${versionId} FOR SHARE`;
+  if (travada.length === 0) return { version: null, bloqueio: null };
+
+  const version = await tx.productionProfileVersion.findUniqueOrThrow({
+    where: { id: versionId },
+    include: versionInclude,
+  });
+  return {
+    version,
+    bloqueio: compatibilidadeDoRoteiro(version, quantityUnitCode, await unidadesDeMedida(tx)),
+  };
+}
+
+/** A mesma autoridade, recusando com o erro de domínio de cada motivo. */
+export async function exigirRoteiroCompativel(
+  tx: Prisma.TransactionClient,
+  versionId: string,
+  quantityUnitCode: string | null,
+  ownerCode: string,
+): Promise<VersionWithRelations> {
+  const { version, bloqueio } = await verificarRoteiroCompativel(tx, versionId, quantityUnitCode);
+  if (!version) throw new ProductionProfileVersionNotFoundError(versionId);
+  switch (bloqueio) {
+    case null:
+      return version;
+    case "VERSAO_NAO_ATIVA":
+      throw new ProductionProfileVersionNotActiveError(version.status);
+    case "SEM_UNIDADE":
+      throw new ProductWithoutUnitError(ownerCode);
+    case "UOM_DESCONHECIDA":
+    case "UOM_INCOMPATIVEL":
+      throw new ProductionProfileUomIncompatibleError(version.referenceUomCode, quantityUnitCode!);
+  }
+}
+
+/**
+ * Grava o padrão do Produto dentro de uma transação já aberta — o núcleo do
+ * PUT e de "definir como padrão do produto e aplicar nesta OP". `null` tira.
+ */
+export async function definirRoteiroPadraoDoProduto(
+  tx: Prisma.TransactionClient,
+  productId: string,
+  versionId: string | null,
+): Promise<void> {
+  const product = await tx.product.findUnique({
+    where: { id: productId },
+    include: { finishedProductItem: { select: { unitCode: true } } },
+  });
+  if (!product) throw new ProductionProfileProductNotFoundError(productId);
+
+  if (versionId !== null) {
+    await exigirRoteiroCompativel(
+      tx,
+      versionId,
+      product.finishedProductItem?.unitCode ?? null,
+      product.code,
+    );
+  }
+
+  await tx.product.update({
+    where: { id: productId },
+    data: { defaultProductionProfileVersionId: versionId },
+  });
+}
+
+/**
+ * Define, troca ou tira o Roteiro de Produção padrão do produto.
+ *
+ * Só versão ATIVA e compatível com a unidade do produto. `null` tira o padrão:
+ * produto sem roteiro continua válido. Formulação, custo e ordens EXISTENTES
+ * não são tocados — o padrão vale para as próximas ordens. Depois disso o
  * ponteiro acompanha sozinho as versões novas do MESMO perfil (§89, ativação).
  */
 export async function setProductProductionProfile(
   productId: string,
   versionId: string | null,
 ): Promise<ProductProductionProfileDTO> {
-  const prisma = getPrisma();
-  const product = await prisma.product.findUnique({
-    where: { id: productId },
-    include: { finishedProductItem: { include: { unit: true } } },
-  });
-  if (!product) throw new ProductionProfileProductNotFoundError(productId);
-
-  if (versionId !== null) {
-    const version = await prisma.productionProfileVersion.findUnique({
-      where: { id: versionId },
-      include: { referenceUom: true },
-    });
-    if (!version) throw new ProductionProfileVersionNotFoundError(versionId);
-    if (version.status !== "ACTIVE") throw new ProductionProfileVersionNotActiveError(version.status);
-
-    const unidadeDoProduto = product.finishedProductItem?.unit;
-    if (!unidadeDoProduto) throw new ProductWithoutUnitError(product.code);
-    if (unidadeDoProduto.dimension !== version.referenceUom.dimension) {
-      throw new ProductionProfileUomIncompatibleError(version.referenceUomCode, unidadeDoProduto.code);
-    }
-  }
-
-  await prisma.product.update({
-    where: { id: productId },
-    data: { defaultProductionProfileVersionId: versionId },
-  });
+  await getPrisma().$transaction((tx) => definirRoteiroPadraoDoProduto(tx, productId, versionId));
   return getProductProductionProfile(productId);
 }

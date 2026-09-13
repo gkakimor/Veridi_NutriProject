@@ -583,6 +583,28 @@ export interface ProductionBoardResourceDTO {
   situacao: SituacaoDoRecursoNoQuadro;
 }
 
+/** Tipos de pendência de planejamento. O primeiro, e por ora o único. */
+export type PendenciaDePlanejamentoTipo = "SEM_ROTEIRO";
+
+/**
+ * Pendência DERIVADA de planejamento (PRODUCTION-ROUTE-ASSIGNMENT-01): nada é
+ * gravado para ela existir. Some sozinha quando a causa se resolve.
+ */
+export interface ProductionPlanningPendencyDTO {
+  tipo: PendenciaDePlanejamentoTipo;
+  productionOrderId: string;
+  code: string;
+  productCode: string;
+  productName: string;
+  plannedQuantity: string;
+  outputUnitCode: string;
+  status: string;
+  customerOrderId: string | null;
+  customerOrderCode: string | null;
+  /** Prazo pedido pelo cliente, quando a ordem nasceu de um Pedido que o tem. */
+  customerPromiseAt: string | null;
+}
+
 export interface ProductionBoardResponse {
   from: string;
   to: string;
@@ -594,4 +616,7 @@ export interface ProductionBoardResponse {
   unscheduled: ProductionBoardOrderDTO[];
   resources: ProductionBoardResourceDTO[];
   conflicts: ConflitoDeCapacidade[];
+  /** Pendências de planejamento — as primeiras; o total vem ao lado. */
+  pendencies: ProductionPlanningPendencyDTO[];
+  pendenciesTotal: number;
 }

@@ -37,6 +37,7 @@ import {
   CUSTOMER_ORDER_CODE_PREFIX,
   calcularTotaisFaturamento,
   calcularTotaisOrdemCompra,
+  roteiroPendente,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { assertProductOperational } from "../../lib/product-lifecycle.js";
@@ -77,7 +78,11 @@ type ProductWithFinishedItem = Product & { finishedProductItem: Item | null };
 type LineWithProduct = CustomerOrderLine & { product: ProductWithFinishedItem };
 type ReservationLineWithRelations = CustomerOrderReservationLine & { product: Product; item: Item; lot: Lot | null };
 type ReservationWithLines = CustomerOrderReservation & { lines: ReservationLineWithRelations[] };
-type GeneratedOrder = ProductionOrder & { product: Product; outputs: { quantity: Prisma.Decimal }[] };
+type GeneratedOrder = ProductionOrder & {
+  product: Product;
+  outputs: { quantity: Prisma.Decimal }[];
+  planningSnapshot: { id: string } | null;
+};
 type LinkedPurchaseOrder = PurchaseOrder & { supplier: Supplier; lines: PurchaseOrderLine[] };
 type ShipmentWithLines = Shipment & { lines: ShipmentLine[] };
 type BillingWithLines = Billing & { lines: BillingLine[] };
@@ -101,7 +106,13 @@ const customerOrderInclude = {
   productionOrders: {
     // `outputs` porque o produzido é sempre a soma dos apontamentos reais —
     // nunca uma coluna agregada que alguém possa editar por fora.
-    include: { product: true, outputs: { select: { quantity: true } } },
+    // `planningSnapshot` só para dizer ao Comercial que a produção está
+    // pendente de roteiro — informativo, nunca bloqueio do Pedido.
+    include: {
+      product: true,
+      outputs: { select: { quantity: true } },
+      planningSnapshot: { select: { id: true } },
+    },
     orderBy: { createdAt: "asc" as const },
   },
   purchaseOrders: { include: { supplier: true, lines: true }, orderBy: { createdAt: "asc" as const } },
@@ -380,6 +391,7 @@ function toGeneratedProductionOrderDTO(order: GeneratedOrder): CustomerOrderGene
       .toString(),
     outputUnitCode: order.outputUnitCode,
     status: order.status,
+    routePending: roteiroPendente(order.status, order.planningSnapshot !== null),
   };
 }
 

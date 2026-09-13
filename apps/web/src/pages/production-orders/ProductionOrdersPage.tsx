@@ -108,7 +108,23 @@ const FILTROS_PADRAO = {
   status: "em-aberto",
   /* Também é o contexto do link "Ordens de produção" do cadastro do Produto. */
   productId: "",
+  /*
+   * Roteiro de produção: `1` = pendentes de roteiro (rascunho, planejada ou
+   * liberada sem roteiro), `0` = com roteiro, vazio = todas. É o destino do
+   * indicador "OPs sem roteiro" do Dashboard: `/producao/ordens?semRoteiro=1`.
+   */
+  semRoteiro: "",
 };
+
+const ROTEIRO_OPCOES: { value: string; label: string }[] = [
+  { value: "", label: "Todos os roteiros" },
+  { value: "0", label: "Com roteiro" },
+  { value: "1", label: "Sem roteiro" },
+];
+
+function roteiroValido(valor: string): string {
+  return valor === "0" || valor === "1" ? valor : "";
+}
 
 function grupoValido(valor: string): string {
   return GRUPOS.some((grupo) => grupo.key === valor) ? valor : FILTROS_PADRAO.status;
@@ -142,6 +158,8 @@ export function ProductionOrdersPage() {
   });
   const { search, productId } = values;
   const grupo = grupoValido(values.status);
+  const semRoteiro = roteiroValido(values.semRoteiro);
+  const canOperate = user?.role === "ADMIN" || user?.role === "PRODUCTION";
 
   /* UM conjunto de filtros para a consulta e para o CSV. */
   const filtrosDaConsulta = useMemo(() => {
@@ -150,8 +168,11 @@ export function ProductionOrdersPage() {
     if (productId) filtros.productId = productId;
     const statuses = statusesOfGroup(GRUPOS, grupo);
     if (statuses.length > 0) filtros.status = statuses;
+    // Entra no MESMO objeto da consulta, do CSV e da seleção em massa: trocar
+    // o filtro de roteiro limpa a seleção como qualquer outro filtro.
+    if (semRoteiro) filtros.semRoteiro = semRoteiro === "1";
     return filtros;
-  }, [search, productId, grupo]);
+  }, [search, productId, grupo, semRoteiro]);
 
   const [searchInput, setSearchInput] = useState(search);
 
@@ -206,6 +227,13 @@ export function ProductionOrdersPage() {
       onRemove: () => set({ status: FILTROS_PADRAO.status }),
     });
   }
+  if (semRoteiro) {
+    chips.push({
+      label: "Roteiro",
+      value: semRoteiro === "1" ? "Sem roteiro" : "Com roteiro",
+      onRemove: () => set({ semRoteiro: "" }),
+    });
+  }
   if (productId) {
     const nome =
       produtoEscolhido?.id === productId
@@ -225,13 +253,15 @@ export function ProductionOrdersPage() {
             Necessidade de materiais calculada a partir do Produto e da Formulação.
           </p>
         </div>
-        <button
-          type="button"
-          className="btn btn--primary"
-          onClick={() => navigate("/producao/ordens/nova")}
-        >
-          + Nova OP
-        </button>
+        {canOperate && (
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => navigate("/producao/ordens/nova")}
+          >
+            + Nova OP
+          </button>
+        )}
         <ExportCsvButton path="/production-orders/export.csv" filters={filtrosDaConsulta} />
       </div>
 
@@ -258,6 +288,21 @@ export function ProductionOrdersPage() {
           value={grupo}
           onChange={(key) => set({ status: key })}
         />
+
+        <label className="sr-only" htmlFor="op-route-filter">
+          Filtrar por roteiro de produção
+        </label>
+        <select
+          id="op-route-filter"
+          value={semRoteiro}
+          onChange={(event) => set({ semRoteiro: event.target.value })}
+        >
+          {ROTEIRO_OPCOES.map((opcao) => (
+            <option key={opcao.value} value={opcao.value}>
+              {opcao.label}
+            </option>
+          ))}
+        </select>
 
         {/* Busca no servidor: o catálogo de produtos não cabe num `<select>`. */}
         <EntityFilterSelect
@@ -347,6 +392,11 @@ export function ProductionOrdersPage() {
                   <span className={statusBadgeClass(op.status)}>
                     {PRODUCTION_ORDER_STATUS_LABELS[op.status]}
                   </span>
+                  {op.planning?.routePending === true && (
+                    <span className="cell-sub">
+                      <span className="badge badge--warn">Sem roteiro</span>
+                    </span>
+                  )}
                 </td>
                 <td className="col-tight">{formatDate(op.createdAt)}</td>
                 <td onClick={(event) => event.stopPropagation()}>

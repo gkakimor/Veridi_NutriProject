@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { Prisma } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { aplicarRoteiroDeTeste } from "../../test-support/fixture-route.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
@@ -146,6 +147,7 @@ async function ordemPlanejada(app: App, produtoId: string, quantidade: string) {
     })
   ).json();
   fixtureProductionOrderIds.push(ordem.id);
+  await aplicarRoteiroDeTeste(ordem.id);
   return (await app.inject({ method: "POST", url: `/production-orders/${ordem.id}/plan` })).json();
 }
 

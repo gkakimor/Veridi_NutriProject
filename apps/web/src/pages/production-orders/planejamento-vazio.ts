@@ -13,7 +13,19 @@ export const PLANEJAMENTO_VAZIO: ProductionOrderPlanningDTO = {
   plan: null,
   appliedAt: null,
   appliedBy: null,
+  quantityInReferenceUom: null,
+  conversionUnits: [],
+  planBlockedReason: null,
+  applicationSource: null,
+  applicationReason: null,
+  productDefaultProfile: null,
+  productDefaultCompatible: false,
   availableProfile: null,
   canApply: false,
+  canChoose: false,
   canUpdate: false,
+  requiresLegacyRepair: false,
+  // Neutro: sem pendência, para as ações da OP ficarem como o teste espera.
+  // Teste de roteiro monta o próprio planejamento.
+  routePending: false,
 };

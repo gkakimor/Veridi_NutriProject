@@ -18,7 +18,7 @@ export const ordemProducao = {
   module: "producao",
   size: "L",
   title: "Ordem de Produção: do planejamento ao lote acabado",
-  revisedAt: "2026-09-09",
+  revisedAt: "2026-09-12",
 
   oneLiner:
     "A Ordem de Produção é o documento de uma produção: o produto, a quantidade, a receita seguida e o registro do que foi reservado, consumido e produzido de fato.",
@@ -35,6 +35,7 @@ export const ordemProducao = {
 
   prerequisites: [
     { text: "Produto aprovado e ativo, com item de produto acabado.", href: "/cadastros/produtos" },
+    { text: "Uma OP precisa ter um roteiro antes de ser planejada, programada ou liberada.", href: "/planejamento/perfis-producao" },
     { text: "Formulação ativa: sem versão não há necessidade de material nem liberação.", href: "/producao/formulacoes" },
     { text: "Para liberar: estoque disponível cobrindo todo o material. Material em compra não cobre; lote aguardando a Qualidade não cobre.", href: "/estoque" },
     { text: "Componente do cliente exige ordem com cliente e lote daquele cliente." },
@@ -87,6 +88,7 @@ export const ordemProducao = {
   },
 
   terms: [
+    { term: "Roteiro de produção", text: "Etapas e tempos da fabricação, copiados para esta ordem." },
     { term: "Necessidade de Materiais", text: "O que a receita exige para a quantidade planejada, com físico, reservado, disponível para esta ordem, em compra e falta." },
     { term: "Liberação", text: "O ato que reserva os lotes para a ordem. Compromete o material e não tira nada da prateleira." },
     { term: "Disponível para esta OP", text: "O disponível do estoque mais o que esta ordem já reservou. Na Posição de Estoque o mesmo item aparece menor." },

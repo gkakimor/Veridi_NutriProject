@@ -5503,8 +5503,10 @@ precificação, tarifa, formulação nem OP.
   (`GET /production-profile-versions/:id/preview`). Sem calendário, turno,
   feriado, data sugerida nem capacidade diária.
 - **Produto → perfil padrão:** ponteiro opcional para uma VERSÃO ATIVA
-  (`Product.defaultProductionProfileVersionId`). Produto sem perfil continua
-  válido. **Ativar uma versão nova leva junto**, na MESMA transação da
+  (`Product.defaultProductionProfileVersionId`), definido, trocado e removido
+  por Produção e Administração — no Roteiro ou no cadastro do Produto, pela
+  mesma rota `PUT /products/:productId/production-profile`. Produto sem
+  perfil continua válido. **Ativar uma versão nova leva junto**, na MESMA transação da
   ativação, os produtos que apontavam para a versão anterior DESTE perfil: o
   padrão é a configuração que as PRÓXIMAS ordens devem usar. Produto sem
   perfil, ou apontando para outro perfil, não é tocado — o sistema acompanha
@@ -5520,22 +5522,62 @@ precificação, tarifa, formulação nem OP.
   - **O instante manda:** padrão em V2 na criação, a OP leva a V2; ativar a V3
     depois não altera essa ordem, nem enquanto ela é rascunho.
   - **A duração não é gravada:** é projetada a cada leitura pelo mesmo motor
-    (`planProductionProfileSnapshot`) para a `plannedQuantity` do momento — base
-    de 1.000 un com 2 h de execução são 6 h numa OP de 3.000 un. Mudar a
-    quantidade em rascunho recalcula duração, lotes e demanda usando a MESMA
-    cópia, sem recopiar o perfil.
-  - **Produto sem perfil padrão:** a OP nasce sem cópia e continua válida —
-    criação, planejamento e liberação seguem. A tela diz "Sem perfil de produção
-    aplicado.". OP anterior à migration fica sem cópia e não é preenchida
-    retroativamente.
-  - **Aplicar e atualizar são ações de RASCUNHO.** OP em DRAFT sem cópia aplica
-    o padrão atual do Produto quando existe um ativo; com cópia de versão
-    diferente da atual, mostra aviso discreto e permite atualizar, com
-    confirmação. As duas ações substituem a cópia inteira, atomicamente. Trocar
-    o Produto em rascunho troca a cópia pelo padrão do produto novo, e a remove
-    quando o novo não tem perfil — nunca fica a do anterior.
-  - **Fora de DRAFT a cópia é imutável:** aplicar, atualizar ou substituir são
-    recusados, mesmo existindo versão mais nova.
+    para a `plannedQuantity` do momento — base de 1.000 un com 2 h de execução
+    são 6 h numa OP de 3.000 un. Mudar a quantidade em rascunho recalcula
+    duração, lotes e demanda usando a MESMA cópia, sem recopiar o perfil.
+  - **A quantidade é CONVERTIDA antes da conta** (PRODUCTION-ROUTE-ASSIGNMENT-01):
+    `planProductionProfileSnapshotForOrder` leva a quantidade da ordem para a
+    unidade de referência do roteiro pela conversão canônica
+    (`converterQuantidadeDeUnidade`, a mesma da Formulação). 2 kg numa
+    referência em g são 2.000 g — antes, "2" contra 1.000 g dava um tempo mil
+    vezes menor. Leitura da OP, tela e agenda passam por essa porta. Sem caminho
+    seguro (unidade desconhecida ou de outra dimensão) a projeção é recusada,
+    nunca feita com a quantidade crua.
+  - **Compatibilidade tem UMA regra** (`compatibilidadeDoRoteiro`, em
+    `@veridi/shared`): versão ATIVA, unidade presente e conversão canônica
+    possível. A autoridade na API (`exigirRoteiroCompativel`, com a versão
+    travada `FOR SHARE` na transação) vale para o padrão do Produto, para a
+    escolha na ordem e para "definir padrão e aplicar".
+  - **Sem roteiro, a OP existe mas não segue** (decisão do PO, 2026-09-12). O
+    Pedido nunca é bloqueado por falta de roteiro, e o Comercial não define
+    como fabricar: Plano de Atendimento, saldo e OP manual criam a ordem em
+    rascunho com o padrão aplicável do Produto, ou SEM cópia — a aplicação
+    automática nunca lança erro, e o Pedido que corre na mesma transação não
+    cai. Mas **sem roteiro a ordem não planeja, não programa e não libera**:
+    `/plan` e `/release` recusam com `route_required`, e a programação com
+    `order_without_route` antes de olhar o calendário.
+  - **Aplicar, escolher e trocar** — `POST /production-orders/:id/production-profile`,
+    decidido dentro da transação com a linha da OP travada (`FOR UPDATE`):
+    - primeira aplicação em DRAFT: o padrão atual (`PRODUCT_DEFAULT_APPLIED`),
+      uma versão escolhida só para a ordem (`MANUAL_ORDER`) ou escolhida e
+      gravada como padrão do Produto na MESMA transação
+      (`DEFAULT_AND_APPLIED`; falhou qualquer etapa, nada fica). Motivo
+      opcional. Padrão novo vale só para as próximas ordens;
+    - troca de roteiro já aplicado: só em DRAFT, com motivo obrigatório;
+    - PLANNED/RELEASED sem cópia (legado): primeira aplicação como
+      `LEGACY_REPAIR`, com confirmação explícita e motivo; depois congela;
+    - IN_PRODUCTION, COMPLETED, CANCELLED e BLOCKED não recebem roteiro;
+    - com programação gravada, aplicar ou trocar a remove na mesma transação,
+      e só com confirmação — agenda velha não aponta para roteiro novo. Trocar
+      o Produto em rascunho também tira a programação;
+    - `expectedSourceVersionId` diferente do atual é 409 `route_changed`, e a
+      corrida que chegasse à unique também — nunca 500.
+  - **Proveniência:** a cópia guarda `applicationSource` (as origens acima e
+    `AUTO_PRODUCT_DEFAULT`, na criação) e `applicationReason`, além de
+    `appliedAt`/`appliedBy`. Cópia anterior à capability fica com origem nula
+    ("não registrada"). Sem histórico de tentativas: fica a aplicação final.
+  - **Pendência DERIVADA, nunca gravada:** sem cópia em DRAFT, PLANNED ou
+    RELEASED (`roteiroPendente`). Mesma regra no filtro `semRoteiro` da lista
+    de OPs (e CSV), no Dashboard ("OPs sem roteiro"), nas Pendências de
+    planejamento do quadro e no aviso do Pedido. Mudar só o padrão do Produto
+    não resolve a ordem que já existia.
+  - **Quem opera a OP pela porta direta é Produção e Administração:** criar,
+    editar, aplicar ou trocar roteiro, planejar, liberar e cancelar (403 para os
+    demais, antes da validação do corpo). A OP que nasce do Pedido segue a rota
+    do Plano de Atendimento e do saldo, aberta ao Comercial.
+  - **Fora de DRAFT a cópia é imutável:** trocar ou substituir é recusado,
+    mesmo existindo versão mais nova — a única exceção é a primeira aplicação
+    de legado acima.
   - **Recurso renomeado ou desativado não reescreve o histórico:** nome, código
     e tipo viajaram por valor. Os ids guardados são proveniência para a
     capacidade futura, nunca canal de leitura.
@@ -5693,9 +5735,11 @@ etapa sem recurso, etapa sem duração, calendário sem horário de intervalo, e
 prazo do cliente em risco quando a ordem vem de um Pedido com
 `requestedDeliveryDate` — **sem mover promessa, pedido nem data** (§75).
 
-**Duração vem do motor de sempre.** `planProductionProfileSnapshot` sobre a
-cópia congelada do Roteiro (§89), para a quantidade da ordem. Não existe um
-segundo cálculo de duração de OP neste repositório.
+**Duração vem do motor de sempre.** `planProductionProfileSnapshotForOrder`
+sobre a cópia congelada do Roteiro (§89), para a quantidade da ordem convertida
+para a unidade de referência. Não existe um segundo cálculo de duração de OP
+neste repositório. Ordem sem roteiro é recusada ANTES do calendário, e a
+gravação confere, com a ordem travada, que o roteiro ainda é o da prévia.
 
 **Fora de escopo, e deliberadamente:** autoagendamento, otimizador, grafo de
 dependências, etapas em paralelo, arrastar e soltar, calendário por recurso,

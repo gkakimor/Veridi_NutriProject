@@ -53,6 +53,11 @@ const stepSchema = z
 
 export const listProductionProfilesQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
+  /** `true`/`1`: só roteiros com versão ativa — os escolhíveis. */
+  activeOnly: z
+    .enum(["true", "false", "1", "0"])
+    .optional()
+    .transform((valor) => valor === "true" || valor === "1"),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });

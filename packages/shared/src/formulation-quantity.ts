@@ -74,6 +74,28 @@ export type FormulationQuantityBlock =
 
 const CEM = new Decimal(100);
 
+/**
+ * A conversão canônica entre unidades: pela unidade-base da dimensão de cada
+ * uma. 2 kg viram 2 × 1000 ÷ 1 = 2000 g.
+ *
+ * Uma função só para a Formulação (componente na unidade de estoque) e para o
+ * Roteiro (quantidade da ordem na unidade de referência). Unidade desconhecida
+ * ou de outra dimensão devolve o MOTIVO, nunca um número: quantidade crua usada
+ * como se estivesse convertida é exatamente o erro que ela existe para impedir.
+ */
+export function converterQuantidadeDeUnidade(
+  quantity: DecimalValue,
+  fromCode: string,
+  toCode: string,
+  units: readonly UomFactorLike[],
+): DecimalInstance | "UOM_DESCONHECIDA" | "UOM_INCOMPATIVEL" {
+  const de = units.find((u) => u.code === fromCode);
+  const para = units.find((u) => u.code === toCode);
+  if (!de || !para) return "UOM_DESCONHECIDA";
+  if (de.dimension !== para.dimension) return "UOM_INCOMPATIVEL";
+  return new Decimal(quantity).times(de.toBaseFactor).dividedBy(para.toBaseFactor);
+}
+
 /** Quais ajustes ESTE componente autoriza — registrar não é autorizar. */
 export function ajustesAutorizados(component: {
   quantityMode?: FormulationComponentQuantityModeLike | null;
@@ -165,14 +187,15 @@ export function calcularQuantidadeDoComponente(
 
   const declarado = new Decimal(component.quantity).times(fator);
 
-  const de = units.find((u) => u.code === component.unitCode);
-  const para = units.find((u) => u.code === component.stockUnitCode);
-  if (!de || !para) return "UOM_DESCONHECIDA";
-  if (de.dimension !== para.dimension) return "UOM_INCOMPATIVEL";
-
   // Converte ANTES do ajuste, para pureza e overage operarem sempre na unidade
   // de estoque — a mesma ordem que a API sempre usou.
-  const theoretical = declarado.times(de.toBaseFactor).dividedBy(para.toBaseFactor);
+  const theoretical = converterQuantidadeDeUnidade(
+    declarado,
+    component.unitCode,
+    component.stockUnitCode,
+    units,
+  );
+  if (typeof theoretical === "string") return theoretical;
 
   return {
     theoretical,

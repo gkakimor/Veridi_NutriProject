@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { aplicarRoteiroDeTeste } from "../../test-support/fixture-route.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
@@ -224,6 +225,7 @@ async function applyPlan(
 }
 
 async function planAndRelease(app: App, opId: string) {
+  await aplicarRoteiroDeTeste(opId);
   const planned = await app.inject({ method: "POST", url: `/production-orders/${opId}/plan` });
   expect(planned.statusCode, `plan falhou: ${planned.body}`).toBe(200);
   const released = await app.inject({ method: "POST", url: `/production-orders/${opId}/release` });
@@ -478,6 +480,7 @@ describe("Sugestão de Compra — análise", () => {
       { customerOrderLineId: order.lines[0].id, reserveQuantity: "0", produceQuantity: "1" },
     ]);
     const opId = applied.generatedProductionOrders[0].id;
+    await aplicarRoteiroDeTeste(opId);
     await app.inject({ method: "POST", url: `/production-orders/${opId}/plan` });
     const planned = (await app.inject({ method: "GET", url: `/production-orders/${opId}` })).json();
     const requirementId = planned.requirements[0].id;

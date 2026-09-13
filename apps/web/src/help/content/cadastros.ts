@@ -173,6 +173,10 @@ export const cadastrosTopics = {
         text: "Diferente do resto do perfil: este número entra no custo e no preço, porque caixa de embalagem é inteira. Ele é congelado na estrutura de custos ativada, e é o valor congelado que vale para cálculos antigos.",
       },
       {
+        term: "Roteiro padrão de produção",
+        text: "O roteiro que toda ordem de produção nova deste produto recebe automaticamente: etapas, tempos e recursos. Alterar o roteiro padrão do Produto não altera ordens existentes. Uma OP precisa ter um roteiro antes de ser planejada, programada ou liberada. Definir, trocar e remover é da Produção e da Administração; os demais perfis leem.",
+      },
+      {
         term: "Lote mínimo",
         text: "Menor quantidade de produção declarada, sempre na unidade do item de produto acabado. É referência: sugere a base da estrutura de custos e faz a precificação avisar quando uma faixa fica abaixo dele. Nunca bloqueia uma ordem de produção.",
       },

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { aplicarRoteiroDeTeste } from "../../test-support/fixture-route.js";
 import { marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
@@ -281,6 +282,7 @@ async function completeProductionOrder(app: App, productId: string, quantity: st
   ).json().id;
   fixtureProductionOrderIds.push(orderId);
 
+  await aplicarRoteiroDeTeste(orderId);
   await app.inject({ method: "POST", url: `/production-orders/${orderId}/plan` });
   const released = (await app.inject({ method: "POST", url: `/production-orders/${orderId}/release` })).json();
   for (const requirement of released.requirements) {
@@ -508,6 +510,7 @@ describe("Dashboard — estado atual", () => {
       })
     ).json().id;
     fixtureProductionOrderIds.push(orderId);
+    await aplicarRoteiroDeTeste(orderId);
     await app.inject({ method: "POST", url: `/production-orders/${orderId}/plan` });
     const released = (await app.inject({ method: "POST", url: `/production-orders/${orderId}/release` })).json();
     const line = released.requirements[0].reservationLines[0];
@@ -544,6 +547,39 @@ describe("Dashboard — estado atual", () => {
     expect(historica.period.productionOrdersCompleted).toBe(0);
     expect(historica.period.customerOrdersCreated).toBe(0);
     expect(historica.period.receiptsCompleted).toBe(0);
+
+    await app.close();
+  });
+
+  it("conta OPs sem roteiro em rascunho, planejada ou liberada — e aplicar o roteiro tira da conta", async () => {
+    const app = buildTestApp();
+    await app.ready();
+    const prisma = getPrisma();
+
+    const before = await fetchDashboard(app);
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+    const criar = async () => {
+      const id = (
+        await app.inject({ method: "POST", url: "/production-orders", payload: { productId: product.id, plannedQuantity: "10" } })
+      ).json().id as string;
+      fixtureProductionOrderIds.push(id);
+      return id;
+    };
+    const rascunho = await criar();
+    const planejadaLegada = await criar();
+    await prisma.productionOrder.update({ where: { id: planejadaLegada }, data: { status: "PLANNED" } });
+    // Em produção sem roteiro é histórico, não pendência: fora da conta.
+    const emProducao = await criar();
+    await prisma.productionOrder.update({ where: { id: emProducao }, data: { status: "IN_PRODUCTION" } });
+
+    const depois = await fetchDashboard(app);
+    expect(depois.currentState.production.withoutRoute - before.currentState.production.withoutRoute).toBe(2);
+
+    await aplicarRoteiroDeTeste(rascunho);
+    const resolvida = await fetchDashboard(app);
+    expect(resolvida.currentState.production.withoutRoute - before.currentState.production.withoutRoute).toBe(1);
 
     await app.close();
   });

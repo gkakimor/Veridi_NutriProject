@@ -1695,6 +1695,15 @@ td .entity-select {
   background-attachment: local, local, scroll, scroll;
 }
 
+/*
+ * Seletor DENTRO de diálogo (escolher o roteiro da OP): a lista vai para o
+ * `body` com 60 e ficava atrás do `.confirm-dialog` (101) — visível para o
+ * leitor de tela, coberta para o mouse. Com diálogo aberto, ela passa à frente.
+ */
+body:has(.confirm-dialog) .entity-select__list {
+  z-index: 102;
+}
+
 .entity-select__option {
   display: flex;
   align-items: baseline;

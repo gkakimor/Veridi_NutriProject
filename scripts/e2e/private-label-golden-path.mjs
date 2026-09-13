@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { abrirNavegador, WEB } from "./lib/browser.mjs";
+import { aplicarRoteiroNaOrdem } from "./lib/roteiro.mjs";
 import { obterRun } from "./lib/run-id.mjs";
 
 /**
@@ -1034,6 +1035,13 @@ etapa("op", async () => {
     op.status === "DRAFT" && op.origin === "CUSTOMER_ORDER" && decimalDe(op.plannedQuantity) === QTD_PEDIDO && op.productId === estado.ids.produto.id,
     `${op.status} · ${op.origin}`,
   );
+  // Desde PRODUCTION-ROUTE-ASSIGNMENT-01 a ordem sem roteiro não planeja. O
+  // roteiro não é o assunto deste caminho: aplica-se um mínimo pela mesma rota
+  // da tela, na unidade da própria ordem.
+  await aplicarRoteiroNaOrdem(api, estado.ids.op.id, {
+    unidade: op.outputUnitCode,
+    nome: `Roteiro GP ${run.runId}`,
+  });
   await abrirOp();
   await clicar("Planejar OP");
   await pagina.getByText("Planejada", { exact: true }).first().waitFor({ timeout: 30000 });

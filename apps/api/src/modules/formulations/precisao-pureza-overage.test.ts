@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { aplicarRoteiroDeTeste } from "../../test-support/fixture-route.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
@@ -380,6 +381,7 @@ describe("PREC-MIG-C: o cálculo real usa os operandos precisos", () => {
       })
     ).json();
     fixtureProductionOrderIds.push(ordem.id);
+    await aplicarRoteiroDeTeste(ordem.id);
     await app.inject({ method: "POST", url: `/production-orders/${ordem.id}/plan` });
 
     const congelado = await getPrisma().productionOrderRequirement.findFirstOrThrow({
@@ -413,6 +415,7 @@ describe("PREC-MIG-C: o cálculo real usa os operandos precisos", () => {
       })
     ).json();
     fixtureProductionOrderIds.push(opA.id);
+    await aplicarRoteiroDeTeste(opA.id);
     await app.inject({ method: "POST", url: `/production-orders/${opA.id}/plan` });
 
     const antes = await getPrisma().productionOrderRequirement.findFirstOrThrow({

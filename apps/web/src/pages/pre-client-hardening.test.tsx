@@ -24,7 +24,10 @@ vi.mock("../lib/costs-api", () => ({
   getProductionOrderMaterialCost: () => Promise.resolve(null),
   getItemCostReference: () => Promise.resolve(null),
 }));
-vi.mock("../app/AuthProvider", () => ({ useAuth: () => ({ user: { role: "ADMIN" } }) }));
+vi.mock("../app/AuthProvider", () => ({
+  useAuth: () => ({ user: { role: "ADMIN" } }),
+  useOptionalAuth: () => ({ user: { role: "ADMIN" } }),
+}));
 vi.mock("../components/AttachmentsSection", () => ({ AttachmentsSection: () => null }));
 vi.mock("../lib/customer-orders-api", () => ({
   getCustomerOrder: vi.fn(),

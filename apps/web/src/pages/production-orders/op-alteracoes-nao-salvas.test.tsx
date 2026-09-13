@@ -131,11 +131,21 @@ function planejamentoAplicado(quantidade: string): ProductionOrderPlanningDTO {
   return {
     snapshot: SNAPSHOT,
     plan: planProductionProfileSnapshot(SNAPSHOT, quantidade),
+    quantityInReferenceUom: quantidade,
+    conversionUnits: [{ code: "un", dimension: "COUNT", toBaseFactor: "1" }],
+    planBlockedReason: null,
     appliedAt: "2026-09-11T12:00:00.000Z",
     appliedBy: "Admin",
+    applicationSource: "AUTO_PRODUCT_DEFAULT",
+    applicationReason: null,
+    productDefaultProfile: null,
+    productDefaultCompatible: false,
     availableProfile: null,
     canApply: false,
+    canChoose: true,
     canUpdate: false,
+    requiresLegacyRepair: false,
+    routePending: false,
   };
 }
 

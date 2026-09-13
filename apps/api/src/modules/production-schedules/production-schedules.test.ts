@@ -135,6 +135,7 @@ beforeAll(async () => {
   const prisma = getPrisma();
   for (const unit of [
     { code: "un", label: "Unidade", dimension: "COUNT" as const, toBaseFactor: "1" },
+    { code: "g", label: "Grama", dimension: "MASS" as const, toBaseFactor: "1" },
     { code: "kg", label: "Quilograma", dimension: "MASS" as const, toBaseFactor: "1000" },
   ]) {
     await prisma.unitOfMeasure.upsert({ where: { code: unit.code }, update: {}, create: unit });
@@ -429,6 +430,69 @@ describe("Calendário e a hora exata", () => {
     const resposta = await prever(ordem.id, em(SEGUNDA, 8));
     expect(resposta.statusCode).toBe(409);
     expect(resposta.json().error).toBe("order_without_route");
+  });
+
+  it("sem roteiro, a recusa vem ANTES do calendário — e gravar também é recusado", async () => {
+    const productId = await produtoPlanejavel();
+    const criada = await app.inject({
+      method: "POST",
+      url: "/production-orders",
+      payload: { productId, plannedQuantity: "1000" },
+    });
+    const ordem = criada.json() as ProductionOrderDTO;
+    fixtureOrderIds.push(ordem.id);
+
+    // Domingo está fechado: com roteiro seria "fora da jornada". Sem roteiro,
+    // o que falta é o roteiro, e é isso que a pessoa precisa ouvir primeiro.
+    const previa = await prever(ordem.id, em(DOMINGO, 8));
+    expect(previa.statusCode).toBe(409);
+    expect(previa.json().error).toBe("order_without_route");
+
+    const gravada = await programar(ordem.id, em(SEGUNDA, 8));
+    expect(gravada.statusCode).toBe(409);
+    expect(gravada.json().error).toBe("order_without_route");
+    expect(await getPrisma().productionOrderSchedule.count({ where: { productionOrderId: ordem.id } })).toBe(0);
+  });
+
+  it("roteiro em g e ordem em kg: a agenda projeta a quantidade CONVERTIDA", async () => {
+    const criado = await app.inject({
+      method: "POST",
+      url: "/production-profiles",
+      payload: { name: `Pó ${proximo()}`, referenceQuantity: "1000", referenceUomCode: "g" },
+    });
+    const perfil = criado.json() as ProductionProfileDTO;
+    fixtureProfileIds.push(perfil.id);
+    const rascunho = perfil.draftVersion!.id;
+    await app.inject({
+      method: "PATCH",
+      url: `/production-profile-versions/${rascunho}`,
+      payload: {
+        steps: [{ name: "Mistura", setupDurationMinutes: 0, runDurationMinutes: 60, scalingMode: "PROPORTIONAL", resources: [] }],
+      },
+    });
+    expect((await app.inject({ method: "POST", url: `/production-profile-versions/${rascunho}/activate` })).statusCode).toBe(200);
+
+    const prisma = getPrisma();
+    const item = await prisma.item.create({
+      data: { type: "FINISHED_PRODUCT", code: `PA-SCH-${proximo()}`, name: `Pó ${marca}`, unitCode: "kg" },
+    });
+    fixtureItemIds.push(item.id);
+    const produto = await prisma.product.create({
+      data: { code: `PROD-SCH-${proximo()}`, name: `Pó ${marca}`, finishedProductItemId: item.id },
+    });
+    fixtureProductIds.push(produto.id);
+    expect((await app.inject({ method: "PUT", url: `/products/${produto.id}/production-profile`, payload: { productionProfileVersionId: rascunho } })).statusCode).toBe(200);
+    const criada = await app.inject({ method: "POST", url: "/production-orders", payload: { productId: produto.id, plannedQuantity: "2" } });
+    const ordem = criada.json() as ProductionOrderDTO;
+    fixtureOrderIds.push(ordem.id);
+
+    // 2 kg = 2000 g, e 60 min por 1000 g são 120 min. Sem conversão seriam 0,12.
+    const previa = await prever(ordem.id, em(SEGUNDA, 8));
+    expect(previa.statusCode).toBe(200);
+    expect((previa.json() as ProductionSchedulePreviewDTO).schedule.workingMinutes).toBe(120);
+    const gravada = await programar(ordem.id, em(SEGUNDA, 8));
+    expect(gravada.statusCode).toBe(200);
+    expect((gravada.json() as ProductionOrderScheduleDTO).workingMinutes).toBe(120);
   });
 });
 

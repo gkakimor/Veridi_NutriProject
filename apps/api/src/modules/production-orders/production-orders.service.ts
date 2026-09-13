@@ -26,8 +26,14 @@ import type {
   ProductionOrderMaterialsStatus,
   ProductionOrderRequirementDTO,
   ProductionOutputDTO,
+  ProductionRouteApplicationSource,
+  UomFactorLike,
 } from "@veridi/shared";
-import { PRODUCTION_ORDER_CODE_PREFIX } from "@veridi/shared";
+import {
+  PRODUCTION_ORDER_CODE_PREFIX,
+  ROUTE_CHANGE_STATUSES,
+  ROUTE_PENDING_STATUSES,
+} from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { isPending, reconciliationStatus, unreconciledQuantity } from "./reconciliation.js";
 import { assertProductOperational } from "../../lib/product-lifecycle.js";
@@ -50,23 +56,39 @@ import { suggestBusinessLotNumber } from "../../lib/business-lot.js";
 import { toControlledDocumentRevisionDTO } from "../controlled-documents/controlled-documents.service.js";
 import { getActiveRevision } from "../controlled-documents/controlled-documents.service.js";
 import { computeFormulationRequirements } from "./requirement-calc.js";
-import { toPlanningDTO, writePlanningSnapshot } from "./planning-snapshot.js";
+import {
+  aplicarRoteiroPadraoAutomatico,
+  copiaDaVersao,
+  gravarRoteiroDaOrdem,
+  toPlanningDTO,
+} from "./planning-snapshot.js";
 import type { ProductDefaultProfileVersion } from "./planning-snapshot.js";
+import {
+  definirRoteiroPadraoDoProduto,
+  exigirRoteiroCompativel,
+  unidadesDeMedida,
+} from "../production-profiles/production-profiles.service.js";
 import {
   CustomerMismatchError,
   FormulationVersionNotFoundError,
   FormulationVersionProductMismatchError,
   InactiveProductError,
   InvalidTransitionError,
+  LegacyRouteRepairNeedsConfirmationError,
   MissingFinishedItemError,
   NoDefaultProductionProfileError,
   OrderLockedError,
   PlanValidationError,
   ProductNotFoundError,
   ProductionOrderNotFoundError,
+  ProductionRouteChangedError,
   ReleaseValidationError,
+  RouteReasonRequiredError,
+  RouteRequiredError,
+  ScheduleRemovalNeedsConfirmationError,
 } from "./production-orders.errors.js";
 import type {
+  ApplyProductionRouteParsed,
   CreateProductionOrderInput,
   ListProductionOrdersQuery,
   UpdateProductionOrderInput,
@@ -486,7 +508,11 @@ async function attachRequirementAvailability(
   return results;
 }
 
-async function toProductionOrderDTO(order: POWithRelations): Promise<ProductionOrderDTO> {
+async function toProductionOrderDTO(
+  order: POWithRelations,
+  /** Unidades com fator: a projeção do roteiro converte a quantidade da ordem. */
+  units: readonly UomFactorLike[],
+): Promise<ProductionOrderDTO> {
   const allLines = order.reservation && order.reservation.status === "ACTIVE" ? order.reservation.lines : [];
   const consumedByLine = await getConsumedByReservationLines(
     getPrisma(),
@@ -670,7 +696,7 @@ async function toProductionOrderDTO(order: POWithRelations): Promise<ProductionO
       productBusinessLotCode: order.product.businessLotCode,
       customerBusinessLotSuffix: orderCustomer ? (order.customer?.businessLotSuffix ?? order.product.customer?.businessLotSuffix ?? null) : null,
     }),
-    planning: toPlanningDTO(order),
+    planning: toPlanningDTO(order, units),
     productionOrderRevision: order.productionOrderRevision
       ? toControlledDocumentRevisionDTO(order.productionOrderRevision)
       : null,
@@ -727,8 +753,20 @@ export async function listProductionOrders(
       { product: { is: { code: { contains: query.search, mode: "insensitive" } } } },
     ];
   }
+  /*
+   * Pendência de roteiro, DERIVADA: sem cópia e numa situação que ainda recebe
+   * roteiro (`ROUTE_PENDING_STATUSES`) — a mesma regra do Dashboard, do quadro
+   * e do Pedido. Soma-se ao status escolhido, nunca o substitui. "Com roteiro"
+   * é só ter a cópia.
+   */
+  if (query.semRoteiro === true) {
+    where["planningSnapshot"] = { is: null };
+    where["AND"] = [{ status: { in: [...ROUTE_PENDING_STATUSES] } }];
+  } else if (query.semRoteiro === false) {
+    where["planningSnapshot"] = { isNot: null };
+  }
 
-  const [orders, total] = await Promise.all([
+  const [orders, total, units] = await Promise.all([
     prisma.productionOrder.findMany({
       where,
       include: productionOrderInclude,
@@ -736,20 +774,22 @@ export async function listProductionOrders(
       ...pageArgs(pagination),
     }),
     prisma.productionOrder.count({ where }),
+    unidadesDeMedida(prisma),
   ]);
 
   return {
-    productionOrders: await Promise.all(orders.map(toProductionOrderDTO)),
+    productionOrders: await Promise.all(orders.map((order) => toProductionOrderDTO(order, units))),
     ...pageMeta(pagination, total),
   };
 }
 
 export async function getProductionOrderById(id: string): Promise<ProductionOrderDTO | null> {
-  const order = await getPrisma().productionOrder.findUnique({
-    where: { id },
-    include: productionOrderInclude,
-  });
-  return order ? toProductionOrderDTO(order) : null;
+  const prisma = getPrisma();
+  const [order, units] = await Promise.all([
+    prisma.productionOrder.findUnique({ where: { id }, include: productionOrderInclude }),
+    unidadesDeMedida(prisma),
+  ]);
+  return order ? toProductionOrderDTO(order, units) : null;
 }
 
 export async function createProductionOrder(
@@ -785,12 +825,18 @@ export async function createProductionOrder(
 
     await regenerateRequirements(tx, created.id, formulationVersion?.id ?? null, plannedQuantity);
     /*
-     * Planejamento previsto: a OP copia o Perfil de Produção padrão do
-     * Produto NESTE instante. Se o padrão for a V2, é a V2 que a ordem leva —
-     * ativar a V3 depois não a alcança. Produto sem perfil segue válido, só
-     * fica sem cópia.
+     * Roteiro: a OP copia o roteiro padrão ATIVO e compatível do Produto NESTE
+     * instante. Se o padrão for a V2, é a V2 que a ordem leva — ativar a V3
+     * depois não a alcança. Sem padrão aplicável a OP nasce em rascunho, sem
+     * roteiro, e isso é pendência de planejamento.
      */
-    await writePlanningSnapshot(tx, created.id, product.id, actor?.name ?? SYSTEM_ACTOR);
+    await aplicarRoteiroPadraoAutomatico(
+      tx,
+      created.id,
+      product.id,
+      product.finishedProductItem!.unitCode,
+      actor?.name ?? SYSTEM_ACTOR,
+    );
     return created.id;
   });
 
@@ -836,9 +882,17 @@ export async function createDraftProductionOrderInTx(
     },
   });
   await regenerateRequirements(tx, created.id, params.formulationVersionId, params.plannedQuantity);
-  // Mesma regra da criação manual: a OP do Plano de Atendimento também nasce
-  // com a cópia do Perfil padrão do Produto.
-  await writePlanningSnapshot(tx, created.id, params.productId, params.createdBy ?? SYSTEM_ACTOR);
+  // Mesma regra da criação manual: a OP do Plano de Atendimento (e a do saldo)
+  // também nasce com o roteiro padrão do Produto quando ele é aplicável. Sem
+  // ele a OP nasce sem roteiro — a aplicação automática nunca lança, e o
+  // Pedido que corre nesta transação não cai por isso.
+  await aplicarRoteiroPadraoAutomatico(
+    tx,
+    created.id,
+    params.productId,
+    params.outputUnitCode,
+    params.createdBy ?? SYSTEM_ACTOR,
+  );
   return created.id;
 }
 
@@ -927,15 +981,22 @@ export async function updateProductionOrder(
 
     /*
      * Trocar de produto troca o roteiro: a cópia é substituída, na mesma
-     * transação, pelo Perfil padrão do produto NOVO. Sem perfil padrão, a OP
-     * fica sem cópia — nunca com o roteiro do produto anterior.
+     * transação, pelo padrão aplicável do produto NOVO — ou some, quando ele
+     * não tem. E a programação sai junto: as etapas e os recursos dela eram do
+     * roteiro anterior, e agenda velha apontando para roteiro novo é mentira.
      *
-     * Mudar só a QUANTIDADE não passa por aqui de propósito: o perfil
-     * congelado continua o mesmo, e o que se refaz é a projeção, calculada na
-     * leitura.
+     * Mudar só a QUANTIDADE não passa por aqui de propósito: o roteiro
+     * congelado continua o mesmo, e o que se refaz é a projeção, na leitura.
      */
     if (productChanging) {
-      await writePlanningSnapshot(tx, id, effectiveProduct.id, actor?.name ?? SYSTEM_ACTOR);
+      await tx.productionOrderSchedule.deleteMany({ where: { productionOrderId: id } });
+      await aplicarRoteiroPadraoAutomatico(
+        tx,
+        id,
+        effectiveProduct.id,
+        effectiveProduct.finishedProductItem!.unitCode,
+        actor?.name ?? SYSTEM_ACTOR,
+      );
     }
   });
 
@@ -943,39 +1004,104 @@ export async function updateProductionOrder(
 }
 
 /**
- * Aplica (ou atualiza) o Perfil de Produção padrão do Produto na OP — a ação
- * manual de PLANNING-OP-SNAPSHOT-01 §12/§13.
+ * APLICAR ou TROCAR o roteiro de uma OP — PRODUCTION-ROUTE-ASSIGNMENT-01, §89.
  *
- * Serve à OP legada, que nasceu antes desta migration, e à que foi criada
- * quando o Produto ainda não tinha perfil; e serve para trocar uma cópia
- * antiga pela versão que o Produto aponta hoje. Nos dois casos é a MESMA
- * operação: substituir a cópia inteira pelo padrão atual, por valor.
+ * Uma operação, quatro formas, decididas DENTRO da transação com a linha da OP
+ * travada (nada de conferir a situação antes e gravar depois):
  *
- * SÓ EM RASCUNHO. Depois que a OP sai de DRAFT a cópia é imutável, mesmo
- * existindo versão mais nova do perfil.
+ * - sem roteiro, em DRAFT: primeira aplicação — o padrão atual do Produto
+ *   (PRODUCT_DEFAULT_APPLIED), uma versão escolhida só para esta ordem
+ *   (MANUAL_ORDER) ou escolhida e gravada como padrão do Produto
+ *   (DEFAULT_AND_APPLIED). Motivo opcional;
+ * - sem roteiro, em PLANNED/RELEASED: regularização de legado (LEGACY_REPAIR),
+ *   com confirmação explícita e motivo;
+ * - com roteiro, em DRAFT: troca, com motivo obrigatório;
+ * - com roteiro fora de DRAFT, ou sem roteiro em produção/concluída/cancelada:
+ *   recusa — a cópia congelou, ou a ordem já é histórico.
+ *
+ * Programação existente sai na mesma transação, só com confirmação: tempos e
+ * recursos podem mudar com o roteiro. Qualquer falha desfaz tudo, inclusive o
+ * padrão do Produto.
  */
 export async function applyProductionProfileToOrder(
   id: string,
+  input: ApplyProductionRouteParsed,
   actor?: { id: string; name: string },
 ): Promise<ProductionOrderDTO> {
-  const current = await requireOrder(id);
-
-  if (current.status !== "DRAFT") {
-    throw new OrderLockedError(
-      "Depois de planejada, a ordem de produção não recebe outro perfil de produção.",
-    );
-  }
+  const motivo = input.reason?.trim() ? input.reason.trim() : null;
 
   await getPrisma().$transaction(async (tx) => {
-    const aplicado = await writePlanningSnapshot(
-      tx,
-      id,
-      current.productId,
-      actor?.name ?? SYSTEM_ACTOR,
-    );
-    // Nada a copiar: recusa explícita, e a cópia que existia continua no
-    // lugar — a transação inteira volta atrás.
-    if (!aplicado) throw new NoDefaultProductionProfileError(current.product.code);
+    const travadas = await tx.$queryRaw<{ status: string }[]>`
+      SELECT status FROM production_orders WHERE id = ${id} FOR UPDATE
+    `;
+    if (travadas.length === 0) throw new ProductionOrderNotFoundError(id);
+
+    const ordem = await tx.productionOrder.findUniqueOrThrow({
+      where: { id },
+      include: {
+        product: { select: { code: true, defaultProductionProfileVersionId: true } },
+        planningSnapshot: { select: { sourceVersionId: true } },
+        schedule: { select: { id: true } },
+      },
+    });
+
+    // A tela decidiu sobre um retrato. Se a ordem mudou de roteiro desde então,
+    // recusa em vez de sobrescrever a escolha de outra pessoa.
+    if (input.expectedSourceVersionId !== undefined) {
+      const atual = ordem.planningSnapshot?.sourceVersionId ?? null;
+      if (atual !== input.expectedSourceVersionId) throw new ProductionRouteChangedError(ordem.code);
+    }
+
+    const temRoteiro = ordem.planningSnapshot !== null;
+    if (temRoteiro) {
+      if (!ROUTE_CHANGE_STATUSES.includes(ordem.status)) {
+        throw new OrderLockedError(
+          "O roteiro desta ordem já foi aplicado e não muda depois que ela sai do rascunho.",
+        );
+      }
+      if (!motivo) throw new RouteReasonRequiredError("Informe o motivo para alterar o roteiro desta ordem.");
+    } else {
+      if (!ROUTE_PENDING_STATUSES.includes(ordem.status)) {
+        throw new OrderLockedError(
+          "Ordem em produção, concluída, cancelada ou bloqueada não recebe roteiro de produção.",
+        );
+      }
+      if (ordem.status !== "DRAFT") {
+        if (input.confirmLegacyRepair !== true) throw new LegacyRouteRepairNeedsConfirmationError(ordem.code);
+        if (!motivo) {
+          throw new RouteReasonRequiredError("Informe o motivo da regularização do roteiro desta ordem.");
+        }
+      }
+    }
+    if (ordem.schedule && input.confirmScheduleRemoval !== true) {
+      throw new ScheduleRemovalNeedsConfirmationError();
+    }
+
+    const escolhida = input.productionProfileVersionId;
+    const versionId = escolhida ?? ordem.product.defaultProductionProfileVersionId;
+    if (!versionId) throw new NoDefaultProductionProfileError(ordem.product.code);
+
+    // A autoridade: versão ativa e unidade da ORDEM convertível para a do roteiro.
+    const version = await exigirRoteiroCompativel(tx, versionId, ordem.outputUnitCode, ordem.code);
+
+    const definirPadrao = escolhida !== undefined && input.setAsProductDefault === true;
+    let source: ProductionRouteApplicationSource;
+    if (ordem.status !== "DRAFT") source = "LEGACY_REPAIR";
+    else if (definirPadrao) source = "DEFAULT_AND_APPLIED";
+    else if (escolhida !== undefined) source = "MANUAL_ORDER";
+    else source = "PRODUCT_DEFAULT_APPLIED";
+
+    // Padrão novo vale para as PRÓXIMAS ordens: nenhuma outra OP muda aqui.
+    if (definirPadrao) await definirRoteiroPadraoDoProduto(tx, ordem.productId, versionId);
+
+    if (ordem.schedule) {
+      await tx.productionOrderSchedule.delete({ where: { productionOrderId: id } });
+    }
+    await gravarRoteiroDaOrdem(tx, id, copiaDaVersao(version), {
+      source,
+      reason: motivo,
+      appliedBy: actor?.name ?? SYSTEM_ACTOR,
+    });
   });
 
   return (await getProductionOrderById(id))!;
@@ -992,6 +1118,16 @@ export async function planProductionOrder(
     if (lockedRows.length === 0) throw new ProductionOrderNotFoundError(id);
     if (lockedRows[0]?.status !== "DRAFT") {
       throw new InvalidTransitionError("Somente rascunhos podem ser planejados.");
+    }
+
+    // Sem roteiro não há etapas, tempos nem recursos: a ordem existe, mas não
+    // planeja. Primeiro o roteiro, depois o resto do portão.
+    const roteiro = await tx.productionOrderPlanningSnapshot.findUnique({
+      where: { productionOrderId: id },
+      select: { id: true },
+    });
+    if (!roteiro) {
+      throw new RouteRequiredError("Esta ordem precisa de um roteiro de produção antes de ser planejada.");
     }
 
     const order = await tx.productionOrder.findUniqueOrThrow({
@@ -1094,6 +1230,17 @@ export async function releaseProductionOrder(
     if (lockedRows.length === 0) throw new ProductionOrderNotFoundError(id);
     if (lockedRows[0]?.status !== "PLANNED") {
       throw new InvalidTransitionError("Somente ordens planejadas podem ser liberadas.");
+    }
+
+    // Defesa do RELEASE: ordem planejada antes desta regra pode estar sem
+    // roteiro. Libera só depois da regularização — é o que impede nascer
+    // ordem EM PRODUÇÃO sem roteiro daqui em diante.
+    const roteiro = await tx.productionOrderPlanningSnapshot.findUnique({
+      where: { productionOrderId: id },
+      select: { id: true },
+    });
+    if (!roteiro) {
+      throw new RouteRequiredError("Esta ordem precisa de um roteiro de produção antes de ser liberada.");
     }
 
     const order = await tx.productionOrder.findUniqueOrThrow({

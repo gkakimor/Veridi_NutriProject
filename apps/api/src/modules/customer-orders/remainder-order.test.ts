@@ -273,12 +273,19 @@ describe("Gerar OP para o saldo restante", () => {
       id: string;
       plannedQuantity: string;
       status: string;
+      routePending: boolean;
     }[];
     expect(ops).toHaveLength(2);
     const nova = ops.find((op) => op.plannedQuantity === "2")!;
     expect(nova).toBeTruthy();
     // Nasce rascunho — nunca planejada ou liberada automaticamente.
     expect(nova.status).toBe("DRAFT");
+    // Produto sem roteiro padrão: a OP de saldo nasce sem roteiro, o Pedido
+    // segue e só avisa — quem resolve é a Produção.
+    expect(nova.routePending).toBe(true);
+    const detalhe = (await app.inject(`/production-orders/${nova.id}`)).json();
+    expect(detalhe.planning.snapshot).toBeNull();
+    expect(detalhe.planning.routePending).toBe(true);
 
     await app.close();
   });

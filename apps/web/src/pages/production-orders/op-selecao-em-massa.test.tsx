@@ -186,6 +186,21 @@ describe("OP — filtro muda → 0", () => {
     await waitFor(() => expect(barra()).toBeNull());
   });
 
+  it("roteiro entra no descritor, e trocar o filtro de roteiro limpa", async () => {
+    await abrir("/producao/ordens?semRoteiro=1");
+    expect(chamadas().at(-1)?.semRoteiro).toBe(true);
+    await todosOsFiltrados();
+    expect(selecao().descriptor).toEqual({
+      mode: "filtered",
+      filters: { semRoteiro: true, status: EM_ABERTO },
+      excludedIds: [],
+    });
+
+    fireEvent.change(screen.getByLabelText("Filtrar por roteiro de produção"), { target: { value: "0" } });
+    await waitFor(() => expect(barra()).toBeNull());
+    await waitFor(() => expect(chamadas().at(-1)?.semRoteiro).toBe(false));
+  });
+
   it("busca limpa", async () => {
     await abrir();
     fireEvent.click(caixa(1));
