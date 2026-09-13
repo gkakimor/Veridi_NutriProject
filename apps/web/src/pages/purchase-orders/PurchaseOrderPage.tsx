@@ -241,10 +241,12 @@ export function PurchaseOrderPage() {
   /*
    * A ação em curso pelo nome: "Salvando…" aparecia nos botões de salvar também
    * enquanto a OC era confirmada ou cancelada. O freio de clique duplo continua
-   * um só (`saving`); o rótulo, não.
+   * um só (`saving`); o rótulo, não. Confirmar com pendência passa por
+   * "salvar-para-confirmar" antes de "confirmar": o botão de confirmar diz a
+   * etapa (CONFIRM-DISCARDS-DIRTY-01).
    */
   const [acaoEmCurso, setAcaoEmCurso] = useState<
-    "rascunho" | "previsao" | "confirmar" | "cancelar" | null
+    "rascunho" | "previsao" | "salvar-para-confirmar" | "confirmar" | "cancelar" | null
   >(null);
   const saving = acaoEmCurso !== null;
   /** O que a última gravação confirmou — uma frase, substituída pela próxima. */
@@ -644,6 +646,54 @@ export function PurchaseOrderPage() {
     genero: "a",
   });
 
+  /**
+   * O que "Salvar rascunho" envia — e o que "Confirmar OC" grava antes de
+   * confirmar. Um funil só: quantidade ou preço ilegível interrompe aqui,
+   * nomeando o item, e a OC não é criada nem alterada.
+   */
+  function payloadDoRascunho() {
+    const linesPayload = lines
+      .filter((line) => line.itemId)
+      .map((line) => {
+        const preco = exigirDecimalOpcional(
+          line.unitPrice,
+          `Preço unitário de ${line.itemCode || "item"}`,
+        );
+        return {
+          itemId: line.itemId,
+          orderedQuantity: exigirDecimal(
+            line.orderedQuantity,
+            `Quantidade de ${line.itemCode || "item"}`,
+          ),
+          ...(preco ? { unitPrice: preco } : {}),
+        };
+      });
+
+    const expectedIso = toIsoOrEmpty(expectedDeliveryDate);
+
+    return {
+      supplierId,
+      orderDate: toIsoOrEmpty(orderDate),
+      notes: notes.trim(),
+      lines: linesPayload,
+      ...(isNew ? (expectedIso ? { expectedDeliveryDate: expectedIso } : {}) : { expectedDeliveryDate: expectedIso }),
+    };
+  }
+
+  /** A recusa da gravação: campo a campo quando a API diz qual, a frase quando não. */
+  function mostrarRecusaDaGravacao(err: unknown) {
+    if (err instanceof ApiValidationError) {
+      const nextFieldErrors: Record<string, string> = {};
+      for (const issue of err.issues) {
+        nextFieldErrors[issue.path] = issue.message;
+      }
+      setFieldErrors(nextFieldErrors);
+      setError("Corrija os campos destacados.");
+    } else {
+      setError(apiErrorMessage(err, "Falha ao salvar ordem de compra"));
+    }
+  }
+
   async function handleSaveDraft() {
     setFeito(null);
     if (!supplierId) {
@@ -656,34 +706,7 @@ export function PurchaseOrderPage() {
     setFieldErrors({});
 
     try {
-      // Dentro do funil: quantidade ou preço ilegível interrompe aqui,
-      // nomeando o item, e a OC não é criada nem alterada.
-      const linesPayload = lines
-        .filter((line) => line.itemId)
-        .map((line) => {
-          const preco = exigirDecimalOpcional(
-            line.unitPrice,
-            `Preço unitário de ${line.itemCode || "item"}`,
-          );
-          return {
-            itemId: line.itemId,
-            orderedQuantity: exigirDecimal(
-              line.orderedQuantity,
-              `Quantidade de ${line.itemCode || "item"}`,
-            ),
-            ...(preco ? { unitPrice: preco } : {}),
-          };
-        });
-
-      const expectedIso = toIsoOrEmpty(expectedDeliveryDate);
-
-      const payload = {
-        supplierId,
-        orderDate: toIsoOrEmpty(orderDate),
-        notes: notes.trim(),
-        lines: linesPayload,
-        ...(isNew ? (expectedIso ? { expectedDeliveryDate: expectedIso } : {}) : { expectedDeliveryDate: expectedIso }),
-      };
+      const payload = payloadDoRascunho();
 
       if (isNew) {
         const created = await createPurchaseOrder(payload);
@@ -703,16 +726,7 @@ export function PurchaseOrderPage() {
         setFeito("Rascunho salvo.");
       }
     } catch (err) {
-      if (err instanceof ApiValidationError) {
-        const nextFieldErrors: Record<string, string> = {};
-        for (const issue of err.issues) {
-          nextFieldErrors[issue.path] = issue.message;
-        }
-        setFieldErrors(nextFieldErrors);
-        setError("Corrija os campos destacados.");
-      } else {
-        setError(apiErrorMessage(err, "Falha ao salvar ordem de compra"));
-      }
+      mostrarRecusaDaGravacao(err);
     } finally {
       setAcaoEmCurso(null);
     }
@@ -739,11 +753,38 @@ export function PurchaseOrderPage() {
   }
 
   async function handleConfirm() {
-    if (!id) return;
+    if (!id || saving) return;
     setConfirmDialogOpen(false);
-    setAcaoEmCurso("confirmar");
     setError(null);
     setFeito(null);
+    /*
+     * Gravar antes de agir (CONFIRM-DISCARDS-DIRTY-01). O servidor confirma a
+     * OC GRAVADA e trava fornecedor, itens, quantidades e preços: confirmar com
+     * alteração pendente mandava ao fornecedor o que estava salvo, e a releitura
+     * apagava da tela o que foi digitado. A pendência é a da guarda — a mesma
+     * que acende a faixa e acorda o salvar —, e sem ela nada é gravado de novo.
+     */
+    if (alteracaoPendente) {
+      if (!supplierId) {
+        setError("Selecione um fornecedor.");
+        return;
+      }
+      setAcaoEmCurso("salvar-para-confirmar");
+      setFieldErrors({});
+      try {
+        const salva = await updatePurchaseOrder(id, payloadDoRascunho());
+        /* A gravação vale por si: recusada a confirmação, a tela fica com o
+           gravado e sem pendência — nunca com o que foi lido antes. */
+        setPurchaseOrder(salva);
+        syncFormFromServer(salva);
+      } catch (err) {
+        // Gravação recusada não confirma: o digitado e a pendência ficam.
+        mostrarRecusaDaGravacao(err);
+        setAcaoEmCurso(null);
+        return;
+      }
+    }
+    setAcaoEmCurso("confirmar");
     try {
       const updated = await confirmPurchaseOrder(id);
       setPurchaseOrder(updated);
@@ -1255,7 +1296,11 @@ options={supplierOptions.map((supplier) => ({
               disabled={saving}
               onClick={() => setConfirmDialogOpen(true)}
             >
-              {acaoEmCurso === "confirmar" ? "Confirmando…" : "Confirmar OC"}
+              {acaoEmCurso === "salvar-para-confirmar"
+                ? "Salvando…"
+                : acaoEmCurso === "confirmar"
+                  ? "Confirmando…"
+                  : "Confirmar OC"}
             </button>
           )}
           {isReceivable && (

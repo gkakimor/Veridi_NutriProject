@@ -2996,6 +2996,50 @@ e R-03 sem consulta no invertido e com uma ao corrigir, frase à vista sem rolag
 horizontal, CSV e PDF desabilitados, PDF com a frase — 108/108, console limpo fora
 o 400 esperado do PDF.
 
+## Confirmar grava antes de agir (CONFIRM-DISCARDS-DIRTY-01, 2026-09-13)
+
+Continuação de SAVE-FLOW-HARDENING-01. "Confirmar pedido" e "Confirmar OC" chamavam
+a confirmação direto, e o servidor confirma o documento GRAVADO. Reproduzido com
+API e tela reais: Pedido com quantidade 12, entrega e notas digitadas confirmou com
+10, sem entrega nem notas; OC com quantidade 12, preço 13,40, previsão e notas
+confirmou com 10 a 12,50, sem previsão nem notas — e a releitura apagou tudo da
+tela, sem aviso. Campos afetados: os da assinatura da guarda (Pedido: cliente,
+entrega prevista, notas, produto e quantidade das linhas; OC: fornecedor, data do
+pedido, previsão, notas, item, quantidade e preço das linhas).
+
+**Regra (decisão do PO: gravar antes de agir).** Ação de domínio não descarta
+edição. Sem a pendência da guarda (`alteracaoPendente` — a mesma que prende a
+saída, acende a faixa e acorda o salvar), confirmar é só a confirmação, sem gravação
+redundante. Com ela, a tela grava pelo salvar normal (`payloadDoRascunho`, o mesmo
+funil do "Salvar rascunho"), espera a resposta real, fica com o gravado e só então
+confirma — nunca as duas em paralelo. Gravação recusada não confirma: digitado,
+pendência e mensagem ficam (campo a campo na recusa de validação). Gravação aceita
+e confirmação recusada: fica o gravado, sem pendência, em rascunho, com o erro, e
+tentar de novo só confirma. O botão de confirmar diz a etapa ("Salvando…",
+"Confirmando…"), os demais ficam travados, e confirmar não passa pela pergunta de
+alterações não salvas — a guarda de saída segue intacta. Documento novo não oferece
+confirmar (o caminho continua sendo salvar o rascunho, que cria). API, lifecycle,
+snapshot, permissão e diálogo intocados; sem endpoint composto, sem migration.
+
+**Validação.** Web 22 novos (`customer-orders/pedido-confirmar-grava-antes.test.tsx`,
+`purchase-orders/oc-confirmar-grava-antes.test.tsx`: `fetch` falso com estado — o
+PATCH grava quando responde e a confirmação congela o gravado no instante em que
+chega —, recusas 409/500 pelo cliente HTTP real; o código antigo derruba os 18
+casos com pendência). 12 mutações (sem o save, confirm antes da resposta, tela com o
+snapshot antigo, estado antigo depois do 409, confirmar após gravação recusada,
+etapa sem "Salvando…"), todas derrubadas. Focados da web (Pedido, OC, guarda,
+feedback de ações, 390px: 77 arquivos, 893 testes), API de Pedido e OC sem mudança
+(12 arquivos, 169) e typecheck. Smoke com API, tela
+e banco isolados, 1440 e 390: sem pendência só confirma; com pendência PATCH →
+resposta → confirmação, com as duas etapas no botão, o congelado com o digitado lido
+da API; quantidade zero recusada (400) sem confirmar, documento intacto; 409
+simulado na confirmação com o gravado na tela e no servidor e a segunda tentativa
+só confirmando; sem rolagem horizontal — 80/80, console limpo fora os 400/409
+esperados.
+
+Achado, sem correção: em 390px a mensagem de erro do Pedido e da OC mora no topo
+da página, longe dos botões de ação no rodapé (padrão já existente).
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
