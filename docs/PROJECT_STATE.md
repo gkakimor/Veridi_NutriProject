@@ -2187,7 +2187,8 @@ R20-QUOTE-FILTER-COMPOSITION-01, abaixo);
 `QuoteVersion.quoteDate` é coluna mista (a tela grava instante, o importador grava
 `entryDate`); OCs antigas com `orderDate` em instante seguem sem backfill; mudar o
 período não volta à página 1; o R-15 vazio mostra "Valores incompletos"; o
-Dashboard ainda semeia o período personalizado com o dia do navegador; o nome de
+Dashboard ainda semeia o período personalizado com o dia do navegador
+(corrigido em DASHBOARD-BUSINESS-DATE-01, abaixo); o nome de
 CSV sem período usa o dia UTC do servidor. Aba aberta antes do deploy recebe 400
 nos relatórios até recarregar.
 
@@ -2372,6 +2373,43 @@ typecheck. Smoke com banco e portas isolados: ativo recebe; inativado depois de
 escolhido é recusado em 390px com o alerta à vista, sem estouro e sem linha, lote ou
 movimento; inativo fora da busca — 10/10 (o único registro de console é o próprio
 navegador anotando a resposta 400 esperada).
+
+## Painel no dia da Veridi (DASHBOARD-BUSINESS-DATE-01, 2026-09-13)
+
+O "Personalizado" do Painel nascia com o dia do NAVEGADOR (`dateInputValueOffset`):
+às 01:30 UTC — 22:30 de 12/09 em São Paulo — um navegador em UTC abria os campos
+terminando em 13/09. A faixa "No período" formatava os limites devolvidos no fuso do
+navegador: o mesmo 12/09 aparecia "12/09 até 13/09" em UTC e "11/09 até 12/09" em
+UTC-07. E o período viajava como instantes ISO montados na tela.
+
+**Contrato.** `GET /dashboard` recebe `from`/`to` como DIA (`diaCivilDeFiltroSchema`;
+instante ISO e formato inválido recusados com 400) — o contrato das listas e dos
+Relatórios. O schema abre o dia uma vez, por `limitesDoDiaComercial` (começo e fim
+inclusivo): o serviço segue com a mesma janela `gte`/`lte` e o mesmo eco
+`period.from`/`period.to`. Ponta vazia ou ausente é hoje comercial, como antes. Na
+tela, `lib/period.ts` resolve Hoje, 7 dias, 30 dias e Personalizado por
+`resolveListPeriod` (os presets das listas, sem regra nova); os campos nascem em
+`hojeComercial`; a faixa usa `formatEventDate`. `startOfDay`, `endOfDay`,
+`toDateInputValue` e `dateInputValueOffset` saíram de `lib/period.ts` (só o Painel os
+usava). KPIs, opções de período, gráfico e layout sem mudança; nenhuma persistência
+nova; sem migration.
+
+**Validação.** Web 8 (`dashboard-dia-comercial.test.tsx`: presets e personalizado com
+o mesmo par de dias em UTC, UTC-07 e São Paulo às 01:30 UTC, mesmo dia, intervalo,
+campo limpo, faixa, guarda estrutural; o código antigo derruba 7). API 6
+(`dashboard-dia-comercial.test.ts`: hoje às 01:30 UTC com a máquina nos três fusos,
+bordas do dia numa coluna de instante, intervalo, ISO recusado, ponta vazia; o schema
+antigo derruba 6) e `dashboard.test.ts` passando a mandar dia. Smoke com banco e
+portas isolados, Chromium com `timezoneId` e relógio fixo em 2026-09-13T01:30Z nos
+três fusos: request, eco, faixa, "Pedidos criados" e KPIs idênticos, campo limpo sem
+erro, console limpo; 390px sem overflow.
+
+Achados (não corrigidos, fora do escopo): o gráfico de movimentações agrupa pelo dia
+UTC (`occurredAt.toISOString().slice(0, 10)`), e o movimento das 22:30 de São Paulo
+cai na barra do dia seguinte; "Atrasadas" de Compras (estado atual e atenção) compara
+o marcador de `expectedDeliveryDate` com o instante de agora, e a OC prevista para
+12/09 conta como atrasada desde 21h de 11/09 em São Paulo. Aba aberta antes do deploy
+recebe 400 no Painel até recarregar.
 
 ## Próxima prioridade
 

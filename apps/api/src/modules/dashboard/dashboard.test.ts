@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { aplicarRoteiroDeTeste } from "../../test-support/fixture-route.js";
-import { marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
+import { diaComercialDeTeste, marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 import { buildAttentionList } from "./attention.service.js";
@@ -113,14 +113,17 @@ const HISTORIC_BASE =
  * Cada teste usa uma janela histórica exclusiva (um dia inteiro) e empurra
  * as datas OPERACIONAIS dos seus documentos para dentro dela. Assim a
  * contagem do período é exata, sem depender do que existe no banco.
+ *
+ * A janela é o DIA (`YYYY-MM-DD`), o contrato da rota; `at` é meio-dia UTC,
+ * que cai no mesmo dia comercial em São Paulo, com ou sem horário de verão.
  */
 function windowFor(dayOffset: number) {
   const day = new Date(HISTORIC_BASE + dayOffset * DAY_MS);
-  const [year, month, date] = [day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate()];
+  const dia = day.toISOString().slice(0, 10);
   return {
-    from: new Date(Date.UTC(year, month, date, 0, 0, 0, 0)),
-    at: new Date(Date.UTC(year, month, date, 12, 0, 0, 0)),
-    to: new Date(Date.UTC(year, month, date, 23, 59, 59, 999)),
+    from: dia,
+    at: new Date(day.getTime() + 12 * 60 * 60 * 1000),
+    to: dia,
   };
 }
 
@@ -130,10 +133,8 @@ function emptyWindow(dayOffset: number) {
   return { from, to };
 }
 
-async function fetchDashboard(app: App, window?: { from: Date; to: Date }) {
-  const query = window
-    ? `?from=${encodeURIComponent(window.from.toISOString())}&to=${encodeURIComponent(window.to.toISOString())}`
-    : "";
+async function fetchDashboard(app: App, window?: { from: string; to: string }) {
+  const query = window ? `?${new URLSearchParams(window)}` : "";
   const response = await app.inject({ method: "GET", url: `/dashboard${query}` });
   expect(response.statusCode).toBe(200);
   return response.json();
@@ -490,10 +491,7 @@ describe("Dashboard — estado atual", () => {
     const prisma = getPrisma();
 
     const antiga = windowFor(3);
-    const janelaDeHoje = {
-      from: new Date(new Date().setHours(0, 0, 0, 0)),
-      to: new Date(),
-    };
+    const janelaDeHoje = { from: diaComercialDeTeste(), to: diaComercialDeTeste() };
 
     const supplier = await createSupplier();
     const rawMaterial = await createItem("RAW_MATERIAL");
