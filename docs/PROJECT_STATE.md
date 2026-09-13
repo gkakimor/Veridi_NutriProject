@@ -2406,10 +2406,33 @@ erro, console limpo; 390px sem overflow.
 
 Achados (não corrigidos, fora do escopo): o gráfico de movimentações agrupa pelo dia
 UTC (`occurredAt.toISOString().slice(0, 10)`), e o movimento das 22:30 de São Paulo
-cai na barra do dia seguinte; "Atrasadas" de Compras (estado atual e atenção) compara
+cai na barra do dia seguinte (corrigido em DASHBOARD-MOVEMENT-BUSINESS-DAY-01, abaixo);
+"Atrasadas" de Compras (estado atual e atenção) compara
 o marcador de `expectedDeliveryDate` com o instante de agora, e a OC prevista para
 12/09 conta como atrasada desde 21h de 11/09 em São Paulo. Aba aberta antes do deploy
 recebe 400 no Painel até recarregar.
+
+## Barra do gráfico no dia comercial (DASHBOARD-MOVEMENT-BUSINESS-DAY-01, 2026-09-13)
+
+O gráfico "Movimentações por dia" agrupava `occurredAt` pelo dia UTC
+(`toISOString().slice(0, 10)`): o movimento das 22:30 de São Paulo (01:30 UTC) caía
+na barra do dia seguinte, e o período 12/09 → 12/09 desenhava uma barra 13/09. A
+chave da barra agora é `diaCivil(occurredAt, FUSO_COMERCIAL)` (`@veridi/shared`),
+em `buildMovementActivity`. Ordem, contagens, tipos, rótulos, dias sem movimento
+(sem barra) e o período `from`/`to` em dia não mudaram; KPIs e tela intocados; sem
+migration.
+
+**Validação.** API 4 novos em `dashboard-dia-comercial.test.ts` (bordas 00:00,
+23:59:59.999, instante anterior e seguinte num dia histórico sorteado; 01:30 UTC na
+barra do próprio dia com o processo em UTC, UTC-07 e São Paulo; série somada igual ao
+resumo; dia vazio sem barra; guarda contra o slice UTC; o serviço antigo derruba os
+4). Smoke com banco e portas isolados, cinco movimentos de 11/09 23:59 a 13/09 00:00
+(São Paulo) e Chromium em UTC, UTC-07 e São Paulo: API e barras da tela idênticas
+(11/09, 12/09 com três segmentos, 13/09), console limpo.
+
+Achado (não corrigido): `diaCivil` monta um `Intl.DateTimeFormat` por chamada, ~54 µs
+na máquina do laboratório — 10 mil movimentos na janela somam ~0,5 s ao Painel; um
+formatador reaproveitado custa ~3 µs.
 
 ## Próxima prioridade
 

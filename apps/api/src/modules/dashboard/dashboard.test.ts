@@ -746,7 +746,7 @@ describe("Dashboard — movimentações", () => {
     expect(adjustment.sourceCode).toBeNull();
 
     expect(dashboard.movementActivity).toHaveLength(1);
-    expect(dashboard.movementActivity[0].date).toBe(window.at.toISOString().slice(0, 10));
+    expect(dashboard.movementActivity[0].date).toBe(window.from);
     expect(dashboard.movementActivity[0].receiptIn).toBe(1);
     expect(dashboard.movementActivity[0].adjustments).toBe(2);
 
