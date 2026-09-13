@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { hojeComercial, limitesDoDiaComercial } from "@veridi/shared";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
-import { dashboardQuerySchema } from "./dashboard.schemas.js";
+import { dashboardQuerySchemaEm } from "./dashboard.schemas.js";
 
 /**
  * Dashboard — o período é o DIA da Veridi (DASHBOARD-BUSINESS-DATE-01).
@@ -124,7 +124,7 @@ describe("hoje comercial — o relógio da máquina não decide", () => {
       await naMaquinaEm(fuso, () => {
         // Sem período, período limpo e o dia pedido explicitamente: a mesma janela.
         for (const query of [{}, { from: "", to: "" }, { from: "2026-09-12", to: "2026-09-12" }]) {
-          expect(comoTexto(dashboardQuerySchema.parse(query)), `${fuso} ${JSON.stringify(query)}`).toEqual([
+          expect(comoTexto(dashboardQuerySchemaEm(new Date()).parse(query)), `${fuso} ${JSON.stringify(query)}`).toEqual([
             "2026-09-12T03:00:00.000Z",
             "2026-09-13T02:59:59.999Z",
           ]);
@@ -136,7 +136,7 @@ describe("hoje comercial — o relógio da máquina não decide", () => {
   it("intervalo 11/09 → 12/09 vai do começo do dia 11 ao fim do dia 12, em qualquer máquina", async () => {
     for (const fuso of FUSOS) {
       await naMaquinaEm(fuso, () => {
-        expect(comoTexto(dashboardQuerySchema.parse({ from: "2026-09-11", to: "2026-09-12" }))).toEqual([
+        expect(comoTexto(dashboardQuerySchemaEm(new Date()).parse({ from: "2026-09-11", to: "2026-09-12" }))).toEqual([
           "2026-09-11T03:00:00.000Z",
           "2026-09-13T02:59:59.999Z",
         ]);

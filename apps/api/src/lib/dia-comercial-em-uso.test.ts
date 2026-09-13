@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { dashboardQuerySchema } from "../modules/dashboard/dashboard.schemas.js";
+import { dashboardQuerySchemaEm } from "../modules/dashboard/dashboard.schemas.js";
 import { nextOfficialNumberYear } from "./production-order-number.js";
 import { lotCodeDay } from "./lot-code.js";
 
@@ -29,7 +29,7 @@ describe('KPI "hoje" do painel', () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOITE_DE_QUINZE);
 
-    const { from, to } = dashboardQuerySchema.parse({});
+    const { from, to } = dashboardQuerySchemaEm(new Date()).parse({});
 
     // 15/09 em São Paulo, do primeiro ao último milissegundo.
     expect(from.toISOString()).toBe("2026-09-15T03:00:00.000Z");
@@ -42,9 +42,10 @@ describe('KPI "hoje" do painel', () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOITE_DE_QUINZE);
 
-    const { from, to } = dashboardQuerySchema.parse({
-      from: "2026-09-01T03:00:00.000Z",
-      to: "2026-09-10T02:59:59.999Z",
+    // A tela manda DIAS desde DASHBOARD-BUSINESS-DATE-01; instante ISO é recusado.
+    const { from, to } = dashboardQuerySchemaEm(new Date()).parse({
+      from: "2026-09-01",
+      to: "2026-09-09",
     });
 
     expect(from.toISOString()).toBe("2026-09-01T03:00:00.000Z");

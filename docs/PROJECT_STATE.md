@@ -2495,6 +2495,32 @@ Achado que continua (fora do escopo): na troca de filtro a tabela anterior fica
 visível com "Carregando…" até a resposta (`useReport`, já anotado em
 REPORTS-PAGINATION-01).
 
+## Um instante por requisição do Painel (DASHBOARD-CONSISTENT-NOW-01, 2026-09-13)
+
+`GET /dashboard` lia o relógio em quatro pontos do mesmo retrato: o "hoje" da ponta
+ausente do período (no parse), o estado atual (`buildCurrentState`: lotes
+vencidos/perto e OCs atrasadas), a lista de atenção (`buildAttentionList` sem `now`)
+e a disponibilidade da falta de material (`getAvailableByItems`, um relógio por lote,
+chamada pelo contador e pela atenção). Na virada do dia comercial, contador e lista
+podiam descrever dias diferentes.
+
+**Regra.** A rota captura `now` uma vez e o entrega a `dashboardQuerySchemaEm(now)` (o
+schema virou fábrica) e a `getDashboard(query, now)`; `buildCurrentState` e
+`getProductionOrdersWithShortage` exigem `now`; `getAvailableByItems` ganhou `agora`
+opcional (padrão: agora, um instante para a chamada inteira — os outros chamadores não
+mudam). Dia comercial/civil, vencimento, atraso e período com a mesma semântica; tela
+intocada; sem migration.
+
+**Validação.** API 2 novos na faixa serial (`dashboard.test.ts`): dia sorteado de 2031
+em diante, lote que vence na véspera (única fonte de uma OP em rascunho) e OC prevista
+para a véspera, em véspera 12:00, 23:59:59.999, dia 00:00 e 12:00 de São Paulo —
+contador e lista de atenção somam o mesmo em cada instante (perto, vencido, atrasada,
+falta), total da atenção e período sem filtro no mesmo dia; guarda estrutural (a rota
+lê o relógio uma vez; schema, serviço e consultas não leem). Atenção sem `now`,
+contador com relógio próprio e disponibilidade sem `agora` derrubam o teste. De
+passagem: `lib/dia-comercial-em-uso.test.ts` ainda mandava instante ISO, recusado desde
+DASHBOARD-BUSINESS-DATE-01 — falhava no `origin/main`; agora manda dias.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

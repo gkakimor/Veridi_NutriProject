@@ -381,11 +381,15 @@ export function isLotAvailableForUse(
  * vencido) e somado — lote AWAITING_RELEASE/BLOCKED/vencido continua em
  * On Hand mas contribui 0 aqui, mesmo que tenha Reserved. Nunca duplicar
  * esta logica em outro modulo.
+ *
+ * `agora` decide o vencimento de TODOS os lotes da chamada — um instante so.
+ * Quem monta um retrato maior (o Painel) passa o dele.
  */
 export async function getAvailableByItems(
   prisma: PrismaOrTx,
   items: readonly { id: string; controlsLot: boolean }[],
   scope?: InventoryOwnerScope,
+  agora: Date = new Date(),
 ): Promise<Map<string, Prisma.Decimal>> {
   const itemIds = items.map((item) => item.id);
   const [onHandByItem, reservedByItem] = await Promise.all([
@@ -407,7 +411,7 @@ export async function getAvailableByItems(
 
   const availableByItem = new Map<string, Prisma.Decimal>();
   for (const lot of lots) {
-    if (!isLotAvailableForUse(lot)) continue;
+    if (!isLotAvailableForUse(lot, agora)) continue;
     const lotOnHand = onHandByLot.get(lot.id) ?? new Prisma.Decimal(0);
     const lotReserved = reservedByLot.get(lot.id) ?? new Prisma.Decimal(0);
     const lotAvailable = Prisma.Decimal.max(lotOnHand.minus(lotReserved), 0);

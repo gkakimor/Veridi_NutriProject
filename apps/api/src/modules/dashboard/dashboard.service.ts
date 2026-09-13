@@ -86,9 +86,11 @@ async function buildPeriod(prisma: PrismaOrTx, from: Date, to: Date): Promise<Da
  * ESTADO ATUAL — nunca responde ao filtro de periodo. Uma OP antiga em
  * producao continua contando aqui mesmo quando esta fora da janela
  * historica selecionada.
+ *
+ * `now` e o instante da requisicao, o mesmo da lista de atencao — nunca um
+ * relogio lido aqui dentro.
  */
-async function buildCurrentState(prisma: PrismaOrTx): Promise<DashboardCurrentStateDTO> {
-  const now = new Date();
+async function buildCurrentState(prisma: PrismaOrTx, now: Date): Promise<DashboardCurrentStateDTO> {
   /* Vencimento se mede em dias civis: a janela sai do marcador de hoje. */
   const hojeComercialMarcador = marcadorDeHojeComercial(now);
   const nearExpiryLimit = new Date(hojeComercialMarcador.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -115,7 +117,7 @@ async function buildCurrentState(prisma: PrismaOrTx): Promise<DashboardCurrentSt
     getOrdersAwaitingShipmentIds(prisma),
     prisma.shipment.count({ where: { status: "CONFIRMED", billings: { none: { status: "ISSUED" } } } }),
     prisma.productionOrder.groupBy({ by: ["status"], _count: { _all: true } }),
-    getProductionOrdersWithShortage(prisma),
+    getProductionOrdersWithShortage(prisma, now),
     getProductionOrdersWithIncompleteCost(prisma),
     getOpenPurchaseOrderState(prisma, now),
     prisma.lot.findMany({ where: { status: "AWAITING_RELEASE" }, select: { id: true } }),
@@ -392,19 +394,25 @@ function groupAttention(items: AttentionItemDTO[]): AttentionGroupDTO[] {
  * requisicoes independentes do frontend. Nada aqui e persistido: tudo sai
  * das entidades operacionais e dos servicos centrais ja existentes
  * (disponibilidade, custo, faturamento).
+ *
+ * `now` e o instante UNICO da requisicao (DASHBOARD-CONSISTENT-NOW-01). O
+ * estado atual e a lista de atencao liam cada um o proprio relogio: na virada
+ * do dia comercial, o contador saia de 23:59:59.999 e a lista de 00:00:00.001,
+ * e o mesmo lote era "perto do vencimento" num e "vencido" no outro. Tudo que
+ * depende de "agora" neste retrato recebe este valor.
  */
-export async function getDashboard(query: DashboardQuery): Promise<DashboardDTO> {
+export async function getDashboard(query: DashboardQuery, now: Date): Promise<DashboardDTO> {
   const prisma = getPrisma();
   const { from, to } = query;
 
   const [period, currentState, movementSummary, recentMovements, movementActivity, attention] =
     await Promise.all([
       buildPeriod(prisma, from, to),
-      buildCurrentState(prisma),
+      buildCurrentState(prisma, now),
       buildMovementSummary(prisma, from, to),
       buildRecentMovements(prisma, from, to),
       buildMovementActivity(prisma, from, to),
-      buildAttentionList(prisma),
+      buildAttentionList(prisma, now),
     ]);
 
   return {
