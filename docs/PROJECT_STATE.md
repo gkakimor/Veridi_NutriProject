@@ -2221,6 +2221,56 @@ a rota de impressão lê esse CSV; a tela não oferece cliente, status nem perí
 papel imprime o id do cliente no filtro "Cliente"; um orçamento com vários produtos
 repete a `key` da linha da tabela (`quoteVersionId`).
 
+## Receber material do cliente sem corte silencioso (CUSTOMER-MATERIAL-ITEM-CUTOFF-01, 2026-09-12)
+
+O seletor de item de `ReceiveCustomerMaterialPage.tsx` pedia
+`listItems({ type: "RAW_MATERIAL", active: true, pageSize: 1000 })` e o mesmo para
+`PACKAGING`, e somava as duas listas num `<select>`: do item 1001 de cada tipo em
+diante o material existia, o servidor aceitaria o recebimento, e a tela não o
+oferecia.
+
+`GET /items` ganhou `customerSupplied=true`: só item que pode entrar como material
+do cliente, com o conjunto de `TIPOS_DE_MATERIAL_DO_CLIENTE`
+(`modules/items/item-customer-supplied.ts`) — a MESMA constante que
+`createCustomerSuppliedReceipt` passou a usar na trava de tipo. Regra inalterada:
+matéria-prima e embalagem; com `type` junto vale a interseção; `false`/ausente não
+restringe. A tela não escreve tipo: cada linha virou `EntityFilterSelect` com
+`itemMaterialDoClienteSource` (`filter-sources.ts`) — primeira página de 20, pedida
+uma vez para todas as linhas; busca no servidor por código ou nome; `porId` por
+`ids` com os mesmos filtros. Unidade e controle de lote da linha vêm do item que o
+servidor devolveu. Inativo continua fora do seletor (a tela manda `active=true`,
+como antes); linha de rascunho restaurado cujo item deixou de poder entrar é
+desfeita com aviso. Item sem controle de lote segue oferecido, com a orientação na
+linha, e recusado ao gravar (anterior).
+
+Dono: Item não tem proprietário no modelo — dono é o `Lot` (`ownerCustomerId`),
+gravado pelo servidor com o cliente do recebimento. O seletor não depende de
+cliente, e o isolamento não mudou. Sem migration.
+
+**Validação.** API 12 testes (`modules/receiving/material-do-cliente-sem-corte.test.ts`:
+1000 matérias-primas ativas com código menor que o do alvo; lista antiga de 1000
+sem o #1001; primeira página de 20 com total acima de 1000; fila elegível completa
+por páginas; busca por código e por nome; `ids`; interseção com `type`; inativo;
+seletor × recebimento tipo por tipo; sem lote; recebimento do #1001 com quantidade,
+unidade, lote, dono, movimento e rastreio; Clientes A e B com o mesmo item e o
+mesmo lote do fabricante, cada um só vê o seu). Mutação: sem o filtro, 5 caem;
+trava de tipo divergente, 1. Web 13 (`pages/receiving/material-do-cliente-sem-corte.test.tsx`,
+servidor falso com 1005 itens; mutação: source sem `customerSupplied` derruba 11;
+sem desfazer o item inelegível, 1; sem memorizar a primeira página, 1). Gate: API
+101 (itens, recebimento, dono), web 105 (Recebimento, criação no contexto,
+relatórios), typecheck. Smoke com banco e portas isolados, 1440 e 390, 1004 itens:
+#1001 por código e por nome, acabado e inativo fora, recebimentos de A e B com o
+mesmo lote do fabricante e cada dono só com o seu, rede só `customerSupplied` com
+`pageSize=20`, 390 sem overflow aberto/busca/selecionado, console limpo — 38/38,
+massa apagada.
+
+Achados, sem correção: `POST /receipts/customer-supplied` NÃO recusa item inativo
+(só a tela o esconde, antes e agora); em 1440 a tabela de linhas ainda rola 28 px
+dentro do contêiner (antes 484 px, com o `<select>` de 696 px); seguem com
+`pageSize: 1000` em seletor, fora deste escopo, `CustomerMaterialsPage`,
+`ProjectsPage`, `ProductsPage`, `BillingsPage`, `SupplierItemsPage`,
+`CustomerOrderPage` e `ProjectProductsSection`.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

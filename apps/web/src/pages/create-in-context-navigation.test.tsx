@@ -509,7 +509,11 @@ describe("Campo que navega — Cliente proprietário (material do cliente)", () 
      * sem poder ser confirmado, o que só acontece com `customerId` vazio.
      */
     expect(campo("customer-receipt-customer")).toHaveValue("");
-    expect(screen.queryByLabelText("Limpar seleção")).toBeNull();
+    // No campo do cliente: o item da linha restaurada é resolvido pelo id e
+    // tem o próprio "Limpar seleção".
+    expect(
+      within(campo("customer-receipt-customer").parentElement!).queryByLabelText("Limpar seleção"),
+    ).toBeNull();
     expect(screen.getByRole("button", { name: /Confirmar recebimento/ })).toBeDisabled();
   });
 });
