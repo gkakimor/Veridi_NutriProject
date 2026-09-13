@@ -12,6 +12,7 @@ import {
   CustomerNotFoundError,
   EmptyReceiptError,
   InactiveCustomerError,
+  InactiveCustomerSuppliedItemError,
   InvalidCustomerSuppliedItemTypeError,
   ReceiptItemNotFoundError,
   InvalidExpiryDateError,
@@ -74,6 +75,9 @@ function mapDomainError(
   }
   if (error instanceof ReceiptItemNotFoundError) {
     return { status: 400, body: { error: "item_not_found", message: error.message } };
+  }
+  if (error instanceof InactiveCustomerSuppliedItemError) {
+    return { status: 400, body: { error: "item_inactive", message: error.message } };
   }
   if (error instanceof InvalidCustomerSuppliedItemTypeError) {
     return { status: 400, body: { error: "invalid_item_type", message: error.message } };

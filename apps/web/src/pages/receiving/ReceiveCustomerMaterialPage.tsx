@@ -106,6 +106,7 @@ export function ReceiveCustomerMaterialPage() {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const alertRef = useRef<HTMLParagraphElement>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -286,6 +287,16 @@ export function ReceiveCustomerMaterialPage() {
       } else {
         setError(apiErrorMessage(err, "Falha ao registrar recebimento"));
       }
+      /*
+       * O alerta mora no topo e o botão, no fim do formulário: sem isto, a
+       * recusa do servidor (ex.: item inativado depois de escolhido) aparecia
+       * fora da vista e confirmar parecia não ter efeito — em 390px, sempre.
+       */
+      requestAnimationFrame(() => {
+        // jsdom não implementa `scrollIntoView`; no navegador ele existe sempre.
+        alertRef.current?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+        alertRef.current?.focus();
+      });
     } finally {
       setSaving(false);
     }
@@ -311,7 +322,11 @@ export function ReceiveCustomerMaterialPage() {
       </div>
 
       <div className="doc-body">
-        {error && <p className="form-alert" role="alert">{error}</p>}
+        {error && (
+          <p className="form-alert" ref={alertRef} tabIndex={-1} role="alert">
+            {error}
+          </p>
+        )}
 
         {/* Recebimento sem fornecedor e sem OC parece cadastro incompleto
             para quem chegou pelo caminho da compra. É o contrário: é o único

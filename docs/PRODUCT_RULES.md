@@ -1141,6 +1141,7 @@ it is deliberately separate from who supplied it.
 - Customer material **requires lot control**. Receiving customer material
   for an item without lot control is refused — a third party's balance that
   cannot be told apart from Veridi's own stock is worse than no balance.
+- Novos recebimentos de material do cliente exigem Item ativo.
 - Ownership is a historical characteristic of the lot: immutable after
   creation. There is no ownership transfer and no silent owner edit;
   adjustments and stock counts never change it.
