@@ -367,10 +367,12 @@ export function CustomerOrderPage() {
   /*
    * A ação em curso pelo nome: "Salvando…" aparecia no botão de salvar
    * também enquanto o pedido era confirmado ou cancelado. O freio de clique
-   * duplo continua um só (`saving`); o rótulo, não.
+   * duplo continua um só (`saving`); o rótulo, não. Confirmar com pendência
+   * passa por "salvar-para-confirmar" antes de "confirmar": o botão de
+   * confirmar diz a etapa (CONFIRM-DISCARDS-DIRTY-01).
    */
   const [acaoEmCurso, setAcaoEmCurso] = useState<
-    "rascunho" | "prazo" | "confirmar" | "cancelar" | null
+    "rascunho" | "prazo" | "salvar-para-confirmar" | "confirmar" | "cancelar" | null
   >(null);
   const saving = acaoEmCurso !== null;
   /** O que a última gravação confirmou — uma frase, substituída pela próxima. */
@@ -1008,6 +1010,46 @@ export function CustomerOrderPage() {
     setLines((prev) => prev.map((line) => (line.key === key ? { ...line, orderedQuantity: value } : line)));
   }
 
+  /**
+   * O que "Salvar rascunho" envia — e o que "Confirmar pedido" grava antes de
+   * confirmar. Um funil só: a conversão acontece aqui dentro, e uma quantidade
+   * ilegível interrompe com o produto nomeado, antes de a requisição sair.
+   */
+  function payloadDoRascunho() {
+    const linesPayload = lines
+      .filter((line) => line.productId)
+      .map((line) => ({
+        productId: line.productId,
+        orderedQuantity: exigirDecimal(
+          line.orderedQuantity,
+          `Quantidade de ${line.productCode || "produto"}`,
+        ),
+      }));
+
+    const requestedIso = toIsoOrEmpty(requestedDeliveryDate);
+
+    return {
+      customerId,
+      notes: notes.trim(),
+      lines: linesPayload,
+      ...(requestedIso ? { requestedDeliveryDate: requestedIso } : {}),
+    };
+  }
+
+  /** A recusa da gravação: campo a campo quando a API diz qual, a frase quando não. */
+  function mostrarRecusaDaGravacao(err: unknown) {
+    if (err instanceof ApiValidationError) {
+      const nextFieldErrors: Record<string, string> = {};
+      for (const issue of err.issues) {
+        nextFieldErrors[issue.path] = issue.message;
+      }
+      setFieldErrors(nextFieldErrors);
+      setError("Corrija os campos destacados.");
+    } else {
+      setError(apiErrorMessage(err, "Falha ao salvar pedido"));
+    }
+  }
+
   async function handleSaveDraft() {
     setFeito(null);
     if (!customerId) {
@@ -1020,26 +1062,7 @@ export function CustomerOrderPage() {
     setFieldErrors({});
 
     try {
-      // A conversão acontece dentro do funil: uma quantidade ilegível
-      // interrompe aqui, com o produto nomeado, e a requisição não sai.
-      const linesPayload = lines
-        .filter((line) => line.productId)
-        .map((line) => ({
-          productId: line.productId,
-          orderedQuantity: exigirDecimal(
-            line.orderedQuantity,
-            `Quantidade de ${line.productCode || "produto"}`,
-          ),
-        }));
-
-      const requestedIso = toIsoOrEmpty(requestedDeliveryDate);
-
-      const payload = {
-        customerId,
-        notes: notes.trim(),
-        lines: linesPayload,
-        ...(requestedIso ? { requestedDeliveryDate: requestedIso } : {}),
-      };
+      const payload = payloadDoRascunho();
 
       if (isNew) {
         const created = await createCustomerOrder(payload);
@@ -1059,16 +1082,7 @@ export function CustomerOrderPage() {
         setFeito("Rascunho salvo.");
       }
     } catch (err) {
-      if (err instanceof ApiValidationError) {
-        const nextFieldErrors: Record<string, string> = {};
-        for (const issue of err.issues) {
-          nextFieldErrors[issue.path] = issue.message;
-        }
-        setFieldErrors(nextFieldErrors);
-        setError("Corrija os campos destacados.");
-      } else {
-        setError(apiErrorMessage(err, "Falha ao salvar pedido"));
-      }
+      mostrarRecusaDaGravacao(err);
     } finally {
       setAcaoEmCurso(null);
     }
@@ -1096,11 +1110,38 @@ export function CustomerOrderPage() {
   }
 
   async function handleConfirm() {
-    if (!id) return;
+    if (!id || saving) return;
     setConfirmDialogOpen(false);
-    setAcaoEmCurso("confirmar");
     setError(null);
     setFeito(null);
+    /*
+     * Gravar antes de agir (CONFIRM-DISCARDS-DIRTY-01). O servidor confirma o
+     * pedido GRAVADO e congela produtos, quantidades e o cliente: confirmar com
+     * alteração pendente congelava o que estava salvo, e a releitura apagava da
+     * tela o que foi digitado. A pendência é a da guarda — a mesma que acende a
+     * faixa e acorda o salvar —, e sem ela nada é gravado de novo.
+     */
+    if (alteracaoPendente) {
+      if (!customerId) {
+        setError("Selecione um cliente.");
+        return;
+      }
+      setAcaoEmCurso("salvar-para-confirmar");
+      setFieldErrors({});
+      try {
+        const salvo = await updateCustomerOrder(id, payloadDoRascunho());
+        /* A gravação vale por si: recusada a confirmação, a tela fica com o
+           gravado e sem pendência — nunca com o que foi lido antes. */
+        setCustomerOrder(salvo);
+        syncFormFromServer(salvo);
+      } catch (err) {
+        // Gravação recusada não confirma: o digitado e a pendência ficam.
+        mostrarRecusaDaGravacao(err);
+        setAcaoEmCurso(null);
+        return;
+      }
+    }
+    setAcaoEmCurso("confirmar");
     try {
       const updated = await confirmCustomerOrder(id);
       setCustomerOrder(updated);
@@ -2829,7 +2870,11 @@ options={customerOptions.map((customer) => ({
           )}
           {isConfirmable && (
             <button type="button" className="btn btn--accent" disabled={saving} onClick={() => setConfirmDialogOpen(true)}>
-              {acaoEmCurso === "confirmar" ? "Confirmando…" : "Confirmar pedido"}
+              {acaoEmCurso === "salvar-para-confirmar"
+                ? "Salvando…"
+                : acaoEmCurso === "confirmar"
+                  ? "Confirmando…"
+                  : "Confirmar pedido"}
             </button>
           )}
         </div>

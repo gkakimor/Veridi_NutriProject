@@ -948,7 +948,7 @@ mudou.
 | ~~SAVE-ENABLED-NO-DIRTY-01~~ | **Fechado em 2026-09-13** por SAVE-FLOW-HARDENING-01 ([`PROJECT_STATE.md`](PROJECT_STATE.md), seção própria): Pedido e OC salvam só com a pendência da guarda, inclusive no documento novo — não é a exceção da Formulação | — | — |
 | ~~BILLING-SHIPMENT-UNSAVED-GUARD-01~~ | **Fechado em 2026-09-13** por SAVE-FLOW-HARDENING-01: Faturamento e Expedição registram a guarda, com faixa e botão de salvar lendo a mesma pendência | — | — |
 | ~~SAVE-THEN-COMMIT-STALE-01~~ | **Fechado em 2026-09-13** por SAVE-FLOW-HARDENING-01: emitir, confirmar e conferir releem a resposta da gravação antes da segunda chamada | — | — |
-| **CONFIRM-DISCARDS-DIRTY-01** | "Confirmar pedido" e "Confirmar OC" ficam habilitados com alteração pendente e, ao contrário de emitir faturamento e confirmar expedição, não gravam antes: o servidor confirma o documento gravado e a releitura apaga da tela, sem aviso, a quantidade ou a nota digitada — o diálogo diz que "produtos e quantidades serão congelados". Por leitura de código. Decidir entre travar a confirmação com pendência, gravar antes ou avisar no diálogo. Achado em SAVE-FLOW-HARDENING-01, fora do escopo dela | UX | XS |
+| ~~CONFIRM-DISCARDS-DIRTY-01~~ | **Fechado em 2026-09-13** por CONFIRM-DISCARDS-DIRTY-01 ([`PROJECT_STATE.md`](PROJECT_STATE.md), seção própria): decisão do PO, gravar antes de agir — com a pendência da guarda, "Confirmar pedido" e "Confirmar OC" gravam pelo salvar da tela, esperam a resposta e só então confirmam; sem pendência, confirmam direto | — | — |
 
 ### Achados do FAST-DEVELOPMENT-RESET-02 (2026-09-11)
 
