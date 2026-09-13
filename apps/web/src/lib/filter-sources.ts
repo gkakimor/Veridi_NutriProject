@@ -1,10 +1,18 @@
-import type { CustomerDTO, CustomerOrderDTO, ItemDTO, ProductDTO, SupplierDTO } from "@veridi/shared";
+import type {
+  CustomerDTO,
+  CustomerOrderDTO,
+  ItemDTO,
+  ProductDTO,
+  ProductionOrderDTO,
+  SupplierDTO,
+} from "@veridi/shared";
 import type { EntityFilterSource } from "../components/filters/EntityFilterSelect";
 import type { EntityOption } from "../components/SearchableEntitySelect";
 import { getCustomerOrder, listCustomerOrders } from "./customer-orders-api";
 import { listCustomers } from "./customers-api";
 import { listItems } from "./items-api";
 import { listProducts } from "./products-api";
+import { getProductionOrder, listProductionOrders } from "./production-orders-api";
 import { listSuppliers } from "./suppliers-api";
 
 /**
@@ -60,7 +68,7 @@ function opcaoDeFornecedor(fornecedor: SupplierDTO): EntityOption {
   };
 }
 
-/** Fornecedores — filtro de Recebimentos e de Ordens de Compra. */
+/** Fornecedores — filtro de Recebimentos, de Ordens de Compra e dos relatórios de Compras. */
 export const fornecedorFilterSource: EntityFilterSource = {
   inicial: async () =>
     (await listSuppliers({ active: true, pageSize: PAGINA })).suppliers.map(opcaoDeFornecedor),
@@ -114,7 +122,7 @@ function opcaoDeCliente(cliente: CustomerDTO): EntityOption {
 }
 
 /**
- * Clientes — filtro de Pedidos.
+ * Clientes — filtro de Pedidos e dos relatórios Comerciais e de Faturamento.
  *
  * Substitui `listCustomers({ pageSize: 1000 })` num `<select>`: do cliente
  * 1001 em diante o filtro deixava de oferecer quem existia. `porId` resolve
@@ -143,7 +151,7 @@ function opcaoDePedido(pedido: CustomerOrderDTO): EntityOption {
 }
 
 /**
- * Pedidos do Cliente — filtro de Expedições.
+ * Pedidos do Cliente — filtro de Expedições e seletor do R-14.
  *
  * A primeira página é a dos pedidos mais recentes; o resto é busca no
  * servidor, por código ou cliente. `porId` pergunta pelo próprio pedido:
@@ -161,6 +169,41 @@ export const pedidoFilterSource: EntityFilterSource = {
       return opcaoDePedido(await getCustomerOrder(id));
     } catch {
       // Pedido que não existe mais: o filtro vale, só o rótulo fica ausente.
+      return null;
+    }
+  },
+};
+
+function opcaoDeOrdemDeProducao(ordem: ProductionOrderDTO): EntityOption {
+  return {
+    id: ordem.id,
+    code: ordem.code,
+    // O código diz qual OP; o produto diz o quê — é o que se confere.
+    name: ordem.productName,
+  };
+}
+
+/**
+ * Ordens de Produção — seletor da Rastreabilidade por OP (R-06).
+ *
+ * Substitui `listProductionOrders({ pageSize: 100 })` num `<select>`: da OP
+ * 101 em diante a genealogia deixava de ser consultável pela tela, sem aviso.
+ * A primeira página é a das OPs mais recentes; o resto é busca no servidor,
+ * por código da OP ou produto, em qualquer status — rastrear é olhar para
+ * trás, e OP concluída é justamente a que mais se consulta.
+ */
+export const ordemDeProducaoFilterSource: EntityFilterSource = {
+  inicial: async () =>
+    (await listProductionOrders({ pageSize: PAGINA })).productionOrders.map(opcaoDeOrdemDeProducao),
+  buscar: async (termo) =>
+    (await listProductionOrders({ search: termo, pageSize: PAGINA })).productionOrders.map(
+      opcaoDeOrdemDeProducao,
+    ),
+  porId: async (id) => {
+    try {
+      return opcaoDeOrdemDeProducao(await getProductionOrder(id));
+    } catch {
+      // OP que não existe mais: a consulta vale, só o rótulo fica ausente.
       return null;
     }
   },
