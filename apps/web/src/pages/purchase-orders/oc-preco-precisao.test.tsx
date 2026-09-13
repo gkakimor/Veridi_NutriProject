@@ -9,9 +9,10 @@ import type { PurchaseOrderDTO } from "@veridi/shared";
  *
  * A coluna guarda oito casas desde o PREC-MIG-P. O risco que sobra é o da
  * tela: um campo que devolve ao servidor o que a máscara mostrou grava
- * `4,0532` no lugar de `4,05318764` sem que ninguém tenha editado nada, e o
- * número parece certo. Abrir, não editar e salvar tem de preservar o valor
- * exato, casa por casa.
+ * `4,0532` no lugar de `4,05318764` sem que ninguém tenha editado o preço, e o
+ * número parece certo. Salvar outra alteração sem tocar no preço tem de
+ * preservar o valor exato, casa por casa. (Sem alteração nenhuma o botão nem
+ * acorda — SAVE-FLOW-HARDENING-01.)
  *
  * A leitura formatada continua sendo leitura: a OC confirmada mostra o preço
  * com as casas do formatter (apresentação), e isso não é o que se persiste.
@@ -106,6 +107,7 @@ function abrir(dto = ordem()) {
 
 const precoDe = (codigo: string) =>
   screen.getByRole("textbox", { name: `Preço unitário de ${codigo}` }) as HTMLInputElement;
+const observacoes = () => document.getElementById("po-notes") as HTMLTextAreaElement;
 
 function payloadDoSalvamento() {
   return vi.mocked(updatePurchaseOrder).mock.calls[0]![1] as {
@@ -126,12 +128,15 @@ describe("preço unitário da OC preserva a casa oculta na tela", () => {
     expect(precoDe("MP-000001").value).not.toBe("4.0532");
   });
 
-  it("abrir, não editar e salvar devolve 4,05318764 — nunca 4,0532", async () => {
+  it("salvar sem tocar no preço devolve 4,05318764 — nunca 4,0532", async () => {
     const user = userEvent.setup();
     abrir();
     await screen.findByRole("heading", { level: 1, name: "OC-000001" });
+    await waitFor(() => expect(precoDe("MP-000001").value).toBe(PRECO_8_CASAS));
     vi.mocked(updatePurchaseOrder).mockResolvedValue(ordem());
 
+    // A alteração é outra: o preço chega ao salvamento como abriu.
+    fireEvent.change(observacoes(), { target: { value: "Entregar pela manhã" } });
     await user.click(screen.getByRole("button", { name: /Salvar rascunho/ }));
 
     await waitFor(() => expect(updatePurchaseOrder).toHaveBeenCalled());
@@ -152,6 +157,7 @@ describe("preço unitário da OC preserva a casa oculta na tela", () => {
     await waitFor(() => expect(rodape()).toContain("Total (prévia): R$ 40,53"));
     vi.mocked(updatePurchaseOrder).mockResolvedValue(ordem());
 
+    fireEvent.change(observacoes(), { target: { value: "Entregar pela manhã" } });
     await user.click(screen.getByRole("button", { name: /Salvar rascunho/ }));
 
     await waitFor(() => expect(updatePurchaseOrder).toHaveBeenCalled());

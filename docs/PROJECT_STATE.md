@@ -2594,7 +2594,7 @@ sem overflow, coluna fixa do Recebimento com a mesma largura; console limpo fora
 linha do Chromium do 400 controlado.
 
 Achados no BACKLOG, P3: SAVE-ENABLED-NO-DIRTY-01, BILLING-SHIPMENT-UNSAVED-GUARD-01
-e SAVE-THEN-COMMIT-STALE-01.
+e SAVE-THEN-COMMIT-STALE-01 — os três fechados em SAVE-FLOW-HARDENING-01.
 
 ## O teste devolve o calendário (TEST-ISOLATION-CALENDAR-01, 2026-09-13)
 
@@ -2789,6 +2789,47 @@ Achado (não corrigido, fora do escopo): estado atual e atenção calculam duas 
 custo incompleto, a falta de material e os pedidos aguardando expedição. No mesmo
 retrato o resultado é idêntico — resolver uma vez cortaria perto de metade das SQL em
 fila. Com latência de rede entre API e banco, cada 1 ms por SQL soma ~5 s nessa massa.
+
+## Salvar só com pendência, e a gravação vale por si (SAVE-FLOW-HARDENING-01, 2026-09-13)
+
+Fecha os três achados de SAVE-FEEDBACK-REMAINING-01. Só estado de tela: API,
+domínio, status, cálculo e migration intocados, e nenhum endpoint composto.
+
+**Pedido e OC.** "Salvar rascunho", "Salvar prazo e observações" e "Salvar
+previsão e observações" só acordam com a pendência que a guarda já calculava — a
+mesma variável prende a saída, acende a faixa e habilita o botão. No documento
+novo também: sem cliente ou fornecedor não há o que validar, e a primeira escolha
+acorda o botão (não é a exceção da Formulação). Recusa mantém a pendência.
+
+**Faturamento e Expedição sob a guarda.** Assinatura do que o salvar envia,
+normalizada por `lib/dirty-fields.ts`, com a referência zerada em toda leitura do
+servidor. Faturamento: referência externa, notas e preço das linhas sem preço
+acordado (a acordada muda por "Alterar preço de faturamento", que grava na hora).
+Expedição: notas e uma quantidade por lote reservado na forma do payload — vazio é
+zero, e o reservado exibido em seis casas é o reservado inteiro; o lote lido para
+conferir fica fora. Faixa "Alterações não salvas" e botão de salvar leem a mesma
+pendência, como na OC e na OP; a edição deixou de apagar a frase à mão — a
+pendência toma o lugar dela. `UI_BRAND.md` perdeu a exceção "tela sem guarda".
+
+**Gravar antes de agir.** Emitir o Faturamento, confirmar e conferir na Expedição
+seguem em duas chamadas; a tela relê a resposta da gravação antes da segunda (e
+cada conferência de um lote em várias linhas). Recusada a segunda, fica o gravado
+— preço e subtotal, linhas recriadas e entregas repartidas, conferência já feita
+— com o erro na tela, sem pendência e sem frase de sucesso.
+
+**Validação.** Web: 2 arquivos novos (21 testes, `fetch` falso com 409/500 pelo
+cliente HTTP real), 10 testes novos em Pedido e OC e 20 ajustados (os que salvavam
+sem alteração passaram a editar antes; "só com a resposta" provado desfazendo a
+edição durante a requisição e depois da recusa). 23 mutações, todas derrubadas.
+Gate focado: 66 arquivos (as quatro telas, Recebimento, guarda e suas waves,
+feedback, telas que as renderizam) e typecheck. Smoke Playwright 1440 e 390 (web
+do worktree contra a API dev, 74/74): Pedido PED-000002 e OC-001153 reais sem
+gravar; Faturamento e Expedição simulados em rascunho com gravação 200 e ação 409
+por interceptação; pergunta ao sair pela trilha, descanso ao desfazer, tela com o
+gravado depois da recusa, sem transbordo, nenhuma escrita real, console limpo fora
+os 409 simulados.
+
+Achado no BACKLOG, P3: CONFIRM-DISCARDS-DIRTY-01.
 
 ## Próxima prioridade
 

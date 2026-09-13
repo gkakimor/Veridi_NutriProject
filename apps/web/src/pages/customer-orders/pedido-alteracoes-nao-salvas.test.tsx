@@ -43,6 +43,14 @@ vi.mock("../../lib/shipments-api", () => ({
   reallocateReservationLine: vi.fn(),
   reserveAvailable: vi.fn(),
 }));
+/* O pedido confirmado mostra as entregas programadas; aqui elas nunca chegam. */
+vi.mock("../../lib/delivery-schedule-api", () => ({
+  getDeliverySchedule: () => new Promise(() => undefined),
+  createDeliverySchedule: vi.fn(),
+  cancelDeliverySchedule: vi.fn(),
+  rescheduleDelivery: vi.fn(),
+  prepareShipmentForDelivery: vi.fn(),
+}));
 
 import {
   createCustomerOrder,
@@ -338,6 +346,87 @@ describe("Pedido gravado — guarda de alterações não salvas", () => {
 
     fireEvent.change(observacoes(), { target: { value: "" } });
     await waitFor(() => expect(avisaAoFechar()).toBe(false));
+  });
+});
+
+/**
+ * SAVE-FLOW-HARDENING-01: o botão de salvar só acorda com a pendência da guarda.
+ *
+ * "Salvar rascunho" e "Salvar prazo e observações" seguiam clicáveis sem nada a
+ * gravar — `UI_BRAND.md` pede desabilitado, e a OP já fazia. A autoridade é a
+ * mesma pendência que prende a saída e acende a faixa: nenhum `dirty` paralelo.
+ */
+describe("Pedido — salvar só com alteração pendente", () => {
+  const salvarRascunho = () => screen.getByRole("button", { name: "Salvar rascunho" });
+  const salvarPrazo = () => screen.getByRole("button", { name: "Salvar prazo e observações" });
+
+  it("novo e não tocado: nada a gravar; escolher o cliente acorda o botão", async () => {
+    await abrirNovo();
+
+    expect(salvarRascunho()).toBeDisabled();
+    await escolherCliente();
+    expect(salvarRascunho()).toBeEnabled();
+  });
+
+  it("gravado: sem alteração desabilitado, alterar habilita, salvar desabilita de novo", async () => {
+    vi.mocked(updateCustomerOrder).mockResolvedValue(pedido({ notes: "Conferir com o cliente" }));
+    await abrirGravado();
+
+    expect(salvarRascunho()).toBeDisabled();
+    expect(screen.queryByText("Alterações não salvas")).toBeNull();
+
+    fireEvent.change(observacoes(), { target: { value: "Conferir com o cliente" } });
+    expect(salvarRascunho()).toBeEnabled();
+    expect(screen.getByText("Alterações não salvas")).toBeInTheDocument();
+
+    fireEvent.click(salvarRascunho());
+
+    expect(await screen.findByText("Rascunho salvo.")).toBeInTheDocument();
+    expect(salvarRascunho()).toBeDisabled();
+    expect(updateCustomerOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it("desfazer a alteração — ou reescrever o mesmo decimal — devolve o botão ao descanso", async () => {
+    await abrirGravado();
+
+    fireEvent.change(quantidade(), { target: { value: "12" } });
+    expect(salvarRascunho()).toBeEnabled();
+    fireEvent.change(quantidade(), { target: { value: "10,0" } });
+
+    expect(salvarRascunho()).toBeDisabled();
+  });
+
+  it("recusa ao salvar: a edição continua pendente, e o botão também", async () => {
+    vi.mocked(updateCustomerOrder).mockRejectedValue(new Error("Cliente inativo não recebe pedido."));
+    await abrirGravado();
+
+    fireEvent.change(quantidade(), { target: { value: "12" } });
+    fireEvent.click(salvarRascunho());
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Cliente inativo não recebe pedido.");
+    expect(quantidade()).toHaveValue("12");
+    expect(screen.getByText("Alterações não salvas")).toBeInTheDocument();
+    expect(screen.queryByText("Rascunho salvo.")).toBeNull();
+    expect(salvarRascunho()).toBeEnabled();
+  });
+
+  it("confirmado: Salvar prazo e observações segue a mesma pendência", async () => {
+    vi.mocked(getCustomerOrder).mockResolvedValue(pedido({ status: "CONFIRMED" }));
+    vi.mocked(updateCustomerOrder).mockResolvedValue(
+      pedido({ status: "CONFIRMED", notes: "Entregar pela manhã" }),
+    );
+    montar(["/comercial/pedidos/co-1"]);
+    await screen.findByRole("button", { name: "Salvar prazo e observações" });
+
+    expect(salvarPrazo()).toBeDisabled();
+    fireEvent.change(observacoes(), { target: { value: "Entregar pela manhã" } });
+    expect(salvarPrazo()).toBeEnabled();
+
+    fireEvent.click(salvarPrazo());
+
+    expect(await screen.findByText("Prazo e observações salvos.")).toBeInTheDocument();
+    expect(salvarPrazo()).toBeDisabled();
+    expect(vi.mocked(updateCustomerOrder).mock.calls[0]![1]).toEqual({ notes: "Entregar pela manhã" });
   });
 });
 

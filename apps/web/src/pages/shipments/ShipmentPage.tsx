@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
+import { assinaturaDoDocumento, decimalComparavel, textoComparavel } from "../../lib/dirty-fields";
 import type {
   ShipmentDTO,
   ShipmentLineDTO,
@@ -181,6 +183,19 @@ function previaDoProduto(
     linhas: legiveis,
   });
   return { ...previa, ilegiveis };
+}
+
+/**
+ * A quantidade de um lote como "Salvar separação" a enviaria, em forma
+ * comparável: vazio vai como zero, e digitar o reservado exibido é pedir o
+ * reservado inteiro — o mesmo número que o servidor devolve depois. Ilegível e
+ * acima do teto ficam como digitados, e contam como pendência.
+ */
+function quantidadeComparavel(digitado: string | undefined, reservedRemaining: string): string | null {
+  const resolvido = resolverQuantidadeContraLimite(digitado ?? "", reservedRemaining);
+  if (resolvido.status === "ok") return decimalComparavel(resolvido.valorCanonico);
+  if (resolvido.status === "vazio") return decimalComparavel("0");
+  return decimalComparavel(digitado);
 }
 
 interface ProductGroupProps {
@@ -477,9 +492,9 @@ export function ShipmentPage() {
   const [acaoEmCurso, setAcaoEmCurso] = useState<"separacao" | "confirmar" | "cancelar" | null>(null);
   const saving = acaoEmCurso !== null;
   /*
-   * O que a última gravação confirmou. A tela não tem pendência calculada, então
-   * a frase sai na próxima edição ou na próxima ação — nunca fica afirmando
-   * "salva" sobre uma separação que já mudou.
+   * O que a última gravação confirmou. Enquanto a separação difere da gravada
+   * a pendência da guarda toma o lugar dela — nunca fica afirmando "salva"
+   * sobre uma separação que já mudou —, e a próxima ação a apaga.
    */
   const [feito, setFeito] = useState<string | null>(null);
 
@@ -497,7 +512,17 @@ export function ShipmentPage() {
   const [lotErrors, setLotErrors] = useState<Record<string, string>>({});
   const lotInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
+  /**
+   * A assinatura da separação de referência — o que sair daqui não se perde.
+   *
+   * `null` é "retome na próxima renderização": toda leitura do servidor passa
+   * por `syncFromServer` — carregar, salvar, conferir, confirmar, cancelar —,
+   * então o que já foi gravado nunca fica contando como pendência.
+   */
+  const baseline = useRef<string | null>(null);
+
   const syncFromServer = useCallback((next: ShipmentDTO) => {
+    baseline.current = null;
     setShipment(next);
     setNotes(next.notes ?? "");
     /* Uma reserva pode ter mais de uma linha quando a quantidade atravessa
@@ -524,6 +549,27 @@ export function ShipmentPage() {
   }, [id, syncFromServer]);
 
   const isDraft = shipment?.status === "DRAFT";
+
+  /**
+   * A separação como ela está na tela, em forma comparável.
+   *
+   * Só o que "Salvar separação" envia: uma quantidade por lote reservado e as
+   * notas. O lote digitado para conferir fica fora — é o pedido de uma ação
+   * que grava sozinha, não parte do documento —, e conferir, confirmar e
+   * cancelar releem do servidor, então o que já foi gravado não pesa.
+   */
+  const assinaturaAtual = assinaturaDoDocumento({
+    notes: textoComparavel(notes),
+    lotes: agruparPorReserva(shipment?.lines ?? []).map((lote) => ({
+      reserva: lote.reservationLineId,
+      quantidade: quantidadeComparavel(quantities[lote.reservationLineId], lote.reservedRemaining),
+    })),
+  });
+  if (baseline.current === null) baseline.current = assinaturaAtual;
+  /* Confirmada e cancelada não editam nada. A mesma pendência prende a saída,
+     acende a faixa e acorda o botão de salvar. */
+  const alteracaoPendente = isDraft && baseline.current !== assinaturaAtual;
+  useUnsavedChangesGuard({ isDirty: alteracaoPendente, substantivo: "expedição", genero: "a" });
 
   /* As três gravações da expedição montam a mesma lista, e ela precisa ser a
      mesma conta: quem digitou o reservado que a tela mostra está expedindo a
@@ -577,10 +623,14 @@ export function ShipmentPage() {
     try {
       // Confirma o que está na tela antes de efetivar a saída física.
       if (shipment) {
-        await updateShipment(id, {
+        const salva = await updateShipment(id, {
           notes: notes.trim(),
           lines: linhasParaEnvio(),
         });
+        /* A gravação vale por si, e recria as linhas no servidor. Se confirmar
+           for recusado, a tela fica com a separação gravada — e não com as
+           linhas lidas antes do salvamento. */
+        syncFromServer(salva);
       }
       const confirmed = await confirmShipment(id);
       syncFromServer(confirmed);
@@ -625,6 +675,9 @@ export function ShipmentPage() {
         notes: notes.trim(),
         lines: linhasParaEnvio(),
       });
+      /* A gravação vale por si: com lote errado, a tela fica com a separação
+         que o servidor guardou (e recriou), não com a de antes. */
+      syncFromServer(saved);
       /* Conferir é do LOTE. Quando a quantidade dele atravessa entregas
          programadas ele tem mais de uma linha, e conferir só a primeira
          deixaria a expedição sem confirmar por uma linha invisível. */
@@ -632,16 +685,14 @@ export function ShipmentPage() {
         (current) => current.customerOrderReservationLineId === reservationLineId,
       );
       if (alvos.length === 0) {
-        syncFromServer(saved);
         setError("Esta linha não está mais na separação — informe a quantidade antes de conferir.");
         return;
       }
 
-      let verified = saved;
       for (const alvo of alvos) {
-        verified = await verifyShipmentLine(id, alvo.id, { lotCode });
+        // Cada conferência também vale por si: a tela acompanha a que já gravou.
+        syncFromServer(await verifyShipmentLine(id, alvo.id, { lotCode }));
       }
-      syncFromServer(verified);
       setLotInputs((prev) => ({ ...prev, [reservationLineId]: "" }));
     } catch (err) {
       // Lote errado: mensagem real do backend, junto do campo, e o que foi
@@ -887,10 +938,9 @@ export function ShipmentPage() {
               isDraft={isDraft}
               shipmentStatus={shipment.status}
               quantities={quantities}
-              onQuantityChange={(reservationLineId, value) => {
-                setQuantities((prev) => ({ ...prev, [reservationLineId]: value }));
-                setFeito(null);
-              }}
+              onQuantityChange={(reservationLineId, value) =>
+                setQuantities((prev) => ({ ...prev, [reservationLineId]: value }))
+              }
               lotInputs={lotInputs}
               onLotInputChange={(reservationLineId, value) =>
                 setLotInputs((prev) => ({ ...prev, [reservationLineId]: value }))
@@ -918,10 +968,7 @@ export function ShipmentPage() {
               rows={3}
               disabled={!isDraft}
               value={notes}
-              onChange={(event) => {
-                setNotes(event.target.value);
-                setFeito(null);
-              }}
+              onChange={(event) => setNotes(event.target.value)}
             />
           </div>
         </FormSection>
@@ -1022,14 +1069,30 @@ export function ShipmentPage() {
         )}
 
         <div className="doc-actions__primary">
-          {feito && (
-            <span className="form-status" role="status">
-              {feito}
+          {/* Pendência antes de confirmação, e a pendência é a MESMA da guarda
+              de saída — nunca uma conta paralela. */}
+          {alteracaoPendente ? (
+            <span className="form-status form-status--dirty" role="status">
+              Alterações não salvas
             </span>
+          ) : (
+            feito && (
+              <span className="form-status" role="status">
+                {feito}
+              </span>
+            )
           )}
           {isDraft && (
             <>
-              <button type="button" className="btn btn--secondary" disabled={saving} onClick={handleSave}>
+              {/* Sem alteração pendente não há o que gravar: o botão só acorda
+                  com a pendência da guarda. Conferir e confirmar continuam
+                  gravando antes. */}
+              <button
+                type="button"
+                className="btn btn--secondary"
+                disabled={saving || !alteracaoPendente}
+                onClick={handleSave}
+              >
                 {acaoEmCurso === "separacao" ? "Salvando…" : "Salvar separação"}
               </button>
               <button
