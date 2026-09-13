@@ -3139,6 +3139,44 @@ do retrato os `findUnique` não se compactam — DASHBOARD-COST-BATCH-01.
 `instanteComercial`, `minutoDoDiaComercial` e `limitesDoDiaComercial` ainda criam
 formatador por chamada — TZ-FORMATTER-REUSE-01. Os dois no BACKLOG, P3.
 
+## Busca e data digitadas nos Relatórios (REPORTS-SEARCH-UX-01, 2026-09-13)
+
+Fecha os achados de consulta de SMALL-UX-CLEANUP-WAVE-01. Só web: sem API, sem filtro
+do servidor, sem fórmula, sem migration.
+
+**Digitação.** Busca (17 telas) e De/até (8) passam por `useFiltrosDigitados`
+(`pages/reports`): o campo mostra cada tecla; consulta, recusa do período, CSV e PDF
+leem o APLICADO, que recebe o digitado quando a digitação para por 300 ms — o mesmo
+valor das buscas das listagens — ou no Enter. Um timer por tela (De e até em sequência
+saem juntos), página 1 no mesmo render que aplica, valor que volta ao aplicado antes da
+pausa não consulta, desmontar limpa o timer. Seletor e checkbox seguem imediatos.
+Durante a pausa a tela é a do filtro aplicado; aplicado, vale o "Carregando…" de
+SMALL-UX. Medido no Chromium pt-BR (main × worktree, mesma API): "abc" rápido 3 → 1
+consulta e 3 → 1 "Carregando…"; 01/09/2026 digitado no De do R-03 8 → 1 (passava por
+ponta aberta e anos 0002/0020/0202, que o servidor recusa com 400); 10/09/2026 no até
+7 → 1, recusa piscando 1 → 0.
+
+**CSV e PDF.** Com digitação pendente não se oferecem (`filtersPending` do
+`ReportPage`, como na recusa do período): o arquivo nunca sai com "ab" diante de "abc".
+
+**Erro.** Consulta que falha mostra o alerta e a tabela não diz mais "nenhum registro"
+(contexto de erro no `ReportTable`); resposta vazia de verdade continua dizendo.
+
+**Validação.** Web: `relatorios-busca-digitada.test.tsx` (38, relógio falso: rápida,
+lenta, Enter, página, fora de ordem, primeira carga, erro, data digitada com os valores
+medidos no Chromium, até invertido, CSV/PDF, desmontar, 17 + 8 telas, guarda
+estrutural); consulta-em-curso, período invertido, página ao filtrar e dia comercial
+passam a deixar a pausa passar (ou Enter). 10 mutações, todas derrubadas. Focados
+Relatórios + conteúdo do PDF; typecheck. Smoke (web do worktree contra a API dev, 500
+simulado por `route`, nada gravado) em 1440 e 390: 68/68 — sem transbordo com
+digitação pendente, carregando, erro, vazio e recusa; console limpo além da linha do
+500 simulado.
+
+**Achados.** `DateRangeFilter` das listagens aplica a cada `change`: a mesma data
+digitada consulta os valores do meio nas listas; dia mal formado que PARA no campo
+(ano 0002) ainda vai ao servidor e volta como "Não foi possível carregar o relatório:
+Data inválida", sem recusa da própria tela.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

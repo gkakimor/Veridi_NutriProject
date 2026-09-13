@@ -15,6 +15,7 @@ import {
 } from "../../lib/reports-api";
 import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
+import { useFiltrosDigitados } from "./useFiltrosDigitados";
 import { ariaDoPeriodoRecusado, diaDoRelatorio, emDias, JANELAS_DE_VENCIMENTO } from "./report-period";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate, formatDateTime } from "../../lib/dates";
@@ -29,11 +30,12 @@ function lotStatusLabel(status: LotStatus | null, isExpired: boolean): string {
 
 /** R-01 — Posição de Estoque. */
 export function InventoryPositionReportPage() {
-  const [search, setSearch] = useState("");
   const [itemType, setItemType] = useState("");
   const [status, setStatus] = useState("");
   const [onlyWithBalance, setOnlyWithBalance] = useState(true);
   const [page, setPage] = useState(1);
+  const digitados = useFiltrosDigitados({ search: "" }, setPage);
+  const { search } = digitados.aplicados;
 
   const filters = useMemo(
     () => ({ search, itemType, status, onlyWithBalance, page, pageSize: PAGE_SIZE }),
@@ -51,18 +53,11 @@ export function InventoryPositionReportPage() {
       subtitle="Saldo atual por item e lote, sempre calculado a partir das movimentações."
       loading={loading}
       error={error}
+      filtersPending={digitados.pendente}
       filters={
         <>
           <div className="toolbar__search">
-            <input
-              type="search"
-              placeholder="Buscar por código ou nome do item…"
-              value={search}
-              onChange={(event) => {
-                setPage(1);
-                setSearch(event.target.value);
-              }}
-            />
+            <input type="search" placeholder="Buscar por código ou nome do item…" {...digitados.campo("search")} />
           </div>
           <select
             aria-label="Tipo de item"
@@ -156,10 +151,9 @@ export function InventoryPositionReportPage() {
 /** R-02 — Vencimentos. */
 export function ExpiryReportPage() {
   const [window, setWindow] = useState("D30");
-  const [search, setSearch] = useState("");
-  const [from, setFrom] = useState(diaDoRelatorio(0));
-  const [to, setTo] = useState(diaDoRelatorio(60));
   const [page, setPage] = useState(1);
+  const digitados = useFiltrosDigitados({ search: "", from: diaDoRelatorio(0), to: diaDoRelatorio(60) }, setPage);
+  const { search, from, to } = digitados.aplicados;
 
   const filters = useMemo(
     () => ({
@@ -186,6 +180,7 @@ export function ExpiryReportPage() {
       loading={loading}
       error={error}
       periodRefusal={periodoRecusado}
+      filtersPending={digitados.pendente}
       filters={
         <>
           <select
@@ -208,36 +203,20 @@ export function ExpiryReportPage() {
               <input
                 id="expiry-from"
                 type="date"
-                value={from}
+                {...digitados.campo("from")}
                 {...ariaDoPeriodoRecusado(periodoRecusado)}
-                onChange={(event) => {
-                  setPage(1);
-                  setFrom(event.target.value);
-                }}
               />
               <label htmlFor="expiry-to">até</label>
               <input
                 id="expiry-to"
                 type="date"
-                value={to}
+                {...digitados.campo("to")}
                 {...ariaDoPeriodoRecusado(periodoRecusado)}
-                onChange={(event) => {
-                  setPage(1);
-                  setTo(event.target.value);
-                }}
               />
             </>
           )}
           <div className="toolbar__search">
-            <input
-              type="search"
-              placeholder="Buscar por item ou lote…"
-              value={search}
-              onChange={(event) => {
-                setPage(1);
-                setSearch(event.target.value);
-              }}
-            />
+            <input type="search" placeholder="Buscar por item ou lote…" {...digitados.campo("search")} />
           </div>
         </>
       }
@@ -301,11 +280,10 @@ const MOVEMENT_DOCUMENT_PATHS: Record<string, string> = {
 
 /** R-03 — Movimentações. */
 export function MovementsReportPage() {
-  const [search, setSearch] = useState("");
   const [type, setType] = useState("");
-  const [from, setFrom] = useState(diaDoRelatorio(-29));
-  const [to, setTo] = useState(diaDoRelatorio(0));
   const [page, setPage] = useState(1);
+  const digitados = useFiltrosDigitados({ search: "", from: diaDoRelatorio(-29), to: diaDoRelatorio(0) }, setPage);
+  const { search, from, to } = digitados.aplicados;
 
   const filters = useMemo(
     () => ({
@@ -332,30 +310,13 @@ export function MovementsReportPage() {
       loading={loading}
       error={error}
       periodRefusal={periodoRecusado}
+      filtersPending={digitados.pendente}
       filters={
         <>
           <label htmlFor="mov-from">De</label>
-          <input
-            id="mov-from"
-            type="date"
-            value={from}
-            {...ariaDoPeriodoRecusado(periodoRecusado)}
-            onChange={(event) => {
-              setPage(1);
-              setFrom(event.target.value);
-            }}
-          />
+          <input id="mov-from" type="date" {...digitados.campo("from")} {...ariaDoPeriodoRecusado(periodoRecusado)} />
           <label htmlFor="mov-to">até</label>
-          <input
-            id="mov-to"
-            type="date"
-            value={to}
-            {...ariaDoPeriodoRecusado(periodoRecusado)}
-            onChange={(event) => {
-              setPage(1);
-              setTo(event.target.value);
-            }}
-          />
+          <input id="mov-to" type="date" {...digitados.campo("to")} {...ariaDoPeriodoRecusado(periodoRecusado)} />
           <select
             aria-label="Tipo de movimento"
             value={type}
@@ -372,15 +333,7 @@ export function MovementsReportPage() {
             ))}
           </select>
           <div className="toolbar__search">
-            <input
-              type="search"
-              placeholder="Buscar por item ou lote…"
-              value={search}
-              onChange={(event) => {
-                setPage(1);
-                setSearch(event.target.value);
-              }}
-            />
+            <input type="search" placeholder="Buscar por item ou lote…" {...digitados.campo("search")} />
           </div>
         </>
       }

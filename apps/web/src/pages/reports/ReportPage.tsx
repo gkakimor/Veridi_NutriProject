@@ -26,6 +26,12 @@ const ReportLoadingContext = createContext(false);
 const ReportPeriodRefusedContext = createContext(false);
 
 /**
+ * Consulta que falhou, lida pela tabela: sem resposta, tabela sem linhas não é
+ * "nenhum registro" — o alerta diz o que houve (REPORTS-SEARCH-UX-01).
+ */
+const ReportErrorContext = createContext(false);
+
+/**
  * Estrutura comum dos relatórios: título, filtros, resumo e tabela — nesta
  * ordem, semanticamente limpa, para a futura impressão/PDF ser um recorte
  * direto da página. Não é um framework de relatórios: é só o esqueleto que
@@ -45,6 +51,7 @@ export function ReportPage({
   printFilters,
   total,
   periodRefusal = null,
+  filtersPending = false,
   children,
 }: {
   title: string;
@@ -57,6 +64,12 @@ export function ReportPage({
    * o mesmo período ao servidor — não se oferecem.
    */
   periodRefusal?: string | null;
+  /**
+   * Texto digitado ainda não aplicado (`useFiltrosDigitados`). CSV e PDF levam o
+   * filtro APLICADO: enquanto o campo mostra um valor que a consulta ainda não
+   * recebeu, eles não se oferecem — o arquivo não sai com "ab" diante de "abc".
+   */
+  filtersPending?: boolean;
   /** Filtros realmente aplicados — impressos no cabeçalho do papel. */
   appliedFilters?: { label: string; value: string }[];
   summary?: ReactNode;
@@ -80,6 +93,7 @@ export function ReportPage({
     if (value !== undefined && value !== "") printParams.set(key, String(value));
   }
   const printQuery = printParams.toString() ? `?${printParams.toString()}` : "";
+  const semExportacao = periodRefusal !== null || filtersPending;
 
   return (
     <>
@@ -90,14 +104,12 @@ export function ReportPage({
           <p className="page__subtitle">{subtitle}</p>
         </div>
         <div className="table__actions">
-          {csvPath && (
-            <ExportCsvButton path={csvPath} filters={csvFilters ?? {}} disabled={periodRefusal !== null} />
-          )}
+          {csvPath && <ExportCsvButton path={csvPath} filters={csvFilters ?? {}} disabled={semExportacao} />}
           {reportCode && (
             <button
               type="button"
               className="btn btn--secondary btn--sm"
-              disabled={periodRefusal !== null}
+              disabled={semExportacao}
               // O PDF nasce em rota dedicada: a tela operacional nunca vai
               // para o papel.
               onClick={() => navigate(`/print/relatorios/${reportCode}${printQuery}`)}
@@ -160,7 +172,9 @@ export function ReportPage({
       {summary && <div className="report-summary">{summary}</div>}
 
       <ReportPeriodRefusedContext.Provider value={periodRefusal !== null}>
-        <ReportLoadingContext.Provider value={loading}>{children}</ReportLoadingContext.Provider>
+        <ReportErrorContext.Provider value={error !== null}>
+          <ReportLoadingContext.Provider value={loading}>{children}</ReportLoadingContext.Provider>
+        </ReportErrorContext.Provider>
       </ReportPeriodRefusedContext.Provider>
     </>
   );
@@ -217,6 +231,7 @@ export function ReportTable({
 }) {
   const loading = useContext(ReportLoadingContext);
   const periodoRecusado = useContext(ReportPeriodRefusedContext);
+  const falhou = useContext(ReportErrorContext);
   const isEmpty = Array.isArray(rows) ? rows.length === 0 : rows === null;
   return (
     <div className="table-container" aria-busy={loading || undefined}>
@@ -233,7 +248,7 @@ export function ReportTable({
         </thead>
         <tbody>
           {rows}
-          {isEmpty && !loading && (
+          {isEmpty && !loading && !falhou && (
             <tr>
               <td colSpan={columns.length} className="table__empty">
                 {periodoRecusado ? TABELA_COM_PERIODO_RECUSADO : emptyMessage}

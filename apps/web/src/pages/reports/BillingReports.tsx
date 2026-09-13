@@ -21,6 +21,7 @@ import {
   ReportTable,
 } from "./ReportPage";
 import { useReport } from "./useReport";
+import { useFiltrosDigitados } from "./useFiltrosDigitados";
 import { ariaDoPeriodoRecusado, diaDoRelatorio, emDias } from "./report-period";
 import { formatBRL } from "../../lib/currency";
 import { EntityLink } from "../../components/EntityLink";
@@ -56,11 +57,10 @@ function CustomerFilter({
 
 /** R-15 — Faturamento por período. */
 export function BillingPeriodReportPage() {
-  const [search, setSearch] = useState("");
   const [customerId, setCustomerId] = useState("");
-  const [from, setFrom] = useState(diaDoRelatorio(-29));
-  const [to, setTo] = useState(diaDoRelatorio(0));
   const [page, setPage] = useState(1);
+  const digitados = useFiltrosDigitados({ search: "", from: diaDoRelatorio(-29), to: diaDoRelatorio(0) }, setPage);
+  const { search, from, to } = digitados.aplicados;
 
   const filters = useMemo(
     () => ({
@@ -87,6 +87,7 @@ export function BillingPeriodReportPage() {
       loading={loading}
       error={error}
       periodRefusal={periodoRecusado}
+      filtersPending={digitados.pendente}
       summary={
         // Sem documento no recorte, não há valor a completar: "Valores
         // incompletos" apontaria um preço faltando que não existe. O vazio é
@@ -110,27 +111,9 @@ export function BillingPeriodReportPage() {
       filters={
         <>
           <label htmlFor="bill-from">De</label>
-          <input
-            id="bill-from"
-            type="date"
-            value={from}
-            {...ariaDoPeriodoRecusado(periodoRecusado)}
-            onChange={(event) => {
-              setPage(1);
-              setFrom(event.target.value);
-            }}
-          />
+          <input id="bill-from" type="date" {...digitados.campo("from")} {...ariaDoPeriodoRecusado(periodoRecusado)} />
           <label htmlFor="bill-to">até</label>
-          <input
-            id="bill-to"
-            type="date"
-            value={to}
-            {...ariaDoPeriodoRecusado(periodoRecusado)}
-            onChange={(event) => {
-              setPage(1);
-              setTo(event.target.value);
-            }}
-          />
+          <input id="bill-to" type="date" {...digitados.campo("to")} {...ariaDoPeriodoRecusado(periodoRecusado)} />
           <CustomerFilter
             id="bill-customer"
             value={customerId}
@@ -143,11 +126,7 @@ export function BillingPeriodReportPage() {
             <input
               type="search"
               placeholder="Buscar por faturamento, pedido ou expedição…"
-              value={search}
-              onChange={(event) => {
-                setPage(1);
-                setSearch(event.target.value);
-              }}
+              {...digitados.campo("search")}
             />
           </div>
         </>
@@ -197,9 +176,10 @@ export function BillingPeriodReportPage() {
 
 /** R-16 — Aguardando faturamento. */
 export function AwaitingBillingReportPage() {
-  const [search, setSearch] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [page, setPage] = useState(1);
+  const digitados = useFiltrosDigitados({ search: "" }, setPage);
+  const { search } = digitados.aplicados;
 
   const filters = useMemo(
     () => ({ search, customerId, page, pageSize: PAGE_SIZE }),
@@ -217,6 +197,7 @@ export function AwaitingBillingReportPage() {
       subtitle="Expedições confirmadas ainda sem faturamento emitido — mais antiga primeiro."
       loading={loading}
       error={error}
+      filtersPending={digitados.pendente}
       filters={
         <>
           <CustomerFilter
@@ -228,15 +209,7 @@ export function AwaitingBillingReportPage() {
             }}
           />
           <div className="toolbar__search">
-            <input
-              type="search"
-              placeholder="Buscar por expedição, pedido ou cliente…"
-              value={search}
-              onChange={(event) => {
-                setPage(1);
-                setSearch(event.target.value);
-              }}
-            />
+            <input type="search" placeholder="Buscar por expedição, pedido ou cliente…" {...digitados.campo("search")} />
           </div>
         </>
       }
@@ -284,10 +257,11 @@ export function AwaitingBillingReportPage() {
 
 /** R-17 — Pedido x Entregue x Faturado. */
 export function OrderDeliveredBilledReportPage() {
-  const [search, setSearch] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
+  const digitados = useFiltrosDigitados({ search: "" }, setPage);
+  const { search } = digitados.aplicados;
 
   const filters = useMemo(
     () => ({ search, customerId, status, page, pageSize: PAGE_SIZE }),
@@ -305,6 +279,7 @@ export function OrderDeliveredBilledReportPage() {
       subtitle="Expedido conta só Expedições confirmadas; faturado conta só Faturamentos emitidos."
       loading={loading}
       error={error}
+      filtersPending={digitados.pendente}
       filters={
         <>
           <CustomerFilter
@@ -331,15 +306,7 @@ export function OrderDeliveredBilledReportPage() {
             ))}
           </select>
           <div className="toolbar__search">
-            <input
-              type="search"
-              placeholder="Buscar por pedido ou cliente…"
-              value={search}
-              onChange={(event) => {
-                setPage(1);
-                setSearch(event.target.value);
-              }}
-            />
+            <input type="search" placeholder="Buscar por pedido ou cliente…" {...digitados.campo("search")} />
           </div>
         </>
       }

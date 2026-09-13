@@ -17,6 +17,7 @@ import { clienteFilterSource, pedidoFilterSource } from "../../lib/filter-source
 import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
+import { useFiltrosDigitados } from "./useFiltrosDigitados";
 import { ariaDoPeriodoRecusado, diaDoRelatorio } from "./report-period";
 import { formatBRL } from "../../lib/currency";
 import { EntityLink } from "../../components/EntityLink";
@@ -44,12 +45,11 @@ function CustomerFilter({ value, onChange }: { value: string; onChange: (value: 
 
 /** R-12 — Pedidos do Cliente. */
 export function CustomerOrdersReportPage() {
-  const [search, setSearch] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [status, setStatus] = useState("");
-  const [from, setFrom] = useState(diaDoRelatorio(-89));
-  const [to, setTo] = useState(diaDoRelatorio(0));
   const [page, setPage] = useState(1);
+  const digitados = useFiltrosDigitados({ search: "", from: diaDoRelatorio(-89), to: diaDoRelatorio(0) }, setPage);
+  const { search, from, to } = digitados.aplicados;
 
   const filters = useMemo(
     () => ({
@@ -77,30 +77,13 @@ export function CustomerOrdersReportPage() {
       loading={loading}
       error={error}
       periodRefusal={periodoRecusado}
+      filtersPending={digitados.pendente}
       filters={
         <>
           <label htmlFor="co-from">De</label>
-          <input
-            id="co-from"
-            type="date"
-            value={from}
-            {...ariaDoPeriodoRecusado(periodoRecusado)}
-            onChange={(event) => {
-              setPage(1);
-              setFrom(event.target.value);
-            }}
-          />
+          <input id="co-from" type="date" {...digitados.campo("from")} {...ariaDoPeriodoRecusado(periodoRecusado)} />
           <label htmlFor="co-to">até</label>
-          <input
-            id="co-to"
-            type="date"
-            value={to}
-            {...ariaDoPeriodoRecusado(periodoRecusado)}
-            onChange={(event) => {
-              setPage(1);
-              setTo(event.target.value);
-            }}
-          />
+          <input id="co-to" type="date" {...digitados.campo("to")} {...ariaDoPeriodoRecusado(periodoRecusado)} />
           <CustomerFilter
             value={customerId}
             onChange={(value) => {
@@ -124,15 +107,7 @@ export function CustomerOrdersReportPage() {
             ))}
           </select>
           <div className="toolbar__search">
-            <input
-              type="search"
-              placeholder="Buscar por pedido ou cliente…"
-              value={search}
-              onChange={(event) => {
-                setPage(1);
-                setSearch(event.target.value);
-              }}
-            />
+            <input type="search" placeholder="Buscar por pedido ou cliente…" {...digitados.campo("search")} />
           </div>
         </>
       }
@@ -178,10 +153,11 @@ export function CustomerOrdersReportPage() {
 
 /** R-13 — Atendimento dos Pedidos. */
 export function FulfillmentReportPage() {
-  const [search, setSearch] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
+  const digitados = useFiltrosDigitados({ search: "" }, setPage);
+  const { search } = digitados.aplicados;
 
   const filters = useMemo(
     () => ({ search, customerId, status, page, pageSize: PAGE_SIZE }),
@@ -199,6 +175,7 @@ export function FulfillmentReportPage() {
       subtitle="Por produto do pedido: reservado, produzido, expedido e faturado — conceitos distintos, nunca inferidos um do outro."
       loading={loading}
       error={error}
+      filtersPending={digitados.pendente}
       filters={
         <>
           <CustomerFilter
@@ -224,15 +201,7 @@ export function FulfillmentReportPage() {
             ))}
           </select>
           <div className="toolbar__search">
-            <input
-              type="search"
-              placeholder="Buscar por pedido ou cliente…"
-              value={search}
-              onChange={(event) => {
-                setPage(1);
-                setSearch(event.target.value);
-              }}
-            />
+            <input type="search" placeholder="Buscar por pedido ou cliente…" {...digitados.campo("search")} />
           </div>
         </>
       }

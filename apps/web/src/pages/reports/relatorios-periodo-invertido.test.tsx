@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { ComponentType } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 /**
@@ -18,6 +18,10 @@ import { MemoryRouter } from "react-router-dom";
  *
  * O servidor recusa o mesmo em `api lib/periodo-invertido.test.ts`; o PDF com a
  * frase do servidor está em `pdf/documents/report-content.test.tsx`.
+ *
+ * Data escolhida vale quando a digitação para (REPORTS-SEARCH-UX-01): cada
+ * mudança aqui deixa a pausa passar. Os valores do meio de uma data digitada,
+ * inclusive invertidos, estão em `relatorios-busca-digitada.test.tsx`.
  */
 
 vi.mock("../../lib/reports-api", () => ({
@@ -56,6 +60,7 @@ import { CustomerOrdersReportPage } from "./CommercialReports";
 import { ExpiryReportPage, MovementsReportPage } from "./InventoryReports";
 import { ConsumptionReportPage, PlannedActualReportPage } from "./ProductionReports";
 import { PurchaseOrdersReportPage, ReceiptsReportPage } from "./PurchasingReports";
+import { PAUSA_DA_DIGITACAO_MS } from "./useFiltrosDigitados";
 
 type Filtros = Record<string, unknown>;
 type Consulta = (filters: Filtros) => Promise<unknown>;
@@ -100,7 +105,15 @@ function chamadas(consulta: unknown): Filtros[] {
 
 const campoDe = () => screen.getByLabelText("De") as HTMLInputElement;
 const campoAte = () => screen.getByLabelText("até") as HTMLInputElement;
-const mudar = (campo: HTMLInputElement, valor: string) => () => fireEvent.change(campo, { target: { value: valor } });
+
+/** Escolhe a data e deixa a pausa da digitação passar. */
+function escolher(campo: HTMLInputElement, valor: string) {
+  fireEvent.change(campo, { target: { value: valor } });
+  act(() => {
+    vi.advanceTimersByTime(PAUSA_DA_DIGITACAO_MS);
+  });
+}
+const mudar = (campo: HTMLInputElement, valor: string) => () => escolher(campo, valor);
 
 /** Uma consulta nova, com estes filtros, e a resposta dela na tela. */
 async function umaConsulta(consulta: unknown, acao: () => void, esperado: Filtros) {
@@ -124,7 +137,8 @@ function linkDoCsv(): URL {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.useFakeTimers({ toFake: ["Date"] });
+  // `shouldAdvanceTime`: `findBy` precisa do relógio andando; a pausa, `escolher` adianta.
+  vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"], shouldAdvanceTime: true });
   vi.setSystemTime(AGORA);
   for (const tela of TELAS) {
     vi.mocked(tela.consulta as Consulta).mockImplementation(async (filters) => ({
@@ -171,7 +185,7 @@ describe("as seis perguntas do período, tela por tela", () => {
 
     // Inicial depois da final: nenhuma consulta, a frase, e nada que se leia como resposta.
     const antes = chamadas(consulta).length;
-    fireEvent.change(campoDe(), { target: { value: "2026-09-11" } });
+    escolher(campoDe(), "2026-09-11");
     expect(await screen.findByRole("alert")).toHaveTextContent(RECUSA);
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(chamadas(consulta)).toHaveLength(antes);
@@ -209,7 +223,7 @@ describe("R-02: as datas só são filtro na janela personalizada", () => {
 
     const antes = chamadas(getExpiryReport).length;
     fireEvent.change(campoDe(), { target: { value: "2026-12-31" } });
-    fireEvent.change(campoAte(), { target: { value: "2026-12-01" } });
+    escolher(campoAte(), "2026-12-01");
     expect(await screen.findByRole("alert")).toHaveTextContent(RECUSA);
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(chamadas(getExpiryReport)).toHaveLength(antes);

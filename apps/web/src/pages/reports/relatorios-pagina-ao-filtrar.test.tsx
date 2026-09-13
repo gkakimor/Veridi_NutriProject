@@ -1,8 +1,8 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { ComponentType } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 /**
@@ -14,10 +14,12 @@ import { MemoryRouter } from "react-router-dom";
  * página 6 do universo NOVO — que tem duas —, e a tabela vazia dizia "nenhum
  * registro no período" com trinta registros no servidor.
  *
- * O reinício mora no mesmo evento que muda o filtro, e não num efeito que
+ * O reinício mora no mesmo gesto que APLICA o filtro, e não num efeito que
  * observa o filtro: as duas atualizações saem num render só, e a primeira
  * consulta do novo recorte já é a da página 1 — sem a consulta da página 6
- * antes, nem uma segunda depois. Anterior/Próxima só mudam a página.
+ * antes, nem uma segunda depois. Seletor aplica no próprio evento; busca e
+ * datas, quando a digitação para (REPORTS-SEARCH-UX-01, `useFiltrosDigitados`),
+ * e cada mudança aqui deixa a pausa passar. Anterior/Próxima só mudam a página.
  *
  * "Incluir custo de material" (R-05) não muda o universo — só acrescenta uma
  * coluna às linhas da página — e por isso não reinicia.
@@ -59,6 +61,7 @@ import { CustomerOrdersReportPage } from "./CommercialReports";
 import { ExpiryReportPage, MovementsReportPage } from "./InventoryReports";
 import { ConsumptionReportPage, PlannedActualReportPage } from "./ProductionReports";
 import { PurchaseOrdersReportPage, ReceiptsReportPage } from "./PurchasingReports";
+import { PAUSA_DA_DIGITACAO_MS } from "./useFiltrosDigitados";
 
 type Filtros = Record<string, unknown>;
 type Consulta = (filters: Filtros) => Promise<unknown>;
@@ -144,8 +147,18 @@ async function umaConsulta(consulta: unknown, acao: () => void, esperado: Filtro
 const proxima = () => fireEvent.click(screen.getByRole("button", { name: "Próxima" }));
 const anterior = () => fireEvent.click(screen.getByRole("button", { name: "Anterior" }));
 
+/** Digita no campo e deixa a pausa da digitação passar. */
+function digitar(campo: HTMLElement, valor: string) {
+  fireEvent.change(campo, { target: { value: valor } });
+  act(() => {
+    vi.advanceTimersByTime(PAUSA_DA_DIGITACAO_MS);
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  // `shouldAdvanceTime`: `findBy` precisa do relógio andando; a pausa, `digitar` adianta.
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
   for (const tela of TELAS) {
     vi.mocked(tela.consulta as Consulta).mockImplementation(async (filters) => {
       // O servidor responde pelo recorte: encurtar o período encolhe o universo.
@@ -161,6 +174,10 @@ beforeEach(() => {
   }
   vi.mocked(listCustomers).mockResolvedValue({ customers: [], page: 1, pageSize: 20, total: 0 } as never);
   vi.mocked(listSuppliers).mockResolvedValue({ suppliers: [], page: 1, pageSize: 20, total: 0 } as never);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("mudar o recorte volta para a página 1; Anterior/Próxima só mudam a página", () => {
@@ -185,7 +202,7 @@ describe("mudar o recorte volta para a página 1; Anterior/Próxima só mudam a 
     // De: a primeira consulta do universo novo já é a página 1 — nunca a 6.
     await umaConsulta(
       consulta,
-      () => fireEvent.change(screen.getByLabelText("De"), { target: { value: NOVO_INICIO } }),
+      () => digitar(screen.getByLabelText("De"), NOVO_INICIO),
       { from: NOVO_INICIO, to: fim, page: 1 },
       UNIVERSO_CURTO,
     );
@@ -194,7 +211,7 @@ describe("mudar o recorte volta para a página 1; Anterior/Próxima só mudam a 
     // até
     await umaConsulta(
       consulta,
-      () => fireEvent.change(screen.getByLabelText("até"), { target: { value: NOVO_FIM } }),
+      () => digitar(screen.getByLabelText("até"), NOVO_FIM),
       { from: NOVO_INICIO, to: NOVO_FIM, page: 1 },
       UNIVERSO_CURTO,
     );
@@ -207,7 +224,7 @@ describe("mudar o recorte volta para a página 1; Anterior/Próxima só mudam a 
     if ("busca" in outroFiltro) {
       campo = "search";
       valor = "LOT";
-      aplicar = () => fireEvent.change(screen.getByRole("searchbox"), { target: { value: valor } });
+      aplicar = () => digitar(screen.getByRole("searchbox"), valor);
     } else {
       const select = screen.getByRole("combobox", { name: outroFiltro.select }) as HTMLSelectElement;
       const opcao = Array.from(select.options).find((option) => option.value !== "" && option.value !== select.value);
