@@ -705,6 +705,208 @@ describe("Trocar o roteiro em rascunho", () => {
   });
 });
 
+describe("Mudar a quantidade com programação gravada — OP-SCHEDULE-STALE-ON-QUANTITY-01", () => {
+  const RECUSA =
+    "Alterar a quantidade removerá a programação atual desta ordem, pois os tempos e recursos precisam ser recalculados. Confirme para continuar.";
+
+  const alterar = (id: string, payload: Record<string, unknown>) =>
+    app.inject({ method: "PATCH", url: `/production-orders/${id}`, payload });
+
+  const programacoes = (productionOrderId: string) =>
+    getPrisma().productionOrderSchedule.count({ where: { productionOrderId } });
+
+  const quantidadeGravada = async (id: string) =>
+    (await getPrisma().productionOrder.findUniqueOrThrow({ where: { id } })).plannedQuantity.toString();
+
+  /** 1.000 un em 60 min, com formulação: a ordem tem necessidades a regenerar. */
+  async function ordemComRoteiro() {
+    const { versionId } = await perfilAtivo([etapa("Mistura", { runDurationMinutes: 60 })]);
+    const item = await produtoPlanejavel();
+    expect((await definirPadrao(item.id, versionId)).statusCode).toBe(200);
+    return { ordem: await criarOP(item.id, "1000"), versionId };
+  }
+
+  /**
+   * Troca o `$transaction` do cliente por um que roda `antes` e então a
+   * transação real, com o `tx` passado por `envolver`. Devolve à mão, pelo
+   * mesmo motivo do teste de duplicação de orçamento: o `mockRestore` do
+   * `vi.spyOn` deixaria o cliente sem `$transaction` para o resto do processo.
+   */
+  async function comTransacaoInterceptada<T>(
+    opcoes: { antes?: () => Promise<unknown>; envolver?: (tx: object) => object },
+    corpo: () => Promise<T>,
+  ): Promise<T> {
+    const prisma = getPrisma();
+    const original = prisma.$transaction.bind(prisma) as (
+      fn: (tx: object) => Promise<unknown>,
+      options?: unknown,
+    ) => Promise<unknown>;
+    const cliente = prisma as unknown as Record<string, unknown>;
+    Object.defineProperty(cliente, "$transaction", {
+      configurable: true,
+      writable: true,
+      value: async (fn: (tx: object) => Promise<unknown>, options?: unknown) => {
+        delete cliente.$transaction;
+        await opcoes.antes?.();
+        return original((tx) => fn(opcoes.envolver ? opcoes.envolver(tx) : tx), options);
+      },
+    });
+    try {
+      return await corpo();
+    } finally {
+      delete cliente.$transaction;
+    }
+  }
+
+  /** O `tx` com UM método de UM delegado falhando — o resto passa direto. */
+  const comFalhaEm = (delegado: string, metodo: string) => (tx: object): object =>
+    new Proxy(tx, {
+      get(alvo, chave) {
+        const valor = Reflect.get(alvo, chave) as unknown;
+        if (chave === delegado) {
+          return new Proxy(valor as object, {
+            get(modelo, nome) {
+              if (nome === metodo) {
+                return () => Promise.reject(new Error(`falha simulada em ${delegado}.${metodo}`));
+              }
+              const funcao = Reflect.get(modelo, nome) as unknown;
+              return typeof funcao === "function" ? funcao.bind(modelo) : funcao;
+            },
+          });
+        }
+        return typeof valor === "function" ? valor.bind(alvo) : valor;
+      },
+    });
+
+  it("sem programação, a quantidade muda normalmente — nada a confirmar", async () => {
+    const { ordem } = await ordemComRoteiro();
+
+    const resposta = await alterar(ordem.id, { plannedQuantity: "2000" });
+
+    expect(resposta.statusCode).toBe(200);
+    expect(await quantidadeGravada(ordem.id)).toBe("2000");
+    expect(await programacoes(ordem.id)).toBe(0);
+  });
+
+  it("com programação, mudar sem confirmar é 409 — e nada muda", async () => {
+    const { ordem } = await ordemComRoteiro();
+    await programacaoExistente(ordem.id);
+
+    const recusada = await alterar(ordem.id, { plannedQuantity: "2000", notes: "junto" });
+
+    expect(recusada.statusCode).toBe(409);
+    expect(recusada.json()).toEqual({ error: "schedule_removal_needs_confirmation", message: RECUSA });
+    expect(await quantidadeGravada(ordem.id)).toBe("1000");
+    expect(await programacoes(ordem.id)).toBe(1);
+    expect((await ler(ordem.id)).notes).toBeNull();
+  });
+
+  it("confirmando, a quantidade muda e a programação sai na mesma gravação — o roteiro fica", async () => {
+    const { ordem, versionId } = await ordemComRoteiro();
+    await programacaoExistente(ordem.id);
+
+    const confirmada = await alterar(ordem.id, { plannedQuantity: "2000", confirmScheduleRemoval: true });
+
+    expect(confirmada.statusCode).toBe(200);
+    expect(await quantidadeGravada(ordem.id)).toBe("2000");
+    expect(await programacoes(ordem.id)).toBe(0);
+    const depois = confirmada.json() as ProductionOrderDTO;
+    expect(depois.planning.snapshot!.sourceVersionId).toBe(versionId);
+    expect(depois.planning.appliedAt).toBe(ordem.planning.appliedAt);
+    expect(depois.planning.routePending).toBe(false);
+    expect(depois.planning.plan!.totalDurationMinutes).toBe("120");
+    expect((await app.inject(`/production-orders/${ordem.id}/schedule`)).json().schedule).toBeNull();
+  });
+
+  it("a mesma quantidade escrita de outro jeito não é mudança — a programação fica, com ou sem a flag", async () => {
+    const { ordem } = await ordemComRoteiro();
+    await programacaoExistente(ordem.id);
+
+    for (const payload of [
+      { plannedQuantity: "1000" },
+      { plannedQuantity: "1000.000" },
+      { plannedQuantity: "1000,0" },
+      { plannedQuantity: "1000", confirmScheduleRemoval: true },
+    ]) {
+      expect((await alterar(ordem.id, payload)).statusCode).toBe(200);
+    }
+    expect(await programacoes(ordem.id)).toBe(1);
+  });
+
+  it("alterar outro campo não toca a programação", async () => {
+    const { ordem } = await ordemComRoteiro();
+    await programacaoExistente(ordem.id);
+
+    const resposta = await alterar(ordem.id, {
+      notes: "Conferir embalagem",
+      labelInstructions: "Lote em destaque",
+      numberOfParts: 2,
+    });
+
+    expect(resposta.statusCode).toBe(200);
+    expect(await programacoes(ordem.id)).toBe(1);
+  });
+
+  for (const situacao of ["PLANNED", "RELEASED"] as const) {
+    it(`${situacao}: a quantidade continua travada, com ou sem confirmação — observação segue livre`, async () => {
+      const { ordem } = await ordemComRoteiro();
+      await programacaoExistente(ordem.id);
+      await forcarSituacao(ordem.id, situacao);
+
+      const recusada = await alterar(ordem.id, { plannedQuantity: "2000", confirmScheduleRemoval: true });
+
+      expect(recusada.statusCode).toBe(400);
+      expect(recusada.json().error).toBe("order_locked");
+      expect(await quantidadeGravada(ordem.id)).toBe("1000");
+      expect(await programacoes(ordem.id)).toBe(1);
+      expect((await alterar(ordem.id, { notes: "Conferido" })).statusCode).toBe(200);
+      expect(await programacoes(ordem.id)).toBe(1);
+    });
+  }
+
+  it("programação que nasce depois da leitura da tela é vista pela transação — 409, nunca agenda velha", async () => {
+    const { ordem } = await ordemComRoteiro();
+
+    // A ordem foi lida sem programação; ela nasce entre essa leitura e a gravação.
+    const resposta = await comTransacaoInterceptada({ antes: () => programacaoExistente(ordem.id) }, () =>
+      alterar(ordem.id, { plannedQuantity: "2000" }),
+    );
+
+    expect(resposta.statusCode).toBe(409);
+    expect(resposta.json().error).toBe("schedule_removal_needs_confirmation");
+    expect(await quantidadeGravada(ordem.id)).toBe("1000");
+    expect(await programacoes(ordem.id)).toBe(1);
+  });
+
+  for (const [delegado, metodo] of [
+    ["productionOrder", "update"],
+    ["productionOrderSchedule", "deleteMany"],
+  ] as const) {
+    it(`falha em ${delegado}.${metodo} desfaz tudo: nem quantidade nova, nem programação apagada`, async () => {
+      const { ordem } = await ordemComRoteiro();
+      await programacaoExistente(ordem.id);
+      const necessidades = async () =>
+        (
+          await getPrisma().productionOrderRequirement.findMany({
+            where: { productionOrderId: ordem.id },
+            orderBy: { position: "asc" },
+          })
+        ).map((linha) => linha.requiredQuantity.toString());
+      const antes = await necessidades();
+      expect(antes.length).toBeGreaterThan(0);
+
+      const falhou = await comTransacaoInterceptada({ envolver: comFalhaEm(delegado, metodo) }, () =>
+        alterar(ordem.id, { plannedQuantity: "2000", confirmScheduleRemoval: true }),
+      );
+
+      expect(falhou.statusCode).toBe(500);
+      expect(await quantidadeGravada(ordem.id)).toBe("1000");
+      expect(await programacoes(ordem.id)).toBe(1);
+      expect(await necessidades()).toEqual(antes);
+    });
+  }
+});
+
 describe("Regularização de legado — PLANNED e RELEASED sem roteiro", () => {
   for (const situacao of ["PLANNED", "RELEASED"] as const) {
     it(`${situacao}: exige confirmação e motivo, grava LEGACY_REPAIR, e depois congela`, async () => {

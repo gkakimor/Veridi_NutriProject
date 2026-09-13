@@ -49,6 +49,11 @@ interface Props {
   canOperate: boolean;
   /** Chegou por "Resolver": o bloco entra em foco. */
   focus?: boolean;
+  /**
+   * A tela da ordem precisa saber se há programação gravada: mudar a
+   * quantidade a remove, e isso se confirma antes de salvar.
+   */
+  onScheduleChange?: (temProgramacao: boolean) => void;
 }
 
 export function ProductionPlanningSection({
@@ -57,6 +62,7 @@ export function ProductionPlanningSection({
   onApplied,
   canOperate,
   focus = false,
+  onScheduleChange,
 }: Props) {
   const planning = order.planning;
   const { snapshot, plan: planSalvo, productDefaultProfile } = planning;
@@ -84,7 +90,14 @@ export function ProductionPlanningSection({
       .catch(() => setAgenda(null));
   }, [order.id]);
 
-  useEffect(() => carregarAgenda(), [carregarAgenda]);
+  /*
+   * Relê a cada gravação da ordem (`updatedAt`): mudar a quantidade ou o
+   * produto remove a programação no servidor, e a tela não pode continuar
+   * mostrando a agenda que deixou de existir.
+   */
+  useEffect(() => carregarAgenda(), [carregarAgenda, order.updatedAt]);
+
+  useEffect(() => onScheduleChange?.(agenda !== null), [agenda, onScheduleChange]);
 
   useEffect(() => {
     if (!focus) return;

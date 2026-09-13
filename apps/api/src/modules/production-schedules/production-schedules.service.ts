@@ -50,6 +50,7 @@ import {
   ScheduleLockedError,
   ScheduleNeedsConfirmationError,
   ScheduleNotFoundError,
+  ScheduleQuantityChangedError,
   ScheduleRouteChangedError,
   ScheduleStartNotOperationalError,
 } from "./production-schedules.errors.js";
@@ -344,9 +345,10 @@ export async function scheduleProductionOrder(
   };
 
   /*
-   * Grava com a ordem travada e conferindo que o roteiro é o MESMO da prévia:
-   * trocar o roteiro remove a programação na transação dele, e uma gravação
-   * que calculou sobre a cópia anterior não pode ressuscitar agenda velha.
+   * Grava com a ordem travada e conferindo que o roteiro e a quantidade são os
+   * MESMOS da prévia: trocar o roteiro ou mudar a quantidade remove a
+   * programação na transação deles, e uma gravação que calculou sobre o estado
+   * anterior não pode ressuscitar agenda velha.
    */
   const linha = await prisma.$transaction(async (tx) => {
     const travadas = await tx.$queryRaw<{ status: string }[]>`
@@ -363,6 +365,16 @@ export async function scheduleProductionOrder(
     });
     if (!roteiro || roteiro.id !== ordem.planningSnapshot?.id) {
       throw new ScheduleRouteChangedError(ordem.code);
+    }
+    const agora = await tx.productionOrder.findUniqueOrThrow({
+      where: { id: orderId },
+      select: { plannedQuantity: true, outputUnitCode: true },
+    });
+    if (
+      !agora.plannedQuantity.equals(ordem.plannedQuantity) ||
+      agora.outputUnitCode !== ordem.outputUnitCode
+    ) {
+      throw new ScheduleQuantityChangedError(ordem.code);
     }
 
     return tx.productionOrderSchedule.upsert({

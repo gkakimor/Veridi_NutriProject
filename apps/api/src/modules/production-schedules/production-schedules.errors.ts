@@ -45,6 +45,19 @@ export class ScheduleRouteChangedError extends Error {
   }
 }
 
+/**
+ * A quantidade da ordem mudou entre a prévia e a gravação: a agenda calculada
+ * seria da quantidade antiga (OP-SCHEDULE-STALE-ON-QUANTITY-01).
+ */
+export class ScheduleQuantityChangedError extends Error {
+  constructor(code: string) {
+    super(
+      `A quantidade de ${code} mudou enquanto a programação era calculada. Defina o início de novo.`,
+    );
+    this.name = "ScheduleQuantityChangedError";
+  }
+}
+
 /** O calendário ainda não sabe ONDE fica o intervalo — fail-closed. */
 export class CalendarBreakNotPositionedError extends Error {
   constructor(message: string) {

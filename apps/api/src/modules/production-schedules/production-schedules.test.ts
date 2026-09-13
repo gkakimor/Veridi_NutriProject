@@ -782,3 +782,135 @@ describe("Conflito e quadro", () => {
     expect(agenda.json().schedule).toBeNull();
   });
 });
+
+describe("Quantidade nova, programação nova — OP-SCHEDULE-STALE-ON-QUANTITY-01", () => {
+  const alterarQuantidade = (id: string, plannedQuantity: string, extra: Record<string, unknown> = {}) =>
+    app.inject({ method: "PATCH", url: `/production-orders/${id}`, payload: { plannedQuantity, ...extra } });
+
+  const agendaGravada = async (id: string) =>
+    (await app.inject(`/production-orders/${id}/schedule`)).json().schedule as ProductionOrderScheduleDTO | null;
+
+  it("roteiro 1000 un = 60 min: a OP de 1000 un programa 60 min; mudar para 2000 invalida, e reprogramar dá 120 min", async () => {
+    const ordem = await ordemComRoteiro(60);
+
+    const antes = await programar(ordem.id, em(SEGUNDA, 8));
+    expect(antes.statusCode).toBe(200);
+    const agendaAntes = antes.json() as ProductionOrderScheduleDTO;
+    expect(agendaAntes.workingMinutes).toBe(60);
+    expect(agendaAntes.plannedEndAt).toBe(em(SEGUNDA, 9));
+    expect(agendaAntes.steps[0]!.durationMinutes).toBe(60);
+    expect(agendaAntes.steps[0]!.workSegments).toEqual([trecho(SEGUNDA, 480, 540)]);
+
+    // Sem confirmação a agenda de 60 min continua lá, intacta.
+    const semConfirmar = await alterarQuantidade(ordem.id, "2000");
+    expect(semConfirmar.statusCode).toBe(409);
+    expect(semConfirmar.json().error).toBe("schedule_removal_needs_confirmation");
+    expect(await agendaGravada(ordem.id)).toEqual(agendaAntes);
+
+    const confirmada = await alterarQuantidade(ordem.id, "2000", { confirmScheduleRemoval: true });
+    expect(confirmada.statusCode).toBe(200);
+    expect(await agendaGravada(ordem.id)).toBeNull();
+    // O roteiro aplicado fica: é ele que a nova programação vai projetar.
+    expect((confirmada.json() as ProductionOrderDTO).planning.snapshot!.sourceVersionId).toBe(
+      ordem.planning.snapshot!.sourceVersionId,
+    );
+
+    const quadro = (
+      await app.inject(`/production-board?from=${SEGUNDA}&to=${SEGUNDA}&view=DAY`)
+    ).json() as ProductionBoardResponse;
+    expect(quadro.orders.map((o) => o.productionOrderId)).not.toContain(ordem.id);
+    expect(quadro.unscheduled.map((o) => o.productionOrderId)).toContain(ordem.id);
+
+    // Não basta "sem programação": a conta nova tem de ser a da quantidade nova.
+    const reprogramada = await programar(ordem.id, em(SEGUNDA, 8));
+    expect(reprogramada.statusCode).toBe(200);
+    const agendaDepois = reprogramada.json() as ProductionOrderScheduleDTO;
+    expect(agendaDepois.workingMinutes).toBe(120);
+    expect(agendaDepois.plannedEndAt).toBe(em(SEGUNDA, 10));
+    expect(agendaDepois.steps[0]!.durationMinutes).toBe(120);
+    expect(agendaDepois.steps[0]!.workSegments).toEqual([trecho(SEGUNDA, 480, 600)]);
+  });
+
+  it("roteiro em g e ordem em kg: 2 kg = 120 min; 5 kg reprogramados = 300 min, pela conversão de sempre", async () => {
+    const criado = await app.inject({
+      method: "POST",
+      url: "/production-profiles",
+      payload: { name: `Pó ${proximo()}`, referenceQuantity: "1000", referenceUomCode: "g" },
+    });
+    const perfil = criado.json() as ProductionProfileDTO;
+    fixtureProfileIds.push(perfil.id);
+    const rascunho = perfil.draftVersion!.id;
+    await app.inject({
+      method: "PATCH",
+      url: `/production-profile-versions/${rascunho}`,
+      payload: {
+        steps: [{ name: "Mistura", setupDurationMinutes: 0, runDurationMinutes: 60, scalingMode: "PROPORTIONAL", resources: [] }],
+      },
+    });
+    expect((await app.inject({ method: "POST", url: `/production-profile-versions/${rascunho}/activate` })).statusCode).toBe(200);
+
+    const prisma = getPrisma();
+    const item = await prisma.item.create({
+      data: { type: "FINISHED_PRODUCT", code: `PA-SCH-${proximo()}`, name: `Pó ${marca}`, unitCode: "kg" },
+    });
+    fixtureItemIds.push(item.id);
+    const produto = await prisma.product.create({
+      data: { code: `PROD-SCH-${proximo()}`, name: `Pó ${marca}`, finishedProductItemId: item.id },
+    });
+    fixtureProductIds.push(produto.id);
+    expect((await app.inject({ method: "PUT", url: `/products/${produto.id}/production-profile`, payload: { productionProfileVersionId: rascunho } })).statusCode).toBe(200);
+    const criada = await app.inject({ method: "POST", url: "/production-orders", payload: { productId: produto.id, plannedQuantity: "2" } });
+    const ordem = criada.json() as ProductionOrderDTO;
+    fixtureOrderIds.push(ordem.id);
+
+    // 2 kg = 2000 g: 120 min, das 08:00 às 10:00.
+    const antes = await programar(ordem.id, em(SEGUNDA, 8));
+    expect((antes.json() as ProductionOrderScheduleDTO).workingMinutes).toBe(120);
+    expect((antes.json() as ProductionOrderScheduleDTO).plannedEndAt).toBe(em(SEGUNDA, 10));
+
+    expect((await alterarQuantidade(ordem.id, "5", { confirmScheduleRemoval: true })).statusCode).toBe(200);
+    expect(await agendaGravada(ordem.id)).toBeNull();
+
+    // 5 kg = 5000 g: 300 min — 08:00–12:00, almoço, 13:00–14:00. Sem conversão seriam 0,3 min.
+    const depois = await programar(ordem.id, em(SEGUNDA, 8));
+    expect(depois.statusCode).toBe(200);
+    const agenda = depois.json() as ProductionOrderScheduleDTO;
+    expect(agenda.workingMinutes).toBe(300);
+    expect(agenda.plannedEndAt).toBe(em(SEGUNDA, 14));
+    expect(agenda.steps[0]!.workSegments).toEqual([trecho(SEGUNDA, 480, 720), trecho(SEGUNDA, 780, 840)]);
+  });
+
+  it("quantidade que muda entre a prévia e a gravação recusa a agenda — a conta velha nunca é gravada", async () => {
+    const ordem = await ordemComRoteiro(60);
+    const prisma = getPrisma();
+    const original = prisma.$transaction.bind(prisma) as (
+      fn: (tx: object) => Promise<unknown>,
+      options?: unknown,
+    ) => Promise<unknown>;
+    const cliente = prisma as unknown as Record<string, unknown>;
+    // A prévia já calculou 1000 un; outra pessoa grava 2000 antes da transação da agenda.
+    // Devolvido à mão, como no teste de duplicação de orçamento (`mockRestore` quebraria o cliente).
+    Object.defineProperty(cliente, "$transaction", {
+      configurable: true,
+      writable: true,
+      value: async (fn: (tx: object) => Promise<unknown>, options?: unknown) => {
+        delete cliente.$transaction;
+        await prisma.productionOrder.update({ where: { id: ordem.id }, data: { plannedQuantity: "2000" } });
+        return original(fn, options);
+      },
+    });
+
+    try {
+      const gravada = await programar(ordem.id, em(SEGUNDA, 8));
+      expect(gravada.statusCode).toBe(409);
+      expect(gravada.json().error).toBe("quantity_changed");
+    } finally {
+      delete cliente.$transaction;
+    }
+    expect(await agendaGravada(ordem.id)).toBeNull();
+
+    const refeita = await programar(ordem.id, em(SEGUNDA, 8));
+    expect(refeita.statusCode).toBe(200);
+    expect((refeita.json() as ProductionOrderScheduleDTO).workingMinutes).toBe(120);
+  });
+});

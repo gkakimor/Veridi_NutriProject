@@ -568,3 +568,24 @@
     width: 100%;
   }
 }
+
+/* Confirmar a quantidade que remove a programação (OP-SCHEDULE-STALE-ON-QUANTITY-01).
+   O rótulo da ação é longo: no desktop a caixa alarga para os dois botões numa
+   linha; em 390px eles empilham e o rótulo quebra DENTRO do botão, nunca vaza. */
+.confirm-dialog:has(.schedule-reset-confirm) {
+  width: min(520px, calc(100vw - 32px));
+}
+
+@media (max-width: 480px) {
+  .confirm-dialog:has(.schedule-reset-confirm) .confirm-dialog__actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .confirm-dialog:has(.schedule-reset-confirm) .confirm-dialog__actions .btn {
+    height: auto;
+    min-height: 34px;
+    padding-block: var(--sp-2);
+    text-align: center;
+  }
+}

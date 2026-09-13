@@ -5575,7 +5575,8 @@ precificação, tarifa, formulação nem OP.
     - IN_PRODUCTION, COMPLETED, CANCELLED e BLOCKED não recebem roteiro;
     - com programação gravada, aplicar ou trocar a remove na mesma transação,
       e só com confirmação — agenda velha não aponta para roteiro novo. Trocar
-      o Produto em rascunho também tira a programação;
+      o Produto em rascunho também tira a programação, e mudar a quantidade
+      também (§91, com confirmação);
     - `expectedSourceVersionId` diferente do atual é 409 `route_changed`, e a
       corrida que chegasse à unique também — nunca 500.
   - **Proveniência:** a cópia guarda `applicationSource` (as origens acima e
@@ -5755,7 +5756,22 @@ prazo do cliente em risco quando a ordem vem de um Pedido com
 sobre a cópia congelada do Roteiro (§89), para a quantidade da ordem convertida
 para a unidade de referência. Não existe um segundo cálculo de duração de OP
 neste repositório. Ordem sem roteiro é recusada ANTES do calendário, e a
-gravação confere, com a ordem travada, que o roteiro ainda é o da prévia.
+gravação confere, com a ordem travada, que o roteiro e a quantidade ainda são
+os da prévia (senão 409 `route_changed` / `quantity_changed`).
+
+**Quantidade nova invalida a programação** (OP-SCHEDULE-STALE-ON-QUANTITY-01,
+decisão do PO). Tempos, recursos e `workSegments` dependem da quantidade: uma
+OP nunca mantém programação calculada para uma quantidade antiga. Em rascunho,
+mudar `plannedQuantity` DE VERDADE (por valor: `1000` = `1000.000`) numa ordem
+com programação exige `confirmScheduleRemoval: true` no mesmo PATCH — sem ele,
+409 `schedule_removal_needs_confirmation` e nada muda. Confirmado, a OP é
+travada, a situação revalidada, e quantidade nova e remoção da programação
+entram na MESMA transação; quem decide é o banco nesse instante, não o que a
+tela tinha lido. O roteiro aplicado fica: a ordem volta a "sem programação" e
+é programada de novo, já com a quantidade nova. Nada é recalculado nem
+reposicionado sozinho. Mesma quantidade, outro campo (observação, rótulo,
+partes) e ordem sem programação não pedem nada; fora do rascunho a quantidade
+continua travada.
 
 **Fora de escopo, e deliberadamente:** autoagendamento, otimizador, grafo de
 dependências, etapas em paralelo, arrastar e soltar, calendário por recurso,

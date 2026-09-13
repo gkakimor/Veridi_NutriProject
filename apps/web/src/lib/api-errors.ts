@@ -64,6 +64,20 @@ export class IncompleteCostApiError extends Error {
 }
 
 /**
+ * Erro 409: a alteração remove a programação gravada da ordem, e isso se
+ * confirma (`schedule_removal_needs_confirmation`).
+ *
+ * A tela antecipa quando sabe da programação; se ela surgiu depois da leitura,
+ * a recusa chega mesmo assim e é este erro que abre a confirmação.
+ */
+export class ScheduleRemovalNeedsConfirmationApiError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ScheduleRemovalNeedsConfirmationApiError";
+  }
+}
+
+/**
  * A requisição não chegou ao servidor.
  *
  * `fetch` rejeita com `TypeError` quando não há resposta nenhuma — API fora do
@@ -213,6 +227,15 @@ export async function parseJsonOrThrow(response: Response): Promise<unknown> {
       (body as { error?: string }).error === "incomplete_cost"
     ) {
       throw new IncompleteCostApiError((body as { message: string }).message);
+    }
+
+    if (
+      response.status === 409 &&
+      body !== null &&
+      typeof body === "object" &&
+      (body as { error?: string }).error === "schedule_removal_needs_confirmation"
+    ) {
+      throw new ScheduleRemovalNeedsConfirmationApiError((body as { message: string }).message);
     }
 
     const payload = (body ?? {}) as { message?: unknown; error?: unknown };

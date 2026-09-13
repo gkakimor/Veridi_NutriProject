@@ -948,10 +948,6 @@ export async function updateProductionOrder(
 ): Promise<ProductionOrderDTO> {
   const current = await requireOrder(id);
 
-  if (current.status === "CANCELLED") {
-    throw new OrderLockedError("Ordem de produção cancelada é somente leitura.");
-  }
-
   // numberOfParts e instruções de rótulo congelam no RELEASE: folha de
   // receita, partes geradas e documento impresso dependem deles.
   const touchesStructural =
@@ -961,11 +957,17 @@ export async function updateProductionOrder(
     input.numberOfParts !== undefined ||
     input.labelInstructions !== undefined;
 
-  if (current.status !== "DRAFT" && touchesStructural) {
-    throw new OrderLockedError(
-      "Após planejada, a ordem de produção só permite alterar observações.",
-    );
-  }
+  const exigirEditavel = (status: string) => {
+    if (status === "CANCELLED") {
+      throw new OrderLockedError("Ordem de produção cancelada é somente leitura.");
+    }
+    if (status !== "DRAFT" && touchesStructural) {
+      throw new OrderLockedError(
+        "Após planejada, a ordem de produção só permite alterar observações.",
+      );
+    }
+  };
+  exigirEditavel(current.status);
 
   let effectiveProduct: ProductWithRelations = current.product;
   const productChanging = input.productId !== undefined && input.productId !== current.productId;
@@ -990,6 +992,38 @@ export async function updateProductionOrder(
   const regenerate = productChanging || formulationExplicitlySet || input.plannedQuantity !== undefined;
 
   await getPrisma().$transaction(async (tx) => {
+    /*
+     * A decisão é tomada sobre a ordem TRAVADA, não sobre o retrato lido antes:
+     * situação, quantidade e programação valem o que estão no banco agora.
+     * Programar trava esta mesma linha, então nenhuma programação nasce entre
+     * a conferência abaixo e a gravação.
+     */
+    const travadas = await tx.$queryRaw<{ status: string }[]>`
+      SELECT status FROM production_orders WHERE id = ${id} FOR UPDATE
+    `;
+    if (travadas.length === 0) throw new ProductionOrderNotFoundError(id);
+    const travada = await tx.productionOrder.findUniqueOrThrow({
+      where: { id },
+      select: { status: true, plannedQuantity: true, schedule: { select: { id: true } } },
+    });
+    exigirEditavel(travada.status);
+
+    /*
+     * OP-SCHEDULE-STALE-ON-QUANTITY-01: tempos, recursos e workSegments da
+     * programação foram calculados para a quantidade gravada. Mudou de verdade
+     * — por valor, 1000 e 1000.000 são a mesma — e existe programação: ela só
+     * sai com confirmação explícita, e sai nesta transação. Nunca quantidade
+     * nova com programação velha.
+     */
+    const quantidadeMudou =
+      input.plannedQuantity !== undefined && !plannedQuantity.equals(travada.plannedQuantity);
+    const removerProgramacao = quantidadeMudou && travada.schedule !== null;
+    if (removerProgramacao && input.confirmScheduleRemoval !== true) {
+      throw new ScheduleRemovalNeedsConfirmationError(
+        "Alterar a quantidade removerá a programação atual desta ordem, pois os tempos e recursos precisam ser recalculados. Confirme para continuar.",
+      );
+    }
+
     await tx.productionOrder.update({
       where: { id },
       data: {
@@ -1024,14 +1058,20 @@ export async function updateProductionOrder(
       await regenerateRequirements(tx, id, formulationVersion?.id ?? null, plannedQuantity);
     }
 
+    // O roteiro congelado fica: a ordem volta a "sem programação" e se programa
+    // de novo, já com a quantidade nova.
+    if (removerProgramacao) {
+      await tx.productionOrderSchedule.deleteMany({ where: { productionOrderId: id } });
+    }
+
     /*
      * Trocar de produto troca o roteiro: a cópia é substituída, na mesma
      * transação, pelo padrão aplicável do produto NOVO — ou some, quando ele
      * não tem. E a programação sai junto: as etapas e os recursos dela eram do
      * roteiro anterior, e agenda velha apontando para roteiro novo é mentira.
      *
-     * Mudar só a QUANTIDADE não passa por aqui de propósito: o roteiro
-     * congelado continua o mesmo, e o que se refaz é a projeção, na leitura.
+     * Mudar só a QUANTIDADE não recopia o roteiro: a projeção se refaz na
+     * leitura, e a programação gravada sai acima, com confirmação.
      */
     if (productChanging) {
       await tx.productionOrderSchedule.deleteMany({ where: { productionOrderId: id } });

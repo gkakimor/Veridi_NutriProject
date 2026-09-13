@@ -500,6 +500,12 @@ export interface UpdateProductionOrderInput {
   formulationVersionId?: string;
   plannedQuantity?: string;
   notes?: string;
+  /**
+   * A quantidade muda e a ordem tem programação: ela sai na mesma gravação, e
+   * isso se confirma. Sem a confirmação o servidor recusa com 409
+   * `schedule_removal_needs_confirmation` (OP-SCHEDULE-STALE-ON-QUANTITY-01).
+   */
+  confirmScheduleRemoval?: boolean;
 }
 
 export interface CancelProductionOrderInput {

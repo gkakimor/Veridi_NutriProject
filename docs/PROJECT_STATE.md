@@ -1970,7 +1970,7 @@ seletor atrás do diálogo (60 × 101) — corrigido em `components.css`.
 
 Achados sem correção: a tabela de "Documentos" alarga o modal do Produto em
 390px (anterior à rodada); mudar a quantidade em DRAFT não refaz a programação
-gravada (anterior); picking, receita e apontamentos seguem sem `requireRole`;
+gravada (anterior — fechado em OP-SCHEDULE-STALE-ON-QUANTITY-01); picking, receita e apontamentos seguem sem `requireRole`;
 cancelar a OP ainda grava `SYSTEM_ACTOR`; E2E do golden path e da busca de
 produto ajustados (`scripts/e2e/lib/roteiro.mjs`) e não rodados.
 
@@ -2024,6 +2024,48 @@ o da seleção usa o dia comercial; com seleção, "Exportar CSV" aparece no
 cabeçalho (lista inteira) e na barra (seleção).
 
 **Próximo:** OP-SCHEDULE-STALE-ON-QUANTITY-01.
+
+## Quantidade nova, programação nova (OP-SCHEDULE-STALE-ON-QUANTITY-01, 2026-09-12)
+
+Bug de integridade fechado: a OP em rascunho mudava de 1.000 para 2.000 un e
+mantinha a programação calculada para 1.000. Decisão do PO: **mudou a
+quantidade, a programação antiga é invalidada e a pessoa programa de novo**.
+Regra durável em `PRODUCT_RULES.md` §91. Sem migration, sem endpoint novo.
+
+**Servidor.** O `PATCH /production-orders/:id` trava a OP (`FOR UPDATE`),
+revalida a situação e compara a quantidade POR VALOR com a do banco. Mudou e
+há programação: sem `confirmScheduleRemoval` é 409
+`schedule_removal_needs_confirmation` (o mesmo código e a mesma flag da troca
+de roteiro); com ela, quantidade, necessidades e remoção na mesma transação —
+falha em qualquer ponto desfaz tudo. Roteiro aplicado fica. Do outro lado, a
+gravação da agenda passou a conferir, com a OP travada, que a quantidade é a
+da prévia (409 `quantity_changed`): a corrida inversa também não grava conta
+velha.
+
+**Tela.** "Salvar rascunho" com quantidade diferente e programação lida pelo
+bloco do roteiro abre a confirmação ("Alterar quantidade e remover
+programação"); a 409 que chegar mesmo assim abre a mesma. Cancelar mantém o
+valor digitado e a pendência. Sucesso: "Quantidade atualizada. A programação
+anterior foi removida e precisa ser refeita." ou "Ordem de produção
+atualizada.", só com a resposta; o bloco relê a programação a cada gravação
+da OP. A OP ganhou o padrão de estado da onda de feedback (nome da ação no
+"Salvando…", "Alterações não salvas" antes da confirmação) — a parte dela em
+SAVE-FEEDBACK-REMAINING-01.
+
+**Validação.** API 13 testes novos (10 de contrato/atomicidade/concorrência,
+3 de planejamento: 60 → 120 min, 2 kg → 5 kg = 300 min com almoço, corrida da
+agenda) e web 10; mutação provada (4 na API, 6 na web). Gate: production-orders
+165, schedules + GMP + calendário 81, shared 52, web OP/planejamento/unsaved
+246, typecheck. Smoke real em 1440 e 390: 1000 un = 1 h, 409 sem confirmação,
+pergunta sem PATCH, Cancelar mantém, confirmar remove, roteiro fica, quadro em
+"sem programação", reprogramar = 2 h até 10:00, "2000,0" não pergunta; modal
+em 390 empilhado sem transbordo; console limpo; massa e calendário apagados.
+
+Achado: o `afterAll` de `production-calendar.test.ts` apaga o calendário do
+`veridi_dev` — depois da suíte, smoke de programação precisa gravar a jornada
+(foi o que este fez, e apagou no fim).
+
+**Próximo:** REPORTS-PAGINATION-01.
 
 ## Próxima prioridade
 
