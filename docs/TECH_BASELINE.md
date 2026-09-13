@@ -343,12 +343,14 @@ Prioritize automated tests for:
 
 Simple CRUD can initially rely more heavily on integration/manual checks when reasonable.
 
-## API test database (TEST-SUPPORT-ISOLATION-WAVE-01)
+## Test database (TEST-SUPPORT-ISOLATION-WAVE-01, TEST-SCRIPTS-DB-ISOLATION-01)
 
 API tests (`apps/api`, both `vitest.config.ts` and `vitest.serial.config.ts`)
 write for real — they delete the Production Calendar, rewrite the weekly
-schedule, create users and sessions. They never run on the `DATABASE_URL`
-database:
+schedule, create users and sessions. The root scripts suite
+(`vitest.scripts.config.ts`) writes too: the importer tests apply the legacy
+corpus master data and create an opening-stock item, lot and movement. None of
+them runs on the `DATABASE_URL` database:
 
 - `TEST_DATABASE_URL` set (environment or `.env`) → that database. This is the
   CI contract: provide it; any name works as long as it contains the word
@@ -374,9 +376,15 @@ left behind are removed by the next run, when no other connection is open on
 the test database. The test database is disposable; nothing a test does, or a
 kill leaves half-done, reaches the database people use.
 
-The root scripts suite (`vitest.scripts.config.ts`) is not covered yet: with
-the corpus present, `scripts/veridi-import/importer.test.ts` still writes to
-the `DATABASE_URL` database (BACKLOG TEST-SCRIPTS-DB-ISOLATION-01).
+All three configs build the workers' environment with `ambienteComBancoDeTeste`
+and share the same global setup and per-file setup, so the scripts suite uses
+the very same test database as the API suite — no second mechanism. Without a
+database that proves to be a test one, not even the pure `@veridi/shared` tests
+in the scripts suite run. `apps/api/src/test-support/faixas-de-teste.test.ts`
+reads the real `pnpm test` command (root script plus every package `pnpm -r`
+reaches) and fails when a Vitest config it triggers is neither isolated this way
+nor owned by a package without a database client (`apps/web`). A new test
+config must be classified there.
 
 ---
 

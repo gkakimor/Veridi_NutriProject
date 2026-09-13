@@ -2863,9 +2863,42 @@ mesmas duas rodadas deram o mesmo resultado. No `veridi_dev`, nenhuma conexão
 das rodadas (`pg_stat_database.sessions` parado em cada janela) e contadores de
 escrita por tabela idênticos antes e depois.
 
-**Fora do escopo.** A suíte de scripts segue no banco da `.env`
-(TEST-SCRIPTS-DB-ISOLATION-01), e os usuários de teste antigos continuam no
-`veridi_dev` (TEST-USERS-LEGACY-RESIDUE-01).
+**Fora do escopo.** A suíte de scripts ficou no banco da `.env` até
+TEST-SCRIPTS-DB-ISOLATION-01 (seção seguinte), e os usuários de teste antigos
+continuam no `veridi_dev` (TEST-USERS-LEGACY-RESIDUE-01).
+
+## A suíte de scripts também escreve só em banco de teste (TEST-SCRIPTS-DB-ISOLATION-01, 2026-09-13)
+
+A faixa de scripts da raiz (`vitest.scripts.config.ts`, último passo do `pnpm
+test`) ainda entregava aos workers a `DATABASE_URL` da `.env`: com o corpus
+presente, `importer.test.ts` gravava o master data no `veridi_dev`. Reproduzido
+num banco descartável no lugar dele: 5.952 linhas em 13 tabelas numa rodada.
+
+**Regra.** A mesma foundation, sem segunda solução: o config monta o ambiente
+por `ambienteComBancoDeTeste` e usa o `globalSetup` e o `setupFiles` da API — o
+corpus mora no mesmo banco de teste da API. O `globalSetup` acha a pasta da API
+pelo próprio arquivo (a faixa tem a raiz do monorepo como `root`). Sem banco que
+se prove de teste, nenhum arquivo da faixa roda, nem os puros do
+`@veridi/shared`. `test-support/faixas-de-teste.test.ts` lê o `test` real da
+raiz e dos pacotes que o `pnpm -r` alcança e reprova config de Vitest não
+classificada: isolada pela foundation, ou de pacote sem client de banco (a web).
+Importador, master data, domínio, auth e migrations intocados.
+
+**Validação.** Config antiga contra banco descartável na `DATABASE_URL`: 13
+tabelas de 0 a 5.952 linhas. Config nova, mesma `DATABASE_URL`: esse banco
+idêntico (77 tabelas, contagem + md5 + contadores de escrita) e o `_test`
+derivado criado, migrado e com as mesmas 5.952 linhas. Com a `.env` do checkout
+principal (`veridi_dev`) e `TEST_DATABASE_URL` exclusivo, a faixa inteira duas
+vezes seguidas — 24 arquivos, 405 testes, verdes: `veridi_dev` idêntico nas 77
+tabelas, `pg_stat_database.sessions` parado em cada janela e nenhuma conexão
+nova nele; no banco de teste, as mesmas contagens da primeira para a segunda.
+Oito destinos proibidos saíram com exit 1 e zero teste; sem a camada do config
+o `globalSetup` recusa, sem ele o `setupFiles` recusa nos 24 arquivos; 9
+mutações do teste das faixas derrubadas. Onze arquivos comuns da API e o painel
+da faixa serial passaram no banco de teste já com o corpus.
+
+**Fora do escopo.** A massa antiga do `veridi_dev` — usuários `USR-TEST-*`,
+sessões, bancos `veridi_apply_check_*` — fica para FRESH-DATA-E2E-BASELINE-01.
 
 ## Próxima prioridade
 
@@ -2952,10 +2985,10 @@ Caminho canônico, nesta ordem (os passos 2 a 4 só quando o PO pedir a carga):
 4. `pnpm veridi:examples -- --apply`
 
 Nunca `db push`, nunca edição manual de `_prisma_migrations`. Runbook do
-importador em [`VERIDI_MIGRATION.md`](VERIDI_MIGRATION.md). A suíte da API
-escreve em `veridi_dev_test`, não aqui (TEST-SUPPORT-ISOLATION-WAVE-01); a de
-scripts ainda grava o corpus no `veridi_dev` quando ele está presente
-(TEST-SCRIPTS-DB-ISOLATION-01).
+importador em [`VERIDI_MIGRATION.md`](VERIDI_MIGRATION.md). As suítes da API
+e de scripts escrevem em `veridi_dev_test`, não aqui — o corpus que o
+`importer.test.ts` grava inclusive (TEST-SUPPORT-ISOLATION-WAVE-01 e
+TEST-SCRIPTS-DB-ISOLATION-01).
 
 ## Produção
 

@@ -1,12 +1,14 @@
 /**
- * O banco em que a suíte da API escreve — e a prova de que ele é de teste.
+ * O banco em que a suíte escreve — e a prova de que ele é de teste.
  *
  * Os testes da API escrevem de verdade: apagam o Calendário de Produção,
  * regravam a jornada da semana, criam usuário e sessão em todo arquivo. Até
  * TEST-SUPPORT-ISOLATION-WAVE-01 eles rodavam no banco da `DATABASE_URL` do
  * `.env` — no DEV, o `veridi_dev` de quem usa o sistema —, e a faixa serial
  * dependia de guardar e devolver o que encontrava. Um kill antes do
- * `afterAll` desfazia essa promessa.
+ * `afterAll` desfazia essa promessa. A faixa de scripts da raiz
+ * (`vitest.scripts.config.ts`) gravava lá o master data do corpus até
+ * TEST-SCRIPTS-DB-ISOLATION-01, e passou a usar este mesmo contrato.
  *
  * Agora o banco da suíte NUNCA é o da `DATABASE_URL`:
  *
@@ -27,8 +29,8 @@
  * - `TEST_DATABASE_URL` nunca aponta para o banco da `DATABASE_URL`;
  * - sessão com credencial de produção no ambiente não roda a suíte.
  *
- * Módulo puro — sem Prisma e sem Vitest — porque o `vitest.config.ts` o
- * importa para montar o ambiente dos workers.
+ * Módulo puro — sem Prisma e sem Vitest — porque os `vitest*.config.ts` o
+ * importam para montar o ambiente dos workers.
  */
 
 type Ambiente = Readonly<Record<string, string | undefined>>;
@@ -47,7 +49,7 @@ export interface BancoDeTeste extends DestinoDeTeste {
 export class BancoDeTesteRecusadoError extends Error {
   constructor(motivo: string) {
     super(
-      `RECUSADO: a suíte da API só escreve em banco de TESTE.\n` +
+      `RECUSADO: a suíte de testes só escreve em banco de TESTE.\n` +
         `Motivo: ${motivo}\n` +
         `Nenhum teste rodou. Contrato: TEST_DATABASE_URL com a palavra "test" no nome do banco,\n` +
         `ou nada — e a suíte usa <banco da DATABASE_URL>_test no mesmo servidor.`,

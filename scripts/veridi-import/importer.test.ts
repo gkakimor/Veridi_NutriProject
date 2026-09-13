@@ -26,8 +26,11 @@ import { buildSourceManifest, diffManifests } from "./sources.js";
  * importar linha insegura, quebrar idempotência ou movimentar estoque numa
  * importação de master data.
  *
- * Os casos que dependem do corpus real (fora do repositório) e do banco
- * local são pulados quando qualquer um dos dois não está disponível.
+ * Os casos que dependem do corpus real (fora do repositório) são pulados
+ * quando ele não está disponível. O banco é sempre o de TESTE — sem um, a
+ * faixa nem começa (`vitest.scripts.config.ts`, TEST-SCRIPTS-DB-ISOLATION-01)
+ * —, e o master data que estes casos gravam nunca chega ao banco de quem usa
+ * o sistema.
  */
 
 const hasCorpus = corpusAvailable();
@@ -723,7 +726,7 @@ integration("Ponte com a revisão humana — corpus real", () => {
     expect(primeira.review?.products.approved).toBe(1);
     expect(primeira.review?.blocked).toBe(false);
 
-    // Fixture do teste: o banco de desenvolvimento sai como entrou.
+    // Fixture do teste: o banco de teste sai como entrou.
     await prisma.customer.update({
       where: { id: cliente!.id },
       data: { city: null, state: null, taxProfile: "NOT_INFORMED" },
