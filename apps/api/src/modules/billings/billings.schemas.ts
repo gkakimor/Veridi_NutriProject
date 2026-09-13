@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
-import { diaCivilDeFiltroSchema } from "../../lib/date-schema.js";
+import { diaCivilDeFiltroSchema, recusarPeriodoInvertido } from "../../lib/date-schema.js";
 import {
   CASAS_PRECO_COMERCIAL,
   casasDecimais,
@@ -71,24 +71,26 @@ export const cancelBillingSchema = z.object({
   reason: z.string().trim().min(3, "Motivo do cancelamento é obrigatório").max(500),
 });
 
-export const listBillingsQuerySchema = z.object({
-  search: z.string().trim().min(1).optional(),
-  /** "Quero ver só os faturamentos do cliente X" é a pergunta desta tela. */
-  customerId: z.string().trim().min(1).optional(),
-  customerOrderId: z.string().trim().min(1).optional(),
-  shipmentId: z.string().trim().min(1).optional(),
-  status: z.enum(["DRAFT", "ISSUED", "CANCELLED"]).optional(),
-  /*
-   * Período = DIA COMERCIAL, não instante UTC digitado. As duas pontas
-   * viajam como `YYYY-MM-DD` e só viram instante em `listBillings`, por
-   * `intervaloDeDiasComerciais`. Sobre a troca de `z.coerce.date()`, ver
-   * `diaCivilDeFiltroSchema`.
-   */
-  dateFrom: diaCivilDeFiltroSchema,
-  dateTo: diaCivilDeFiltroSchema,
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
-});
+export const listBillingsQuerySchema = z
+  .object({
+    search: z.string().trim().min(1).optional(),
+    /** "Quero ver só os faturamentos do cliente X" é a pergunta desta tela. */
+    customerId: z.string().trim().min(1).optional(),
+    customerOrderId: z.string().trim().min(1).optional(),
+    shipmentId: z.string().trim().min(1).optional(),
+    status: z.enum(["DRAFT", "ISSUED", "CANCELLED"]).optional(),
+    /*
+     * Período = DIA COMERCIAL, não instante UTC digitado. As duas pontas
+     * viajam como `YYYY-MM-DD` e só viram instante em `listBillings`, por
+     * `intervaloDeDiasComerciais`. Sobre a troca de `z.coerce.date()`, ver
+     * `diaCivilDeFiltroSchema`.
+     */
+    dateFrom: diaCivilDeFiltroSchema,
+    dateTo: diaCivilDeFiltroSchema,
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  })
+  .superRefine(recusarPeriodoInvertido("dateFrom", "dateTo"));
 
 export type CreateBillingInput = z.infer<typeof createBillingSchema>;
 export type UpdateBillingLineInput = z.infer<typeof updateBillingLineSchema>;

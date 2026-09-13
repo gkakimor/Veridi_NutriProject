@@ -10,12 +10,20 @@ import type { ReportFilters } from "../../lib/reports-api";
 import "./reports.css";
 import "../../print/print.css";
 import { formatDateTime } from "../../lib/dates";
+import { TABELA_COM_PERIODO_RECUSADO } from "../../lib/list-period";
+import { ID_DA_RECUSA_DO_PERIODO } from "./report-period";
 
 /**
  * Consulta em curso, lida pela tabela do relatório: antes da resposta, tabela
  * sem linhas não é "nenhum registro" — ainda não se sabe.
  */
 const ReportLoadingContext = createContext(false);
+
+/**
+ * Período recusado, lido pela tabela: sem consulta, tabela sem linhas também
+ * não é "nenhum registro" — a pergunta é que não vale.
+ */
+const ReportPeriodRefusedContext = createContext(false);
 
 /**
  * Estrutura comum dos relatórios: título, filtros, resumo e tabela — nesta
@@ -36,11 +44,19 @@ export function ReportPage({
   reportCode,
   printFilters,
   total,
+  periodRefusal = null,
   children,
 }: {
   title: string;
   subtitle: string;
   filters: ReactNode;
+  /**
+   * Por que o período da tela não se consulta (`recusaDoPeriodo`,
+   * PERIOD-RANGE-VALIDATION-WAVE-01). Com ela, a frase fica embaixo dos
+   * filtros, a tabela não diz "nenhum registro", e CSV e PDF — que perguntariam
+   * o mesmo período ao servidor — não se oferecem.
+   */
+  periodRefusal?: string | null;
   /** Filtros realmente aplicados — impressos no cabeçalho do papel. */
   appliedFilters?: { label: string; value: string }[];
   summary?: ReactNode;
@@ -74,11 +90,14 @@ export function ReportPage({
           <p className="page__subtitle">{subtitle}</p>
         </div>
         <div className="table__actions">
-          {csvPath && <ExportCsvButton path={csvPath} filters={csvFilters ?? {}} />}
+          {csvPath && (
+            <ExportCsvButton path={csvPath} filters={csvFilters ?? {}} disabled={periodRefusal !== null} />
+          )}
           {reportCode && (
             <button
               type="button"
               className="btn btn--secondary btn--sm"
+              disabled={periodRefusal !== null}
               // O PDF nasce em rota dedicada: a tela operacional nunca vai
               // para o papel.
               onClick={() => navigate(`/print/relatorios/${reportCode}${printQuery}`)}
@@ -128,12 +147,19 @@ export function ReportPage({
 
       <div className="toolbar report-filters">{filters}</div>
 
+      {periodRefusal && (
+        <p id={ID_DA_RECUSA_DO_PERIODO} className="form-alert" role="alert">
+          {periodRefusal}
+        </p>
+      )}
       {error && <p className="form-alert" role="alert">Não foi possível carregar o relatório: {error}</p>}
       {loading && <p className="muted">Carregando…</p>}
 
       {summary && <div className="report-summary">{summary}</div>}
 
-      <ReportLoadingContext.Provider value={loading}>{children}</ReportLoadingContext.Provider>
+      <ReportPeriodRefusedContext.Provider value={periodRefusal !== null}>
+        <ReportLoadingContext.Provider value={loading}>{children}</ReportLoadingContext.Provider>
+      </ReportPeriodRefusedContext.Provider>
     </>
   );
 }
@@ -188,6 +214,7 @@ export function ReportTable({
   footer?: ReactNode;
 }) {
   const loading = useContext(ReportLoadingContext);
+  const periodoRecusado = useContext(ReportPeriodRefusedContext);
   const isEmpty = Array.isArray(rows) ? rows.length === 0 : rows === null;
   return (
     <div className="table-container" aria-busy={loading || undefined}>
@@ -207,7 +234,7 @@ export function ReportTable({
           {isEmpty && !loading && (
             <tr>
               <td colSpan={columns.length} className="table__empty">
-                {emptyMessage}
+                {periodoRecusado ? TABELA_COM_PERIODO_RECUSADO : emptyMessage}
               </td>
             </tr>
           )}

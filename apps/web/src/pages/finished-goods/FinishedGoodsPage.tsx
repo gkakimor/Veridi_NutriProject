@@ -3,7 +3,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { Link, useNavigate } from "react-router-dom";
 import type { FinishedGoodRowDTO, LotStatus } from "@veridi/shared";
-import { COST_QUALITY_LABELS, COST_SOURCE_LABELS, LOT_STATUSES, LOT_STATUS_LABELS } from "@veridi/shared";
+import {
+  COST_QUALITY_LABELS,
+  COST_SOURCE_LABELS,
+  LOT_STATUSES,
+  LOT_STATUS_LABELS,
+  recusaDoPeriodo,
+} from "@veridi/shared";
 import type { ListFinishedGoodsParams } from "../../lib/finished-goods-api";
 import { listFinishedGoods } from "../../lib/finished-goods-api";
 import { formatBRL } from "../../lib/currency";
@@ -11,6 +17,7 @@ import { useListFilters } from "../../lib/list-filters";
 import type { ListPeriodPreset } from "../../lib/list-period";
 import {
   LIST_PERIOD_PRESET_LABELS,
+  TABELA_COM_PERIODO_RECUSADO,
   ehListPeriodPreset,
   formatListPeriod,
   resolveListPeriod,
@@ -148,6 +155,9 @@ export function FinishedGoodsPage() {
     [period, values.dateFrom, values.dateTo],
   );
 
+  /* Data inicial depois da final não se consulta (PERIOD-RANGE-VALIDATION-WAVE-01). */
+  const periodoRecusado = recusaDoPeriodo(periodo.dateFrom, periodo.dateTo);
+
   /*
    * UM conjunto de filtros para a consulta e para o CSV.
    *
@@ -178,8 +188,12 @@ export function FinishedGoodsPage() {
   }, [searchInput, search, set]);
 
   const reload = useCallback(() => {
-    setLoading(true);
     setError(null);
+    if (periodoRecusado) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
 
     listFinishedGoods({ ...filtrosDaConsulta, page, pageSize: PAGE_SIZE })
       .then((result) => {
@@ -190,7 +204,7 @@ export function FinishedGoodsPage() {
         setError(err instanceof Error ? err.message : "Falha ao carregar produtos acabados");
       })
       .finally(() => setLoading(false));
-  }, [filtrosDaConsulta, page]);
+  }, [filtrosDaConsulta, page, periodoRecusado]);
 
   useEffect(() => {
     reload();
@@ -230,6 +244,7 @@ export function FinishedGoodsPage() {
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const linhas = periodoRecusado ? [] : rows;
 
   return (
     <>
@@ -241,7 +256,11 @@ export function FinishedGoodsPage() {
             vêm das fontes originais.
           </p>
         </div>
-        <ExportCsvButton path="/finished-goods/export.csv" filters={filtrosDaConsulta} />
+        <ExportCsvButton
+          path="/finished-goods/export.csv"
+          filters={filtrosDaConsulta}
+          disabled={periodoRecusado !== null}
+        />
 </div>
 
       <ContextHelp topic={helpTopics["producao.produtoAcabado"]} />
@@ -350,7 +369,7 @@ export function FinishedGoodsPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {linhas.map((row) => (
               <tr key={row.lotId}>
                 <td>{row.productName ?? "—"}</td>
                 <td>
@@ -412,10 +431,12 @@ export function FinishedGoodsPage() {
               </tr>
             ))}
 
-            {!loading && rows.length === 0 && (
+            {!loading && linhas.length === 0 && (
               <tr>
                 <td colSpan={14} className="table__empty">
-                  {isActive ? (
+                  {periodoRecusado ? (
+                    TABELA_COM_PERIODO_RECUSADO
+                  ) : isActive ? (
                     <>
                       Nenhum produto acabado encontrado com esses filtros.{" "}
                       <ClearFilters onClear={clear} />
@@ -428,34 +449,38 @@ export function FinishedGoodsPage() {
             )}
           </tbody>
         </table>
-        <div className="table-foot">
-          {total} {total === 1 ? "lote produzido" : "lotes produzidos"}
-        </div>
+        {!periodoRecusado && (
+          <div className="table-foot">
+            {total} {total === 1 ? "lote produzido" : "lotes produzidos"}
+          </div>
+        )}
       </div>
 
-      <div className="pagination">
-        <span>
-          Página {page} de {totalPages}
-        </span>
-        <div className="table__actions">
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page <= 1}
-            onClick={() => setPage(page - 1)}
-          >
-            Anterior
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage(page + 1)}
-          >
-            Próxima
-          </button>
+      {!periodoRecusado && (
+        <div className="pagination">
+          <span>
+            Página {page} de {totalPages}
+          </span>
+          <div className="table__actions">
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Próxima
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

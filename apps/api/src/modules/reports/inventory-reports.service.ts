@@ -175,7 +175,7 @@ export async function getExpiryReport(
    */
   const hoje = marcadorDeHojeComercial(now);
 
-  let expiryFilter: Prisma.DateTimeFilter;
+  let expiryFilter: Prisma.DateTimeNullableFilter;
   switch (query.window) {
     case "EXPIRED":
       expiryFilter = { lt: hoje };
@@ -190,8 +190,11 @@ export async function getExpiryReport(
       expiryFilter = { gte: hoje, lte: new Date(hoje.getTime() + 60 * DAY_MS) };
       break;
     case "CUSTOM":
-      // Os dias escolhidos, em marcadores — a mesma espécie da validade.
-      expiryFilter = periodoDeDataCivil(query) ?? {};
+      // Os dias escolhidos, em marcadores — a mesma espécie da validade. Sem
+      // nenhuma ponta o período é aberto, mas continua sendo de VALIDADE: o
+      // filtro vazio trazia o lote sem validade e quebrava a linha (500 no
+      // JSON, no CSV e no PDF — PERIOD-RANGE-VALIDATION-WAVE-01).
+      expiryFilter = periodoDeDataCivil(query) ?? { not: null };
       break;
   }
 

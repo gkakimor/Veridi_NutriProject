@@ -1,3 +1,4 @@
+import { recusaDoPeriodo } from "@veridi/shared";
 import type { ListPeriodPreset } from "../../lib/list-period";
 import { LIST_PERIOD_PRESETS, LIST_PERIOD_PRESET_LABELS, resolveListPeriod } from "../../lib/list-period";
 
@@ -22,6 +23,11 @@ export interface DateRangeValue {
  *
  * Dia comercial, nunca instante: o que sai daqui é `YYYY-MM-DD`, e quem
  * resolve o "hoje" é `resolveListPeriod`, no fuso da operação.
+ *
+ * Personalizado com a data inicial depois da final mostra a recusa aqui, junto
+ * dos campos (PERIOD-RANGE-VALIDATION-WAVE-01) — a mesma regra que a tela usa
+ * para não consultar e que o servidor aplica. Uma ponta vazia é aberta, e não
+ * recusa nada.
  */
 export function DateRangeFilter({
   idPrefix,
@@ -55,6 +61,9 @@ export function DateRangeFilter({
     onChange({ period: "custom", dateFrom: atual.dateFrom, dateTo: atual.dateTo });
   }
 
+  const recusa = value.period === "custom" ? recusaDoPeriodo(value.dateFrom, value.dateTo) : null;
+  const idDaRecusa = `${idPrefix}-period-error`;
+
   return (
     <div className="filter-period" role="group" aria-label="Período">
       {presets.map((preset) => (
@@ -80,6 +89,8 @@ export function DateRangeFilter({
             id={`${idPrefix}-date-from`}
             type="date"
             value={value.dateFrom}
+            aria-invalid={recusa ? true : undefined}
+            aria-describedby={recusa ? idDaRecusa : undefined}
             onChange={(event) =>
               onChange({ period: "custom", dateFrom: event.target.value, dateTo: value.dateTo })
             }
@@ -91,11 +102,19 @@ export function DateRangeFilter({
             id={`${idPrefix}-date-to`}
             type="date"
             value={value.dateTo}
+            aria-invalid={recusa ? true : undefined}
+            aria-describedby={recusa ? idDaRecusa : undefined}
             onChange={(event) =>
               onChange({ period: "custom", dateFrom: value.dateFrom, dateTo: event.target.value })
             }
           />
         </div>
+      )}
+
+      {recusa && (
+        <p id={idDaRecusa} className="form-alert filter-period__error" role="alert">
+          {recusa}
+        </p>
       )}
     </div>
   );

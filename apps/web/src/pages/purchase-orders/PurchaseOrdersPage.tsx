@@ -3,7 +3,7 @@ import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { Link, useNavigate } from "react-router-dom";
 import type { PurchaseOrderDTO, PurchaseOrderStatus } from "@veridi/shared";
-import { PURCHASE_ORDER_STATUSES, PURCHASE_ORDER_STATUS_LABELS } from "@veridi/shared";
+import { PURCHASE_ORDER_STATUSES, PURCHASE_ORDER_STATUS_LABELS, recusaDoPeriodo } from "@veridi/shared";
 import type { ListPurchaseOrdersParams } from "../../lib/purchase-orders-api";
 import { listPurchaseOrders } from "../../lib/purchase-orders-api";
 import { formatBRL } from "../../lib/currency";
@@ -15,6 +15,7 @@ import { useListFilters } from "../../lib/list-filters";
 import type { ListPeriodPreset } from "../../lib/list-period";
 import {
   LIST_PERIOD_PRESET_LABELS,
+  TABELA_COM_PERIODO_RECUSADO,
   ehListPeriodPreset,
   formatListPeriod,
   resolveListPeriod,
@@ -138,6 +139,9 @@ export function PurchaseOrdersPage() {
     [period, values.dateFrom, values.dateTo],
   );
 
+  /* Data inicial depois da final não se consulta (PERIOD-RANGE-VALIDATION-WAVE-01). */
+  const periodoRecusado = recusaDoPeriodo(periodo.dateFrom, periodo.dateTo);
+
   /* UM conjunto de filtros para a consulta e para o CSV. */
   const filtrosDaConsulta = useMemo(() => {
     const filtros: Omit<ListPurchaseOrdersParams, "page" | "pageSize"> = {};
@@ -163,8 +167,12 @@ export function PurchaseOrdersPage() {
   }, [searchInput, search, set]);
 
   const reload = useCallback(() => {
-    setLoading(true);
     setError(null);
+    if (periodoRecusado) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
 
     listPurchaseOrders({ ...filtrosDaConsulta, page, pageSize: PAGE_SIZE })
       .then((result) => {
@@ -175,7 +183,7 @@ export function PurchaseOrdersPage() {
         setError(err instanceof Error ? err.message : "Falha ao carregar ordens de compra");
       })
       .finally(() => setLoading(false));
-  }, [filtrosDaConsulta, page]);
+  }, [filtrosDaConsulta, page, periodoRecusado]);
 
   useEffect(() => {
     reload();
@@ -208,6 +216,7 @@ export function PurchaseOrdersPage() {
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const linhas = periodoRecusado ? [] : purchaseOrders;
 
   return (
     <>
@@ -225,7 +234,11 @@ export function PurchaseOrdersPage() {
         >
           + Nova OC
         </button>
-        <ExportCsvButton path="/purchase-orders/export.csv" filters={filtrosDaConsulta} />
+        <ExportCsvButton
+          path="/purchase-orders/export.csv"
+          filters={filtrosDaConsulta}
+          disabled={periodoRecusado !== null}
+        />
       </div>
 
       {/* Rascunho, Confirmada e Parcialmente recebida são estados com
@@ -295,7 +308,7 @@ export function PurchaseOrdersPage() {
             </tr>
           </thead>
           <tbody>
-            {purchaseOrders.map((po) => (
+            {linhas.map((po) => (
               <tr
                 key={po.id}
                 tabIndex={0}
@@ -332,10 +345,12 @@ export function PurchaseOrdersPage() {
               </tr>
             ))}
 
-            {!loading && purchaseOrders.length === 0 && (
+            {!loading && linhas.length === 0 && (
               <tr>
                 <td colSpan={8} className="table__empty">
-                  {isActive ? (
+                  {periodoRecusado ? (
+                    TABELA_COM_PERIODO_RECUSADO
+                  ) : isActive ? (
                     <>
                       Nenhuma ordem de compra encontrada para os filtros atuais.{" "}
                       <ClearFilters onClear={clear} />
@@ -357,34 +372,38 @@ export function PurchaseOrdersPage() {
             )}
           </tbody>
         </table>
-        <div className="table-foot">
-          {total} {total === 1 ? "ordem de compra" : "ordens de compra"}
-        </div>
+        {!periodoRecusado && (
+          <div className="table-foot">
+            {total} {total === 1 ? "ordem de compra" : "ordens de compra"}
+          </div>
+        )}
       </div>
 
-      <div className="pagination">
-        <span>
-          Página {page} de {totalPages}
-        </span>
-        <div className="table__actions">
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page <= 1}
-            onClick={() => setPage(page - 1)}
-          >
-            Anterior
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage(page + 1)}
-          >
-            Próxima
-          </button>
+      {!periodoRecusado && (
+        <div className="pagination">
+          <span>
+            Página {page} de {totalPages}
+          </span>
+          <div className="table__actions">
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Próxima
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

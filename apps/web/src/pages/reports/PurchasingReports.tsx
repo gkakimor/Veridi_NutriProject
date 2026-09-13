@@ -1,7 +1,7 @@
 import { formatQuantity } from "../../lib/quantity";
 import { useMemo, useState } from "react";
 import type { PurchaseOrderStatus } from "@veridi/shared";
-import { PURCHASE_ORDER_STATUS_LABELS } from "@veridi/shared";
+import { PURCHASE_ORDER_STATUS_LABELS, recusaDoPeriodo } from "@veridi/shared";
 import {
   getLatePurchaseOrdersReport,
   getOnOrderReport,
@@ -12,7 +12,7 @@ import { fornecedorFilterSource } from "../../lib/filter-sources";
 import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
-import { diaDoRelatorio } from "./report-period";
+import { ariaDoPeriodoRecusado, diaDoRelatorio } from "./report-period";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
@@ -60,7 +60,8 @@ export function PurchaseOrdersReportPage() {
     }),
     [search, supplierId, status, origin, from, to, page],
   );
-  const { data, loading, error } = useReport(getPurchaseOrdersReport, filters);
+  const periodoRecusado = recusaDoPeriodo(from, to);
+  const { data, loading, error } = useReport(getPurchaseOrdersReport, filters, { enabled: periodoRecusado === null });
 
   return (
     <ReportPage
@@ -72,6 +73,7 @@ export function PurchaseOrdersReportPage() {
       subtitle="Ordens por data do pedido. O valor previsto só aparece quando todas as linhas têm preço."
       loading={loading}
       error={error}
+      periodRefusal={periodoRecusado}
       filters={
         <>
           <label htmlFor="po-from">De</label>
@@ -79,6 +81,7 @@ export function PurchaseOrdersReportPage() {
             id="po-from"
             type="date"
             value={from}
+            {...ariaDoPeriodoRecusado(periodoRecusado)}
             onChange={(event) => {
               setPage(1);
               setFrom(event.target.value);
@@ -89,6 +92,7 @@ export function PurchaseOrdersReportPage() {
             id="po-to"
             type="date"
             value={to}
+            {...ariaDoPeriodoRecusado(periodoRecusado)}
             onChange={(event) => {
               setPage(1);
               setTo(event.target.value);
@@ -209,7 +213,8 @@ export function ReceiptsReportPage() {
     }),
     [search, supplierId, from, to, page],
   );
-  const { data, loading, error } = useReport(getReceiptsReport, filters);
+  const periodoRecusado = recusaDoPeriodo(from, to);
+  const { data, loading, error } = useReport(getReceiptsReport, filters, { enabled: periodoRecusado === null });
 
   return (
     <ReportPage
@@ -221,6 +226,7 @@ export function ReceiptsReportPage() {
       subtitle="Uma linha por item recebido. Preço da OC é expectativa; custo efetivo é a referência real."
       loading={loading}
       error={error}
+      periodRefusal={periodoRecusado}
       filters={
         <>
           <label htmlFor="rec-from">De</label>
@@ -228,6 +234,7 @@ export function ReceiptsReportPage() {
             id="rec-from"
             type="date"
             value={from}
+            {...ariaDoPeriodoRecusado(periodoRecusado)}
             onChange={(event) => {
               setPage(1);
               setFrom(event.target.value);
@@ -238,6 +245,7 @@ export function ReceiptsReportPage() {
             id="rec-to"
             type="date"
             value={to}
+            {...ariaDoPeriodoRecusado(periodoRecusado)}
             onChange={(event) => {
               setPage(1);
               setTo(event.target.value);

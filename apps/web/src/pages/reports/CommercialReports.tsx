@@ -6,6 +6,7 @@ import {
   CUSTOMER_ORDER_STATUS_LABELS,
   PRODUCTION_ORDER_STATUS_LABELS,
   PURCHASE_ORDER_STATUS_LABELS,
+  recusaDoPeriodo,
 } from "@veridi/shared";
 import {
   getCustomerOrdersReport,
@@ -16,7 +17,7 @@ import { clienteFilterSource, pedidoFilterSource } from "../../lib/filter-source
 import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
-import { diaDoRelatorio } from "./report-period";
+import { ariaDoPeriodoRecusado, diaDoRelatorio } from "./report-period";
 import { formatBRL } from "../../lib/currency";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
@@ -62,7 +63,8 @@ export function CustomerOrdersReportPage() {
     }),
     [search, customerId, status, from, to, page],
   );
-  const { data, loading, error } = useReport(getCustomerOrdersReport, filters);
+  const periodoRecusado = recusaDoPeriodo(from, to);
+  const { data, loading, error } = useReport(getCustomerOrdersReport, filters, { enabled: periodoRecusado === null });
 
   return (
     <ReportPage
@@ -74,6 +76,7 @@ export function CustomerOrdersReportPage() {
       subtitle="Pedidos por data, com o estado operacional e o de faturamento derivados dos documentos."
       loading={loading}
       error={error}
+      periodRefusal={periodoRecusado}
       filters={
         <>
           <label htmlFor="co-from">De</label>
@@ -81,6 +84,7 @@ export function CustomerOrdersReportPage() {
             id="co-from"
             type="date"
             value={from}
+            {...ariaDoPeriodoRecusado(periodoRecusado)}
             onChange={(event) => {
               setPage(1);
               setFrom(event.target.value);
@@ -91,6 +95,7 @@ export function CustomerOrdersReportPage() {
             id="co-to"
             type="date"
             value={to}
+            {...ariaDoPeriodoRecusado(periodoRecusado)}
             onChange={(event) => {
               setPage(1);
               setTo(event.target.value);

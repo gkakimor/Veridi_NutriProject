@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ehDiaCivil } from "@veridi/shared";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
+import { recusarPeriodoInvertido } from "../../lib/date-schema.js";
 
 /**
  * Contrato de entrada da programação (PLANNING-CAPACITY-BOARD-01).
@@ -30,17 +31,20 @@ const diaCivilSchema = z
   .trim()
   .refine(ehDiaCivil, "Informe uma data existente, no formato AAAA-MM-DD");
 
-export const productionBoardQuerySchema = z.object({
-  /** Recorte em DIAS COMERCIAIS. O fim é inclusivo, como a tela mostra. */
-  from: diaCivilSchema,
-  to: diaCivilSchema,
-  view: z.enum(["DAY", "WEEK"]).default("WEEK"),
-  status: z
-    .enum(["DRAFT", "PLANNED", "RELEASED", "IN_PRODUCTION", "COMPLETED", "BLOCKED", "CANCELLED"])
-    .optional(),
-  productId: z.string().uuid().optional(),
-  industrialResourceId: z.string().uuid().optional(),
-});
+export const productionBoardQuerySchema = z
+  .object({
+    /** Recorte em DIAS COMERCIAIS. O fim é inclusivo, como a tela mostra. */
+    from: diaCivilSchema,
+    to: diaCivilSchema,
+    view: z.enum(["DAY", "WEEK"]).default("WEEK"),
+    status: z
+      .enum(["DRAFT", "PLANNED", "RELEASED", "IN_PRODUCTION", "COMPLETED", "BLOCKED", "CANCELLED"])
+      .optional(),
+    productId: z.string().uuid().optional(),
+    industrialResourceId: z.string().uuid().optional(),
+  })
+  // Invertido, o quadro saía vazio e sem dias: recusa (PERIOD-RANGE-VALIDATION-WAVE-01).
+  .superRefine(recusarPeriodoInvertido("from", "to"));
 
 export type ScheduleProductionOrderInput = z.infer<typeof scheduleProductionOrderSchema>;
 export type ProductionBoardQuery = z.infer<typeof productionBoardQuerySchema>;

@@ -1,3 +1,5 @@
+import { MENSAGEM_DE_PERIODO_INVERTIDO, recusaDoPeriodo } from "./period-range.js";
+
 /**
  * Contratos do Dashboard operacional.
  *
@@ -122,13 +124,17 @@ export interface RecusaDoPeriodoDoPainel {
  * recusaria — a mesma frase nos dois lados. `from`/`to` são dias `YYYY-MM-DD`
  * já validados (ou vazios), e `hoje` é o dia comercial do instante da
  * requisição; dia bem formado se compara como texto.
+ *
+ * Completadas as pontas, a comparação é a das listas (`recusaDoPeriodo`,
+ * PERIOD-RANGE-VALIDATION-WAVE-01) — lá a ponta vazia fica aberta, e por isso
+ * a regra do Painel não se copia para elas.
  */
 export function recusaDoPeriodoDoPainel(
   from: string | undefined,
   to: string | undefined,
   hoje: string,
 ): RecusaDoPeriodoDoPainel | null {
-  if ((from || hoje) <= (to || hoje)) return null;
+  if (!recusaDoPeriodo(from || hoje, to || hoje)) return null;
   // Uma ponta vazia só pode ser a causa se a outra passou de hoje: a frase
   // conta de onde veio o "hoje", que ninguém digitou.
   if (!from) {
@@ -143,7 +149,7 @@ export function recusaDoPeriodoDoPainel(
       mensagem: "Sem data final, o período termina hoje — a data inicial não pode ser posterior a hoje.",
     };
   }
-  return { campo: "from", mensagem: "A data inicial não pode ser posterior à data final." };
+  return { campo: "from", mensagem: MENSAGEM_DE_PERIODO_INVERTIDO };
 }
 
 export interface DashboardPeriodDTO {

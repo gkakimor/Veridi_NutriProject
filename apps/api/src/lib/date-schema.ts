@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ehDiaCivil } from "@veridi/shared";
+import { MENSAGEM_DE_PERIODO_INVERTIDO, ehDiaCivil, recusaDoPeriodo } from "@veridi/shared";
 
 /** Data obrigatoria. */
 export const requiredDateSchema = z.coerce.date({
@@ -43,3 +43,30 @@ export const diaCivilDeFiltroSchema = z
   // type="date">` limpo vira `?dateFrom=` em vez de desaparecer da URL.
   .transform((valor) => (valor === "" ? undefined : valor))
   .optional();
+
+/**
+ * Recusa do período de filtro invertido, para `.superRefine` do schema da
+ * listagem, do relatório ou da exportação (PERIOD-RANGE-VALIDATION-WAVE-01).
+ *
+ * As duas pontas preenchidas e a inicial depois da final é 400
+ * `validation_error` na ponta inicial, com a frase que a tela mostra — nunca
+ * 200 vazio. Ponta ausente continua aberta: a regra é `recusaDoPeriodo`, a
+ * mesma da tela, e não a do Painel, que completa a ponta com hoje.
+ *
+ * O dia (`YYYY-MM-DD`) é o contrato dos filtros novos. Par que ainda chega como
+ * `Date` (`requiredDateSchema`, em Projetos e Amostras) compara os instantes,
+ * sem mudar a leitura de fuso que ele já tinha.
+ */
+export function recusarPeriodoInvertido<K extends string>(de: K, ate: K) {
+  return (query: Partial<Record<K, string | Date | undefined>>, ctx: z.RefinementCtx): void => {
+    const inicio = query[de];
+    const fim = query[ate];
+    const invertido =
+      inicio instanceof Date && fim instanceof Date
+        ? inicio.getTime() > fim.getTime()
+        : typeof inicio === "string" && typeof fim === "string" && recusaDoPeriodo(inicio, fim) !== null;
+    if (invertido) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [de], message: MENSAGEM_DE_PERIODO_INVERTIDO });
+    }
+  };
+}

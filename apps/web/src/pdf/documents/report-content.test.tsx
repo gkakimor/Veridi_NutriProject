@@ -372,6 +372,34 @@ describe("relatórios R-01…R-20 em PDF", () => {
     expect(apiFetch).not.toHaveBeenCalled();
     expect(renderPdfBlob).not.toHaveBeenCalled();
   });
+
+  // PERIOD-RANGE-VALIDATION-WAVE-01: o PDF lê o CSV, e o CSV recusa o que a tela recusa.
+  it("período invertido na URL: a frase do servidor, e nenhum documento", async () => {
+    apiFetch.mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: () =>
+        Promise.resolve({
+          error: "validation_error",
+          issues: [{ path: "from", message: "A data inicial não pode ser posterior à data final." }],
+        }),
+    });
+    abrir("/print/relatorios/R-03?from=2026-09-13&to=2026-09-12");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Não foi possível gerar o documento: A data inicial não pode ser posterior à data final.",
+    );
+    expect(apiFetch).toHaveBeenCalledWith(`${API_URL}/reports/inventory/movements/export.csv?from=2026-09-13&to=2026-09-12`);
+    expect(renderPdfBlob).not.toHaveBeenCalled();
+  });
+
+  it("outra falha do CSV continua dizendo o status", async () => {
+    apiFetch.mockResolvedValue({ ok: false, status: 500, json: () => Promise.resolve({ error: "internal_error" }) });
+    abrir("/print/relatorios/R-03?from=2026-09-01");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Falha ao carregar o relatório (500)");
+    expect(renderPdfBlob).not.toHaveBeenCalled();
+  });
 });
 
 const RASTREABILIDADE: ProductionTraceabilityDTO = {

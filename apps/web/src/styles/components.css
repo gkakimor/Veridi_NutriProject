@@ -2085,6 +2085,11 @@ body:has(.confirm-dialog) .entity-select__list {
   gap: var(--sp-2);
 }
 
+/* Recusa do período invertido: linha própria, embaixo dos campos. */
+.filter-period__error {
+  flex-basis: 100%;
+}
+
 /* Campo de data não é `input[type="search"]` nem `select`, então não pegava
    nada da regra da toolbar: vinha com a caixa nativa do navegador ao lado de
    campos do sistema. */

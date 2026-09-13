@@ -4,6 +4,7 @@ import type { CustomerOrderStatus } from "@veridi/shared";
 import {
   CUSTOMER_ORDER_BILLING_STATUS_LABELS,
   CUSTOMER_ORDER_STATUS_LABELS,
+  recusaDoPeriodo,
 } from "@veridi/shared";
 import {
   getAwaitingBillingReport,
@@ -20,7 +21,7 @@ import {
   ReportTable,
 } from "./ReportPage";
 import { useReport } from "./useReport";
-import { diaDoRelatorio } from "./report-period";
+import { ariaDoPeriodoRecusado, diaDoRelatorio } from "./report-period";
 import { formatBRL } from "../../lib/currency";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
@@ -72,7 +73,8 @@ export function BillingPeriodReportPage() {
     }),
     [search, customerId, from, to, page],
   );
-  const { data, loading, error } = useReport(getBillingPeriodReport, filters);
+  const periodoRecusado = recusaDoPeriodo(from, to);
+  const { data, loading, error } = useReport(getBillingPeriodReport, filters, { enabled: periodoRecusado === null });
 
   return (
     <ReportPage
@@ -84,6 +86,7 @@ export function BillingPeriodReportPage() {
       subtitle="Somente faturamentos emitidos, pela data de emissão."
       loading={loading}
       error={error}
+      periodRefusal={periodoRecusado}
       summary={
         // Sem documento no recorte, não há valor a completar: "Valores
         // incompletos" apontaria um preço faltando que não existe. O vazio é
@@ -111,6 +114,7 @@ export function BillingPeriodReportPage() {
             id="bill-from"
             type="date"
             value={from}
+            {...ariaDoPeriodoRecusado(periodoRecusado)}
             onChange={(event) => {
               setPage(1);
               setFrom(event.target.value);
@@ -121,6 +125,7 @@ export function BillingPeriodReportPage() {
             id="bill-to"
             type="date"
             value={to}
+            {...ariaDoPeriodoRecusado(periodoRecusado)}
             onChange={(event) => {
               setPage(1);
               setTo(event.target.value);

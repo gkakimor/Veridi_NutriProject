@@ -5,7 +5,12 @@ import type {
   TraceabilityConsumedRowDTO,
   TraceabilityProducedRowDTO,
 } from "@veridi/shared";
-import { COST_QUALITY_LABELS, COST_SOURCE_LABELS, PRODUCTION_ORDER_STATUS_LABELS } from "@veridi/shared";
+import {
+  COST_QUALITY_LABELS,
+  COST_SOURCE_LABELS,
+  PRODUCTION_ORDER_STATUS_LABELS,
+  recusaDoPeriodo,
+} from "@veridi/shared";
 import {
   getConsumptionReport,
   getPlannedActualReport,
@@ -16,7 +21,7 @@ import { ordemDeProducaoFilterSource } from "../../lib/filter-sources";
 import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
-import { diaDoRelatorio } from "./report-period";
+import { ariaDoPeriodoRecusado, diaDoRelatorio } from "./report-period";
 import { formatBRL } from "../../lib/currency";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
@@ -141,7 +146,8 @@ export function PlannedActualReportPage() {
     }),
     [status, search, includeCost, from, to, page],
   );
-  const { data, loading, error } = useReport(getPlannedActualReport, filters);
+  const periodoRecusado = recusaDoPeriodo(from, to);
+  const { data, loading, error } = useReport(getPlannedActualReport, filters, { enabled: periodoRecusado === null });
 
   return (
     <ReportPage
@@ -157,6 +163,7 @@ export function PlannedActualReportPage() {
       }
       loading={loading}
       error={error}
+      periodRefusal={periodoRecusado}
       filters={
         <>
           <label htmlFor="pa-from">De</label>
@@ -164,6 +171,7 @@ export function PlannedActualReportPage() {
             id="pa-from"
             type="date"
             value={from}
+            {...ariaDoPeriodoRecusado(periodoRecusado)}
             onChange={(event) => {
               setPage(1);
               setFrom(event.target.value);
@@ -174,6 +182,7 @@ export function PlannedActualReportPage() {
             id="pa-to"
             type="date"
             value={to}
+            {...ariaDoPeriodoRecusado(periodoRecusado)}
             onChange={(event) => {
               setPage(1);
               setTo(event.target.value);
@@ -388,7 +397,8 @@ export function ConsumptionReportPage() {
     }),
     [search, from, to, page],
   );
-  const { data, loading, error } = useReport(getConsumptionReport, filters);
+  const periodoRecusado = recusaDoPeriodo(from, to);
+  const { data, loading, error } = useReport(getConsumptionReport, filters, { enabled: periodoRecusado === null });
 
   return (
     <ReportPage
@@ -400,6 +410,7 @@ export function ConsumptionReportPage() {
       subtitle="Consumo real de materiais, com o custo do lote consumido e sua origem."
       loading={loading}
       error={error}
+      periodRefusal={periodoRecusado}
       filters={
         <>
           <label htmlFor="cons-from">De</label>
@@ -407,6 +418,7 @@ export function ConsumptionReportPage() {
             id="cons-from"
             type="date"
             value={from}
+            {...ariaDoPeriodoRecusado(periodoRecusado)}
             onChange={(event) => {
               setPage(1);
               setFrom(event.target.value);
@@ -417,6 +429,7 @@ export function ConsumptionReportPage() {
             id="cons-to"
             type="date"
             value={to}
+            {...ariaDoPeriodoRecusado(periodoRecusado)}
             onChange={(event) => {
               setPage(1);
               setTo(event.target.value);

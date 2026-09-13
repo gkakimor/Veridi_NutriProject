@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import { quantityDecimalSchema } from "../../lib/decimal-schema.js";
-import { requiredDateSchema } from "../../lib/date-schema.js";
+import { recusarPeriodoInvertido, requiredDateSchema } from "../../lib/date-schema.js";
 
 export const createSampleSchema = z.object({
   /**
@@ -34,18 +34,20 @@ export const sampleDecisionSchema = z.object({
   decisionNotes: z.string().trim().max(2000).optional(),
 });
 
-export const listSamplesQuerySchema = z.object({
-  search: z.string().trim().min(1).optional(),
-  projectId: z.string().trim().min(1).optional(),
-  customerId: z.string().trim().min(1).optional(),
-  status: z
-    .enum(["DRAFT", "IN_PROGRESS", "PRODUCED", "APPROVED", "REJECTED", "CANCELLED"])
-    .optional(),
-  producedFrom: requiredDateSchema.optional(),
-  producedTo: requiredDateSchema.optional(),
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
-});
+export const listSamplesQuerySchema = z
+  .object({
+    search: z.string().trim().min(1).optional(),
+    projectId: z.string().trim().min(1).optional(),
+    customerId: z.string().trim().min(1).optional(),
+    status: z
+      .enum(["DRAFT", "IN_PROGRESS", "PRODUCED", "APPROVED", "REJECTED", "CANCELLED"])
+      .optional(),
+    producedFrom: requiredDateSchema.optional(),
+    producedTo: requiredDateSchema.optional(),
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  })
+  .superRefine(recusarPeriodoInvertido("producedFrom", "producedTo"));
 
 export type CreateSampleInput = z.infer<typeof createSampleSchema>;
 export type RegisterSampleConsumptionInput = z.infer<typeof registerSampleConsumptionSchema>;

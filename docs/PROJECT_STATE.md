@@ -2550,10 +2550,11 @@ período fora, corrigir volta a consultar, três fusos às 01:30 UTC, frase do s
 14 mutações (tela, regra e schema) derrubam teste. Smoke com banco e portas isolados:
 tela e API diretas nos oito casos, console limpo, 390px sem overflow com a frase à vista.
 
-Achado (não corrigido, fora do escopo): listas e Relatórios com as duas pontas
-invertidas continuam 200 vazio (`intervaloDeDiasComerciais` não compara; visto em
+Achado: listas e Relatórios com as duas pontas invertidas respondiam 200 vazio
+(`intervaloDeDiasComerciais` não compara; visto em
 `/billings?dateFrom=2026-09-13&dateTo=2026-09-12` e
-`/reports/inventory/movements?from=2026-09-13&to=2026-09-12`).
+`/reports/inventory/movements?from=2026-09-13&to=2026-09-12`) — fechado em
+PERIOD-RANGE-VALIDATION-WAVE-01.
 
 ## Gravou? Todas as telas respondem (SAVE-FEEDBACK-REMAINING-01, 2026-09-13)
 
@@ -2942,6 +2943,57 @@ sem rolagem lateral em todas as telas; corpo dos sete modais com 0px (também em
 1024 e 1280); seletor com 0px sob o ✕ em onze telas, limpando por Tab + Enter e
 pela borda do ✕; linhas do material do cliente com 0px também em 1280; console
 limpo.
+
+## Período invertido de listas e Relatórios é recusa (PERIOD-RANGE-VALIDATION-WAVE-01, 2026-09-13)
+
+Fecha o achado do DASHBOARD-INVERTED-PERIOD-01: fora do Painel, as duas pontas
+invertidas respondiam 200 vazio, lido como "nada no período".
+
+**Regra (decisão do PO).** As duas datas preenchidas e a inicial depois da final
+é intervalo inválido: 400 `validation_error` na ponta inicial, "A data inicial não
+pode ser posterior à data final.". Nenhuma ponta, só a inicial, só a final,
+inicial antes e o mesmo dia consultam, e a ponta vazia é ABERTA — completar com
+hoje continua só no Painel. Primitiva única em `@veridi/shared`
+(`period-range.ts`: `recusaDoPeriodo`, `MENSAGEM_DE_PERIODO_INVERTIDO`);
+`recusaDoPeriodoDoPainel` a usa depois de completar as pontas, sem mudar o Painel.
+
+**Servidor.** `recusarPeriodoInvertido(de, ate)` (`lib/date-schema.ts`) em
+`.superRefine` de: Faturamento, Recebimentos, OC e Produto Acabado
+(`dateFrom`/`dateTo`); Projetos (`entryFrom`/`entryTo`) e Amostras
+(`producedFrom`/`producedTo`), que ainda chegam como `Date` e comparam instantes
+(leitura de fuso intocada); exceções do Calendário e quadro de produção
+(`from`/`to`); os dez schemas de relatório com `periodFields` — R-02 só na janela
+personalizada. CSV usa o schema da tela e o PDF lê o CSV: a mesma recusa nos três.
+
+**Tela.** Faturamento, Recebimentos, OC e Produto Acabado: Personalizado invertido
+mostra a frase no `DateRangeFilter` (`role=alert`, `aria-invalid`), não consulta,
+tira linhas, total e páginas, a tabela diz "Corrija o período para consultar." e
+o CSV vira botão desabilitado. As oito telas de relatório com De/até: consulta
+desligada (`useReport` `enabled`), a frase embaixo dos filtros (`ReportPage`
+`periodRefusal`), a mesma dica na tabela, CSV e PDF desabilitados. Corrigir
+consulta uma vez; filtro válido segue com uma consulta por gesto, página 1 e
+`YYYY-MM-DD`. Impressão com período invertido na URL mostra a frase do servidor em
+vez de "(400)". Fuso, fórmulas, paginação, auth e dados intocados; sem migration.
+
+**De passagem.** R-02 personalizado sem nenhuma ponta dava 500 com lote sem
+validade (`expiryDate: {}` trazia o lote e a linha quebrava em `toISOString`);
+aberto dos dois lados agora é todo lote com validade (`{ not: null }`).
+
+**Validação.** Shared 8 (`period-range.test.ts`). API 219
+(`lib/periodo-invertido.test.ts`: 19 famílias × 6 casos no JSON e 17 no CSV, só a
+inicial em 2999 e só a final em 2001 passando, R-02 fora do personalizado e sem
+ponta, guarda de que todo CSV com par de datas está na matriz; o código antigo
+derruba os 36 invertidos). Web 22 novos
+(`pages/periodo-invertido-listas.test.tsx`,
+`pages/reports/relatorios-periodo-invertido.test.tsx`) e 2 no PDF
+(`pdf/documents/report-content.test.tsx`). 21 mutações — primitiva, schemas,
+serviço, filtro, listas, esqueleto, telas e PDF — todas derrubam teste. Focados da
+API (listas, Relatórios, exportações, dia comercial, Painel, faixa serial de
+Calendário e quadro) e da web (listas, Relatórios, PDF, período), typecheck.
+Smoke com banco e portas isolados, 1440 e 390: API direta em 12 rotas, Faturamento
+e R-03 sem consulta no invertido e com uma ao corrigir, frase à vista sem rolagem
+horizontal, CSV e PDF desabilitados, PDF com a frase — 108/108, console limpo fora
+o 400 esperado do PDF.
 
 ## Próxima prioridade
 
