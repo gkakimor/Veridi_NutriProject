@@ -365,7 +365,9 @@ function QuotePricingAuditReport() {
         emptyMessage="Nenhum orçamento encontrado."
         rows={data?.rows.map((row) => (
           <tr
-            key={row.quoteVersionId}
+            // Uma linha por linha de orçamento: a versão com vários produtos
+            // repete `quoteVersionId` (R20-UX-CLEANUP-WAVE-01).
+            key={row.quoteLineId}
             tabIndex={0}
             onClick={() => navigate(`/comercial/projetos/${row.projectId}`)}
             onKeyDown={(event) => {

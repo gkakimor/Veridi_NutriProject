@@ -92,6 +92,33 @@ function respostaCsv(linhas: string[][]) {
   return { ok: true, status: 200, text: () => Promise.resolve(texto) };
 }
 
+/** Cliente como `GET /customers` o devolve — o que o seletor de Cliente lê. */
+const CLIENTE_A = {
+  id: "7d3f0c2e-5b1a-4c8e-9f00-1a2b3c4d5e6f",
+  code: "CLI-000012",
+  legalName: "Nutri Alfa Suplementos Ltda",
+  tradeName: "Nutri Alfa",
+  cnpj: "12345678000190",
+};
+
+/**
+ * `apiFetch` por destino: o CSV do relatório e a consulta do cliente por id.
+ * `falha` simula a consulta do cliente recusada pelo servidor.
+ */
+function responderPorUrl(
+  csv: ReturnType<typeof respostaCsv>,
+  cliente: { clientes: (typeof CLIENTE_A)[] } | { falha: true },
+) {
+  apiFetch.mockImplementation(async (url: string) => {
+    if (!url.startsWith(`${API_URL}/customers?`)) return csv;
+    if ("falha" in cliente) {
+      return { ok: false, status: 500, json: () => Promise.resolve({ error: "internal_error" }) };
+    }
+    const corpo = { customers: cliente.clientes, total: cliente.clientes.length, page: 1, pageSize: 1 };
+    return { ok: true, status: 200, json: () => Promise.resolve(corpo) };
+  });
+}
+
 /** Espera o arquivo ficar pronto e devolve o documento montado, desenhado como DOM. */
 async function documentoGerado(nomeDoArquivo: string): Promise<HTMLElement> {
   await screen.findByTitle(`Documento ${nomeDoArquivo}`);
@@ -210,19 +237,86 @@ describe("relatórios R-01…R-20 em PDF", () => {
   });
 
   it("R-20: cliente, status e período chegam JUNTOS ao CSV que vira o papel", async () => {
-    apiFetch.mockResolvedValue(respostaCsv([["Orçamento", "Status"], ["ORC-000001 · V1", "Enviado"]]));
+    responderPorUrl(respostaCsv([["Orçamento", "Status"], ["ORC-000001 · V1", "Enviado"]]), {
+      clientes: [CLIENTE_A],
+    });
     // R20-QUOTE-FILTER-COMPOSITION-01: o servidor compõe os três em AND; o
     // papel não pode perder nenhum no caminho até ele.
-    abrir("/print/relatorios/R-20?customerId=cli-a&status=SENT&from=2026-09-01&to=2026-09-30");
+    abrir(`/print/relatorios/R-20?customerId=${CLIENTE_A.id}&status=SENT&from=2026-09-01&to=2026-09-30`);
 
     const documento = await documentoGerado("R-20-2026-09-11.pdf");
     expect(apiFetch).toHaveBeenCalledWith(
-      `${API_URL}/reports/commercial/quote-pricing/export.csv?customerId=cli-a&status=SENT&from=2026-09-01&to=2026-09-30`,
+      `${API_URL}/reports/commercial/quote-pricing/export.csv?customerId=${CLIENTE_A.id}&status=SENT&from=2026-09-01&to=2026-09-30`,
     );
-    expect(campo(documento, "Cliente")).toBe("cli-a");
+    // O cliente sai como o seletor da tela o escreve (R20-UX-CLEANUP-WAVE-01).
+    expect(campo(documento, "Cliente")).toBe("CLI-000012 · Nutri Alfa Suplementos Ltda");
     expect(campo(documento, "Status")).toBe("SENT");
     expect(campo(documento, "De")).toBe("2026-09-01");
     expect(campo(documento, "Até")).toBe("2026-09-30");
+  });
+
+  describe("R-20: o cliente do filtro no papel é nome, nunca id técnico (R20-UX-CLEANUP-WAVE-01)", () => {
+    const CSV_R20 = [
+      ["Orçamento", "Cliente", "Produto", "Total"],
+      ["ORC-000001 · V1", "Nutri Alfa Suplementos Ltda", "PROD-000001", "100,00"],
+    ];
+
+    it("cliente resolvido: código e razão social, uma consulta por id, e o UUID fora do documento", async () => {
+      responderPorUrl(respostaCsv(CSV_R20), { clientes: [CLIENTE_A] });
+      abrir(`/print/relatorios/R-20?customerId=${CLIENTE_A.id}`);
+
+      const documento = await documentoGerado("R-20-2026-09-11.pdf");
+      expect(campo(documento, "Cliente")).toBe("CLI-000012 · Nutri Alfa Suplementos Ltda");
+      expect(documento.textContent).not.toContain(CLIENTE_A.id);
+      // A consulta do seletor de Cliente, por identidade — inclusive inativo.
+      const consultas = apiFetch.mock.calls.map(([url]) => String(url)).filter((url) => url.includes("/customers?"));
+      expect(consultas).toHaveLength(1);
+      expect(new URL(consultas[0]!).searchParams.get("ids")).toBe(CLIENTE_A.id);
+      expect(new URL(consultas[0]!).searchParams.has("active")).toBe(false);
+      expect(linhas(documento)).toHaveLength(1);
+    });
+
+    it("id legado sem cadastro: Cliente sai —, sem o id, e o documento é gerado", async () => {
+      const LEGADO = "cli-legado-0001";
+      responderPorUrl(respostaCsv(CSV_R20), { clientes: [] });
+      abrir(`/print/relatorios/R-20?customerId=${LEGADO}&status=SENT`);
+
+      const documento = await documentoGerado("R-20-2026-09-11.pdf");
+      expect(campo(documento, "Cliente")).toBe("—");
+      expect(documento.textContent).not.toContain(LEGADO);
+      expect(campo(documento, "Status")).toBe("SENT");
+      expect(campo(documento, "Registros")).toBe("1");
+    });
+
+    it("consulta do cliente falha: Cliente sai —, e o documento é gerado mesmo assim", async () => {
+      responderPorUrl(respostaCsv(CSV_R20), { falha: true });
+      abrir(`/print/relatorios/R-20?customerId=${CLIENTE_A.id}`);
+
+      const documento = await documentoGerado("R-20-2026-09-11.pdf");
+      expect(campo(documento, "Cliente")).toBe("—");
+      expect(documento.textContent).not.toContain(CLIENTE_A.id);
+      expect(linhas(documento)).toHaveLength(1);
+    });
+
+    it("sem cliente no filtro: nenhuma consulta de cliente e nenhum campo Cliente", async () => {
+      responderPorUrl(respostaCsv(CSV_R20), { clientes: [CLIENTE_A] });
+      abrir("/print/relatorios/R-20?status=SENT");
+
+      const documento = await documentoGerado("R-20-2026-09-11.pdf");
+      expect(apiFetch).toHaveBeenCalledTimes(1);
+      expect(apiFetch).toHaveBeenCalledWith(`${API_URL}/reports/commercial/quote-pricing/export.csv?status=SENT`);
+      expect(campo(documento, "Cliente")).toBeNull();
+    });
+
+    it("perfil sem autorização com cliente no filtro: nem CSV, nem consulta do cliente", async () => {
+      sessao.role = "PRODUCTION";
+      responderPorUrl(respostaCsv(CSV_R20), { clientes: [CLIENTE_A] });
+      abrir(`/print/relatorios/R-20?customerId=${CLIENTE_A.id}`);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Seu perfil não permite ver este relatório.");
+      expect(apiFetch).not.toHaveBeenCalled();
+      expect(renderPdfBlob).not.toHaveBeenCalled();
+    });
   });
 
   it.each(["PRODUCTION", "QUALITY", "PURCHASING", "VIEWER"])(

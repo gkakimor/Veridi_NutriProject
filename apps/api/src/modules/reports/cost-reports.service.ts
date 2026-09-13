@@ -260,6 +260,7 @@ export async function getQuotePricingAuditReport(
       : (line.pricingTier?.contributionMarginSnapshot ?? null);
 
     return {
+      quoteLineId: line.id,
       quoteVersionId: quote.id,
       quoteLabel: `${quote.code} · V${quote.versionNumber}`,
       projectId: quote.projectId,

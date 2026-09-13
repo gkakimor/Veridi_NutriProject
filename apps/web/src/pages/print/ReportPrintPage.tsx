@@ -3,6 +3,7 @@ import type { UserRole } from "@veridi/shared";
 import { PRICING_PROVENANCE_ROLES } from "@veridi/shared";
 import { useOptionalAuth } from "../../app/AuthProvider";
 import { API_URL, apiFetch } from "../../lib/api";
+import { clienteFilterSource } from "../../lib/filter-sources";
 import { PdfScreen } from "../../pdf/PdfScreen";
 
 /**
@@ -307,11 +308,33 @@ const FILTER_LABELS: Record<string, string> = {
  *
  * Paginação da tela (`page`, `pageSize`) não é filtro: o documento traz o
  * recorte inteiro, e "pageSize 25" no papel sugeriria um corte que não existe.
+ *
+ * `customerId` é id técnico e nunca vai ao papel: sai o cliente como o
+ * seletor da tela o escreve, resolvido pela página. Sem nome — id legado ou
+ * consulta que falhou —, o valor fica vazio e o documento o escreve "—",
+ * como todo desconhecido (R20-UX-CLEANUP-WAVE-01).
  */
-export function reportAppliedFilters(params: URLSearchParams): { label: string; value: string }[] {
+export function reportAppliedFilters(
+  params: URLSearchParams,
+  customerLabel: string | null = null,
+): { label: string; value: string }[] {
   return [...params.entries()]
     .filter(([key, value]) => value !== "" && key !== "all" && key !== "page" && key !== "pageSize")
-    .map(([key, value]) => ({ label: FILTER_LABELS[key] ?? key, value }));
+    .map(([key, value]) => ({
+      label: FILTER_LABELS[key] ?? key,
+      value: key === "customerId" ? (customerLabel ?? "") : value,
+    }));
+}
+
+/**
+ * "CLI-000012 · Razão social" do cliente filtrado — o rótulo do seletor de
+ * Cliente, pela mesma consulta por id. Uma requisição, e só quando há filtro;
+ * falhar não impede o documento.
+ */
+async function customerFilterLabel(customerId: string | null): Promise<string | null> {
+  if (!customerId) return null;
+  const cliente = await clienteFilterSource.porId(customerId).catch(() => null);
+  return cliente ? `${cliente.code} · ${cliente.name}` : null;
 }
 
 /** Parser do CSV gerado pela API (`;`, aspas duplas, BOM). */
@@ -390,7 +413,7 @@ export function ReportPrintPage() {
         return {
           definition,
           ...parseReportCsv(await response.text()),
-          filters: reportAppliedFilters(params),
+          filters: reportAppliedFilters(params, await customerFilterLabel(params.get("customerId"))),
         };
       }}
       build={async ({ definition: relatorio, header, rows, filters }) => {

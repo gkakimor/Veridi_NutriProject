@@ -578,6 +578,12 @@ export interface PricingByProductRowDTO {
  * nunca o orçamento do cliente.
  */
 export interface QuotePricingAuditRowDTO {
+  /**
+   * Identidade da linha do relatório: uma por linha de orçamento. A versão
+   * com vários produtos repete `quoteVersionId` em cada uma
+   * (R20-UX-CLEANUP-WAVE-01).
+   */
+  quoteLineId: string;
   quoteVersionId: string;
   quoteLabel: string;
   projectId: string;

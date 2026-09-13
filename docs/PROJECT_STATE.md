@@ -2622,6 +2622,41 @@ com `--bail=1` em cada um, com `beforeAll` falhando depois de apagar, e sem
 calendário prévio (nada fica). Devolução sem as exceções (mutação) derrubada pela
 releitura. Typecheck.
 
+## R-20: uma chave por linha e o cliente pelo nome no PDF (R20-UX-CLEANUP-WAVE-01, 2026-09-13)
+
+Dois achados de UX do R-20, fast.
+
+**Chave da linha.** O R-20 tem uma linha por linha de orçamento, e a tela usava
+`quoteVersionId` como chave da `<tr>`: numa versão com vários produtos a chave
+repetia, o React avisava e, ao trocar o recorte, a tabela mostrava linha
+duplicada (reproduzido: cinco linhas para quatro). O DTO ganhou `quoteLineId`
+(`QuoteLine.id`), e é a chave da tela. `quoteVersionId + productCode` não serve: o
+código sai do snapshot, e a unicidade do banco é `(quoteVersionId, productId)`.
+
+**Cliente no PDF.** A impressão dos relatórios escrevia o `?customerId=` cru em
+"Filtros aplicados" — o UUID. `ReportPrintPage` resolve o id pelo `porId` do
+`clienteFilterSource` (uma consulta por carga, só com filtro de cliente, depois da
+checagem de perfil) e escreve `código · razão social`, como o seletor da tela. Sem
+nome (id legado, consulta recusada) o campo sai "—", e o documento sai. Vale para
+todo relatório impresso por essa página com `customerId` (R-12, R-13, R-15 a R-17
+e R-20).
+
+Perfis (`PRICING_PROVENANCE_ROLES`), autorização de JSON, CSV e PDF, catálogo,
+custo, margem, fórmulas, filtros, paginação e colunas do CSV sem mudança. Sem
+migration.
+
+**Validação.** Reprodução antes do fix: aviso `same key` e linha duplicada na tela;
+PDF com o UUID e com o id legado. API 3 (`r20-linha-por-produto.test.ts`: versão com
+três produtos, identidade por linha, ordem, paginação, CSV com as mesmas colunas e
+sem id) + 93 focados (R-20, pricing, exportações, dia comercial) + integração R-20;
+web 161 focados (relatórios, impressão, PDF). Typecheck. Smoke com banco e portas
+isolados: tela sem aviso de chave e sem duplicar ao trocar o recorte; PDF com
+`CLI-… · razão social`, "—" para id legado, nenhuma consulta de cliente sem
+filtro — 18/18, console limpo.
+
+Achados, sem correção: no papel, `supplierId` (R-08 a R-11) ainda sai como UUID, e
+status/tipo saem como código de enum (`SENT`, `RAW_MATERIAL`).
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
