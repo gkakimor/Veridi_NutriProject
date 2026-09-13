@@ -4,6 +4,8 @@ import { PRICING_PROVENANCE_ROLES, USER_ROLES } from "@veridi/shared";
 import { buildTestApp, createAuthenticatedUser } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 import { csvExportPaths } from "../exports/exports.routes.js";
+import { listCsvExports } from "../exports/list-exports.js";
+import { reportCsvExports } from "../exports/report-exports.js";
 
 /**
  * R-20 — a mesma autorização em qualquer formato (R20-EXPORT-AUTHORIZATION-01).
@@ -180,6 +182,31 @@ describe("exportações — formato nunca amplia a autorização", () => {
       }
       // A guarda precisa ter visto ao menos a recusa do R-20 para valer alguma coisa.
       expect(recusas).toContain("/reports/commercial/quote-pricing PRODUCTION");
+      // R19-REPORT-AUTHORIZATION-01: o R-19 também é restrito.
+      expect(recusas).toContain("/reports/costs/pricing-by-product PRODUCTION");
+    },
+  );
+
+  it(
+    "o inverso: exportação que declara perfis tem o JSON restrito aos MESMOS perfis",
+    { timeout: 60_000 },
+    async () => {
+      // R19-REPORT-AUTHORIZATION-01: proteger só o arquivo deixaria a tela e o JSON abertos.
+      const declaradas = [...listCsvExports, ...reportCsvExports].filter((exportacao) => exportacao.roles);
+      expect(declaradas.map((exportacao) => exportacao.path)).toEqual(
+        expect.arrayContaining([
+          "/reports/costs/pricing-by-product/export.csv",
+          "/reports/commercial/quote-pricing/export.csv",
+        ]),
+      );
+      for (const exportacao of declaradas) {
+        const jsonPath = exportacao.path.replace(/\/export\.csv$/, "");
+        for (const papel of USER_ROLES) {
+          const json = await como(papel, `${jsonPath}?pageSize=1`);
+          const permitido = exportacao.roles!.includes(papel);
+          expect(json.statusCode === 403, `${jsonPath} como ${papel}`).toBe(!permitido);
+        }
+      }
     },
   );
 });

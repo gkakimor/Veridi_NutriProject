@@ -246,6 +246,31 @@ describe("relatórios R-01…R-20 em PDF", () => {
     expect(apiFetch).toHaveBeenCalledWith(`${API_URL}/reports/commercial/quote-pricing/export.csv`);
   });
 
+  // R19-REPORT-AUTHORIZATION-01: margem e markup das faixas, a mesma autoridade do R-20.
+  it.each(["PRODUCTION", "QUALITY", "PURCHASING", "VIEWER"])(
+    "R-19 como %s: nem pede o CSV, nem gera documento — a recusa de verdade é do servidor",
+    async (role) => {
+      sessao.role = role;
+      abrir("/print/relatorios/R-19?search=PROD-000001");
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Seu perfil não permite ver este relatório.");
+      expect(apiFetch).not.toHaveBeenCalled();
+      expect(renderPdfBlob).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["COMMERCIAL", "ADMIN"])("R-19 como %s: o documento sai normalmente", async (role) => {
+    sessao.role = role;
+    apiFetch.mockResolvedValue(
+      respostaCsv([["Produto", "Precificação", "Margem de contribuição (%)", "Markup (%)"], ["PROD-000001", "PREC-000001 · V1", "32,5", "48,1"]]),
+    );
+    abrir("/print/relatorios/R-19?search=PROD-000001");
+
+    const documento = await documentoGerado("R-19-2026-09-11.pdf");
+    expect(apiFetch).toHaveBeenCalledWith(`${API_URL}/reports/costs/pricing-by-product/export.csv?search=PROD-000001`);
+    expect(documento.textContent).toContain("PREC-000001 · V1");
+  });
+
   it("relatório desconhecido não gera documento", async () => {
     abrir("/print/relatorios/R-99");
 

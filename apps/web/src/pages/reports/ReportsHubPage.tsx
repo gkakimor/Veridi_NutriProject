@@ -188,6 +188,7 @@ const GROUPS: { title: string; reports: ReportLink[] }[] = [
         label: "Precificação por produto",
         hint: "Faixas de preço ativas com margem de contribuição e markup.",
         path: "/relatorios/custos/precificacao-por-produto",
+        roles: PRICING_PROVENANCE_ROLES,
       },
       {
         code: "R-20",

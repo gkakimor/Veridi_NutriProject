@@ -131,6 +131,34 @@ export function ReportPage({
   );
 }
 
+/**
+ * Relatório restrito aberto por um perfil que a API recusaria (URL direta):
+ * título, aviso e volta — nenhuma consulta, CSV ou PDF. A recusa de verdade é
+ * do servidor; aqui só não se oferece o que seria negado.
+ */
+export function ReportForbidden({ title, subtitle }: { title: string; subtitle: string }) {
+  const navigate = useNavigate();
+  return (
+    <>
+      <div className="page__header">
+        <div>
+          <PageBreadcrumbs items={[{ label: "Relatórios", href: "/relatorios" }, { label: "Relatório" }]} />
+          <h1 className="page__title">{title}</h1>
+          <p className="page__subtitle">{subtitle}</p>
+        </div>
+        <div className="table__actions">
+          <button type="button" className="btn btn--ghost btn--sm" onClick={() => navigate("/relatorios")}>
+            ← Relatórios
+          </button>
+        </div>
+      </div>
+      <p className="form-alert" role="alert">
+        Seu perfil não permite ver este relatório.
+      </p>
+    </>
+  );
+}
+
 export function ReportSummaryItem({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="report-summary__item">

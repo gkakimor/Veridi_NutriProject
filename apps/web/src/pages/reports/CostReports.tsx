@@ -10,7 +10,7 @@ import {
   QUOTE_STATUS_LABELS,
 } from "@veridi/shared";
 import { useOptionalAuth } from "../../app/AuthProvider";
-import { ReportPage, ReportPagination, ReportTable } from "./ReportPage";
+import { ReportForbidden, ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
 import {
   getIndustrialCostByProductReport,
@@ -136,8 +136,26 @@ export function IndustrialCostByProductReportPage() {
  * Uma linha por faixa de preço ATIVA, lendo o que foi congelado na ativação.
  * O relatório nunca resimula: mostra o preço praticado, com a qualidade do
  * custo que o embasou.
+ *
+ * Margem e markup são proveniência econômica (`PRICING_PROVENANCE_ROLES`, a
+ * mesma autoridade do R-20). A API recusa em JSON, CSV e PDF; para os demais
+ * perfis a tela nem consulta nem oferece CSV e PDF
+ * (R19-REPORT-AUTHORIZATION-01).
  */
 export function PricingByProductReportPage() {
+  const user = useOptionalAuth()?.user ?? null;
+  if (!user || !PRICING_PROVENANCE_ROLES.includes(user.role)) {
+    return (
+      <ReportForbidden
+        title="R-19 · Precificação por produto"
+        subtitle="Documento interno: faixas de preço com margem de contribuição e markup."
+      />
+    );
+  }
+  return <PricingByProductReport />;
+}
+
+function PricingByProductReport() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
