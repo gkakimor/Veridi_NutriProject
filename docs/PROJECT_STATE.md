@@ -2067,6 +2067,45 @@ Achado: o `afterAll` de `production-calendar.test.ts` apaga o calendário do
 
 **Próximo:** REPORTS-PAGINATION-01.
 
+## Relatórios sem corte silencioso (REPORTS-PAGINATION-01, 2026-09-12)
+
+Auditoria dos Relatórios (web e API) atrás de "primeiros N tratados como tudo".
+**O read model já estava certo:** os serviços de relatório paginam no banco (ou
+fatiam depois de montar o conjunto inteiro), com `total` de `count` no mesmo
+`where`; o resumo do R-15 cobre o filtro inteiro; CSV e PDF pedem `ALL_ROWS`.
+**O corte estava nos seletores das telas:** R-06 carregava 100 OPs, R-14 100
+Pedidos, e os filtros de Cliente (R-12, R-13, R-15, R-16, R-17) e de Fornecedor
+(R-08 a R-11) mil cadastros, num `<select>`. Da OP ou Pedido 101 e do cadastro
+1001 em diante o registro existia e não era escolhível, sem aviso.
+
+Os cinco passaram à foundation dos filtros: `EntityFilterSelect` com
+`clienteFilterSource`, `fornecedorFilterSource`, `pedidoFilterSource` e a nova
+`ordemDeProducaoFilterSource` (primeira página de 20, busca no servidor por
+código ou produto, `porId` pela própria OP). Filtros, período, status, "trocar
+filtro volta à página 1" e o recorte do CSV não mudaram. Como nas listagens, a
+busca alcança cadastro inativo e a primeira página mostra só ativos; o rótulo
+visível virou rótulo acessível + placeholder ("Todos os clientes", "Selecione a
+OP…"). Nenhuma mudança de API, nenhuma migration.
+
+**Validação.** Web 24 testes novos (`pages/reports/relatorios-sem-corte.test.tsx`:
+registro fora da primeira página alcançado, consulta com o filtro na página 1,
+CSV, resumo do servidor, estado vazio, guarda estrutural, 390px; mutação: as
+telas antigas derrubam 15). API 5 (`modules/reports/reports-sem-corte.test.ts`:
+137 pedidos, 137 OPs, 137 faturamentos com resumo R$ 1.370,00 estável entre
+páginas, borda do dia comercial, 1.005 pedidos e 1.005 clientes; mutação: resumo
+com `take: 100` e `ALL_ROWS` com teto 1000 falham). Gate web 288 (relacionados) e
+147 (relatório, PDF, impressão, 390px), API 40, typecheck. Smoke com banco e
+portas isolados, 1440 e 390: 31/31, console limpo, fixtures apagadas.
+
+Achados: o seletor escolhido corta o rótulo em 240px com o "✕" por cima (visual
+da foundation, igual nas listagens); relatórios não guardam filtro na URL
+(padrão atual mantido); na troca de filtro a tabela anterior fica visível com
+"Carregando…" (`useReport`); o resumo do R-15 lê as linhas de todos os
+faturamentos filtrados em memória — correto, candidato a agregação no banco se o
+volume crescer.
+
+**Próximo:** RECEIVING-OPEN-PO-CUTOFF-01.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

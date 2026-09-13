@@ -1,6 +1,6 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useEffect, useMemo, useState } from "react";
-import type { CustomerDTO, CustomerOrderDTO, CustomerOrderStatus } from "@veridi/shared";
+import { useMemo, useState } from "react";
+import type { CustomerOrderStatus } from "@veridi/shared";
 import {
   CUSTOMER_ORDER_BILLING_STATUS_LABELS,
   CUSTOMER_ORDER_STATUS_LABELS,
@@ -12,8 +12,8 @@ import {
   getFulfillmentReport,
   getOrderOperationReport,
 } from "../../lib/reports-api";
-import { listCustomers } from "../../lib/customers-api";
-import { listCustomerOrders } from "../../lib/customer-orders-api";
+import { clienteFilterSource, pedidoFilterSource } from "../../lib/filter-sources";
+import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
 import { dateInputValueOffset } from "../../lib/period";
@@ -24,43 +24,25 @@ import { formatDate } from "../../lib/dates";
 const PAGE_SIZE = 25;
 
 
-function useCustomerOptions() {
-  const [customers, setCustomers] = useState<CustomerDTO[]>([]);
-  useEffect(() => {
-    listCustomers({ active: true, pageSize: 1000 })
-      .then((result) => setCustomers(result.customers))
-      .catch(() => setCustomers([]));
-  }, []);
-  return customers;
-}
-
-function CustomerFilter({
-  customers,
-  value,
-  onChange,
-}: {
-  customers: CustomerDTO[];
-  value: string;
-  onChange: (value: string) => void;
-}) {
+/**
+ * Filtro por Cliente com busca no servidor — o `<select>` de mil clientes
+ * escondia do filtro quem passasse do milésimo.
+ */
+function CustomerFilter({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
-    <>
-      <label htmlFor="customer-filter">Cliente</label>
-      <select id="customer-filter" value={value} onChange={(event) => onChange(event.target.value)}>
-        <option value="">Todos</option>
-        {customers.map((customer) => (
-          <option key={customer.id} value={customer.id}>
-            {customer.legalName}
-          </option>
-        ))}
-      </select>
-    </>
+    <EntityFilterSelect
+      id="customer-filter"
+      label="Cliente"
+      placeholder="Todos os clientes"
+      value={value}
+      onChange={onChange}
+      source={clienteFilterSource}
+    />
   );
 }
 
 /** R-12 — Pedidos do Cliente. */
 export function CustomerOrdersReportPage() {
-  const customers = useCustomerOptions();
   const [search, setSearch] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [status, setStatus] = useState("");
@@ -99,7 +81,6 @@ export function CustomerOrdersReportPage() {
           <label htmlFor="co-to">até</label>
           <input id="co-to" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
           <CustomerFilter
-            customers={customers}
             value={customerId}
             onChange={(value) => {
               setPage(1);
@@ -176,7 +157,6 @@ export function CustomerOrdersReportPage() {
 
 /** R-13 — Atendimento dos Pedidos. */
 export function FulfillmentReportPage() {
-  const customers = useCustomerOptions();
   const [search, setSearch] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [status, setStatus] = useState("");
@@ -201,7 +181,6 @@ export function FulfillmentReportPage() {
       filters={
         <>
           <CustomerFilter
-            customers={customers}
             value={customerId}
             onChange={(value) => {
               setPage(1);
@@ -285,14 +264,7 @@ export function FulfillmentReportPage() {
 
 /** R-14 — Pedido → Operação. */
 export function OrderOperationReportPage() {
-  const [orders, setOrders] = useState<CustomerOrderDTO[]>([]);
   const [customerOrderId, setCustomerOrderId] = useState("");
-
-  useEffect(() => {
-    listCustomerOrders({ pageSize: 100 })
-      .then((result) => setOrders(result.customerOrders))
-      .catch(() => setOrders([]));
-  }, []);
 
   const filters = useMemo(() => ({ customerOrderId }), [customerOrderId]);
   const { data, loading, error } = useReport(getOrderOperationReport, filters, {
@@ -308,21 +280,15 @@ export function OrderOperationReportPage() {
       loading={loading}
       error={error}
       filters={
-        <>
-          <label htmlFor="chain-order">Pedido</label>
-          <select
-            id="chain-order"
-            value={customerOrderId}
-            onChange={(event) => setCustomerOrderId(event.target.value)}
-          >
-            <option value="">Selecione o pedido…</option>
-            {orders.map((order) => (
-              <option key={order.id} value={order.id}>
-                {order.code} — {order.customerName}
-              </option>
-            ))}
-          </select>
-        </>
+        // Busca no servidor: o pedido 101 em diante não aparecia no seletor.
+        <EntityFilterSelect
+          id="chain-order"
+          label="Pedido"
+          placeholder="Selecione o pedido…"
+          value={customerOrderId}
+          onChange={setCustomerOrderId}
+          source={pedidoFilterSource}
+        />
       }
     >
       {!customerOrderId && <p className="muted">Selecione um pedido para ver a cadeia operacional.</p>}

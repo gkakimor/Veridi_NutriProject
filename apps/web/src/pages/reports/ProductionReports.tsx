@@ -1,7 +1,6 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type {
-  ProductionOrderDTO,
   ProductionOrderStatus,
   TraceabilityConsumedRowDTO,
   TraceabilityProducedRowDTO,
@@ -13,7 +12,8 @@ import {
   getProductionTraceabilityReport,
   getRequirementsReport,
 } from "../../lib/reports-api";
-import { listProductionOrders } from "../../lib/production-orders-api";
+import { ordemDeProducaoFilterSource } from "../../lib/filter-sources";
+import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
 import { dateInputValueOffset } from "../../lib/period";
@@ -22,18 +22,6 @@ import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
 
 const PAGE_SIZE = 25;
-
-
-/** Seletor de OP reutilizado pelos relatórios que exigem uma ordem. */
-function useProductionOrderOptions() {
-  const [orders, setOrders] = useState<ProductionOrderDTO[]>([]);
-  useEffect(() => {
-    listProductionOrders({ pageSize: 100 })
-      .then((result) => setOrders(result.productionOrders))
-      .catch(() => setOrders([]));
-  }, []);
-  return orders;
-}
 
 /** R-04 — Necessidade / Falta para OP. */
 export function RequirementsReportPage() {
@@ -266,7 +254,6 @@ export function PlannedActualReportPage() {
 
 /** R-06 — Rastreabilidade por OP. */
 export function ProductionTraceabilityReportPage() {
-  const orders = useProductionOrderOptions();
   const [productionOrderId, setProductionOrderId] = useState("");
 
   const filters = useMemo(() => ({ productionOrderId }), [productionOrderId]);
@@ -283,21 +270,16 @@ export function ProductionTraceabilityReportPage() {
       loading={loading}
       error={error}
       filters={
-        <>
-          <label htmlFor="trace-op">Ordem de Produção</label>
-          <select
-            id="trace-op"
-            value={productionOrderId}
-            onChange={(event) => setProductionOrderId(event.target.value)}
-          >
-            <option value="">Selecione a OP…</option>
-            {orders.map((order) => (
-              <option key={order.id} value={order.id}>
-                {order.code} — {order.productName}
-              </option>
-            ))}
-          </select>
-        </>
+        // Busca no servidor: a OP antiga — a que mais se rastreia — não pode
+        // depender de estar entre as primeiras carregadas.
+        <EntityFilterSelect
+          id="trace-op"
+          label="Ordem de Produção"
+          placeholder="Selecione a OP…"
+          value={productionOrderId}
+          onChange={setProductionOrderId}
+          source={ordemDeProducaoFilterSource}
+        />
       }
     >
       {!productionOrderId && <p className="muted">Selecione uma Ordem de Produção para ver a genealogia.</p>}

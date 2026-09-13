@@ -1,6 +1,6 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useEffect, useMemo, useState } from "react";
-import type { PurchaseOrderStatus, SupplierDTO } from "@veridi/shared";
+import { useMemo, useState } from "react";
+import type { PurchaseOrderStatus } from "@veridi/shared";
 import { PURCHASE_ORDER_STATUS_LABELS } from "@veridi/shared";
 import {
   getLatePurchaseOrdersReport,
@@ -8,7 +8,8 @@ import {
   getPurchaseOrdersReport,
   getReceiptsReport,
 } from "../../lib/reports-api";
-import { listSuppliers } from "../../lib/suppliers-api";
+import { fornecedorFilterSource } from "../../lib/filter-sources";
+import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
 import { dateInputValueOffset } from "../../lib/period";
@@ -19,43 +20,25 @@ import { formatDate } from "../../lib/dates";
 const PAGE_SIZE = 25;
 
 
-function useSupplierOptions() {
-  const [suppliers, setSuppliers] = useState<SupplierDTO[]>([]);
-  useEffect(() => {
-    listSuppliers({ active: true, pageSize: 1000 })
-      .then((result) => setSuppliers(result.suppliers))
-      .catch(() => setSuppliers([]));
-  }, []);
-  return suppliers;
-}
-
-function SupplierFilter({
-  suppliers,
-  value,
-  onChange,
-}: {
-  suppliers: SupplierDTO[];
-  value: string;
-  onChange: (value: string) => void;
-}) {
+/**
+ * Filtro por Fornecedor com busca no servidor — o `<select>` de mil
+ * fornecedores escondia do filtro quem passasse do milésimo.
+ */
+function SupplierFilter({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
-    <>
-      <label htmlFor="supplier-filter">Fornecedor</label>
-      <select id="supplier-filter" value={value} onChange={(event) => onChange(event.target.value)}>
-        <option value="">Todos</option>
-        {suppliers.map((supplier) => (
-          <option key={supplier.id} value={supplier.id}>
-            {supplier.legalName}
-          </option>
-        ))}
-      </select>
-    </>
+    <EntityFilterSelect
+      id="supplier-filter"
+      label="Fornecedor"
+      placeholder="Todos os fornecedores"
+      value={value}
+      onChange={onChange}
+      source={fornecedorFilterSource}
+    />
   );
 }
 
 /** R-08 — Ordens de Compra. */
 export function PurchaseOrdersReportPage() {
-  const suppliers = useSupplierOptions();
   const [search, setSearch] = useState("");
   const [supplierId, setSupplierId] = useState("");
   const [status, setStatus] = useState("");
@@ -96,7 +79,6 @@ export function PurchaseOrdersReportPage() {
           <label htmlFor="po-to">até</label>
           <input id="po-to" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
           <SupplierFilter
-            suppliers={suppliers}
             value={supplierId}
             onChange={(value) => {
               setPage(1);
@@ -194,7 +176,6 @@ export function PurchaseOrdersReportPage() {
 
 /** R-09 — Recebimentos. */
 export function ReceiptsReportPage() {
-  const suppliers = useSupplierOptions();
   const [search, setSearch] = useState("");
   const [supplierId, setSupplierId] = useState("");
   const [from, setFrom] = useState(dateInputValueOffset(-29));
@@ -231,7 +212,6 @@ export function ReceiptsReportPage() {
           <label htmlFor="rec-to">até</label>
           <input id="rec-to" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
           <SupplierFilter
-            suppliers={suppliers}
             value={supplierId}
             onChange={(value) => {
               setPage(1);
@@ -302,7 +282,6 @@ export function ReceiptsReportPage() {
 
 /** R-10 — Em Compra. */
 export function OnOrderReportPage() {
-  const suppliers = useSupplierOptions();
   const [search, setSearch] = useState("");
   const [supplierId, setSupplierId] = useState("");
   const [page, setPage] = useState(1);
@@ -326,7 +305,6 @@ export function OnOrderReportPage() {
       filters={
         <>
           <SupplierFilter
-            suppliers={suppliers}
             value={supplierId}
             onChange={(value) => {
               setPage(1);
@@ -384,7 +362,6 @@ export function OnOrderReportPage() {
 
 /** R-11 — OCs atrasadas. */
 export function LatePurchaseOrdersReportPage() {
-  const suppliers = useSupplierOptions();
   const [supplierId, setSupplierId] = useState("");
   const [page, setPage] = useState(1);
 
@@ -403,7 +380,6 @@ export function LatePurchaseOrdersReportPage() {
       error={error}
       filters={
         <SupplierFilter
-          suppliers={suppliers}
           value={supplierId}
           onChange={(value) => {
             setPage(1);

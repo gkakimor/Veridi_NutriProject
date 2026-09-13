@@ -1,6 +1,6 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useEffect, useMemo, useState } from "react";
-import type { CustomerDTO, CustomerOrderStatus } from "@veridi/shared";
+import { useMemo, useState } from "react";
+import type { CustomerOrderStatus } from "@veridi/shared";
 import {
   CUSTOMER_ORDER_BILLING_STATUS_LABELS,
   CUSTOMER_ORDER_STATUS_LABELS,
@@ -10,7 +10,8 @@ import {
   getBillingPeriodReport,
   getOrderDeliveredBilledReport,
 } from "../../lib/reports-api";
-import { listCustomers } from "../../lib/customers-api";
+import { clienteFilterSource } from "../../lib/filter-sources";
+import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import {
   DocLink,
   ReportPage,
@@ -27,19 +28,33 @@ import { formatDate } from "../../lib/dates";
 const PAGE_SIZE = 25;
 
 
-function useCustomerOptions() {
-  const [customers, setCustomers] = useState<CustomerDTO[]>([]);
-  useEffect(() => {
-    listCustomers({ active: true, pageSize: 1000 })
-      .then((result) => setCustomers(result.customers))
-      .catch(() => setCustomers([]));
-  }, []);
-  return customers;
+/**
+ * Filtro por Cliente com busca no servidor — o `<select>` de mil clientes
+ * escondia do filtro quem passasse do milésimo.
+ */
+function CustomerFilter({
+  id,
+  value,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <EntityFilterSelect
+      id={id}
+      label="Cliente"
+      placeholder="Todos os clientes"
+      value={value}
+      onChange={onChange}
+      source={clienteFilterSource}
+    />
+  );
 }
 
 /** R-15 — Faturamento por período. */
 export function BillingPeriodReportPage() {
-  const customers = useCustomerOptions();
   const [search, setSearch] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [from, setFrom] = useState(dateInputValueOffset(-29));
@@ -91,22 +106,14 @@ export function BillingPeriodReportPage() {
           <input id="bill-from" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
           <label htmlFor="bill-to">até</label>
           <input id="bill-to" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
-          <label htmlFor="bill-customer">Cliente</label>
-          <select
+          <CustomerFilter
             id="bill-customer"
             value={customerId}
-            onChange={(event) => {
+            onChange={(value) => {
               setPage(1);
-              setCustomerId(event.target.value);
+              setCustomerId(value);
             }}
-          >
-            <option value="">Todos</option>
-            {customers.map((customer) => (
-              <option key={customer.id} value={customer.id}>
-                {customer.legalName}
-              </option>
-            ))}
-          </select>
+          />
           <div className="toolbar__search">
             <input
               type="search"
@@ -163,7 +170,6 @@ export function BillingPeriodReportPage() {
 
 /** R-16 — Aguardando faturamento. */
 export function AwaitingBillingReportPage() {
-  const customers = useCustomerOptions();
   const [search, setSearch] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [page, setPage] = useState(1);
@@ -186,22 +192,14 @@ export function AwaitingBillingReportPage() {
       error={error}
       filters={
         <>
-          <label htmlFor="await-customer">Cliente</label>
-          <select
+          <CustomerFilter
             id="await-customer"
             value={customerId}
-            onChange={(event) => {
+            onChange={(value) => {
               setPage(1);
-              setCustomerId(event.target.value);
+              setCustomerId(value);
             }}
-          >
-            <option value="">Todos</option>
-            {customers.map((customer) => (
-              <option key={customer.id} value={customer.id}>
-                {customer.legalName}
-              </option>
-            ))}
-          </select>
+          />
           <div className="toolbar__search">
             <input
               type="search"
@@ -259,7 +257,6 @@ export function AwaitingBillingReportPage() {
 
 /** R-17 — Pedido x Entregue x Faturado. */
 export function OrderDeliveredBilledReportPage() {
-  const customers = useCustomerOptions();
   const [search, setSearch] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [status, setStatus] = useState("");
@@ -283,22 +280,14 @@ export function OrderDeliveredBilledReportPage() {
       error={error}
       filters={
         <>
-          <label htmlFor="odb-customer">Cliente</label>
-          <select
+          <CustomerFilter
             id="odb-customer"
             value={customerId}
-            onChange={(event) => {
+            onChange={(value) => {
               setPage(1);
-              setCustomerId(event.target.value);
+              setCustomerId(value);
             }}
-          >
-            <option value="">Todos</option>
-            {customers.map((customer) => (
-              <option key={customer.id} value={customer.id}>
-                {customer.legalName}
-              </option>
-            ))}
-          </select>
+          />
           <select
             aria-label="Status"
             value={status}
