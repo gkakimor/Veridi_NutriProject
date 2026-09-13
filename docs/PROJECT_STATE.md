@@ -2271,6 +2271,44 @@ dentro do contêiner (antes 484 px, com o `<select>` de 696 px); seguem com
 `ProjectsPage`, `ProductsPage`, `BillingsPage`, `SupplierItemsPage`,
 `CustomerOrderPage` e `ProjectProductsSection`.
 
+## Formato de saída não é permissão (R20-EXPORT-AUTHORIZATION-01, 2026-09-13)
+
+P0. O R-20 (custo e margem por proposta) recusava PRODUCTION com 403 em JSON,
+mas `GET /reports/commercial/quote-pricing/export.csv` respondia 200 com os mesmos
+dados — e o PDF do R-20 é gerado a partir desse CSV. Causa: o dispatcher de CSV
+(`exports.routes.ts`) só validava o filtro; a permissão existia apenas, escrita à
+mão, na rota JSON.
+
+**Regra.** Autorização é do relatório, não do formato: tela, JSON, CSV e o PDF que
+lê o CSV respondem aos mesmos perfis. A autoridade do R-20 é UMA,
+`PRICING_PROVENANCE_ROLES` (`@veridi/shared`, COMMERCIAL e ADMIN — a regra da
+proveniência econômica, §5.11): a rota JSON aplica, a definição do CSV declara
+(`roles`, conferido pelo dispatcher antes do filtro, com o 403 padrão
+`{ error: "forbidden", message }`), e `canSeePricingProvenance` passou a ler a
+mesma lista. A tela usa a lista só para não oferecer o recusado: o catálogo não
+lista o R-20, a tela não consulta nem mostra CSV/PDF, a impressão não pede o CSV.
+Conteúdo do relatório inalterado. Sem migration.
+
+**Auditoria.** Todas as 20 listas e os R-01 a R-19 com CSV têm a rota JSON aberta
+a qualquer perfil (sem bypass por formato); o R-20 era o único relatório com perfil.
+Seleção em massa (`/bulk/…`) segue aberta como as listas.
+
+**Validação.** API 9 testes (`modules/reports/r20-autorizacao.test.ts`: seis perfis ×
+JSON, CSV e o CSV com a paginação que o PDF manda; 403 padrão sem dado no corpo;
+perfil antes da validação; guarda genérica — para toda exportação e todo perfil,
+JSON 403 ⇒ CSV 403; mutação: sem `roles` no CSV caem 6). Web 16
+(`r20-autorizacao.test.tsx`: tela e catálogo nos seis perfis; `report-content`:
+impressão recusada sem pedir o CSV, e gerada para COMMERCIAL; mutação: a UI antiga
+derruba 12). Gate API 162, web 121, shared 29, typecheck. Smoke com banco e portas
+isolados: ADMIN e COMMERCIAL abrem, baixam CSV e geram PDF; PRODUCTION e VIEWER
+levam 403 em JSON, CSV e no CSV do PDF, sem R-20 no catálogo, tela e impressão
+bloqueadas sem requisição — 26/26, console limpo.
+
+Achado, sem correção (decisão de perfil): **R-19 mostra margem e markup a todos** —
+PRODUCTION leva 403 em `/pricing-versions` (COMMERCIAL, PURCHASING e ADMIN) e 200
+no R-19 em JSON e CSV. Não é bypass por formato; é o relatório mais aberto que a
+origem.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

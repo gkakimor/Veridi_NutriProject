@@ -7,7 +7,12 @@ import type {
   QuotePricingProvenanceDTO,
   QuoteVersionDTO,
 } from "@veridi/shared";
-import { QUOTE_CODE_PREFIX, QUOTE_STATUS_LABELS, calcularTotaisOrcamento } from "@veridi/shared";
+import {
+  PRICING_PROVENANCE_ROLES,
+  QUOTE_CODE_PREFIX,
+  QUOTE_STATUS_LABELS,
+  calcularTotaisOrcamento,
+} from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { diaComercialPorExtenso, venceuEm } from "../../lib/business-day.js";
@@ -179,10 +184,11 @@ function toQuoteLineDTO(
 
 /**
  * Custo, margem, markup e comissão são informação interna: só quem negocia
- * (ou administra) recebe a proveniência econômica.
+ * (ou administra) recebe a proveniência econômica — `PRICING_PROVENANCE_ROLES`,
+ * a mesma lista que guarda o R-20 em JSON, CSV e PDF.
  */
 export function canSeePricingProvenance(role: string): boolean {
-  return role === "COMMERCIAL" || role === "ADMIN";
+  return (PRICING_PROVENANCE_ROLES as readonly string[]).includes(role);
 }
 
 export function toQuoteVersionDTO(

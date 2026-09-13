@@ -28,6 +28,18 @@
 export const PRICING_VERSION_CODE_PREFIX = "PREC";
 
 import type { IndustrialCostQuality, IndustrialCostWarningDTO } from "./industrial-cost-calculation.js";
+import type { UserRole } from "./users.js";
+
+/**
+ * Quem recebe a PROVENIÊNCIA ECONÔMICA — custo, margem, markup e comissão por
+ * proposta: só quem negocia ou administra (§5.11).
+ *
+ * A API aplica em todo formato de saída: o orçamento, o R-20 em JSON, o CSV
+ * dele e o PDF, que é gerado a partir desse CSV. Formato de arquivo não é
+ * permissão (R20-EXPORT-AUTHORIZATION-01). A tela usa a mesma lista só para
+ * não oferecer o que seria recusado.
+ */
+export const PRICING_PROVENANCE_ROLES: readonly UserRole[] = ["COMMERCIAL", "ADMIN"];
 import type { PricingModelConfig } from "./pricing-model.js";
 
 export type PricingVersionStatus = "DRAFT" | "ACTIVE" | "INACTIVE";

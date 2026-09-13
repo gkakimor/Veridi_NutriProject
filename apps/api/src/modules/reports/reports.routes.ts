@@ -29,8 +29,10 @@ import {
   getPricingByProductReport,
   getQuotePricingAuditReport,
 } from "./cost-reports.service.js";
+import { PRICING_PROVENANCE_ROLES } from "@veridi/shared";
 import { ALL_ROWS } from "../../lib/pagination.js";
 import { requireRole } from "../../lib/current-user.js";
+import { ForbiddenError } from "../auth/auth.errors.js";
 import type { Pagination } from "../../lib/pagination.js";
 import {
   awaitingBillingQuerySchema,
@@ -134,11 +136,15 @@ export const reportsRoutes: FastifyPluginAsync = async (app) => {
   register("/reports/costs/pricing-by-product", pricingByProductQuerySchema, getPricingByProductReport);
 
   // R-20 expõe custo e margem por proposta: acesso restrito a quem negocia.
+  // A MESMA lista guarda o CSV (`report-exports.ts`) — e o PDF, que lê o CSV.
   app.get("/reports/commercial/quote-pricing", async (request, reply) => {
     try {
-      requireRole(request, "COMMERCIAL", "ADMIN");
-    } catch {
-      return reply.status(403).send({ error: "forbidden" });
+      requireRole(request, ...PRICING_PROVENANCE_ROLES);
+    } catch (error) {
+      if (error instanceof ForbiddenError) {
+        return reply.status(403).send({ error: "forbidden", message: error.message });
+      }
+      throw error;
     }
     const parsed = quotePricingAuditQuerySchema.safeParse(request.query);
     if (!parsed.success) {

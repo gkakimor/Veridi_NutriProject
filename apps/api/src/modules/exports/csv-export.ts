@@ -1,4 +1,5 @@
 import type { ZodTypeAny } from "zod";
+import type { UserRole } from "@veridi/shared";
 import type { CsvColumn } from "../../lib/csv.js";
 import { buildCsv, csvFileName } from "../../lib/csv.js";
 
@@ -20,6 +21,12 @@ export interface CsvExportDefinition<TQuery, TRow> {
   columns: CsvColumn<TRow>[];
   /** Período aplicado, quando existir — entra no nome do arquivo. */
   period?: (query: TQuery) => { from?: Date; to?: Date };
+  /**
+   * Perfis que podem baixar — a MESMA lista que guarda a rota JSON do mesmo
+   * read model. Sem ela, o arquivo é tão aberto quanto a tela; com ela, o CSV
+   * (e o PDF que o lê) nunca entrega o que o JSON recusa.
+   */
+  roles?: readonly UserRole[];
 }
 
 /**
@@ -32,6 +39,7 @@ export interface CsvExportRoute {
   schema: ZodTypeAny;
   build: (query: unknown) => Promise<string>;
   fileName: (query: unknown) => string;
+  roles?: readonly UserRole[];
 }
 
 export function defineCsvExport<TQuery, TRow>(
@@ -41,6 +49,7 @@ export function defineCsvExport<TQuery, TRow>(
     path: definition.path,
     slug: definition.slug,
     schema: definition.schema,
+    ...(definition.roles ? { roles: definition.roles } : {}),
     build: async (query) => buildCsv(definition.columns, await definition.fetch(query as TQuery)),
     fileName: (query) => csvFileName(definition.slug, definition.period?.(query as TQuery)),
   };

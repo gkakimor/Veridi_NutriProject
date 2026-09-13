@@ -42,13 +42,15 @@ vi.mock("../../lib/reports-api", () => ({
   getOrderOperationReport: (...args: unknown[]) => getOrderOperationReport(...args),
 }));
 
+const sessao = vi.hoisted(() => ({ role: "ADMIN" }));
 vi.mock("../../lib/auth-api", () => ({
   fetchCurrentUser: () =>
-    Promise.resolve({ id: "u-1", code: "USR-000001", name: "Ana Souza", email: "ana@veridi.test", role: "ADMIN" }),
+    Promise.resolve({ id: "u-1", code: "USR-000001", name: "Ana Souza", email: "ana@veridi.test", role: sessao.role }),
   logout: vi.fn(),
 }));
 
 beforeEach(() => {
+  sessao.role = "ADMIN";
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-09-11T12:30:00.000Z"));
   renderPdfBlob.mockReset().mockResolvedValue(new Blob(["%PDF-1.3"], { type: "application/pdf" }));
@@ -221,6 +223,27 @@ describe("relatórios R-01…R-20 em PDF", () => {
     expect(campo(documento, "Status")).toBe("SENT");
     expect(campo(documento, "De")).toBe("2026-09-01");
     expect(campo(documento, "Até")).toBe("2026-09-30");
+  });
+
+  it.each(["PRODUCTION", "QUALITY", "PURCHASING", "VIEWER"])(
+    "R-20 como %s: nem pede o CSV, nem gera documento — a recusa de verdade é do servidor",
+    async (role) => {
+      sessao.role = role;
+      abrir("/print/relatorios/R-20?search=ORC-000001");
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Seu perfil não permite ver este relatório.");
+      expect(apiFetch).not.toHaveBeenCalled();
+      expect(renderPdfBlob).not.toHaveBeenCalled();
+    },
+  );
+
+  it("R-20 como COMMERCIAL: o documento sai como para ADMIN", async () => {
+    sessao.role = "COMMERCIAL";
+    apiFetch.mockResolvedValue(respostaCsv([["Orçamento", "Total"], ["ORC-000001 · V1", "100,00"]]));
+    abrir("/print/relatorios/R-20");
+
+    await documentoGerado("R-20-2026-09-11.pdf");
+    expect(apiFetch).toHaveBeenCalledWith(`${API_URL}/reports/commercial/quote-pricing/export.csv`);
   });
 
   it("relatório desconhecido não gera documento", async () => {

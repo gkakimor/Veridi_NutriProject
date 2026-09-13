@@ -1,4 +1,6 @@
 import { useParams, useSearchParams } from "react-router-dom";
+import type { UserRole } from "@veridi/shared";
+import { PRICING_PROVENANCE_ROLES } from "@veridi/shared";
 import { useOptionalAuth } from "../../app/AuthProvider";
 import { API_URL, apiFetch } from "../../lib/api";
 import { PdfScreen } from "../../pdf/PdfScreen";
@@ -27,6 +29,11 @@ interface ReportPrintDefinition {
   screenPath: string;
   /** Contém custo/margem: documento interno, nunca entregue ao cliente. */
   internal?: boolean;
+  /**
+   * Perfis que podem gerar o documento — a lista que a API aplica ao CSV. A
+   * recusa de verdade é do servidor; aqui só não se pede o que seria negado.
+   */
+  roles?: readonly UserRole[];
   /**
    * Relatório largo demais para uma linha só. As colunas listadas aqui viram
    * a linha principal; TODAS as outras aparecem logo abaixo, rotuladas, na
@@ -258,6 +265,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     screenPath: "/relatorios/comercial/orcamento-precificacao",
     // Contém custo e margem: nunca é o documento entregue ao cliente.
     internal: true,
+    roles: PRICING_PROVENANCE_ROLES,
     primaryColumns: [
       "Orçamento",
       "Projeto",
@@ -361,8 +369,9 @@ type ReportPrintData = {
 export function ReportPrintPage() {
   const { reportCode } = useParams<{ reportCode: string }>();
   const [params] = useSearchParams();
+  const user = useOptionalAuth()?.user ?? null;
   // Quem gerou o documento — não substitui quem executou cada ato no sistema.
-  const generatedBy = useOptionalAuth()?.user?.name ?? null;
+  const generatedBy = user?.name ?? null;
   const definition = reportCode ? REPORT_PRINT_DEFINITIONS[reportCode.toUpperCase()] : undefined;
   const query = params.toString();
 
@@ -372,6 +381,9 @@ export function ReportPrintPage() {
       key={`${reportCode ?? ""}?${query}`}
       load={async () => {
         if (!definition) throw new Error(`Relatório desconhecido: ${reportCode ?? ""}`);
+        if (definition.roles && !(user && definition.roles.includes(user.role))) {
+          throw new Error("Seu perfil não permite ver este relatório.");
+        }
         const response = await apiFetch(`${API_URL}${definition.csvPath}${query ? `?${query}` : ""}`);
         if (!response.ok) throw new Error(`Falha ao carregar o relatório (${response.status})`);
         return {
