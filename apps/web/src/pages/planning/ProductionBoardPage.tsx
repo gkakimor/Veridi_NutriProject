@@ -150,9 +150,14 @@ export function ProductionBoardPage() {
           code: p.code,
           name: p.name,
         })),
+      /*
+       * Pelo id no servidor. Procurava o `?productId=` dentro dos 20
+       * primeiros: do 21º produto em diante o quadro ficava filtrado e o
+       * campo, vazio.
+       */
       porId: async (id: string) => {
-        const achados = (await listProducts({ pageSize: 20 })).products.find((p) => p.id === id);
-        return achados ? { id: achados.id, code: achados.code, name: achados.name } : null;
+        const achado = (await listProducts({ productId: id, pageSize: 1 })).products[0];
+        return achado ? { id: achado.id, code: achado.code, name: achado.name } : null;
       },
     }),
     [],

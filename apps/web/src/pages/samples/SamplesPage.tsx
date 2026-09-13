@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import type { CustomerDTO, ProjectSampleDTO, ProjectSampleStatus } from "@veridi/shared";
+import type { ProjectSampleDTO, ProjectSampleStatus } from "@veridi/shared";
 import { PROJECT_SAMPLE_STATUSES, PROJECT_SAMPLE_STATUS_LABELS } from "@veridi/shared";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
+import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { listSamples } from "../../lib/samples-api";
-import { listCustomers } from "../../lib/customers-api";
+import { clienteAtivoFilterSource } from "../../lib/filter-sources";
 import { EntityLink } from "../../components/EntityLink";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
@@ -57,7 +58,6 @@ export function SamplesPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<ProjectSampleStatus | "all">("all");
   const [customerId, setCustomerId] = useState("");
-  const [customers, setCustomers] = useState<CustomerDTO[]>([]);
 
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput), 300);
@@ -67,12 +67,6 @@ export function SamplesPage() {
   useEffect(() => {
     setPage(1);
   }, [search, status, customerId]);
-
-  useEffect(() => {
-    listCustomers({ active: true, pageSize: 100 })
-      .then((result) => setCustomers(result.customers))
-      .catch(() => setCustomers([]));
-  }, []);
 
   const reload = useCallback(() => {
     setLoading(true);
@@ -172,21 +166,16 @@ export function SamplesPage() {
           ))}
         </select>
 
-        <label className="sr-only" htmlFor="samples-customer">
-          Filtrar por cliente
-        </label>
-        <select
+        {/* Era um `<select>` com os 100 primeiros clientes ativos: do 101º em
+            diante o cliente tinha amostra e não tinha filtro. */}
+        <EntityFilterSelect
           id="samples-customer"
+          label="Filtrar por cliente"
+          placeholder="Todos os clientes"
           value={customerId}
-          onChange={(event) => setCustomerId(event.target.value)}
-        >
-          <option value="">Todos os clientes</option>
-          {customers.map((customer) => (
-            <option key={customer.id} value={customer.id}>
-              {customer.code} — {customer.legalName}
-            </option>
-          ))}
-        </select>
+          onChange={setCustomerId}
+          source={clienteAtivoFilterSource}
+        />
       </div>
 
       {error && <p className="form-alert" role="alert">{error}</p>}

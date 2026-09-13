@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { ProductDTO, ProjectProductDTO, ProjectStatus } from "@veridi/shared";
 import { PROJECT_PRODUCT_STATUS_LABELS } from "@veridi/shared";
@@ -6,6 +6,7 @@ import { createProjectProduct, linkProjectProduct } from "../../lib/projects-api
 import { listProducts } from "../../lib/products-api";
 import { EntityLink } from "../../components/EntityLink";
 import { FormSection } from "../../components/FormSection";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 
 /**
@@ -31,6 +32,25 @@ const LIFECYCLE_LABELS: Record<string, string> = {
   APPROVED: "Aprovado",
 };
 
+/** Primeira página do seletor e tamanho de cada busca no servidor. */
+const PAGINA_DO_SELETOR = 20;
+
+function opcaoDeProduto(product: ProductDTO): EntityOption {
+  return {
+    id: product.id,
+    code: product.code,
+    name: product.name,
+    hint: LIFECYCLE_LABELS[product.lifecycle] ?? product.lifecycle,
+  };
+}
+
+/** Mescla sem duplicar e sem trocar a referência à toa. */
+function mesclarProdutos(atual: ProductDTO[], novos: ProductDTO[]): ProductDTO[] {
+  const conhecidos = new Set(atual.map((product) => product.id));
+  const ineditos = novos.filter((product) => !conhecidos.has(product.id));
+  return ineditos.length === 0 ? atual : [...atual, ...ineditos];
+}
+
 export function ProjectProductsSection({
   projectId,
   customerId,
@@ -54,15 +74,52 @@ export function ProjectProductsSection({
   const [selectedProductId, setSelectedProductId] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Id do escolhido já perguntado ao servidor — uma pergunta por carga, nunca em laço. */
+  const produtoPedido = useRef("");
 
+  /*
+   * Primeira página curta e busca no servidor. Eram os 1000 primeiros do
+   * cliente: do produto 1001 em diante ele existia, o backend aceitaria o
+   * vínculo, e o campo não o achava.
+   */
   useEffect(() => {
     if (mode !== "link") return;
     // Só produtos do mesmo cliente: vincular produto de outro cliente
     // misturaria propriedade, e o backend recusa.
-    listProducts({ customerId, pageSize: 1000 })
-      .then((result) => setCatalog(result.products))
+    listProducts({ customerId, pageSize: PAGINA_DO_SELETOR })
+      .then((result) => {
+        // A página substitui o catálogo; o escolhido que estava fora dela
+        // volta pelo id, logo abaixo.
+        produtoPedido.current = "";
+        setCatalog(result.products);
+      })
       .catch(() => setCatalog([]));
   }, [mode, customerId]);
+
+  /** Busca no servidor com o MESMO filtro da primeira página: o cliente do projeto. */
+  async function buscarProdutos(termo: string): Promise<EntityOption[]> {
+    const { products: achados } = await listProducts({
+      customerId,
+      search: termo,
+      pageSize: PAGINA_DO_SELETOR,
+    });
+    setCatalog((atual) => mesclarProdutos(atual, achados));
+    return achados.filter((product) => !alreadyLinked.has(product.id)).map(opcaoDeProduto);
+  }
+
+  /*
+   * O escolhido que não está no catálogo — voltar a "Vincular" recarrega só a
+   * primeira página, e o achado pela busca sai dela. Pelo id e com o mesmo
+   * cliente: sem isto o campo ficaria em branco com o botão habilitado.
+   */
+  useEffect(() => {
+    if (mode !== "link" || !selectedProductId || produtoPedido.current === selectedProductId) return;
+    if (catalog.some((product) => product.id === selectedProductId)) return;
+    produtoPedido.current = selectedProductId;
+    listProducts({ customerId, productId: selectedProductId, pageSize: 1 })
+      .then(({ products: achados }) => setCatalog((atual) => mesclarProdutos(atual, achados)))
+      .catch(() => undefined);
+  }, [mode, selectedProductId, catalog, customerId]);
 
   async function run(action: () => Promise<unknown>) {
     setSaving(true);
@@ -265,12 +322,8 @@ export function ProjectProductsSection({
                 placeholder="Busque por código ou nome"
                 options={catalog
                   .filter((product) => !alreadyLinked.has(product.id))
-                  .map((product) => ({
-                    id: product.id,
-                    code: product.code,
-                    name: product.name,
-                    hint: LIFECYCLE_LABELS[product.lifecycle] ?? product.lifecycle,
-                  }))}
+                  .map(opcaoDeProduto)}
+                onSearch={buscarProdutos}
               />
               <div className="form-actions">
                 <button

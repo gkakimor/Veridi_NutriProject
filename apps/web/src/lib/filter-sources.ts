@@ -85,6 +85,25 @@ export const fornecedorFilterSource: EntityFilterSource = {
   },
 };
 
+/**
+ * Fornecedores ATIVOS — filtro de Item × Fornecedor.
+ *
+ * Substitui `listSuppliers({ active: true, pageSize: 1000 })` num `<select>`:
+ * do fornecedor ativo 1001 em diante a barra não o oferecia. Primeira página
+ * e busca continuam só entre ativos — o universo desta barra sempre foi esse,
+ * e trocar o componente não o amplia. `porId` só dá nome ao fornecedor que já
+ * está aplicado (link do cadastro, filtro lembrado), ativo ou não: sem ele o
+ * campo diria "Todos os fornecedores" com a lista filtrada.
+ */
+export const fornecedorAtivoFilterSource: EntityFilterSource = {
+  inicial: fornecedorFilterSource.inicial,
+  buscar: async (termo) =>
+    (await listSuppliers({ active: true, search: termo, pageSize: PAGINA })).suppliers.map(
+      opcaoDeFornecedor,
+    ),
+  porId: fornecedorFilterSource.porId,
+};
+
 function opcaoDeItem(item: ItemDTO): EntityOption {
   return {
     id: item.id,
@@ -178,7 +197,8 @@ function opcaoDeCliente(cliente: CustomerDTO): EntityOption {
 }
 
 /**
- * Clientes — filtro de Pedidos e dos relatórios Comerciais e de Faturamento.
+ * Clientes — filtro de Pedidos, Produtos, Faturamento e dos relatórios
+ * Comerciais e de Faturamento.
  *
  * Substitui `listCustomers({ pageSize: 1000 })` num `<select>`: do cliente
  * 1001 em diante o filtro deixava de oferecer quem existia. `porId` resolve
@@ -195,6 +215,26 @@ export const clienteFilterSource: EntityFilterSource = {
     const cliente = encontrados[0];
     return cliente ? opcaoDeCliente(cliente) : null;
   },
+};
+
+/**
+ * Clientes ATIVOS — filtro de Projetos, Amostras e Materiais de Clientes.
+ *
+ * Substitui `listCustomers({ active: true, pageSize: 1000 })` (em Amostras,
+ * 100) num `<select>`: do cliente ativo 1001 em diante a barra não o
+ * oferecia. Primeira página e busca continuam só entre ativos — o universo
+ * dessas barras sempre foi esse, e trocar o componente não o amplia. `porId`
+ * só dá nome ao cliente que já está aplicado (link do cadastro, filtro
+ * lembrado), ativo ou não: sem ele o campo diria "Todos os clientes" com a
+ * lista filtrada.
+ */
+export const clienteAtivoFilterSource: EntityFilterSource = {
+  inicial: clienteFilterSource.inicial,
+  buscar: async (termo) =>
+    (await listCustomers({ active: true, search: termo, pageSize: PAGINA })).customers.map(
+      opcaoDeCliente,
+    ),
+  porId: clienteFilterSource.porId,
 };
 
 function opcaoDePedido(pedido: CustomerOrderDTO): EntityOption {

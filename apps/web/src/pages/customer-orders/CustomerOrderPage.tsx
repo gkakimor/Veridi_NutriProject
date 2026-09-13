@@ -16,6 +16,8 @@ import type {
   ProductDTO,
   PlanPurchaseSourcingDTO,
   PurchaseSuggestionDTO,
+  PurchaseSuggestionRowDTO,
+  PurchaseSupplierCandidateDTO,
   ReservationStatusDTO,
   ReservationStatusLineDTO,
   ShipmentStatus,
@@ -85,6 +87,45 @@ import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 function DicaDaColuna({ id }: { id: HelpHintId }) {
   const dica = helpHints[id];
   return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
+
+/** Primeira página e tamanho de cada busca do fornecedor da sugestão de compra. */
+const PAGINA_DE_FORNECEDORES_DA_COMPRA = 20;
+
+/** Mescla sem duplicar e sem trocar a referência à toa. */
+function mesclarFornecedores(atual: SupplierDTO[], novos: SupplierDTO[]): SupplierDTO[] {
+  const conhecidos = new Set(atual.map((supplier) => supplier.id));
+  const ineditos = novos.filter((supplier) => !conhecidos.has(supplier.id));
+  return ineditos.length === 0 ? atual : [...atual, ...ineditos];
+}
+
+/** Sem caixa e sem acento: quem digita rápido não acentua. */
+function semAcento(texto: string): string {
+  return texto
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .trim();
+}
+
+/** Homologado do material — o grupo "Homologados" que o `<select>` tinha virou a dica. */
+function opcaoDeCandidato(candidate: PurchaseSupplierCandidateDTO): EntityOption {
+  return {
+    id: candidate.supplierId,
+    code: candidate.supplierCode,
+    name: candidate.supplierName,
+    hint: candidate.preferred ? "Homologado · preferencial" : "Homologado",
+  };
+}
+
+/** Demais fornecedores ativos: compra emergencial/amostra continua possível. */
+function opcaoDeFornecedorAtivo(supplier: SupplierDTO): EntityOption {
+  return {
+    id: supplier.id,
+    code: supplier.code,
+    name: supplier.tradeName ?? supplier.legalName,
+    searchTerms: supplier.legalName,
+  };
 }
 
 interface LineRow {
@@ -729,12 +770,46 @@ export function CustomerOrderPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showPurchaseSuggestion, id]);
 
+  /*
+   * Fornecedores ativos do seletor da sugestão de compra: primeira página e
+   * busca no servidor. Eram os 1000 primeiros num `<select>` — do fornecedor
+   * ativo 1001 em diante a compra emergencial não tinha a quem ir. A página
+   * ENTRA, não substitui: o achado pela busca e já escolhido numa linha
+   * continua com nome quando a seção recarrega.
+   */
   useEffect(() => {
     if (!showPurchaseSuggestion) return;
-    listSuppliers({ active: true, pageSize: 1000 })
-      .then((result) => setActiveSuppliers(result.suppliers))
-      .catch(() => setActiveSuppliers([]));
+    listSuppliers({ active: true, pageSize: PAGINA_DE_FORNECEDORES_DA_COMPRA })
+      .then((result) => setActiveSuppliers((atual) => mesclarFornecedores(result.suppliers, atual)))
+      .catch(() => undefined);
   }, [showPurchaseSuggestion]);
+
+  /**
+   * Busca no SERVIDOR, com o MESMO filtro da primeira página: só ativos. Os
+   * homologados do material vêm primeiro, como no grupo que o `<select>`
+   * tinha — e são procurados também entre os candidatos da linha, para que
+   * um homologado nunca fique de fora por não caber na página da busca.
+   */
+  async function buscarFornecedoresDaCompra(
+    row: PurchaseSuggestionRowDTO,
+    termo: string,
+  ): Promise<EntityOption[]> {
+    const { suppliers: achados } = await listSuppliers({
+      active: true,
+      search: termo,
+      pageSize: PAGINA_DE_FORNECEDORES_DA_COMPRA,
+    });
+    setActiveSuppliers((atual) => mesclarFornecedores(atual, achados));
+    const procurado = semAcento(termo);
+    const candidatos = row.supplierCandidates.filter((candidate) =>
+      semAcento(`${candidate.supplierCode} ${candidate.supplierName}`).includes(procurado),
+    );
+    const homologados = new Set(row.supplierCandidates.map((candidate) => candidate.supplierId));
+    return [
+      ...candidatos.map(opcaoDeCandidato),
+      ...achados.filter((supplier) => !homologados.has(supplier.id)).map(opcaoDeFornecedorAtivo),
+    ];
+  }
 
   const reloadReservationStatus = useCallback(() => {
     if (!id) return;
@@ -2042,41 +2117,32 @@ options={customerOptions.map((customer) => ({
                               />
                             </td>
                             <td>
-                              <select
+                              <label className="sr-only" htmlFor={`purchase-supplier-${row.itemId}`}>
+                                Fornecedor de {row.itemCode}
+                              </label>
+                              {/* Homologados primeiro, marcados na dica. Compra
+                                  emergencial/amostra continua possivel: a
+                                  homologacao orienta, nao bloqueia o modulo de
+                                  compras — os demais ativos vêm na primeira
+                                  página e na busca do servidor. */}
+                              <SearchableEntitySelect
+                                id={`purchase-supplier-${row.itemId}`}
                                 value={input.supplierId}
-                                onChange={(event) => handleDraftSupplierChange(row.itemId, event.target.value)}
-                              >
-                                <option value="">Selecionar…</option>
-                                {row.supplierCandidates.length > 0 && (
-                                  <optgroup label="Homologados">
-                                    {row.supplierCandidates.map((candidate) => (
-                                      <option
-                                        key={candidate.supplierItemId}
-                                        value={candidate.supplierId}
-                                      >
-                                        {candidate.supplierCode} — {candidate.supplierName}
-                                        {candidate.preferred ? " (preferencial)" : ""}
-                                      </option>
-                                    ))}
-                                  </optgroup>
-                                )}
-                                {/* Compra emergencial/amostra continua possivel: a
-                                    homologacao orienta, nao bloqueia o modulo de compras. */}
-                                <optgroup label="Demais fornecedores ativos">
-                                  {activeSuppliers
+                                onChange={(supplierId) => handleDraftSupplierChange(row.itemId, supplierId)}
+                                placeholder="Selecionar…"
+                                options={[
+                                  ...row.supplierCandidates.map(opcaoDeCandidato),
+                                  ...activeSuppliers
                                     .filter(
                                       (supplier) =>
                                         !row.supplierCandidates.some(
                                           (candidate) => candidate.supplierId === supplier.id,
                                         ),
                                     )
-                                    .map((supplier) => (
-                                      <option key={supplier.id} value={supplier.id}>
-                                        {supplier.code} — {supplier.tradeName ?? supplier.legalName}
-                                      </option>
-                                    ))}
-                                </optgroup>
-                              </select>
+                                    .map(opcaoDeFornecedorAtivo),
+                                ]}
+                                onSearch={(termo) => buscarFornecedoresDaCompra(row, termo)}
+                              />
                             </td>
                           </tr>
                         );
