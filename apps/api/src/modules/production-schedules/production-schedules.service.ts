@@ -4,13 +4,13 @@ import type {
   AgendaEtapa,
   AgendaRecurso,
   AvisoDeAgenda,
+  CalendarioDeProducao,
   CapacidadeDoRecurso,
   EtapaParaAgendar,
   OcupacaoDeRecurso,
   ProductionBoardOrderDTO,
   ProductionBoardResourceDTO,
   ProductionBoardResponse,
-  ProductionCalendarConfigInput,
   ProductionOrderScheduleDTO,
   ProductionSchedulePreviewDTO,
 } from "@veridi/shared";
@@ -22,12 +22,10 @@ import {
   avisosDaAgenda,
   cargaPorRecursoEDia,
   conflitosDeCapacidade,
-  conjuntoDeExcecoes,
   diaCivil,
   diaCivilDeslocado,
   fimExclusivoDoDiaComercial,
   inicioDoDiaComercial,
-  intervaloPosicionado,
   isCapacityResourceType,
   minutoDoDiaComercial,
   minutosUteisDoDia,
@@ -36,8 +34,7 @@ import {
   programarEtapas,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
-import { diaDaColunaDeData } from "../../lib/business-day.js";
-import { getProductionCalendar } from "../production-calendar/production-calendar.service.js";
+import { getProductionCalendarForPlanning } from "../production-calendar/production-calendar.service.js";
 import { readPlanningSnapshot } from "../production-orders/planning-snapshot.js";
 import {
   CalendarBreakNotPositionedError,
@@ -92,30 +89,19 @@ const SITUACAO_TRAVADA: Record<string, string> = {
   BLOCKED: "bloqueada",
 };
 
-/** A jornada gravada, ou a recusa de quem nunca configurou o calendário. */
-async function jornadaConfigurada(): Promise<{
-  calendario: ProductionCalendarConfigInput;
-  excecoes: ReadonlySet<string>;
-}> {
-  const dto = await getProductionCalendar();
+/**
+ * A jornada semanal gravada e as exceções, ou a recusa de quem nunca
+ * configurou o calendário.
+ *
+ * Dia com intervalo sem horário recusa ANTES de projetar, mesmo que a ordem
+ * não chegue a ele: uma agenda que sai ou não conforme a duração alcança a
+ * terça seria uma resposta que muda sem ninguém entender por quê.
+ */
+async function jornadaConfigurada(): Promise<CalendarioDeProducao> {
+  const { dto, calendario } = await getProductionCalendarForPlanning();
   if (!dto.configured) throw new CalendarNotConfiguredError();
-  if (dto.breakMinutes > 0 && !intervaloPosicionado(dto)) {
-    throw new CalendarBreakNotPositionedError(dto.breakPositionWarning!);
-  }
-  const linhas = await getPrisma().productionCalendarException.findMany({
-    select: { date: true },
-  });
-  return {
-    calendario: {
-      startMinuteOfDay: dto.startMinuteOfDay,
-      endMinuteOfDay: dto.endMinuteOfDay,
-      breakMinutes: dto.breakMinutes,
-      breakStartMinuteOfDay: dto.breakStartMinuteOfDay,
-      breakEndMinuteOfDay: dto.breakEndMinuteOfDay,
-      weekdays: dto.weekdays,
-    },
-    excecoes: conjuntoDeExcecoes(linhas.map((linha) => ({ date: diaDaColunaDeData(linha.date) }))),
-  };
+  if (dto.breakPositionWarning) throw new CalendarBreakNotPositionedError(dto.breakPositionWarning);
+  return calendario;
 }
 
 /** As capacidades cadastradas, por recurso. Energia fica de fora. */
@@ -215,10 +201,15 @@ export async function previewProductionOrderSchedule(
   });
   if (!ordem) throw new ProductionOrderNotFoundError(orderId);
 
-  const { calendario, excecoes } = await jornadaConfigurada();
+  const calendario = await jornadaConfigurada();
   const inicio = new Date(startAtISO);
 
-  const avaliacao = avaliarInicio(inicio, calendario, excecoes);
+  let avaliacao: ReturnType<typeof avaliarInicio>;
+  try {
+    avaliacao = avaliarInicio(inicio, calendario);
+  } catch (erro) {
+    comoRecusaDeDominio(erro);
+  }
   if (!avaliacao.operacional) {
     throw new ScheduleStartNotOperationalError(avaliacao.motivo!, avaliacao.sugestaoAt);
   }
@@ -233,7 +224,6 @@ export async function previewProductionOrderSchedule(
         minutoDoDia: minutoDoDiaComercial(inicio),
       },
       calendario,
-      excecoes,
     });
   } catch (erro) {
     comoRecusaDeDominio(erro);
@@ -382,21 +372,7 @@ export async function getProductionBoard(
   const inicio = inicioDoDiaComercial(query.from);
   const fim = fimExclusivoDoDiaComercial(query.to);
 
-  const dto = await getProductionCalendar();
-  const calendario: ProductionCalendarConfigInput = {
-    startMinuteOfDay: dto.startMinuteOfDay,
-    endMinuteOfDay: dto.endMinuteOfDay,
-    breakMinutes: dto.breakMinutes,
-    breakStartMinuteOfDay: dto.breakStartMinuteOfDay,
-    breakEndMinuteOfDay: dto.breakEndMinuteOfDay,
-    weekdays: dto.weekdays,
-  };
-  const excecoesLinhas = await prisma.productionCalendarException.findMany({
-    select: { date: true },
-  });
-  const excecoes = conjuntoDeExcecoes(
-    excecoesLinhas.map((linha) => ({ date: diaDaColunaDeData(linha.date) })),
-  );
+  const { dto, calendario } = await getProductionCalendarForPlanning();
 
   const filtroDeOrdem = {
     ...(query.status ? { status: query.status } : {}),
@@ -505,13 +481,11 @@ export async function getProductionBoard(
         ],
   }));
 
-  // Minutos-recurso disponíveis no período: capacidade × jornada dos dias
-  // operantes. Só faz sentido onde a capacidade está cadastrada.
+  // Minutos-recurso disponíveis no período: capacidade × a jornada DE CADA DIA
+  // — sexta curta rende menos que quinta, e horário especial conta o que ele
+  // declara. Só faz sentido onde a capacidade está cadastrada.
   const dias = diasDoPeriodo(query.from, query.to);
-  const minutosOperantes = dias.reduce(
-    (soma, dia) => soma + minutosUteisDoDia(dia, calendario, excecoes),
-    0,
-  );
+  const minutosOperantes = dias.reduce((soma, dia) => soma + minutosUteisDoDia(dia, calendario), 0);
   const carga = cargaPorRecursoEDia(ocupacoes);
 
   const recursos: ProductionBoardResourceDTO[] = capacidades

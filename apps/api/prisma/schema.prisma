@@ -4647,13 +4647,36 @@ model ProductionOrderSchedule {
   @@map("production_order_schedules")
 }
 
-/// Motivo de um dia NAO operacional no calendario de producao
-/// (PLANNING-CALENDAR-01). Lista fechada: o texto livre fica em `reason`.
+/// Motivo de uma excecao do calendario de producao (PLANNING-CALENDAR-01).
+/// Lista fechada: o texto livre fica em `reason`. Motivo NAO decide se a
+/// fabrica opera — isso e `operation` (PLANNING-CALENDAR-WEEKLY-SCHEDULE-01).
 enum ProductionCalendarExceptionType {
   FERIADO
   RECESSO
   PARADA_OPERACIONAL
   OUTRO
+}
+
+/// Como a fabrica funciona numa data com excecao
+/// (PLANNING-CALENDAR-WEEKLY-SCHEDULE-01).
+///
+/// Separado do motivo de proposito: feriado pode ser dia fechado OU
+/// expediente curto. Nao existe "MEIO_DIA" — o caso real e "jornada diferente
+/// nesta data", e 08-12, 13-17 e 08-14 sao todos HORARIO_ESPECIAL.
+enum ProductionCalendarExceptionOperation {
+  SEM_OPERACAO
+  HORARIO_ESPECIAL
+}
+
+/// Dia da semana, de segunda a domingo (PLANNING-CALENDAR-WEEKLY-SCHEDULE-01).
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
 }
 
 /// CALENDARIO DE PRODUCAO (PLANNING-CALENDAR-01) — a jornada operacional da
@@ -4677,33 +4700,35 @@ enum ProductionCalendarExceptionType {
 /// oferta de fornecedor, `ItemCostReference`, validade de lote, faturamento
 /// nem promessa de entrega ao cliente (§75): nada disso passa a depender de
 /// dia util.
+///
+/// **Jornada SEMANAL desde PLANNING-CALENDAR-WEEKLY-SCHEDULE-01.** A fonte
+/// canonica da jornada sao as sete linhas de `ProductionCalendarWeekday`.
+/// As colunas de jornada unica abaixo (`startMinuteOfDay` ... `sunday`) ficam
+/// DEPRECADAS: a migration copiou o que elas diziam para as linhas da semana,
+/// nenhum codigo as le mais, e a remocao e o item de limpeza do BACKLOG
+/// (CALENDAR-LEGACY-COLUMNS-CLEANUP-01). Nao voltar a le-las.
 model ProductionCalendar {
   /// Sempre `GLOBAL` — CHECK no banco. Um calendario, sem ambiguidade.
   id String @id
 
+  /// DEPRECADO — jornada unica anterior. Ver `ProductionCalendarWeekday`.
   /// Minutos desde a meia-noite civil. 480 = 08:00, 1020 = 17:00.
   /// CHECK: 0 <= inicio < fim <= 1440.
   startMinuteOfDay Int @default(480)
   endMinuteOfDay   Int @default(1020)
 
-  /// Intervalo TOTAL do dia, em minutos. Continua respondendo "quanto rende
-  /// um dia" e, quando a pausa tem horario, e DERIVADO dele.
+  /// DEPRECADO — intervalo TOTAL da jornada unica anterior.
   /// CHECK: 0 <= intervalo < (fim - inicio).
   breakMinutes Int @default(60)
 
-  /// ONDE a pausa cai no dia (PLANNING-CAPACITY-BOARD-01). Null nos dois =
-  /// posicao ainda nao configurada, e e assim que um calendario antigo chega
-  /// aqui: a coluna nasce nula e nada e inferido. Sem posicao, a agenda com
-  /// horario exato RECUSA em vez de chutar 12:00-13:00 — o calendario segue
-  /// valido para tudo o mais.
+  /// DEPRECADO — posicao do intervalo da jornada unica anterior.
   /// CHECK: os dois nulos ou os dois preenchidos; inicio < fim; dentro da
   /// janela do dia; e a diferenca bate com "breakMinutes".
   breakStartMinuteOfDay Int?
   breakEndMinuteOfDay   Int?
 
-  /// Dias em que a fabrica opera. Sete colunas, e nao um array: cada dia e
-  /// uma pergunta independente, e "nenhum dia selecionado" vira CHECK de uma
-  /// linha. Default de calendario NOVO e segunda a sexta.
+  /// DEPRECADO — dias operantes da jornada unica anterior. Hoje e `enabled`
+  /// em cada `ProductionCalendarWeekday`.
   monday    Boolean @default(true)
   tuesday   Boolean @default(true)
   wednesday Boolean @default(true)
@@ -4715,20 +4740,73 @@ model ProductionCalendar {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  /// Nome de quem salvou, por valor — mesmo padrao de `ProductionProfile`.
+  /// Nome de quem salvou por ultimo qualquer dia da semana, por valor.
   updatedBy String?
+
+  weekdayJourneys ProductionCalendarWeekday[]
 
   @@map("production_calendars")
 }
 
-/// Dia CIVIL inteiro sem operacao — feriado, recesso ou parada.
+/// A jornada de UM dia da semana (PLANNING-CALENDAR-WEEKLY-SCHEDULE-01).
+///
+/// Sete linhas por calendario, uma por dia, criadas JUNTAS — pela migration,
+/// para o calendario que ja existia, ou no primeiro salvamento de qualquer
+/// dia. Cada linha se edita e se salva sozinha: mudar a sexta nao reescreve a
+/// segunda.
+///
+/// **Dia que nao opera nao tem horario.** `enabled = false` exige as quatro
+/// colunas de horario NULAS (CHECK): horario guardado num dia fechado seria um
+/// valor invisivel esperando para ser usado sem ninguem ver.
+///
+/// **Dia que opera tem inicio e fim**, com `0 <= inicio < fim <= 1440`, e o
+/// intervalo e opcional: os dois nulos (dia sem pausa) ou os dois preenchidos,
+/// dentro da jornada e menor que ela. Minutos uteis sao DERIVADOS, nunca
+/// coluna.
+model ProductionCalendarWeekday {
+  id String @id @default(uuid())
+
+  /// Sempre `GLOBAL` hoje — o calendario e um so.
+  calendarId String
+  calendar   ProductionCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+
+  weekday DayOfWeek
+  enabled Boolean
+
+  startMinuteOfDay      Int?
+  endMinuteOfDay        Int?
+  breakStartMinuteOfDay Int?
+  breakEndMinuteOfDay   Int?
+
+  /// LEGADO: minutos de intervalo SEM horario, herdados da jornada unica em
+  /// que so a duracao da pausa estava cadastrada. Nenhuma escrita da API grava
+  /// valor aqui — so a migration e a sugestao de calendario novo. Enquanto nao
+  /// for nulo, o dia rende `fim - inicio - N` mas nao produz hora exata: a
+  /// agenda RECUSA ate alguem salvar o dia com o horario da pausa (ou sem
+  /// pausa). Salvar o dia zera a coluna.
+  unpositionedBreakMinutes Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@unique([calendarId, weekday])
+  @@map("production_calendar_weekdays")
+}
+
+/// Uma regra especifica para UMA data civil — feriado, recesso, parada.
 ///
 /// **Uma excecao por data** (decisao do PO no primeiro corte): ha um motivo
-/// por dia, garantido por unique. Cadastrar de novo a mesma data e EDITAR o
-/// tipo e o motivo, nunca empilhar dois.
+/// por dia, garantido por unique. Cadastrar de novo a mesma data e recusa;
+/// editar muda motivo e funcionamento, nunca empilha dois.
 ///
-/// **Dia inteiro.** Parada parcial por hora nao existe nesta fase: o dia
-/// opera por inteiro ou nao opera.
+/// **Motivo e funcionamento sao perguntas separadas**
+/// (PLANNING-CALENDAR-WEEKLY-SCHEDULE-01). `SEM_OPERACAO` fecha o dia inteiro
+/// e exige horarios NULOS; `HORARIO_ESPECIAL` troca a jornada daquela data
+/// pela declarada aqui — para menos (vespera de Natal ate 12:00) ou para mais
+/// (sabado normalmente fechado que trabalha). A excecao da data SEMPRE vence a
+/// jornada semanal. As excecoes anteriores a esta capability eram dia inteiro
+/// fechado e chegam como `SEM_OPERACAO`.
 ///
 /// `date` e DATA CIVIL guardada como a meia-noite UTC que marca o dia — o
 /// mesmo padrao de `CustomerOrderDelivery.scheduledDate` e de
@@ -4740,6 +4818,14 @@ model ProductionCalendarException {
 
   type   ProductionCalendarExceptionType
   reason String?
+
+  operation ProductionCalendarExceptionOperation @default(SEM_OPERACAO)
+
+  /// So em HORARIO_ESPECIAL — CHECK. Mesmas regras da jornada semanal.
+  startMinuteOfDay      Int?
+  endMinuteOfDay        Int?
+  breakStartMinuteOfDay Int?
+  breakEndMinuteOfDay   Int?
 
   createdAt DateTime @default(now())
   createdBy String?

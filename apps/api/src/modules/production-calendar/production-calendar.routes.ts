@@ -6,21 +6,24 @@ import {
   ProductionCalendarConfigInvalidError,
   ProductionCalendarDateInvalidError,
   ProductionCalendarExceptionDateTakenError,
+  ProductionCalendarExceptionInvalidError,
   ProductionCalendarExceptionNotFoundError,
+  ProductionCalendarWeekIncompleteError,
 } from "./production-calendar.errors.js";
 import {
   createProductionCalendarException,
   deleteProductionCalendarException,
   getProductionCalendar,
   listProductionCalendarExceptions,
-  updateProductionCalendar,
   updateProductionCalendarException,
+  updateProductionCalendarWeekday,
 } from "./production-calendar.service.js";
 import {
   createProductionCalendarExceptionSchema,
   listProductionCalendarExceptionsQuerySchema,
   updateProductionCalendarExceptionSchema,
-  updateProductionCalendarSchema,
+  updateProductionCalendarWeekdaySchema,
+  weekdayParamsSchema,
 } from "./production-calendar.schemas.js";
 
 /**
@@ -28,6 +31,10 @@ import {
  *
  * Rotas no SINGULAR e sem id: existe um calendário, e a URL diz isso. Não é
  * um motor genérico de calendários — nada aqui aceita "qual calendário".
+ *
+ * A jornada se grava POR DIA (PLANNING-CALENDAR-WEEKLY-SCHEDULE-01):
+ * `PUT /production-calendar/weekdays/:weekday` troca uma linha e só ela. A
+ * gravação da semana inteira de uma vez deixou de existir.
  *
  * Mesmo gate dos Perfis de Produção: quem configura como a fábrica opera é
  * produção ou administração; os demais perfis leem.
@@ -53,6 +60,12 @@ function mapDomainError(
   }
   if (error instanceof ProductionCalendarConfigInvalidError) {
     return { status: 400, body: { error: "invalid_calendar_config", message: error.message } };
+  }
+  if (error instanceof ProductionCalendarExceptionInvalidError) {
+    return { status: 400, body: { error: "invalid_calendar_exception", message: error.message } };
+  }
+  if (error instanceof ProductionCalendarWeekIncompleteError) {
+    return { status: 409, body: { error: "calendar_week_incomplete", message: error.message } };
   }
   if (error instanceof ProductionCalendarDateInvalidError) {
     return { status: 400, body: { error: "invalid_date", message: error.message } };
@@ -86,16 +99,23 @@ export const productionCalendarRoutes: FastifyPluginAsync = async (app) => {
     }),
   );
 
-  app.put("/production-calendar", async (request, reply) =>
+  /** Uma linha da jornada semanal. Devolve o calendário inteiro, já relido. */
+  app.put("/production-calendar/weekdays/:weekday", async (request, reply) =>
     guard(reply, async () => {
       const actor = requireRole(request, ...WRITE_ROLES);
-      const parsed = updateProductionCalendarSchema.safeParse(request.body ?? {});
+      const params = weekdayParamsSchema.safeParse(request.params ?? {});
+      if (!params.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(params.error) });
+      }
+      const parsed = updateProductionCalendarWeekdaySchema.safeParse(request.body ?? {});
       if (!parsed.success) {
         return reply
           .status(400)
           .send({ error: "validation_error", issues: formatZodError(parsed.error) });
       }
-      return reply.send(await updateProductionCalendar(parsed.data, actor));
+      return reply.send(await updateProductionCalendarWeekday(params.data, parsed.data, actor));
     }),
   );
 

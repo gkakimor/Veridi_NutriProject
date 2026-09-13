@@ -23,6 +23,8 @@ export default defineConfig(({ mode }) => ({
       "src/modules/dashboard/dashboard.test.ts",
       "src/modules/production-orders/gmp-execution.test.ts",
       "src/modules/controlled-documents/controlled-documents.test.ts",
+      "src/modules/production-calendar/production-calendar.test.ts",
+      "src/modules/production-schedules/production-schedules.test.ts",
     ],
   },
 }));

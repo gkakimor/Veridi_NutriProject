@@ -1,8 +1,8 @@
 import type { IndustrialResourceType } from "./industrial-resources.js";
 import { FUSO_COMERCIAL, diaCivil, instanteComercial, minutoDoDiaComercial } from "./business-timezone.js";
 import {
+  type CalendarioDeProducao,
   type MomentoDaJornada,
-  type ProductionCalendarConfigInput,
   janelasDoDia,
   proximoDiaOperacional,
   proximoInicioUtil,
@@ -14,6 +14,9 @@ import {
  * O que este arquivo faz: pega a duração que o motor do Roteiro já calculou,
  * um instante de início escolhido POR UMA PESSOA e o Calendário de Produção,
  * e projeta as etapas sobre as janelas em que a fábrica realmente trabalha.
+ * Cada dia usa a SUA jornada (PLANNING-CALENDAR-WEEKLY-SCHEDULE-01): quinta
+ * 08–17 com almoço, sexta 08–12, domingo fechado, e a exceção da data por
+ * cima de tudo — quem decide a janela é `janelasDoDia`, e só ela.
  *
  * O que ele NÃO faz, e não deve passar a fazer sem uma decisão do Product
  * Owner: procurar sozinho o primeiro horário livre, priorizar ordens,
@@ -109,16 +112,14 @@ function instanteDe(momento: MomentoDaJornada): string {
 export function programarEtapas(entrada: {
   etapas: readonly EtapaParaAgendar[];
   inicio: MomentoDaJornada;
-  calendario: ProductionCalendarConfigInput;
-  excecoes?: ReadonlySet<string>;
+  calendario: CalendarioDeProducao;
 }): AgendaCalculada {
-  const excecoes = entrada.excecoes ?? new Set<string>();
   const etapas = [...entrada.etapas].sort((a, b) => a.sequence - b.sequence);
   if (etapas.length === 0) {
     throw new ProductionScheduleInputError("A ordem não tem etapas para programar.");
   }
 
-  let cursor = proximoInicioUtil(entrada.inicio, entrada.calendario, excecoes);
+  let cursor = proximoInicioUtil(entrada.inicio, entrada.calendario);
   if (!cursor) {
     throw new ProductionScheduleInputError(
       "O calendário não tem nenhum dia operante a partir desta data.",
@@ -146,16 +147,16 @@ export function programarEtapas(entrada: {
           "A programação não termina dentro de um ano — confira a jornada do calendário.",
         );
       }
-      const janelas = janelasDoDia(cursor.diaISO, entrada.calendario, excecoes);
+      const janelas = janelasDoDia(cursor.diaISO, entrada.calendario);
       const janela = janelas.find((atual) => cursor!.minutoDoDia < atual.fimMinuto);
       if (!janela) {
-        const proximo = proximoDiaOperacional(cursor.diaISO, entrada.calendario, excecoes);
+        const proximo = proximoDiaOperacional(cursor.diaISO, entrada.calendario);
         if (!proximo) {
           throw new ProductionScheduleInputError(
             "O calendário não tem dia operante suficiente para esta ordem.",
           );
         }
-        const primeira = janelasDoDia(proximo, entrada.calendario, excecoes)[0];
+        const primeira = janelasDoDia(proximo, entrada.calendario)[0];
         if (!primeira) {
           throw new ProductionScheduleInputError(
             "O calendário não tem janela de trabalho no próximo dia operante.",
@@ -183,7 +184,6 @@ export function programarEtapas(entrada: {
         const seguinte = proximoInicioUtil(
           { diaISO: cursor.diaISO, minutoDoDia: cursor.minutoDoDia },
           entrada.calendario,
-          excecoes,
         );
         if (!seguinte) {
           throw new ProductionScheduleInputError(
@@ -239,18 +239,17 @@ export interface AvaliacaoDeInicio {
  */
 export function avaliarInicio(
   inicioAt: Date,
-  calendario: ProductionCalendarConfigInput,
-  excecoes: ReadonlySet<string> = new Set(),
+  calendario: CalendarioDeProducao,
 ): AvaliacaoDeInicio {
   const diaISO = diaCivil(inicioAt, FUSO_COMERCIAL);
   const minuto = minutoDoDiaComercial(inicioAt);
-  const janelas = janelasDoDia(diaISO, calendario, excecoes);
+  const janelas = janelasDoDia(diaISO, calendario);
   const dentro = janelas.some(
     (janela) => minuto >= janela.inicioMinuto && minuto < janela.fimMinuto,
   );
   if (dentro) return { operacional: true, motivo: null, sugestaoAt: null };
 
-  const sugestao = proximoInicioUtil({ diaISO, minutoDoDia: minuto }, calendario, excecoes);
+  const sugestao = proximoInicioUtil({ diaISO, minutoDoDia: minuto }, calendario);
   const motivo =
     janelas.length === 0
       ? "Este dia não é operacional no calendário de produção."
