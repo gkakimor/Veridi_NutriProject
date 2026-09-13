@@ -17,6 +17,11 @@ export interface ListPurchaseOrdersParams {
    * vírgula e o servidor responde com UMA consulta paginada.
    */
   status?: PurchaseOrderStatus | PurchaseOrderStatus[];
+  /**
+   * Só OC que pode receber material agora. Quais status recebem é o servidor
+   * quem diz — a mesma regra que ele aplica ao gravar o recebimento.
+   */
+  receivable?: boolean;
   /** Data do pedido, dia civil `YYYY-MM-DD` — nunca instante. */
   dateFrom?: string;
   dateTo?: string;
@@ -32,6 +37,7 @@ export async function listPurchaseOrders(
   if (params.supplierId) query.set("supplierId", params.supplierId);
   const status = Array.isArray(params.status) ? params.status.join(",") : params.status;
   if (status) query.set("status", status);
+  if (params.receivable) query.set("receivable", "true");
   if (params.dateFrom) query.set("dateFrom", params.dateFrom);
   if (params.dateTo) query.set("dateTo", params.dateTo);
   query.set("page", String(params.page ?? 1));

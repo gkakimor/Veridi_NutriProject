@@ -58,6 +58,16 @@ export const listPurchaseOrdersQuerySchema = z.object({
     z.enum(["DRAFT", "ORDERED", "PARTIALLY_RECEIVED", "RECEIVED", "CANCELLED"]),
   ).optional(),
   /*
+   * Só OC que pode receber material agora — o seletor do Recebimento
+   * (RECEIVING-OPEN-PO-CUTOFF-01). Quem pergunta não diz QUAIS status: o
+   * conjunto é o mesmo que `createReceipt` aplica (`STATUS_QUE_RECEBEM`).
+   * `false` ou ausente não restringe; com `status` junto, vale a interseção.
+   */
+  receivable: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value === "true")),
+  /*
    * Período pela DATA DO PEDIDO, em dias civis `YYYY-MM-DD`. `orderDate` é
    * data de documento — a tela grava a meia-noite UTC do dia escolhido —, e
    * o serviço compara marcador com marcador (`intervaloDeDiasCivis`), com fim

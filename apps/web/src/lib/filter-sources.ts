@@ -4,8 +4,10 @@ import type {
   ItemDTO,
   ProductDTO,
   ProductionOrderDTO,
+  PurchaseOrderDTO,
   SupplierDTO,
 } from "@veridi/shared";
+import { PURCHASE_ORDER_STATUS_LABELS } from "@veridi/shared";
 import type { EntityFilterSource } from "../components/filters/EntityFilterSelect";
 import type { EntityOption } from "../components/SearchableEntitySelect";
 import { getCustomerOrder, listCustomerOrders } from "./customer-orders-api";
@@ -13,6 +15,7 @@ import { listCustomers } from "./customers-api";
 import { listItems } from "./items-api";
 import { listProducts } from "./products-api";
 import { getProductionOrder, listProductionOrders } from "./production-orders-api";
+import { getPurchaseOrder, listPurchaseOrders } from "./purchase-orders-api";
 import { listSuppliers } from "./suppliers-api";
 
 /**
@@ -204,6 +207,46 @@ export const ordemDeProducaoFilterSource: EntityFilterSource = {
       return opcaoDeOrdemDeProducao(await getProductionOrder(id));
     } catch {
       // OP que não existe mais: a consulta vale, só o rótulo fica ausente.
+      return null;
+    }
+  },
+};
+
+function opcaoDeOrdemDeCompra(ordem: PurchaseOrderDTO): EntityOption {
+  return {
+    id: ordem.id,
+    code: ordem.code,
+    // O código diz qual OC; o fornecedor diz de quem — é o que se confere na doca.
+    name: ordem.supplierName,
+    // Quem chega com o resto de uma entrega procura a recebida parcialmente.
+    hint: PURCHASE_ORDER_STATUS_LABELS[ordem.status],
+  };
+}
+
+/**
+ * Ordens de Compra que podem receber material — seletor do Receber OC.
+ *
+ * Substitui duas listas de 100 (`ORDERED` e `PARTIALLY_RECEIVED`) somadas num
+ * `<select>`: da OC 101 de cada status em diante a ordem estava aberta e não
+ * era recebível pela tela, sem aviso. Quais status recebem é o servidor quem
+ * diz (`receivable`), com a mesma regra que ele aplica ao gravar o
+ * recebimento — a tela não repete a lista. A busca vai ao servidor, por
+ * código da OC ou fornecedor.
+ */
+export const ordemDeCompraParaReceberSource: EntityFilterSource = {
+  inicial: async () =>
+    (await listPurchaseOrders({ receivable: true, pageSize: PAGINA })).purchaseOrders.map(
+      opcaoDeOrdemDeCompra,
+    ),
+  buscar: async (termo) =>
+    (await listPurchaseOrders({ receivable: true, search: termo, pageSize: PAGINA })).purchaseOrders.map(
+      opcaoDeOrdemDeCompra,
+    ),
+  porId: async (id) => {
+    try {
+      return opcaoDeOrdemDeCompra(await getPurchaseOrder(id));
+    } catch {
+      // OC que não existe mais: só o rótulo fica ausente.
       return null;
     }
   },

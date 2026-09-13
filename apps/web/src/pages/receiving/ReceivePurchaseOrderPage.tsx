@@ -7,7 +7,9 @@ import {
   textoComparavel,
 } from "../../lib/dirty-fields";
 import { Decimal, type PurchaseOrderDTO } from "@veridi/shared";
-import { getPurchaseOrder, listPurchaseOrders } from "../../lib/purchase-orders-api";
+import { getPurchaseOrder } from "../../lib/purchase-orders-api";
+import { ordemDeCompraParaReceberSource } from "../../lib/filter-sources";
+import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { getItem } from "../../lib/items-api";
 import { createReceipt } from "../../lib/receiving-api";
 import { diaDoRecebimentoPadrao, instanteDoRecebimento } from "../../lib/receipt-instant";
@@ -127,8 +129,8 @@ export function ReceivePurchaseOrderPage() {
   const [searchParams] = useSearchParams();
   const preselectedId = searchParams.get("purchaseOrderId");
 
-  const [pickerOptions, setPickerOptions] = useState<PurchaseOrderDTO[]>([]);
-  const [pickerLoading, setPickerLoading] = useState(!preselectedId);
+  /** A OC escolhida no seletor — sem `?purchaseOrderId=`, é por aqui que se chega. */
+  const [ocEscolhida, setOcEscolhida] = useState("");
 
   const [po, setPo] = useState<PurchaseOrderDTO | null>(null);
   const [lines, setLines] = useState<LineDraft[]>([]);
@@ -194,20 +196,12 @@ export function ReceivePurchaseOrderPage() {
     }
   }, []);
 
+  /*
+   * Veio da OC (`?purchaseOrderId=`): a ordem é pedida pelo id, direto — não
+   * depende de estar na primeira página de lista nenhuma.
+   */
   useEffect(() => {
-    if (preselectedId) {
-      void loadPurchaseOrder(preselectedId);
-      return;
-    }
-
-    setPickerLoading(true);
-    Promise.all([
-      listPurchaseOrders({ status: "ORDERED", pageSize: 100 }),
-      listPurchaseOrders({ status: "PARTIALLY_RECEIVED", pageSize: 100 }),
-    ])
-      .then(([ordered, partial]) => setPickerOptions([...ordered.purchaseOrders, ...partial.purchaseOrders]))
-      .catch(() => setPickerOptions([]))
-      .finally(() => setPickerLoading(false));
+    if (preselectedId) void loadPurchaseOrder(preselectedId);
   }, [preselectedId, loadPurchaseOrder]);
 
   function handleLineChange(id: string, field: keyof LineDraft, value: string) {
@@ -390,31 +384,24 @@ export function ReceivePurchaseOrderPage() {
             title="Selecionar ordem de compra"
             subtitle="Somente OCs confirmadas com quantidade em aberto podem receber materiais."
           >
-            {pickerLoading ? (
-              <p className="muted">Carregando…</p>
-            ) : pickerOptions.length === 0 ? (
-              <p className="muted">Nenhuma OC confirmada com saldo em aberto no momento.</p>
-            ) : (
-              <div className="field">
-                <label htmlFor="receiving-po-picker">Ordem de compra</label>
-                <select
-                  id="receiving-po-picker"
-                  defaultValue=""
-                  onChange={(event) => {
-                    if (event.target.value) void loadPurchaseOrder(event.target.value);
-                  }}
-                >
-                  <option value="" disabled>
-                    Selecione…
-                  </option>
-                  {pickerOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.code} — {option.supplierName}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            {error && <p className="form-alert" role="alert">{error}</p>}
+            {/*
+              Primeira página curta e busca no servidor, por código da OC ou
+              fornecedor. Eram duas listas de 100 — confirmadas e parciais —
+              num <select>: da OC 101 de cada lado a ordem estava aberta e não
+              aparecia para receber.
+            */}
+            <EntityFilterSelect
+              id="receiving-po-picker"
+              label="Ordem de compra"
+              placeholder="Digite o código da OC ou o fornecedor…"
+              value={ocEscolhida}
+              onChange={(id) => {
+                setOcEscolhida(id);
+                if (id) void loadPurchaseOrder(id);
+              }}
+              source={ordemDeCompraParaReceberSource}
+            />
           </FormSection>
         </div>
       </>

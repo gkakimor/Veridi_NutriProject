@@ -2106,6 +2106,47 @@ volume crescer.
 
 **Próximo:** RECEIVING-OPEN-PO-CUTOFF-01.
 
+## Receber OC sem corte silencioso (RECEIVING-OPEN-PO-CUTOFF-01, 2026-09-12)
+
+O seletor de `ReceivePurchaseOrderPage.tsx` pedia `status=ORDERED` e
+`status=PARTIALLY_RECEIVED` com `pageSize: 100` e somava as duas listas num
+`<select>`: da 101ª OC de cada status em diante a ordem estava aberta, o servidor
+aceitaria o recebimento, e a tela não a oferecia. As duas listas só alimentavam o
+seletor — linhas, saldo e validação já vinham de `GET /purchase-orders/:id`.
+
+`GET /purchase-orders` ganhou `receivable=true`: a fila de OCs que podem receber
+agora, com o conjunto de `STATUS_QUE_RECEBEM`
+(`modules/purchase-orders/purchase-order-receivable.ts`) — a MESMA constante que
+`createReceipt` passou a usar nas duas travas de status (antes e sob lock). Regra
+inalterada: `ORDERED` e `PARTIALLY_RECEIVED`; com `status` junto vale a
+interseção; `false`/ausente não restringe. A tela não escreve status nenhum: o
+seletor virou `EntityFilterSelect` com `ordemDeCompraParaReceberSource`
+(`filter-sources.ts`) — primeira página de 20, busca no servidor por código da OC
+ou fornecedor (snapshot `supplierName`), status como dica ("Recebido
+parcialmente"). `?purchaseOrderId=` continua abrindo a OC pelo id, sem lista.
+Erro ao carregar a OC escolhida agora aparece no seletor. Sem migration.
+
+**Validação.** API 8 testes (`modules/purchase-orders/receber-oc-sem-corte.test.ts`:
+210 OCs abertas montadas para que as duas listas de 100 percam a OC #150, a 101ª
+parcial e a OC do fornecedor B; fila completa por páginas; busca por código e
+fornecedor; parcial com saldo real até fechar; finalizada, cancelada e rascunho
+fora; fila × recebimento status por status). Mutação: sem o filtro, 5 caem. Web
+12 (`pages/receiving/receber-oc-sem-corte.test.tsx`, servidor falso que pagina 213
+OCs; mutação: a tela antiga derruba 11, `buscar` sem `receivable` derruba 7). Gate
+web 200 (Recebimento, OC, filtros, relatórios, 390px), API 105, typecheck. Smoke
+na 3333/5173 com 130 OCs abertas, 1440 e 390: busca, seleção, fornecedor, linha,
+saldo 10/4/6, rede só `receivable` com `pageSize=20`, console limpo, massa apagada.
+
+Achados, sem correção: Receber material do cliente carrega itens com
+`listItems({ pageSize: 1000 })` (`ReceiveCustomerMaterialPage.tsx`); o botão
+"Receber materiais" da OC ainda decide por status no front
+(`PurchaseOrderPage.tsx`, `isReceivable`); `?purchaseOrderId=` de OC cancelada ou
+rascunho abre o formulário e só o servidor recusa ao confirmar (anterior); sem OC
+aberta, a lista diz "Nada disponível para escolher." no lugar da frase própria.
+
+**Próximo:** a definir pelo PO — da auditoria de filtros sobra FO-03
+(`OperationalSheets.tsx`).
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
