@@ -3135,9 +3135,57 @@ invertido 400; R-15 pela rota com o resumo de antes e CSV de 2.000; console limp
 19/19.
 
 **Achados.** Custo incompleto ainda resolve OP a OP (~2.600 das 2.651 SQL), e dentro
-do retrato os `findUnique` não se compactam — DASHBOARD-COST-BATCH-01.
-`instanteComercial`, `minutoDoDiaComercial` e `limitesDoDiaComercial` ainda criam
-formatador por chamada — TZ-FORMATTER-REUSE-01. Os dois no BACKLOG, P3.
+do retrato os `findUnique` não se compactam — DASHBOARD-COST-BATCH-01 (fechado, seção
+abaixo). `instanteComercial`, `minutoDoDiaComercial` e `limitesDoDiaComercial` ainda
+criam formatador por chamada — TZ-FORMATTER-REUSE-01. Os dois no BACKLOG, P3.
+
+## Custo incompleto do Painel em lote (DASHBOARD-COST-BATCH-01, 2026-09-13)
+
+O Painel resolvia o custo de material das 200 OPs concluídas pela função unitária, uma
+OP por vez: a leitura da OP com consumos, itens, lotes e produção (5 SQL, que dentro da
+transação não se compactam) e até quatro consultas de recebimento por consumo — custo do
+lote, janelas de 30 e 90 dias, último real. Na massa da PERFORMANCE-CLEANUP-WAVE-01 eram
+2.600 das 2.650 SQL da requisição.
+
+`findProductionOrderMaterialCosts` (`costs.service.ts`) lê as OPs numa consulta, e
+`getConsumedLotCostReferences` (`lib/cost-reference.ts`) as referências de todos os
+consumos em até três: o custo efetivo dos lotes consumidos (`lotId` é único na linha de
+recebimento); as linhas com custo real dos itens no intervalo que cobre as janelas de
+todos os consumos; e, só para item sem linha até o dia de algum consumo, o último real
+anterior ao intervalo. A regra não mudou nem ganhou cópia: a hierarquia
+(`referenciaDoConsumo`/`referenciaDoItem`) e a conta da OP (`materialCostOfOrder`) servem
+à função unitária e ao lote, e só a origem dos dados muda. Pergunta da hierarquia fora
+do que foi carregado é erro, nunca `NO_COST`. A janela de um dia fica guardada só dentro
+da chamada — cada cálculo pergunta o fuso ao `Intl` (~0,5 ms) e era a maior parte do
+tempo que sobrava. A função unitária mantém as mesmas consultas, e os outros chamadores
+(Estoque acabado, Relatórios, lote de documentos, detalhe da OP) seguem nela. O Painel
+chama o lote com o `prisma` da transação `RepeatableRead`; migration, contrato de API e
+UI intocados.
+
+**Medida** (mesmo `now`, 7 rodadas, banco isolado). Massa da wave anterior (200 OPs sem
+custo, 2 consumos): Painel 2.650 → 58 SQL, mediana 1,79 → 0,10 s (hoje) e 1,77 → 0,09 s
+(período), transação igual ao total; conjunto do custo sozinho 1.609 → 12 SQL, 1,13 s →
+42 ms; 2.968 linhas devolvidas antes e depois. Mesma massa + 120 OPs com os casos de custo
+(real, parcial, 30/90 dias, último real, cliente, sem lote, compra depois do consumo, custo
+zero, consumo extra): 2.245 → 62 SQL, 1,77 → 0,10 s, 3.152 → 3.070 linhas. DTO do Painel
+idêntico nas duas massas e nos dois períodos; lista do custo incompleto igual em ids e
+ordem; função unitária igual à de antes nas 321 OPs; lote igual à unitária, salvo a
+ordem de dois consumos com `createdAt` idêntico — empate que o `orderBy` da unitária
+também não fixa.
+
+**Validação.** `custo-de-material-em-lote.test.ts` (21 OPs, um caso da regra cada; lote
+igual à unitária e ao valor escrito à mão; recortes; consultas constantes; lista do
+Painel; retrato com escrita de outra conexão em cada caminho do lote) e
+`dashboard-conjuntos-uma-vez.test.ts` ajustado (custo em lote, nenhuma OP lida por id).
+18 mutações, todas derrubadas. Focados: API paralela 14 arquivos/198 testes (custos,
+custo do cliente, precisão, consumo extra, estoque acabado, material do cliente, custo
+industrial, relatórios, lote de documentos, dia comercial do custo, seleção de fonte),
+serial 3/13 (Painel, retrato, conjuntos); typecheck.
+
+**Achados.** Consumos com `createdAt` empatado saem em ordem não fixa no DTO de custo —
+na função unitária também. Quantidade abaixo de `1e-7` sai como `"1e-12"` no DTO de custo
+(Watchlist 15, já registrado). Janela de custo por consumo pesa na função unitária —
+anotado em TZ-FORMATTER-REUSE-01.
 
 ## Busca e data digitadas nos Relatórios (REPORTS-SEARCH-UX-01, 2026-09-13)
 

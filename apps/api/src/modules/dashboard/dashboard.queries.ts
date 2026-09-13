@@ -3,7 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { DashboardPurchasingStateDTO } from "@veridi/shared";
 import { venceuEm } from "../../lib/business-day.js";
 import { getAvailableByItems, getOnHandByLots, isLotAvailableForUse } from "../../lib/inventory-ledger.js";
-import { findProductionOrderMaterialCost } from "../costs/costs.service.js";
+import { findProductionOrderMaterialCosts } from "../costs/costs.service.js";
 
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -137,6 +137,10 @@ export async function getProductionOrdersWithShortage(
  * O custo e lido pelo MESMO `prisma` da lista — no Painel, a transacao do
  * retrato. Pelo cliente global, a OP listada no retrato tinha o custo lido
  * depois dele (DASHBOARD-SNAPSHOT-CONSISTENCY-01).
+ *
+ * As 200 OPs tem o custo resolvido em lote, com a conta de cada uma igual a
+ * da funcao unitaria (DASHBOARD-COST-BATCH-01): OP a OP eram ~2.600 SQL por
+ * requisicao do Painel.
  */
 export async function getProductionOrdersWithIncompleteCost(
   prisma: PrismaOrTx,
@@ -149,15 +153,16 @@ export async function getProductionOrdersWithIncompleteCost(
   });
   if (orders.length === 0) return [];
 
-  const results = await Promise.all(
-    orders.map(async (order) => {
-      const cost = await findProductionOrderMaterialCost(order.id, prisma);
-      // OP que sumiu entre as duas leituras nao e custo pendente de ninguem.
-      if (!cost) return null;
-      return cost.quality === "PARTIAL" || cost.quality === "NO_COST" ? order : null;
-    }),
+  const costs = await findProductionOrderMaterialCosts(
+    orders.map((order) => order.id),
+    prisma,
   );
-  return results.filter((order): order is (typeof orders)[number] => order !== null);
+  return orders.filter((order) => {
+    const cost = costs.get(order.id);
+    // OP que sumiu entre as duas leituras nao e custo pendente de ninguem.
+    if (!cost) return false;
+    return cost.quality === "PARTIAL" || cost.quality === "NO_COST";
+  });
 }
 
 /**

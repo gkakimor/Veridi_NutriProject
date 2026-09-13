@@ -19,7 +19,8 @@ import { getDashboard } from "./dashboard.service.js";
  * expedição, as OPs com falta de material e as OPs concluídas com custo
  * incompleto — no mesmo retrato e com o mesmo `now`, duas vezes o mesmo
  * resultado. O custo incompleto resolve o custo de cada OP concluída: numa base
- * de 200 OPs com dois consumos, 5.262 SQL por requisição, metade repetida.
+ * de 200 OPs com dois consumos, 5.262 SQL por requisição, metade repetida. Desde
+ * DASHBOARD-COST-BATCH-01 esse custo sai em lote (58 SQL na mesma base).
  *
  * O cliente da aplicação ganha uma extensão que só anota as operações enquanto
  * o teste pede. Faixa serial: os contadores são agregado do banco inteiro, e o
@@ -74,7 +75,8 @@ const RAIZES = {
 
 /** O que só a resolução do custo das OPs concluídas consulta no Painel. */
 const doCusto = (op: Operacao) =>
-  (op.model === "ProductionOrder" && op.operation === "findUnique") || op.model === "ReceiptLine";
+  (op.model === "ProductionOrder" && (op.operation === "findUnique" || (op.operation === "findMany" && "id" in op.where))) ||
+  op.model === "ReceiptLine";
 
 const criados = { ordens: [] as string[], itens: [] as string[], pedidos: [] as string[], produtos: [] as string[] };
 
@@ -223,7 +225,7 @@ function porTipo(itens: AttentionItemDTO[]) {
 }
 
 describe("Painel — os conjuntos comuns ao estado atual e à atenção saem uma vez", () => {
-  it("cada consulta-raiz sai uma vez, e o custo das OPs é resolvido uma vez por OP", { timeout: 60_000 }, async () => {
+  it("cada consulta-raiz sai uma vez, e o custo das OPs sai em lote", { timeout: 60_000 }, async () => {
     const agora = new Date();
     const consulta = dashboardQuerySchemaEm(agora).parse({});
 
@@ -233,14 +235,16 @@ describe("Painel — os conjuntos comuns ao estado atual e à atenção saem uma
     for (const [conjunto, raiz] of Object.entries(RAIZES)) {
       expect(painel.operacoes.filter(raiz), conjunto).toHaveLength(1);
     }
-    // A resolução do custo inteira — uma leitura da OP e as do custo de cada
-    // consumo — é a mesma de uma chamada avulsa. Antes, o dobro.
-    const custoDoPainel = painel.operacoes.filter(doCusto).length;
-    expect(custoDoPainel).toBeGreaterThan(0);
-    expect(custoDoPainel).toBe(avulso.operacoes.filter(doCusto).length);
-    expect(painel.operacoes.filter((op) => op.model === "ProductionOrder" && op.operation === "findUnique")).toHaveLength(
-      Math.min(200, await getPrisma().productionOrder.count({ where: { status: "COMPLETED", consumptions: { some: {} } } })),
-    );
+    // A resolução do custo inteira é a mesma de uma chamada avulsa. Antes, o dobro.
+    const custoDoPainel = painel.operacoes.filter(doCusto);
+    expect(custoDoPainel.length).toBeGreaterThan(0);
+    expect(custoDoPainel.length).toBe(avulso.operacoes.filter(doCusto).length);
+    // E em lote (DASHBOARD-COST-BATCH-01): uma leitura das OPs e no máximo três
+    // de recebimentos, por mais OPs concluídas que existam. OP a OP eram uma
+    // leitura por OP e até quatro consultas por consumo.
+    expect(custoDoPainel.filter((op) => op.operation === "findUnique" || op.operation === "findFirst")).toEqual([]);
+    expect(custoDoPainel.filter((op) => op.model === "ProductionOrder")).toHaveLength(1);
+    expect(custoDoPainel.filter((op) => op.model === "ReceiptLine").length).toBeLessThanOrEqual(3);
   });
 
   it("o que o Painel mostra é o que cada conjunto dá calculado à parte, no contador e na atenção", { timeout: 60_000 }, async () => {

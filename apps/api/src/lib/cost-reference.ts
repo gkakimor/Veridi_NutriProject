@@ -59,6 +59,34 @@ export interface CostReference {
   details: string | null;
 }
 
+/** Linha de recebimento com custo real informado, como a média a lê. */
+interface LinhaComCustoReal {
+  receivedQuantity: Prisma.Decimal;
+  actualUnitCost: Prisma.Decimal | null;
+}
+
+/** A linha com custo real mais recente, como o último custo real a lê. */
+interface UltimaLinhaComCustoReal {
+  actualUnitCost: Prisma.Decimal | null;
+  receipt: { receivedAt: Date; code: string };
+}
+
+/**
+ * De onde a hierarquia de custo de UM item lê os recebimentos com custo real.
+ *
+ * A regra — janelas, média ponderada, último real, `NO_COST` — mora só em
+ * `referenciaDoItem`. Quem responde as perguntas é que muda: o banco, uma
+ * consulta por pergunta (`getItemCostReference`), ou os recebimentos já
+ * carregados de uma vez para muitos consumos (`getConsumedLotCostReferences`,
+ * DASHBOARD-COST-BATCH-01). As duas respostas têm de ser as mesmas linhas.
+ */
+interface RecebimentosComCustoDoItem {
+  /** Linhas com `actualUnitCost` informado e `receipt.receivedAt` em [inicio, fim]. */
+  naJanela(inicio: Date, fim: Date): Promise<LinhaComCustoReal[]>;
+  /** A linha com `actualUnitCost` informado de `receipt.receivedAt` mais recente até `fim`. */
+  ultimaAte(fim: Date): Promise<UltimaLinhaComCustoReal | null>;
+}
+
 /**
  * Media PONDERADA POR QUANTIDADE dos custos reais de uma janela:
  *
@@ -69,20 +97,9 @@ export interface CostReference {
  * estimativas anteriores, Billing e custo de produto acabado nunca
  * participam.
  */
-async function weightedAverageInWindow(
-  prisma: PrismaOrTx,
-  itemId: string,
-  from: Date,
-  to: Date,
-): Promise<{ unitCost: Prisma.Decimal; receiptLineCount: number } | null> {
-  const lines = await prisma.receiptLine.findMany({
-    where: {
-      itemId,
-      actualUnitCost: { not: null },
-      receipt: { receivedAt: { gte: from, lte: to } },
-    },
-    select: { receivedQuantity: true, actualUnitCost: true },
-  });
+function weightedAverage(
+  lines: readonly LinhaComCustoReal[],
+): { unitCost: Prisma.Decimal; receiptLineCount: number } | null {
   if (lines.length === 0) return null;
 
   let totalValue = new Prisma.Decimal(0);
@@ -96,6 +113,33 @@ async function weightedAverageInWindow(
   if (totalQuantity.lessThanOrEqualTo(0)) return null;
 
   return { unitCost: totalValue.dividedBy(totalQuantity), receiptLineCount: lines.length };
+}
+
+/** Os recebimentos de um item perguntados ao banco, uma consulta por pergunta. */
+function recebimentosNoBanco(prisma: PrismaOrTx, itemId: string): RecebimentosComCustoDoItem {
+  return {
+    naJanela: (from, to) =>
+      prisma.receiptLine.findMany({
+        where: {
+          itemId,
+          actualUnitCost: { not: null },
+          receipt: { receivedAt: { gte: from, lte: to } },
+        },
+        select: { receivedQuantity: true, actualUnitCost: true },
+      }),
+    // Ultimo custo real conhecido — sem limite de idade, mas nunca de um dia
+    // comercial posterior ao da pergunta.
+    ultimaAte: (fim) =>
+      prisma.receiptLine.findFirst({
+        where: {
+          itemId,
+          actualUnitCost: { not: null },
+          receipt: { receivedAt: { lte: fim } },
+        },
+        orderBy: { receipt: { receivedAt: "desc" } },
+        select: { actualUnitCost: true, receipt: { select: { receivedAt: true, code: true } } },
+      }),
+  };
 }
 
 /**
@@ -118,8 +162,23 @@ export async function getItemCostReference(
   itemId: string,
   referenceDate: Date = marcadorDeHojeComercial(),
 ): Promise<CostReference> {
-  const janela30 = limitesDaJanelaDeCusto(referenceDate, 30);
-  const window30 = await weightedAverageInWindow(prisma, itemId, janela30.inicio, janela30.fim);
+  return referenciaDoItem(recebimentosNoBanco(prisma, itemId), referenceDate);
+}
+
+type LimitesDaJanela = typeof limitesDaJanelaDeCusto;
+
+/**
+ * A hierarquia de `getItemCostReference`, sobre os recebimentos de quem pergunta.
+ * `janelaDeCusto` é sempre `limitesDaJanelaDeCusto` — quem resolve muitos
+ * consumos passa a mesma função guardando o resultado por dia na chamada.
+ */
+async function referenciaDoItem(
+  recebimentos: RecebimentosComCustoDoItem,
+  referenceDate: Date,
+  janelaDeCusto: LimitesDaJanela = limitesDaJanelaDeCusto,
+): Promise<CostReference> {
+  const janela30 = janelaDeCusto(referenceDate, 30);
+  const window30 = weightedAverage(await recebimentos.naJanela(janela30.inicio, janela30.fim));
   if (window30) {
     return {
       unitCost: window30.unitCost,
@@ -129,8 +188,8 @@ export async function getItemCostReference(
     };
   }
 
-  const janela90 = limitesDaJanelaDeCusto(referenceDate, 90);
-  const window90 = await weightedAverageInWindow(prisma, itemId, janela90.inicio, janela90.fim);
+  const janela90 = janelaDeCusto(referenceDate, 90);
+  const window90 = weightedAverage(await recebimentos.naJanela(janela90.inicio, janela90.fim));
   if (window90) {
     return {
       unitCost: window90.unitCost,
@@ -142,15 +201,7 @@ export async function getItemCostReference(
 
   // Ultimo custo real conhecido — sem limite de idade, mas nunca de um dia
   // comercial posterior ao da pergunta. O fim do dia e o MESMO das janelas.
-  const lastReal = await prisma.receiptLine.findFirst({
-    where: {
-      itemId,
-      actualUnitCost: { not: null },
-      receipt: { receivedAt: { lte: janela30.fim } },
-    },
-    orderBy: { receipt: { receivedAt: "desc" } },
-    select: { actualUnitCost: true, receipt: { select: { receivedAt: true, code: true } } },
-  });
+  const lastReal = await recebimentos.ultimaAte(janela30.fim);
   if (lastReal?.actualUnitCost) {
     return {
       unitCost: lastReal.actualUnitCost,
@@ -194,13 +245,45 @@ export async function getItemCostReferences(
  */
 export async function getConsumedLotCostReference(
   prisma: PrismaOrTx,
-  params: { itemId: string; lotId: string | null; consumedAt: Date },
+  params: ConsumoParaCusto,
+): Promise<CostReference> {
+  return referenciaDoConsumo(
+    {
+      custoDoLote: (lotId) =>
+        prisma.receiptLine.findFirst({
+          where: { lotId, actualUnitCost: { not: null } },
+          select: { actualUnitCost: true, lot: { select: { code: true } } },
+        }),
+      recebimentosDoItem: (itemId) => recebimentosNoBanco(prisma, itemId),
+    },
+    params,
+  );
+}
+
+/** O que a referência de custo lê de um consumo. */
+export interface ConsumoParaCusto {
+  itemId: string;
+  lotId: string | null;
+  consumedAt: Date;
+}
+
+/** A linha de recebimento do lote consumido, como o custo `REAL` a lê. */
+interface CustoDoLote {
+  actualUnitCost: Prisma.Decimal | null;
+  lot: { code: string } | null;
+}
+
+/** A hierarquia de `getConsumedLotCostReference`, sobre os dados de quem pergunta. */
+async function referenciaDoConsumo(
+  fontes: {
+    custoDoLote(lotId: string): Promise<CustoDoLote | null>;
+    recebimentosDoItem(itemId: string): RecebimentosComCustoDoItem;
+    janelaDeCusto?: LimitesDaJanela;
+  },
+  params: ConsumoParaCusto,
 ): Promise<CostReference> {
   if (params.lotId) {
-    const receiptLine = await prisma.receiptLine.findFirst({
-      where: { lotId: params.lotId, actualUnitCost: { not: null } },
-      select: { actualUnitCost: true, lot: { select: { code: true } } },
-    });
+    const receiptLine = await fontes.custoDoLote(params.lotId);
     if (receiptLine?.actualUnitCost) {
       return {
         unitCost: receiptLine.actualUnitCost,
@@ -214,5 +297,182 @@ export async function getConsumedLotCostReference(
   // `consumedAt` é INSTANTE; a fundação pergunta por DATA CIVIL. O consumo
   // das 22:30 de São Paulo pertence ao dia comercial em que a pessoa estava
   // trabalhando, não ao dia UTC que já virou.
-  return getItemCostReference(prisma, params.itemId, marcadorDoDiaComercialDe(params.consumedAt));
+  return referenciaDoItem(
+    fontes.recebimentosDoItem(params.itemId),
+    marcadorDoDiaComercialDe(params.consumedAt),
+    fontes.janelaDeCusto,
+  );
+}
+
+/**
+ * `getConsumedLotCostReference` de muitos consumos de uma vez — a mesma
+ * referência, na mesma ordem da entrada (DASHBOARD-COST-BATCH-01).
+ *
+ * Consumo a consumo, cada referência custava até quatro consultas: o custo do
+ * lote, as duas janelas e o último real. O Painel pergunta por 200 OPs
+ * concluídas, e as consultas por consumo eram quase todas as da requisição.
+ * Aqui os dados saem em até três consultas para todos, e cada consumo passa
+ * pela MESMA hierarquia (`referenciaDoConsumo`/`referenciaDoItem`) lendo do
+ * que foi carregado:
+ *
+ * 1. o custo efetivo dos lotes consumidos — `lotId` é único na linha de
+ *    recebimento, uma linha por lote no máximo;
+ * 2. para os consumos sem custo de lote, as linhas com custo real dos itens
+ *    no intervalo que cobre as janelas de TODOS eles — do início da janela
+ *    mais antiga ao fim do dia mais recente;
+ * 3. só para item que não tem nenhuma linha até o dia de algum consumo dentro
+ *    desse intervalo, o último custo real ANTERIOR ao intervalo — é o único
+ *    último real que o intervalo não contém.
+ *
+ * Nada fica guardado entre chamadas, e `prisma` é o contexto de quem pergunta:
+ * dentro do retrato do Painel, a transação dele. Uma pergunta da hierarquia
+ * fora do que foi carregado é erro, nunca resposta vazia — custo desconhecido
+ * por falta de carga seria um `NO_COST` que o banco não diz.
+ */
+export async function getConsumedLotCostReferences(
+  prisma: PrismaOrTx,
+  consumos: readonly ConsumoParaCusto[],
+): Promise<CostReference[]> {
+  if (consumos.length === 0) return [];
+
+  // A janela de um dia é a mesma para todo consumo desse dia, e cada cálculo
+  // pergunta o fuso ao `Intl` (~0,5 ms): guardada por dia, só nesta chamada.
+  const janelasDoDia = new Map<string, ReturnType<LimitesDaJanela>>();
+  const janelaDeCusto: LimitesDaJanela = (referenceDate, diasParaTras) => {
+    const chave = `${referenceDate.getTime()}:${diasParaTras}`;
+    let limites = janelasDoDia.get(chave);
+    if (!limites) {
+      limites = limitesDaJanelaDeCusto(referenceDate, diasParaTras);
+      janelasDoDia.set(chave, limites);
+    }
+    return limites;
+  };
+
+  const custoPorLote = await carregarCustoDosLotes(prisma, consumos);
+  // Quem cai na fundação do item: consumo sem lote, ou lote sem custo efetivo.
+  const semCustoDoLote = consumos.filter(
+    (consumo) => !(consumo.lotId && custoPorLote.get(consumo.lotId)?.actualUnitCost),
+  );
+  const fontes = {
+    custoDoLote: async (lotId: string) => custoPorLote.get(lotId) ?? null,
+    recebimentosDoItem: await carregarRecebimentosDosItens(prisma, semCustoDoLote, janelaDeCusto),
+    janelaDeCusto,
+  };
+  return Promise.all(consumos.map((consumo) => referenciaDoConsumo(fontes, consumo)));
+}
+
+/** Passo 1 de `getConsumedLotCostReferences`: o custo efetivo de cada lote consumido. */
+async function carregarCustoDosLotes(
+  prisma: PrismaOrTx,
+  consumos: readonly ConsumoParaCusto[],
+): Promise<Map<string, CustoDoLote>> {
+  const lotIds = [...new Set(consumos.flatMap((consumo) => (consumo.lotId ? [consumo.lotId] : [])))];
+  if (lotIds.length === 0) return new Map();
+  const linhas = await prisma.receiptLine.findMany({
+    where: { lotId: { in: lotIds }, actualUnitCost: { not: null } },
+    select: { lotId: true, actualUnitCost: true, lot: { select: { code: true } } },
+  });
+  return new Map<string, CustoDoLote>(linhas.map((linha) => [linha.lotId!, linha]));
+}
+
+/**
+ * Passos 2 e 3 de `getConsumedLotCostReferences`: os recebimentos com custo real
+ * que a hierarquia vai perguntar sobre estes consumos, respondidos do que foi
+ * carregado.
+ */
+async function carregarRecebimentosDosItens(
+  prisma: PrismaOrTx,
+  consumos: readonly ConsumoParaCusto[],
+  janelaDeCusto: LimitesDaJanela,
+): Promise<(itemId: string) => RecebimentosComCustoDoItem> {
+  const naoCarregado = (itemId: string): never => {
+    throw new Error(`Recebimentos do item ${itemId} pedidos fora do que o custo em lote carregou.`);
+  };
+  const perguntas = consumos.map((consumo) => {
+    const referenceDate = marcadorDoDiaComercialDe(consumo.consumedAt);
+    return {
+      itemId: consumo.itemId,
+      janela30: janelaDeCusto(referenceDate, 30),
+      janela90: janelaDeCusto(referenceDate, 90),
+    };
+  });
+  if (perguntas.length === 0) {
+    return (itemId) => ({
+      naJanela: async () => naoCarregado(itemId),
+      ultimaAte: async () => naoCarregado(itemId),
+    });
+  }
+
+  const ms = (instante: Date) => instante.getTime();
+  const janelas = perguntas.flatMap(({ janela30, janela90 }) => [janela30, janela90]);
+  const inicio = janelas.reduce(
+    (menor, janela) => (ms(janela.inicio) < ms(menor) ? janela.inicio : menor),
+    janelas[0]!.inicio,
+  );
+  const fim = janelas.reduce((maior, janela) => (ms(janela.fim) > ms(maior) ? janela.fim : maior), janelas[0]!.fim);
+  const itemIds = [...new Set(perguntas.map((pergunta) => pergunta.itemId))];
+
+  const linhasPorItem = new Map<string, (LinhaComCustoReal & UltimaLinhaComCustoReal)[]>(
+    itemIds.map((itemId) => [itemId, []]),
+  );
+  const linhas = await prisma.receiptLine.findMany({
+    where: {
+      itemId: { in: itemIds },
+      actualUnitCost: { not: null },
+      receipt: { receivedAt: { gte: inicio, lte: fim } },
+    },
+    select: {
+      itemId: true,
+      receivedQuantity: true,
+      actualUnitCost: true,
+      receipt: { select: { receivedAt: true, code: true } },
+    },
+  });
+  for (const linha of linhas) linhasPorItem.get(linha.itemId)!.push(linha);
+
+  // O último real de um consumo está no intervalo sempre que o item tem linha
+  // nele até o dia do consumo. Sem nenhuma, só pode ser anterior ao intervalo.
+  const temLinhaAte = (itemId: string, ate: Date) =>
+    linhasPorItem.get(itemId)!.some((linha) => ms(linha.receipt.receivedAt) <= ms(ate));
+  const semLinhaAteODia = [
+    ...new Set(
+      perguntas.filter(({ itemId, janela30 }) => !temLinhaAte(itemId, janela30.fim)).map(({ itemId }) => itemId),
+    ),
+  ];
+  const anteriorPorItem = new Map<string, UltimaLinhaComCustoReal | null>(
+    semLinhaAteODia.map((itemId) => [itemId, null]),
+  );
+  if (semLinhaAteODia.length > 0) {
+    const anteriores = await prisma.receiptLine.findMany({
+      where: {
+        itemId: { in: semLinhaAteODia },
+        actualUnitCost: { not: null },
+        receipt: { receivedAt: { lt: inicio } },
+      },
+      orderBy: { receipt: { receivedAt: "desc" } },
+      distinct: ["itemId"],
+      select: { itemId: true, actualUnitCost: true, receipt: { select: { receivedAt: true, code: true } } },
+    });
+    for (const linha of anteriores) anteriorPorItem.set(linha.itemId, linha);
+  }
+
+  return (itemId) => {
+    const doItem = linhasPorItem.get(itemId);
+    const carregadasAte = (ate: Date) => (doItem && ms(ate) <= ms(fim) ? doItem : naoCarregado(itemId));
+    return {
+      naJanela: async (desde, ate) =>
+        (ms(desde) >= ms(inicio) ? carregadasAte(ate) : naoCarregado(itemId)).filter(
+          (linha) => ms(linha.receipt.receivedAt) >= ms(desde) && ms(linha.receipt.receivedAt) <= ms(ate),
+        ),
+      ultimaAte: async (ate) => {
+        let ultima: UltimaLinhaComCustoReal | null = null;
+        for (const linha of carregadasAte(ate)) {
+          if (ms(linha.receipt.receivedAt) > ms(ate)) continue;
+          if (!ultima || ms(linha.receipt.receivedAt) > ms(ultima.receipt.receivedAt)) ultima = linha;
+        }
+        if (ultima) return ultima;
+        return anteriorPorItem.has(itemId) ? anteriorPorItem.get(itemId)! : naoCarregado(itemId);
+      },
+    };
+  };
 }
