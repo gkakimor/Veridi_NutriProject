@@ -21,7 +21,7 @@ import {
   ReportTable,
 } from "./ReportPage";
 import { useReport } from "./useReport";
-import { ariaDoPeriodoRecusado, diaDoRelatorio } from "./report-period";
+import { ariaDoPeriodoRecusado, diaDoRelatorio, emDias } from "./report-period";
 import { formatBRL } from "../../lib/currency";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
@@ -271,7 +271,7 @@ export function AwaitingBillingReportPage() {
                 to={row.billingId ? `/comercial/faturamento/${row.billingId}` : null}
               />
             </td>
-            <td className="is-number">{row.daysWaiting} dias</td>
+            <td className="is-number">{emDias(row.daysWaiting)}</td>
           </tr>
         ))}
       />

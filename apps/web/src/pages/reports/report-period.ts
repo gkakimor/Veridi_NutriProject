@@ -22,6 +22,24 @@ export function diaDoRelatorio(dias: number, agora: Date = new Date()): string {
   return diaCivilDeslocado(hojeComercial(agora), dias);
 }
 
+/** "1 dia", "2 dias", "0 dias" — contagem de dias civis de uma célula de relatório. */
+export function emDias(quantidade: number): string {
+  return `${quantidade} ${quantidade === 1 ? "dia" : "dias"}`;
+}
+
+/**
+ * Janelas prontas do R-02, como a tela as oferece. O PDF escreve a mesma frase
+ * nos filtros aplicados, no lugar do código que vai à API (`D30`)
+ * (REPORTS-PRESENTATION-WAVE-01).
+ */
+export const JANELAS_DE_VENCIMENTO: Readonly<Record<string, string>> = {
+  EXPIRED: "Vencidos",
+  D7: "Próximos 7 dias",
+  D30: "Próximos 30 dias",
+  D60: "Próximos 60 dias",
+  CUSTOM: "Período personalizado",
+};
+
 /** Onde o esqueleto do relatório escreve a recusa do período (`ReportPage`). */
 export const ID_DA_RECUSA_DO_PERIODO = "report-period-error";
 

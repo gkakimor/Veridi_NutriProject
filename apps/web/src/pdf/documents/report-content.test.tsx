@@ -9,7 +9,11 @@ import {
   OrderOperationPrintPage,
   ProductionTraceabilityPrintPage,
 } from "../../pages/print/DocumentReportPrints";
-import { ReportPrintPage } from "../../pages/print/ReportPrintPage";
+import {
+  REPORT_PRINT_DEFINITIONS,
+  ReportPrintPage,
+  reportAppliedFilters,
+} from "../../pages/print/ReportPrintPage";
 
 /**
  * Relatórios em PDF — o que o papel DIZ, da rota ao documento.
@@ -119,6 +123,39 @@ function responderPorUrl(
   });
 }
 
+/** Fornecedor como `GET /suppliers` o devolve — o que o seletor de Fornecedor lê. */
+const FORNECEDOR_A = {
+  id: "3b9e1c7a-2f4d-4e8b-a1c0-9d8e7f6a5b4c",
+  code: "FOR-000003",
+  legalName: "Insumos Sul Comércio de Matérias-Primas Ltda",
+  tradeName: "Insumos Sul",
+};
+
+const FORNECEDOR_SEM_FANTASIA = {
+  id: "c0ffee00-1234-4abc-8def-0123456789ab",
+  code: "FOR-000004",
+  legalName: "Laticínios Serra Azul Ltda",
+  tradeName: null,
+};
+
+/**
+ * `apiFetch` por destino: o CSV do relatório e a consulta do fornecedor por
+ * id. `falha` simula a consulta do fornecedor recusada pelo servidor.
+ */
+function responderComFornecedor(
+  csv: ReturnType<typeof respostaCsv>,
+  fornecedor: { fornecedores: { id: string; code: string; legalName: string; tradeName: string | null }[] } | { falha: true },
+) {
+  apiFetch.mockImplementation(async (url: string) => {
+    if (!url.startsWith(`${API_URL}/suppliers?`)) return csv;
+    if ("falha" in fornecedor) {
+      return { ok: false, status: 500, json: () => Promise.resolve({ error: "internal_error" }) };
+    }
+    const corpo = { suppliers: fornecedor.fornecedores, total: fornecedor.fornecedores.length, page: 1, pageSize: 1 };
+    return { ok: true, status: 200, json: () => Promise.resolve(corpo) };
+  });
+}
+
 /** Espera o arquivo ficar pronto e devolve o documento montado, desenhado como DOM. */
 async function documentoGerado(nomeDoArquivo: string): Promise<HTMLElement> {
   await screen.findByTitle(`Documento ${nomeDoArquivo}`);
@@ -170,7 +207,8 @@ describe("relatórios R-01…R-20 em PDF", () => {
     expect(texto).toContain("R-01");
     expect(texto).toContain("Gerado por Ana Souza");
     expect(campo(documento, "Busca")).toBe("whey");
-    expect(campo(documento, "Status")).toBe("AVAILABLE");
+    // O rótulo do seletor da tela, nunca o valor da API (REPORTS-PRESENTATION-WAVE-01).
+    expect(campo(documento, "Status")).toBe("Disponível");
     // Paginação da tela não é filtro do documento.
     expect(campo(documento, "page")).toBeNull();
     expect(campo(documento, "all")).toBeNull();
@@ -250,7 +288,7 @@ describe("relatórios R-01…R-20 em PDF", () => {
     );
     // O cliente sai como o seletor da tela o escreve (R20-UX-CLEANUP-WAVE-01).
     expect(campo(documento, "Cliente")).toBe("CLI-000012 · Nutri Alfa Suplementos Ltda");
-    expect(campo(documento, "Status")).toBe("SENT");
+    expect(campo(documento, "Status")).toBe("Enviado");
     expect(campo(documento, "De")).toBe("2026-09-01");
     expect(campo(documento, "Até")).toBe("2026-09-30");
   });
@@ -284,7 +322,7 @@ describe("relatórios R-01…R-20 em PDF", () => {
       const documento = await documentoGerado("R-20-2026-09-11.pdf");
       expect(campo(documento, "Cliente")).toBe("—");
       expect(documento.textContent).not.toContain(LEGADO);
-      expect(campo(documento, "Status")).toBe("SENT");
+      expect(campo(documento, "Status")).toBe("Enviado");
       expect(campo(documento, "Registros")).toBe("1");
     });
 
@@ -316,6 +354,180 @@ describe("relatórios R-01…R-20 em PDF", () => {
       expect(await screen.findByRole("alert")).toHaveTextContent("Seu perfil não permite ver este relatório.");
       expect(apiFetch).not.toHaveBeenCalled();
       expect(renderPdfBlob).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("R-08…R-11: o fornecedor do filtro no papel é código e nome, nunca id técnico (REPORTS-PRESENTATION-WAVE-01)", () => {
+    const CSV_COMPRAS = [
+      ["OC", "Fornecedor", "Item"],
+      ["OC-000031", "Insumos Sul", "MP-000001"],
+    ];
+
+    /** URLs das consultas de fornecedor que a página fez. */
+    function consultasDeFornecedor(): string[] {
+      return apiFetch.mock.calls.map(([url]) => String(url)).filter((url) => url.includes("/suppliers?"));
+    }
+
+    it.each(["R-08", "R-09", "R-10", "R-11"])(
+      "%s: código e nome do fornecedor, uma consulta por id, e o UUID fora do documento",
+      async (codigo) => {
+        responderComFornecedor(respostaCsv(CSV_COMPRAS), { fornecedores: [FORNECEDOR_A] });
+        abrir(`/print/relatorios/${codigo}?supplierId=${FORNECEDOR_A.id}`);
+
+        const documento = await documentoGerado(`${codigo}-2026-09-11.pdf`);
+        expect(campo(documento, "Fornecedor")).toBe("FOR-000003 · Insumos Sul");
+        expect(documento.textContent).not.toContain(FORNECEDOR_A.id);
+        // O CSV recebe o id como sempre: o recorte é o mesmo, só o papel muda.
+        const csv = String(apiFetch.mock.calls[0]?.[0]);
+        expect(new URL(csv).searchParams.get("supplierId")).toBe(FORNECEDOR_A.id);
+        // A consulta do seletor de Fornecedor, por identidade — inclusive inativo.
+        const consultas = consultasDeFornecedor();
+        expect(consultas).toHaveLength(1);
+        expect(new URL(consultas[0]!).searchParams.get("ids")).toBe(FORNECEDOR_A.id);
+        expect(new URL(consultas[0]!).searchParams.has("active")).toBe(false);
+        expect(linhas(documento)).toHaveLength(1);
+      },
+    );
+
+    it("fornecedor sem nome fantasia: código e razão social, como o seletor escreve", async () => {
+      responderComFornecedor(respostaCsv(CSV_COMPRAS), { fornecedores: [FORNECEDOR_SEM_FANTASIA] });
+      abrir(`/print/relatorios/R-09?supplierId=${FORNECEDOR_SEM_FANTASIA.id}&from=2026-09-01`);
+
+      const documento = await documentoGerado("R-09-2026-09-11.pdf");
+      expect(campo(documento, "Fornecedor")).toBe("FOR-000004 · Laticínios Serra Azul Ltda");
+      expect(documento.textContent).not.toContain(FORNECEDOR_SEM_FANTASIA.id);
+      expect(campo(documento, "De")).toBe("2026-09-01");
+    });
+
+    it("id inexistente ou legado: Fornecedor sai —, sem o id, e o documento é gerado", async () => {
+      const LEGADO = "for-legado-0001";
+      responderComFornecedor(respostaCsv(CSV_COMPRAS), { fornecedores: [] });
+      abrir(`/print/relatorios/R-11?supplierId=${LEGADO}`);
+
+      const documento = await documentoGerado("R-11-2026-09-11.pdf");
+      expect(campo(documento, "Fornecedor")).toBe("—");
+      expect(documento.textContent).not.toContain(LEGADO);
+      expect(campo(documento, "Registros")).toBe("1");
+    });
+
+    it("consulta do fornecedor falha: Fornecedor sai —, e o documento é gerado mesmo assim", async () => {
+      responderComFornecedor(respostaCsv(CSV_COMPRAS), { falha: true });
+      abrir(`/print/relatorios/R-10?supplierId=${FORNECEDOR_A.id}`);
+
+      const documento = await documentoGerado("R-10-2026-09-11.pdf");
+      expect(campo(documento, "Fornecedor")).toBe("—");
+      expect(documento.textContent).not.toContain(FORNECEDOR_A.id);
+      expect(linhas(documento)).toHaveLength(1);
+    });
+
+    it("sem fornecedor no filtro: nenhuma consulta extra e nenhum campo Fornecedor", async () => {
+      responderComFornecedor(respostaCsv(CSV_COMPRAS), { fornecedores: [FORNECEDOR_A] });
+      abrir("/print/relatorios/R-08?search=OC-000031");
+
+      const documento = await documentoGerado("R-08-2026-09-11.pdf");
+      expect(apiFetch).toHaveBeenCalledTimes(1);
+      expect(apiFetch).toHaveBeenCalledWith(`${API_URL}/reports/purchasing/orders/export.csv?search=OC-000031`);
+      expect(campo(documento, "Fornecedor")).toBeNull();
+    });
+
+    it("CSV recusado pelo servidor: nem consulta o fornecedor, nem gera documento", async () => {
+      responderComFornecedor(
+        { ok: false, status: 403, json: () => Promise.resolve({ error: "forbidden" }) } as never,
+        { fornecedores: [FORNECEDOR_A] },
+      );
+      abrir(`/print/relatorios/R-08?supplierId=${FORNECEDOR_A.id}`);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Falha ao carregar o relatório (403)");
+      expect(consultasDeFornecedor()).toHaveLength(0);
+      expect(renderPdfBlob).not.toHaveBeenCalled();
+    });
+
+    it("fornecedor e cliente juntos não se confundem: cada um pela sua consulta", async () => {
+      apiFetch.mockImplementation(async (url: string) => {
+        if (url.startsWith(`${API_URL}/suppliers?`)) {
+          return { ok: true, status: 200, json: () => Promise.resolve({ suppliers: [FORNECEDOR_A], total: 1, page: 1, pageSize: 1 }) };
+        }
+        if (url.startsWith(`${API_URL}/customers?`)) {
+          return { ok: true, status: 200, json: () => Promise.resolve({ customers: [CLIENTE_A], total: 1, page: 1, pageSize: 1 }) };
+        }
+        return respostaCsv(CSV_COMPRAS);
+      });
+      // Nenhuma tela manda os dois; a URL digitada pode.
+      abrir(`/print/relatorios/R-08?supplierId=${FORNECEDOR_A.id}&customerId=${CLIENTE_A.id}`);
+
+      const documento = await documentoGerado("R-08-2026-09-11.pdf");
+      expect(campo(documento, "Fornecedor")).toBe("FOR-000003 · Insumos Sul");
+      expect(campo(documento, "Cliente")).toBe("CLI-000012 · Nutri Alfa Suplementos Ltda");
+    });
+  });
+
+  describe("filtro de lista fechada no papel: o rótulo da tela, nunca o valor da API (REPORTS-PRESENTATION-WAVE-01)", () => {
+    it.each<[string, string, Record<string, string>, string[]]>([
+      [
+        "R-01",
+        "itemType=RAW_MATERIAL&status=BLOCKED&onlyWithBalance=true",
+        { "Tipo de item": "Matéria-prima", Status: "Bloqueado", "Somente com saldo": "Sim" },
+        ["RAW_MATERIAL", "BLOCKED", "onlyWithBalance"],
+      ],
+      [
+        "R-02",
+        "window=D30&itemType=PACKAGING",
+        { "Janela de vencimento": "Próximos 30 dias", "Tipo de item": "Material de embalagem" },
+        ["D30", "PACKAGING", "window"],
+      ],
+      ["R-03", "type=ADJUSTMENT_IN", { Tipo: "Ajuste de entrada" }, ["ADJUSTMENT_IN"]],
+      [
+        "R-04",
+        "status=IN_PRODUCTION&onlyShortage=false",
+        { Status: "Em produção", "Somente com falta": "Não" },
+        ["IN_PRODUCTION", "onlyShortage"],
+      ],
+      [
+        "R-05",
+        "status=COMPLETED&includeCost=true",
+        { Status: "Concluída", "Incluir custo": "Sim" },
+        ["COMPLETED", "includeCost"],
+      ],
+      [
+        "R-08",
+        "status=PARTIALLY_RECEIVED&origin=CUSTOMER_ORDER",
+        { Status: "Recebido parcialmente", Origem: "Pedido do Cliente" },
+        ["PARTIALLY_RECEIVED", "CUSTOMER_ORDER"],
+      ],
+      ["R-12", "status=IN_FULFILLMENT", { Status: "Em atendimento" }, ["IN_FULFILLMENT"]],
+      ["R-13", "status=PARTIALLY_SHIPPED", { Status: "Parcialmente expedido" }, ["PARTIALLY_SHIPPED"]],
+      ["R-17", "status=CANCELLED", { Status: "Cancelado" }, ["CANCELLED"]],
+      [
+        "R-20",
+        "status=SENT&priceSource=PRICING_TIER",
+        { Status: "Enviado", "Origem do preço": "Faixa de precificação" },
+        ["SENT", "PRICING_TIER", "priceSource"],
+      ],
+    ])("%s?%s", async (codigo, filtros, esperados, crus) => {
+      apiFetch.mockResolvedValue(respostaCsv([["Documento"], ["DOC-000001"]]));
+      abrir(`/print/relatorios/${codigo}?${filtros}`);
+
+      const documento = await documentoGerado(`${codigo}-2026-09-11.pdf`);
+      for (const [rotulo, valor] of Object.entries(esperados)) expect(campo(documento, rotulo), rotulo).toBe(valor);
+      const texto = documento.textContent ?? "";
+      for (const cru of crus) expect(texto, cru).not.toContain(cru);
+      // A URL do CSV não muda: o servidor continua recebendo o valor dele.
+      expect(apiFetch).toHaveBeenCalledWith(expect.stringContaining(`export.csv?${filtros}`));
+    });
+
+    it("valor fora do mapa sai como veio — nem some, nem vira o protótipo do objeto", () => {
+      const filtros = reportAppliedFilters(
+        new URLSearchParams("itemType=constructor&status=toString&onlyWithBalance=hasOwnProperty&search=SENT"),
+        {},
+        REPORT_PRINT_DEFINITIONS["R-01"]!.filterValues,
+      );
+      expect(filtros).toEqual([
+        { label: "Tipo de item", value: "constructor" },
+        { label: "Status", value: "toString" },
+        { label: "Somente com saldo", value: "hasOwnProperty" },
+        // Busca é texto livre: "SENT" digitado é o que a pessoa procurou.
+        { label: "Busca", value: "SENT" },
+      ]);
     });
   });
 

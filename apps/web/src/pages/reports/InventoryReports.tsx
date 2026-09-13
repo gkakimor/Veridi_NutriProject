@@ -15,7 +15,7 @@ import {
 } from "../../lib/reports-api";
 import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
-import { ariaDoPeriodoRecusado, diaDoRelatorio } from "./report-period";
+import { ariaDoPeriodoRecusado, diaDoRelatorio, emDias, JANELAS_DE_VENCIMENTO } from "./report-period";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate, formatDateTime } from "../../lib/dates";
 
@@ -196,11 +196,11 @@ export function ExpiryReportPage() {
               setWindow(event.target.value);
             }}
           >
-            <option value="EXPIRED">Vencidos</option>
-            <option value="D7">Próximos 7 dias</option>
-            <option value="D30">Próximos 30 dias</option>
-            <option value="D60">Próximos 60 dias</option>
-            <option value="CUSTOM">Período personalizado</option>
+            {Object.entries(JANELAS_DE_VENCIMENTO).map(([valor, rotulo]) => (
+              <option key={valor} value={valor}>
+                {rotulo}
+              </option>
+            ))}
           </select>
           {window === "CUSTOM" && (
             <>
@@ -270,10 +270,10 @@ export function ExpiryReportPage() {
               {/* `daysToExpiry` vem da API em dias civis: `0` é hoje, e o
                   lote que vence hoje ainda vale o dia inteiro. */}
               {row.daysToExpiry < 0
-                ? `Vencido há ${Math.abs(row.daysToExpiry)} dias`
+                ? `Vencido há ${emDias(Math.abs(row.daysToExpiry))}`
                 : row.daysToExpiry === 0
                   ? "Vence hoje"
-                  : `Vence em ${row.daysToExpiry} dias`}
+                  : `Vence em ${emDias(row.daysToExpiry)}`}
             </td>
             <td className="is-number">
               {formatQuantity(row.onHand)} {row.unitCode}
