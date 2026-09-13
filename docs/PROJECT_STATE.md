@@ -2988,8 +2988,9 @@ derruba os 36 invertidos). Web 22 novos
 `pages/reports/relatorios-periodo-invertido.test.tsx`) e 2 no PDF
 (`pdf/documents/report-content.test.tsx`). 21 mutações — primitiva, schemas,
 serviço, filtro, listas, esqueleto, telas e PDF — todas derrubam teste. Focados da
-API (listas, Relatórios, exportações, dia comercial, Painel, faixa serial de
-Calendário e quadro) e da web (listas, Relatórios, PDF, período), typecheck.
+API (listas, Relatórios, exportações, dia comercial, Painel, inventário, suporte de
+teste: 50 arquivos, 914 testes; faixa serial com Calendário, quadro e Painel: 74) e
+da web (listas, Relatórios, PDF, período, 390px: 53 arquivos, 772), typecheck.
 Smoke com banco e portas isolados, 1440 e 390: API direta em 12 rotas, Faturamento
 e R-03 sem consulta no invertido e com uma ao corrigir, frase à vista sem rolagem
 horizontal, CSV e PDF desabilitados, PDF com a frase — 108/108, console limpo fora
