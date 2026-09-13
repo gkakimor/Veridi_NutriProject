@@ -271,7 +271,10 @@ describe("R-15 — resumo agregado, igual à conta de antes", () => {
       await resumoDeAntes({ ...doCliente(clientes.completo), code: { contains: prefixo, mode: "insensitive" } }),
     );
 
-    const completo = await getBillingPeriodReport({ customerId: clientes.completo, ...PERIODO, page: 1, pageSize: PAGINA }, ALL_ROWS);
+    const completo = await getBillingPeriodReport(
+      { customerId: clientes.completo, ...PERIODO, page: 1, pageSize: PAGINA, all: true },
+      ALL_ROWS,
+    );
     expect(completo.rows).toHaveLength(45);
     expect(completo.summary).toEqual(await resumoDeAntes(doCliente(clientes.completo)));
     const csv = await app.inject({
@@ -286,7 +289,7 @@ describe("R-15 — resumo agregado, igual à conta de antes", () => {
     registro.operacoes = [];
     registro.ligado = true;
     try {
-      await getBillingPeriodReport({ customerId: clientes.completo, ...PERIODO, page: 2, pageSize: PAGINA });
+      await getBillingPeriodReport({ customerId: clientes.completo, ...PERIODO, page: 2, pageSize: PAGINA, all: false });
     } finally {
       registro.ligado = false;
     }

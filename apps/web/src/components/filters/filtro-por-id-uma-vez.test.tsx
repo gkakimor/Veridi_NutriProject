@@ -112,7 +112,7 @@ function Barra({
         value={valor}
         onChange={setValor}
         source={source}
-        onResolve={aoResolver}
+        {...(aoResolver ? { onResolve: aoResolver } : {})}
       />
       {/* Troca de valor vinda de fora do campo — link, filtro lembrado, "Limpar". */}
       <button type="button" onClick={() => setValor(OUTRO.id)}>
