@@ -417,7 +417,7 @@ options={customers.map((customer) => ({
           subtitle="Material de cliente exige controle de lote — item sem controle de lote é recusado no recebimento."
         >
           <div className="table-container">
-            <table className="table">
+            <table className="table table--customer-material-lines">
               <thead>
                 <tr>
                   <th>Item</th>
