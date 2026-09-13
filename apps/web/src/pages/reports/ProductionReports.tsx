@@ -16,7 +16,7 @@ import { ordemDeProducaoFilterSource } from "../../lib/filter-sources";
 import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
-import { dateInputValueOffset } from "../../lib/period";
+import { diaDoRelatorio } from "./report-period";
 import { formatBRL } from "../../lib/currency";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
@@ -125,8 +125,8 @@ export function PlannedActualReportPage() {
   const [status, setStatus] = useState("COMPLETED");
   const [search, setSearch] = useState("");
   const [includeCost, setIncludeCost] = useState(false);
-  const [from, setFrom] = useState(dateInputValueOffset(-29));
-  const [to, setTo] = useState(dateInputValueOffset(0));
+  const [from, setFrom] = useState(diaDoRelatorio(-29));
+  const [to, setTo] = useState(diaDoRelatorio(0));
   const [page, setPage] = useState(1);
 
   const filters = useMemo(
@@ -134,8 +134,8 @@ export function PlannedActualReportPage() {
       status,
       search,
       includeCost,
-      from: new Date(`${from}T00:00:00`).toISOString(),
-      to: new Date(`${to}T23:59:59.999`).toISOString(),
+      from,
+      to,
       page,
       pageSize: PAGE_SIZE,
     }),
@@ -358,15 +358,15 @@ export function ProductionTraceabilityReportPage() {
 /** R-07 — Consumo por período. */
 export function ConsumptionReportPage() {
   const [search, setSearch] = useState("");
-  const [from, setFrom] = useState(dateInputValueOffset(-29));
-  const [to, setTo] = useState(dateInputValueOffset(0));
+  const [from, setFrom] = useState(diaDoRelatorio(-29));
+  const [to, setTo] = useState(diaDoRelatorio(0));
   const [page, setPage] = useState(1);
 
   const filters = useMemo(
     () => ({
       search,
-      from: new Date(`${from}T00:00:00`).toISOString(),
-      to: new Date(`${to}T23:59:59.999`).toISOString(),
+      from,
+      to,
       page,
       pageSize: PAGE_SIZE,
     }),

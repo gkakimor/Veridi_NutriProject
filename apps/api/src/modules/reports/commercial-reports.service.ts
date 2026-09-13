@@ -12,33 +12,31 @@ import { deriveOrderBillingStatus } from "../customer-orders/customer-orders.ser
 import { getReservedRemainingByLines, getShippedByOrderLines } from "../shipments/shipments.service.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { ALL_ROWS, pageArgs, pageMeta, slicePage } from "../../lib/pagination.js";
+import { periodoDeInstante } from "./report-period.js";
 import type {
   CustomerOrdersQuery,
   FulfillmentQuery,
   OrderOperationQuery,
 } from "./reports.schemas.js";
 
-/** Filtro comum dos relatórios de Pedido — período sempre por `orderDate`. */
+/**
+ * Filtro comum dos relatórios de Pedido — período sempre por `orderDate`, que
+ * é o instante de criação do Pedido (`@default(now())`), lido no dia comercial.
+ */
 function orderWhere(query: {
   search?: string | undefined;
   customerId?: string | undefined;
   status?: string | undefined;
-  from?: Date | undefined;
-  to?: Date | undefined;
+  from?: string | undefined;
+  to?: string | undefined;
 }): Prisma.CustomerOrderWhereInput {
+  const periodo = periodoDeInstante(query);
   // `exactOptionalPropertyTypes` nao aceita spread condicional direto sobre
   // campos de enum do Prisma — o objeto e montado e tipado no retorno.
   const where: Record<string, unknown> = {
     ...(query.customerId ? { customerId: query.customerId } : {}),
     ...(query.status ? { status: query.status as Prisma.CustomerOrderWhereInput["status"] } : {}),
-    ...(query.from || query.to
-      ? {
-          orderDate: {
-            ...(query.from ? { gte: query.from } : {}),
-            ...(query.to ? { lte: query.to } : {}),
-          },
-        }
-      : {}),
+    ...(periodo ? { orderDate: periodo } : {}),
     ...(query.search
       ? {
           OR: [

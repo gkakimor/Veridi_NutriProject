@@ -12,7 +12,7 @@ import { fornecedorFilterSource } from "../../lib/filter-sources";
 import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
-import { dateInputValueOffset } from "../../lib/period";
+import { diaDoRelatorio } from "./report-period";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
@@ -43,8 +43,8 @@ export function PurchaseOrdersReportPage() {
   const [supplierId, setSupplierId] = useState("");
   const [status, setStatus] = useState("");
   const [origin, setOrigin] = useState("");
-  const [from, setFrom] = useState(dateInputValueOffset(-89));
-  const [to, setTo] = useState(dateInputValueOffset(0));
+  const [from, setFrom] = useState(diaDoRelatorio(-89));
+  const [to, setTo] = useState(diaDoRelatorio(0));
   const [page, setPage] = useState(1);
 
   const filters = useMemo(
@@ -53,8 +53,8 @@ export function PurchaseOrdersReportPage() {
       supplierId,
       status,
       origin,
-      from: new Date(`${from}T00:00:00`).toISOString(),
-      to: new Date(`${to}T23:59:59.999`).toISOString(),
+      from,
+      to,
       page,
       pageSize: PAGE_SIZE,
     }),
@@ -178,16 +178,16 @@ export function PurchaseOrdersReportPage() {
 export function ReceiptsReportPage() {
   const [search, setSearch] = useState("");
   const [supplierId, setSupplierId] = useState("");
-  const [from, setFrom] = useState(dateInputValueOffset(-29));
-  const [to, setTo] = useState(dateInputValueOffset(0));
+  const [from, setFrom] = useState(diaDoRelatorio(-29));
+  const [to, setTo] = useState(diaDoRelatorio(0));
   const [page, setPage] = useState(1);
 
   const filters = useMemo(
     () => ({
       search,
       supplierId,
-      from: new Date(`${from}T00:00:00`).toISOString(),
-      to: new Date(`${to}T23:59:59.999`).toISOString(),
+      from,
+      to,
       page,
       pageSize: PAGE_SIZE,
     }),

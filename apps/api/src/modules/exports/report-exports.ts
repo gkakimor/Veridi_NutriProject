@@ -27,6 +27,7 @@ import {
   PURCHASE_ORDER_STATUS_LABELS,
 } from "@veridi/shared";
 import { csvCode, csvDate, csvDateTime, csvDecimal, csvMoney, csvText, csvUnitPrice } from "../../lib/csv.js";
+import { marcadorDoDiaCivil } from "../../lib/business-day.js";
 import { ALL_ROWS } from "../../lib/pagination.js";
 import {
   getExpiryReport,
@@ -124,11 +125,14 @@ import { defineCsvExport } from "./csv-export.js";
  * documento único, não listagens tabulares — a saída deles é a impressão.
  */
 
-/** Período aplicado, para compor o nome do arquivo. */
-function period<TQuery extends { from?: Date | undefined; to?: Date | undefined }>(query: TQuery) {
+/**
+ * Período aplicado, para compor o nome do arquivo — os DIAS escolhidos, pelo
+ * marcador de cada um, então o nome diz exatamente o dia pedido.
+ */
+function period<TQuery extends { from?: string | undefined; to?: string | undefined }>(query: TQuery) {
   return {
-    ...(query.from ? { from: query.from } : {}),
-    ...(query.to ? { to: query.to } : {}),
+    ...(query.from ? { from: marcadorDoDiaCivil(query.from) } : {}),
+    ...(query.to ? { to: marcadorDoDiaCivil(query.to) } : {}),
   };
 }
 

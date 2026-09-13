@@ -2147,6 +2147,49 @@ aberta, a lista diz "Nada disponível para escolher." no lugar da frase própria
 **Próximo:** a definir pelo PO — da auditoria de filtros sobra FO-03
 (`OperationalSheets.tsx`).
 
+## Relatórios no dia da Veridi (REPORTS-BUSINESS-DATE-01, 2026-09-12)
+
+Oito telas de relatório (R-02 personalizado, R-03, R-05, R-07, R-08, R-09, R-12,
+R-15) mandavam o período como `new Date(dia + "T00:00:00").toISOString()` e
+`...T23:59:59.999`: a meia-noite do NAVEGADOR. A mesma escolha de 12/09 era um
+recorte em UTC (trazia a noite de 11/09 de São Paulo e perdia a de 12/09), outro
+em UTC-07 e outro em São Paulo — e CSV e PDF, que levam os mesmos filtros,
+erravam junto. O mesmo gesto tinha mais três efeitos: o R-02 personalizado
+comparava esses instantes com a validade (marcador de meia-noite UTC) e errava o
+dia inteiro até em São Paulo; campo de data limpo derrubava a tela
+(`RangeError: Invalid time value`); e o nome do CSV saía com o dia seguinte no fim.
+
+**Contrato.** `from`/`to` dos relatórios viraram DIA (`diaCivilDeFiltroSchema`;
+instante ISO é recusado com 400, não reinterpretado) — o contrato das listas. O
+serviço abre o dia uma vez, em `modules/reports/report-period.ts`, pela espécie
+da coluna: `intervaloDeDiasComerciais` para instante (`issuedAt`, `occurredAt`,
+`receivedAt`, `consumedAt`, `completedAt`/`createdAt`, `CustomerOrder.orderDate`,
+`quoteDate`) e `intervaloDeDiasCivis` para marcador (`PurchaseOrder.orderDate`,
+como a lista de OCs; `Lot.expiryDate`), sempre com fim exclusivo. A janela
+inicial dos campos nasce em `hojeComercial` (`pages/reports/report-period.ts`),
+não no dia do navegador. Quais dias entram, filtros, KPIs, ordenação e layout não
+mudaram; o PDF lê o CSV com os mesmos parâmetros. Nenhuma migration.
+
+**Validação.** API 27 testes novos (`reports-dia-comercial.test.ts`: bordas do dia
+comercial com a virada das 01:30 UTC no R-12 e no R-05, marcadores no R-08 e no
+R-02, intervalo início/fim sem off-by-one, ponta aberta, CSV com o mesmo recorte e
+o nome com os dias pedidos, instante e formato inválido recusados nas 11 rotas e
+nos 11 CSV, guarda estrutural; mutação: espécies trocadas e fim inclusivo derrubam
+os 4 de borda). Web 19 (`relatorios-dia-comercial.test.tsx`: tela, CSV e PDF com o
+mesmo dia em UTC, UTC-07 e São Paulo nas oito telas, janela padrão às 01:30 UTC,
+campo limpo, guarda estrutural; mutação: a tela antiga do R-15 derruba 4) e 1 no
+PDF (`report-content.test.tsx`). Smoke com banco e portas isolados, Chromium com
+`timezoneId`: 61/61.
+
+Achados (não corrigidos, fora do escopo): no R-20, `status`, cliente e período
+escrevem a mesma chave `quoteVersion` no `where` e só o último vale;
+`QuoteVersion.quoteDate` é coluna mista (a tela grava instante, o importador grava
+`entryDate`); OCs antigas com `orderDate` em instante seguem sem backfill; mudar o
+período não volta à página 1; o R-15 vazio mostra "Valores incompletos"; o
+Dashboard ainda semeia o período personalizado com o dia do navegador; o nome de
+CSV sem período usa o dia UTC do servidor. Aba aberta antes do deploy recebe 400
+nos relatórios até recarregar.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

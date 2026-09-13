@@ -16,6 +16,7 @@ import { findProductionOrderMaterialCost } from "../costs/costs.service.js";
 import { requirementOwnerScope } from "../production-orders/production-orders.service.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta, slicePage } from "../../lib/pagination.js";
+import { periodoDeInstante } from "./report-period.js";
 import type {
   ConsumptionQuery,
   PlannedActualQuery,
@@ -134,19 +135,13 @@ export async function getPlannedActualReport(
   const prisma = getPrisma();
   const status = query.status ?? "COMPLETED";
   const dateField = status === "COMPLETED" ? "completedAt" : "createdAt";
+  const periodo = periodoDeInstante(query);
 
   const where: Prisma.ProductionOrderWhereInput = {
     status,
     ...(query.productId ? { productId: query.productId } : {}),
     ...(query.productionOrderId ? { id: query.productionOrderId } : {}),
-    ...(query.from || query.to
-      ? {
-          [dateField]: {
-            ...(query.from ? { gte: query.from } : {}),
-            ...(query.to ? { lte: query.to } : {}),
-          },
-        }
-      : {}),
+    ...(periodo ? { [dateField]: periodo } : {}),
     ...(query.search
       ? {
           OR: [
@@ -317,19 +312,13 @@ export async function getConsumptionReport(
   pagination: Pagination = query,
 ): Promise<ReportPageDTO<ConsumptionRowDTO>> {
   const prisma = getPrisma();
+  const periodo = periodoDeInstante(query);
 
   const where: Prisma.ProductionConsumptionWhereInput = {
     ...(query.itemId ? { itemId: query.itemId } : {}),
     ...(query.productionOrderId ? { productionOrderId: query.productionOrderId } : {}),
     ...(query.productId ? { productionOrder: { is: { productId: query.productId } } } : {}),
-    ...(query.from || query.to
-      ? {
-          consumedAt: {
-            ...(query.from ? { gte: query.from } : {}),
-            ...(query.to ? { lte: query.to } : {}),
-          },
-        }
-      : {}),
+    ...(periodo ? { consumedAt: periodo } : {}),
     ...(query.search
       ? {
           OR: [

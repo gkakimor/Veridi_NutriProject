@@ -10,6 +10,7 @@ import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta, slicePage } from "../../lib/pagination.js";
 import { latestCalculationsByProduct } from "../industrial-cost-calculation/snapshot.service.js";
 import { precoUnitario, resultadoTecnico } from "../../lib/decimal-serialization.js";
+import { periodoDeInstante } from "./report-period.js";
 import type {
   IndustrialCostByProductQuery,
   PricingByProductQuery,
@@ -171,21 +172,14 @@ export async function getQuotePricingAuditReport(
   pagination: Pagination = query,
 ): Promise<ReportPageDTO<QuotePricingAuditRowDTO>> {
   const prisma = getPrisma();
+  // `quoteDate` nasce como instante (`new Date()` ao criar a versão).
+  const periodo = periodoDeInstante(query);
 
   const where: PrismaTypes.QuoteLineWhereInput = {
     ...(query.status ? { quoteVersion: { status: query.status } } : {}),
     ...(query.priceSource ? { priceSource: query.priceSource } : {}),
     ...(query.customerId ? { quoteVersion: { project: { customerId: query.customerId } } } : {}),
-    ...(query.from || query.to
-      ? {
-          quoteVersion: {
-            quoteDate: {
-              ...(query.from ? { gte: query.from } : {}),
-              ...(query.to ? { lte: query.to } : {}),
-            },
-          },
-        }
-      : {}),
+    ...(periodo ? { quoteVersion: { quoteDate: periodo } } : {}),
     ...(query.search
       ? {
           OR: [
