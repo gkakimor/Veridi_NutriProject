@@ -2657,6 +2657,54 @@ filtro — 18/18, console limpo.
 Achados, sem correção: no papel, `supplierId` (R-08 a R-11) ainda sai como UUID, e
 status/tipo saem como código de enum (`SENT`, `RAW_MATERIAL`).
 
+## Limpeza pequena de UX (SMALL-UX-CLEANUP-WAVE-01, 2026-09-13)
+
+Quatro achados já conhecidos, só na tela. Sem API, sem migration, sem fórmula.
+
+**R-15 sem documento.** Recorte sem faturamento emitido mostrava "Valores
+incompletos" e "0 de 0": o servidor manda `totalAmount: null` quando não há
+documento (o total exige TODOS completos) e a tela lia isso como preço faltando.
+Com `billingCount` 0 o resumo não aparece e a tabela diz "Nenhum faturamento para
+os filtros informados." (curta de propósito: célula de relatório não quebra
+linha, e a frase longa sumia sob a rolagem em 390px). Documento sem preço segue
+"Valores incompletos" com "N de M".
+
+**R-11.** "1 dia" / "2 dias" / "0 dias", no ternário local que o produto já usa —
+não havia helper de plural.
+
+**CSV da seleção.** Com seleção, cabeçalho e barra tinham dois "Exportar CSV". O
+da barra (`BulkDocumentActions`, Pedidos e OP) virou "Exportar selecionados em
+CSV"; o do cabeçalho segue "Exportar CSV", lista filtrada inteira. Descritor,
+`excludedIds`, CSV do servidor e limites intocados.
+
+**Relatórios com filtro novo.** `useReport` guardava a resposta anterior até a nova
+chegar — tabela, resumo e paginação do recorte velho debaixo de "Carregando…".
+Agora a resposta só aparece para o mesmo recorte (filtros sem `page`/`pageSize`):
+filtro novo esconde o anterior até a resposta; Anterior/Próxima mantêm a página
+aberta até a próxima chegar. `loading` é derivado no render (chave da última
+resposta ≠ chave atual), sem quadro intermediário, e a tabela não mostra a frase
+de vazio durante a carga (contexto do `ReportPage`, `aria-busy`). Vale para os
+vinte relatórios, inclusive R-06/R-14 (outra OP/pedido não mostra a genealogia
+anterior). Página 1 e uma consulta por gesto (REPORTS-PAGE-RESET-ON-PERIOD-01)
+mantidas.
+
+**Validação.** Web: 2 arquivos novos (8 testes) e 1 teste novo em Pedidos; 7
+mutações, todas derrubadas; focados 191/191 (relatórios, seleção em massa, CSV das
+listas, conteúdo do PDF de relatório); typecheck. Smoke real (web do worktree
+contra a API dev, respostas sintéticas por `route.fulfill`, nada gravado) em 1440
+e 390: 36/36 cada — zero documentos pela API, uma consulta por gesto na página 1,
+busca/De sem nada do recorte anterior durante 1,5 s de atraso, Próxima mantendo a
+página, R-11 numa linha, barra da seleção sem transbordo (ids e 327 filtrados),
+CSV da barra = cabeçalho + 2 selecionados e CSV do cabeçalho = 12 da lista,
+console limpo.
+
+**Achados.** Mesmo plural fixo em R-16 ("Aguardando há 1 dias") e R-02 ("Vence em
+1 dias"); Painel mostra "Valores incompletos · 0 de 0 documentos" sem faturamento
+no período (Dashboard fora do escopo); a busca dos relatórios consulta a cada tecla
+e agora esvazia a tabela até cada resposta; erro de consulta mostra o alerta junto
+da frase de vazio da tabela; célula de relatório é `nowrap`, então frase de vazio
+acima de ~50 caracteres fica no limite de 390px (a maior hoje tem 52; não medida).
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

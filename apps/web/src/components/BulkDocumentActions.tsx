@@ -5,10 +5,15 @@ import { apiErrorMessage } from "../lib/api-errors";
 /**
  * Ações DOCUMENTAIS da seleção em massa — BULK-DOCUMENTS-01.
  *
- * "Baixar PDF" e "Exportar CSV" leem a seleção; nenhuma muda registro, e por
- * isso são secundárias — não competem com as ações que gravam na página. Vale
- * o descritor do momento do clique (o servidor resolve o conjunto), cada ação
- * roda uma vez por clique e a seleção continua de pé depois do download.
+ * "Baixar PDF" e "Exportar selecionados em CSV" leem a seleção; nenhuma muda
+ * registro, e por isso são secundárias — não competem com as ações que gravam
+ * na página. Vale o descritor do momento do clique (o servidor resolve o
+ * conjunto), cada ação roda uma vez por clique e a seleção continua de pé
+ * depois do download.
+ *
+ * O CSV diz de QUEM é (SMALL-UX-CLEANUP-WAVE-01): o "Exportar CSV" do
+ * cabeçalho da lista continua lá, com o recorte filtrado inteiro, e dois
+ * botões com o mesmo nome não diziam qual dos dois conjuntos saía.
  */
 
 type Acao = "pdf" | "csv";
@@ -76,7 +81,7 @@ export function BulkDocumentActions<F>({
         disabled={emCurso.csv}
         onClick={() => void executar("csv")}
       >
-        {emCurso.csv ? "Gerando CSV…" : "Exportar CSV"}
+        {emCurso.csv ? "Gerando CSV…" : "Exportar selecionados em CSV"}
       </button>
       {feito && (
         <span className="bulk-bar__feedback" role="status">

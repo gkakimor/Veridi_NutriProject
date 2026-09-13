@@ -436,7 +436,9 @@ export function LatePurchaseOrdersReportPage() {
               {formatQuantity(row.openQuantity)} {row.unitCode}
             </td>
             <td>{formatDate(row.expectedDeliveryDate)}</td>
-            <td className="is-number">{row.daysLate} dias</td>
+            <td className="is-number">
+              {row.daysLate} {row.daysLate === 1 ? "dia" : "dias"}
+            </td>
             <td>{PURCHASE_ORDER_STATUS_LABELS[row.status]}</td>
             <td>
               <DocLink

@@ -1,3 +1,4 @@
+import { createContext, useContext } from "react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
@@ -9,6 +10,12 @@ import type { ReportFilters } from "../../lib/reports-api";
 import "./reports.css";
 import "../../print/print.css";
 import { formatDateTime } from "../../lib/dates";
+
+/**
+ * Consulta em curso, lida pela tabela do relatório: antes da resposta, tabela
+ * sem linhas não é "nenhum registro" — ainda não se sabe.
+ */
+const ReportLoadingContext = createContext(false);
 
 /**
  * Estrutura comum dos relatórios: título, filtros, resumo e tabela — nesta
@@ -126,7 +133,7 @@ export function ReportPage({
 
       {summary && <div className="report-summary">{summary}</div>}
 
-      {children}
+      <ReportLoadingContext.Provider value={loading}>{children}</ReportLoadingContext.Provider>
     </>
   );
 }
@@ -180,9 +187,10 @@ export function ReportTable({
   emptyMessage: string;
   footer?: ReactNode;
 }) {
+  const loading = useContext(ReportLoadingContext);
   const isEmpty = Array.isArray(rows) ? rows.length === 0 : rows === null;
   return (
-    <div className="table-container">
+    <div className="table-container" aria-busy={loading || undefined}>
       <table className="table report-table">
         <thead>
           <tr>
@@ -196,7 +204,7 @@ export function ReportTable({
         </thead>
         <tbody>
           {rows}
-          {isEmpty && (
+          {isEmpty && !loading && (
             <tr>
               <td colSpan={columns.length} className="table__empty">
                 {emptyMessage}
