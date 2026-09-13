@@ -104,8 +104,15 @@ async function abrir() {
 const pergunta = () => screen.queryByRole("alertdialog");
 const menuEstoque = () => screen.getByRole("link", { name: "Estoque" });
 const observacoes = () => document.getElementById("customer-receipt-notes") as HTMLTextAreaElement;
-const itemDaLinha = () => screen.getByLabelText("Item recebido") as HTMLSelectElement;
 const loteDaLinha = () => screen.getByLabelText("Lote do fabricante") as HTMLInputElement;
+
+/** Escolhe o item da linha no seletor com busca — a opção vem da primeira página. */
+async function escolherItemDaLinha() {
+  const campo = screen.getByRole("combobox", { name: "Item recebido" });
+  fireEvent.focus(campo);
+  fireEvent.mouseDown(await screen.findByRole("option", { name: /MP-000120/ }));
+  await waitFor(() => expect(campo).toHaveValue("MP-000120 · Material do cliente"));
+}
 
 /** O aviso nativo de F5 / fechar aba só existe quando alguém o registra. */
 function avisaAoFechar(): boolean {
@@ -146,7 +153,7 @@ describe("Material do cliente — guarda de alterações não salvas", () => {
     const user = userEvent.setup();
     await abrir();
 
-    fireEvent.change(itemDaLinha(), { target: { value: "item-a" } });
+    await escolherItemDaLinha();
     fireEvent.change(loteDaLinha(), { target: { value: "LT-2026-09" } });
     await user.click(menuEstoque());
 
@@ -165,7 +172,7 @@ describe("Material do cliente — guarda de alterações não salvas", () => {
 
     await user.click(document.getElementById("customer-receipt-customer") as HTMLInputElement);
     await user.click(await screen.findByText(CLIENTE.tradeName));
-    fireEvent.change(itemDaLinha(), { target: { value: "item-a" } });
+    await escolherItemDaLinha();
     fireEvent.change(screen.getByLabelText(/Quantidade recebida/), { target: { value: "10" } });
 
     await user.click(screen.getByRole("button", { name: /Confirmar recebimento/ }));

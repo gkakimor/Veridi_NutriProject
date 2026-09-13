@@ -16,6 +16,11 @@ export interface ListItemsParams {
   search?: string;
   type?: ItemType;
   active?: boolean;
+  /**
+   * Só item que pode entrar como material do cliente. Quais tipos entram é o
+   * servidor quem diz — a mesma regra que ele aplica ao gravar o recebimento.
+   */
+  customerSupplied?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -28,6 +33,7 @@ export async function listItems(
   if (params.search) query.set("search", params.search);
   if (params.type) query.set("type", params.type);
   if (params.active !== undefined) query.set("active", String(params.active));
+  if (params.customerSupplied) query.set("customerSupplied", "true");
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 20));
 

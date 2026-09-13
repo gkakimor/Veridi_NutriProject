@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
+import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { useNavigate } from "react-router-dom";
 import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import {
@@ -10,7 +11,7 @@ import {
 import type { CustomerDTO, ItemDTO } from "@veridi/shared";
 import { listCustomers } from "../../lib/customers-api";
 import { diaDoRecebimentoPadrao, instanteDoRecebimento } from "../../lib/receipt-instant";
-import { listItems } from "../../lib/items-api";
+import { itemMaterialDoClienteSource } from "../../lib/filter-sources";
 import { createCustomerSuppliedReceipt } from "../../lib/receiving-api";
 import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal } from "../../lib/decimal-field";
@@ -60,8 +61,9 @@ function absorverChaves(linhas: LineDraft[]) {
 /**
  * O que o recebimento leva junto ao sair para cadastrar o cliente.
  *
- * Só o formulário: `customers` e `items` vêm do servidor e são recarregados
- * na volta, então guardá-los seria copiar catálogo para dentro do rascunho.
+ * Só o formulário: clientes e itens vêm do servidor — o item de cada linha é
+ * resolvido de novo pelo id na volta —, então guardá-los seria copiar
+ * catálogo para dentro do rascunho.
  */
 type RascunhoRecebimento = {
   customerId: string;
@@ -92,7 +94,8 @@ export function ReceiveCustomerMaterialPage() {
   const navigate = useNavigate();
 
   const [customers, setCustomers] = useState<CustomerDTO[]>([]);
-  const [items, setItems] = useState<ItemDTO[]>([]);
+  /** Os itens que o servidor já devolveu ao seletor, pelo id — unidade e lote da linha. */
+  const [itens, setItens] = useState<Record<string, ItemDTO>>({});
 
   const [customerId, setCustomerId] = useState("");
   const [receivedAt, setReceivedAt] = useState(() => diaDoRecebimentoPadrao());
@@ -105,6 +108,39 @@ export function ReceiveCustomerMaterialPage() {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  /*
+   * Item de cada linha: primeira página curta e busca no servidor, só entre o
+   * que pode entrar como material do cliente. Eram duas listas de 1000 num
+   * `<select>` — do item 1001 de cada tipo em diante o material existia e a
+   * tela não o oferecia.
+   */
+  const fonteDeItens = useMemo(() => {
+    const fonte = itemMaterialDoClienteSource((novos) =>
+      setItens((atual) => ({ ...atual, ...Object.fromEntries(novos.map((item) => [item.id, item])) })),
+    );
+    return {
+      ...fonte,
+      porId: async (id: string) => {
+        const opcao = await fonte.porId(id);
+        /*
+         * Linha restaurada com item que não pode mais entrar (inativado
+         * enquanto a pessoa cadastrava o cliente): a escolha é desfeita às
+         * claras. Ficar valendo com o campo vazio mandaria ao servidor um
+         * item que esta tela nunca ofereceria.
+         */
+        if (!opcao) {
+          setLines((atuais) =>
+            atuais.map((linha) => (linha.itemId === id ? { ...linha, itemId: "" } : linha)),
+          );
+          setError(
+            "Um item do rascunho não pode mais ser recebido como material do cliente. Escolha o item de novo.",
+          );
+        }
+        return opcao;
+      },
+    };
+  }, []);
 
   /**
    * A assinatura do recebimento de referência — o que sair daqui não se perde.
@@ -151,14 +187,6 @@ export function ReceiveCustomerMaterialPage() {
     listCustomers({ active: true, pageSize: 50 })
       .then((result) => setCustomers(result.customers))
       .catch(() => setCustomers([]));
-
-    // Material de cliente existe só para matéria-prima e embalagem.
-    Promise.all([
-      listItems({ type: "RAW_MATERIAL", active: true, pageSize: 1000 }),
-      listItems({ type: "PACKAGING", active: true, pageSize: 1000 }),
-    ])
-      .then(([raw, packaging]) => setItems([...raw.items, ...packaging.items]))
-      .catch(() => setItems([]));
   }, []);
 
   /*
@@ -183,8 +211,7 @@ export function ReceiveCustomerMaterialPage() {
     setLines((prev) => prev.map((line) => (line.key === key ? { ...line, [field]: value } : line)));
   }
 
-  const selectedItem = (itemId: string): ItemDTO | undefined =>
-    items.find((item) => item.id === itemId);
+  const selectedItem = (itemId: string): ItemDTO | undefined => itens[itemId];
 
   /**
    * O recebimento como ele está na tela, em forma comparável.
@@ -395,18 +422,14 @@ options={customers.map((customer) => ({
                   return (
                     <tr key={line.key}>
                       <td>
-                        <select
-                          aria-label="Item recebido"
+                        <EntityFilterSelect
+                          id={`customer-receipt-item-${line.key}`}
+                          label="Item recebido"
+                          placeholder="Digite código ou nome do item…"
                           value={line.itemId}
-                          onChange={(event) => updateLine(line.key, "itemId", event.target.value)}
-                        >
-                          <option value="">Selecione…</option>
-                          {items.map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.code} — {option.name}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(itemId) => updateLine(line.key, "itemId", itemId)}
+                          source={fonteDeItens}
+                        />
                         {item && !item.controlsLot && (
                           <div className="field__error">
                             Item não controla lote — ative o controle de lote no cadastro antes de
@@ -424,7 +447,7 @@ options={customers.map((customer) => ({
                              estava. */
                           aria-label={
                             line.itemId
-                              ? `Quantidade recebida de ${items.find((option) => option.id === line.itemId)?.code ?? "item"}`
+                              ? `Quantidade recebida de ${item?.code ?? "item"}`
                               : "Quantidade recebida"
                           }
                           placeholder="0"

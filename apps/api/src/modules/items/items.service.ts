@@ -5,6 +5,7 @@ import { getPrisma } from "../../db/prisma.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextItemCode } from "./item-codes.js";
+import { TIPOS_DE_MATERIAL_DO_CLIENTE } from "./item-customer-supplied.js";
 import { insertItemCostReference } from "./item-cost-references.service.js";
 import {
   ItemNotFoundError,
@@ -117,6 +118,14 @@ export async function listItems(
   const where: Record<string, unknown> = {};
 
   if (query.type) where["type"] = query.type;
+  /*
+   * "Pode entrar como material do cliente" é resposta do servidor, com o mesmo
+   * conjunto que o recebimento aplica ao gravar. Em `AND` para compor com
+   * `type`: junto dele, restringe — nunca amplia o que foi pedido.
+   */
+  if (query.customerSupplied) {
+    where["AND"] = [{ type: { in: [...TIPOS_DE_MATERIAL_DO_CLIENTE] } }];
+  }
   if (query.family) where["family"] = query.family;
   if (query.active !== undefined) where["active"] = query.active;
   if (query.ids && query.ids.length > 0) where["id"] = { in: query.ids };

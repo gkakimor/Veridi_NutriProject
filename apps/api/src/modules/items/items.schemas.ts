@@ -97,6 +97,17 @@ export const listItemsQuerySchema = z.object({
     .enum(["true", "false"])
     .optional()
     .transform((value) => (value === undefined ? undefined : value === "true")),
+  /*
+   * Só item que pode entrar como material do cliente — o seletor do Receber
+   * material do cliente (CUSTOMER-MATERIAL-ITEM-CUTOFF-01). Quem pergunta não
+   * diz QUAIS tipos: o conjunto é o mesmo que `createCustomerSuppliedReceipt`
+   * aplica (`TIPOS_DE_MATERIAL_DO_CLIENTE`). `false` ou ausente não restringe;
+   * com `type` junto, vale a interseção.
+   */
+  customerSupplied: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value === "true")),
   page: z.coerce.number().int().min(1).default(1),
   /* Seletor de tela carrega o catálogo inteiro num <select>; com teto de
    100 o cadastro 101 em diante ficava impossível de escolher. */

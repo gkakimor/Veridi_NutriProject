@@ -13,6 +13,7 @@ import type { EntityOption } from "../components/SearchableEntitySelect";
 import { getCustomerOrder, listCustomerOrders } from "./customer-orders-api";
 import { listCustomers } from "./customers-api";
 import { listItems } from "./items-api";
+import type { ListItemsParams } from "./items-api";
 import { listProducts } from "./products-api";
 import { getProductionOrder, listProductionOrders } from "./production-orders-api";
 import { getPurchaseOrder, listPurchaseOrders } from "./purchase-orders-api";
@@ -111,6 +112,58 @@ export const itemFilterSource: EntityFilterSource = {
     return item ? opcaoDeItem(item) : null;
   },
 };
+
+/**
+ * Itens que podem entrar como material do cliente — seletor das linhas do
+ * Receber material do cliente.
+ *
+ * Substitui duas listas de 1000 (matéria-prima e embalagem) somadas num
+ * `<select>`: do item 1001 de cada tipo em diante o material existia, o
+ * servidor aceitaria o recebimento, e a tela não o oferecia. Quais tipos
+ * entram é o servidor quem diz (`customerSupplied`), com a mesma regra que ele
+ * aplica ao gravar; inativo continua fora, como sempre esteve nesta tela.
+ *
+ * Não depende do cliente escolhido: Item não tem dono. Dono é o lote, que o
+ * servidor cria com o cliente do recebimento.
+ *
+ * É fábrica, e não literal, porque a linha precisa do que a opção não carrega
+ * — unidade e controle de lote: `lembrar` recebe os itens que o servidor
+ * devolveu. Criar dentro de `useMemo`: a primeira página sai uma vez só para
+ * todas as linhas da tela.
+ */
+export function itemMaterialDoClienteSource(
+  lembrar: (itens: ItemDTO[]) => void,
+): EntityFilterSource {
+  async function pedir(filtros: Pick<ListItemsParams, "search" | "ids" | "pageSize">) {
+    const { items } = await listItems({
+      customerSupplied: true,
+      active: true,
+      pageSize: PAGINA,
+      ...filtros,
+    });
+    lembrar(items);
+    return items.map(opcaoDeItem);
+  }
+
+  let primeiraPagina: Promise<EntityOption[]> | null = null;
+  return {
+    inicial: () => {
+      primeiraPagina ??= pedir({}).catch((erro: unknown) => {
+        // Falhou: a próxima linha pergunta de novo, em vez de herdar o erro.
+        primeiraPagina = null;
+        throw erro;
+      });
+      return primeiraPagina;
+    },
+    buscar: (termo) => pedir({ search: termo }),
+    /*
+     * Pelo id, com os MESMOS filtros: o item de uma linha restaurada é achado
+     * esteja ele na primeira página ou na milésima — e o que deixou de poder
+     * entrar (inativado no meio do caminho) não volta como se ainda pudesse.
+     */
+    porId: async (id) => (await pedir({ ids: [id], pageSize: 1 }))[0] ?? null,
+  };
+}
 
 function opcaoDeCliente(cliente: CustomerDTO): EntityOption {
   return {

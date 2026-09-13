@@ -16,6 +16,7 @@ import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { nextLotCode } from "../../lib/lot-code.js";
 import { ordemDeCompraRecebe } from "../purchase-orders/purchase-order-receivable.js";
+import { tipoAceitaMaterialDoCliente } from "../items/item-customer-supplied.js";
 import {
   CustomerMaterialRequiresLotControlError,
   CustomerNotFoundError,
@@ -390,7 +391,8 @@ export async function createCustomerSuppliedReceipt(
   for (const lineInput of input.lines) {
     const item = await prisma.item.findUnique({ where: { id: lineInput.itemId } });
     if (!item) throw new ReceiptItemNotFoundError(lineInput.itemId);
-    if (item.type !== "RAW_MATERIAL" && item.type !== "PACKAGING") {
+    // O mesmo conjunto que o seletor da tela oferece (`?customerSupplied=true`).
+    if (!tipoAceitaMaterialDoCliente(item.type)) {
       throw new InvalidCustomerSuppliedItemTypeError(item.code);
     }
     // Sem lote não existe saldo de terceiro identificável — bloqueia em vez
