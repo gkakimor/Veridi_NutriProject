@@ -205,10 +205,21 @@ export function ExpiryReportPage() {
                 id="expiry-from"
                 type="date"
                 value={from}
-                onChange={(event) => setFrom(event.target.value)}
+                onChange={(event) => {
+                  setPage(1);
+                  setFrom(event.target.value);
+                }}
               />
               <label htmlFor="expiry-to">até</label>
-              <input id="expiry-to" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+              <input
+                id="expiry-to"
+                type="date"
+                value={to}
+                onChange={(event) => {
+                  setPage(1);
+                  setTo(event.target.value);
+                }}
+              />
             </>
           )}
           <div className="toolbar__search">
@@ -316,9 +327,25 @@ export function MovementsReportPage() {
       filters={
         <>
           <label htmlFor="mov-from">De</label>
-          <input id="mov-from" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+          <input
+            id="mov-from"
+            type="date"
+            value={from}
+            onChange={(event) => {
+              setPage(1);
+              setFrom(event.target.value);
+            }}
+          />
           <label htmlFor="mov-to">até</label>
-          <input id="mov-to" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+          <input
+            id="mov-to"
+            type="date"
+            value={to}
+            onChange={(event) => {
+              setPage(1);
+              setTo(event.target.value);
+            }}
+          />
           <select
             aria-label="Tipo de movimento"
             value={type}

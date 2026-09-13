@@ -160,9 +160,25 @@ export function PlannedActualReportPage() {
       filters={
         <>
           <label htmlFor="pa-from">De</label>
-          <input id="pa-from" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+          <input
+            id="pa-from"
+            type="date"
+            value={from}
+            onChange={(event) => {
+              setPage(1);
+              setFrom(event.target.value);
+            }}
+          />
           <label htmlFor="pa-to">até</label>
-          <input id="pa-to" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+          <input
+            id="pa-to"
+            type="date"
+            value={to}
+            onChange={(event) => {
+              setPage(1);
+              setTo(event.target.value);
+            }}
+          />
           <select
             aria-label="Status da OP"
             value={status}
@@ -387,9 +403,25 @@ export function ConsumptionReportPage() {
       filters={
         <>
           <label htmlFor="cons-from">De</label>
-          <input id="cons-from" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+          <input
+            id="cons-from"
+            type="date"
+            value={from}
+            onChange={(event) => {
+              setPage(1);
+              setFrom(event.target.value);
+            }}
+          />
           <label htmlFor="cons-to">até</label>
-          <input id="cons-to" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+          <input
+            id="cons-to"
+            type="date"
+            value={to}
+            onChange={(event) => {
+              setPage(1);
+              setTo(event.target.value);
+            }}
+          />
           <div className="toolbar__search">
             <input
               type="search"

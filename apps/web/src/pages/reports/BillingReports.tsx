@@ -103,9 +103,25 @@ export function BillingPeriodReportPage() {
       filters={
         <>
           <label htmlFor="bill-from">De</label>
-          <input id="bill-from" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+          <input
+            id="bill-from"
+            type="date"
+            value={from}
+            onChange={(event) => {
+              setPage(1);
+              setFrom(event.target.value);
+            }}
+          />
           <label htmlFor="bill-to">até</label>
-          <input id="bill-to" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+          <input
+            id="bill-to"
+            type="date"
+            value={to}
+            onChange={(event) => {
+              setPage(1);
+              setTo(event.target.value);
+            }}
+          />
           <CustomerFilter
             id="bill-customer"
             value={customerId}

@@ -75,9 +75,25 @@ export function PurchaseOrdersReportPage() {
       filters={
         <>
           <label htmlFor="po-from">De</label>
-          <input id="po-from" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+          <input
+            id="po-from"
+            type="date"
+            value={from}
+            onChange={(event) => {
+              setPage(1);
+              setFrom(event.target.value);
+            }}
+          />
           <label htmlFor="po-to">até</label>
-          <input id="po-to" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+          <input
+            id="po-to"
+            type="date"
+            value={to}
+            onChange={(event) => {
+              setPage(1);
+              setTo(event.target.value);
+            }}
+          />
           <SupplierFilter
             value={supplierId}
             onChange={(value) => {
@@ -208,9 +224,25 @@ export function ReceiptsReportPage() {
       filters={
         <>
           <label htmlFor="rec-from">De</label>
-          <input id="rec-from" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+          <input
+            id="rec-from"
+            type="date"
+            value={from}
+            onChange={(event) => {
+              setPage(1);
+              setFrom(event.target.value);
+            }}
+          />
           <label htmlFor="rec-to">até</label>
-          <input id="rec-to" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+          <input
+            id="rec-to"
+            type="date"
+            value={to}
+            onChange={(event) => {
+              setPage(1);
+              setTo(event.target.value);
+            }}
+          />
           <SupplierFilter
             value={supplierId}
             onChange={(value) => {

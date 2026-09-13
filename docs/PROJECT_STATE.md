@@ -2186,7 +2186,8 @@ escrevem a mesma chave `quoteVersion` no `where` e só o último vale (corrigido
 R20-QUOTE-FILTER-COMPOSITION-01, abaixo);
 `QuoteVersion.quoteDate` é coluna mista (a tela grava instante, o importador grava
 `entryDate`); OCs antigas com `orderDate` em instante seguem sem backfill; mudar o
-período não volta à página 1; o R-15 vazio mostra "Valores incompletos"; o
+período não volta à página 1 (corrigido em REPORTS-PAGE-RESET-ON-PERIOD-01,
+abaixo); o R-15 vazio mostra "Valores incompletos"; o
 Dashboard ainda semeia o período personalizado com o dia do navegador
 (corrigido em DASHBOARD-BUSINESS-DATE-01, abaixo); o nome de
 CSV sem período usa o dia UTC do servidor. Aba aberta antes do deploy recebe 400
@@ -2462,6 +2463,37 @@ no fim; contador = lista = R-11 em cada borda; o código antigo derruba os três
 Relatórios, exportações, dia civil, fuso) e typecheck. Smoke HTTP com banco e porta
 isolados, relógio real: prevista hoje fora; prevista ontem no contador (+1), na
 atenção, no R-11 com 1 dia e no CSV.
+
+## Mudar o recorte volta à página 1 (REPORTS-PAGE-RESET-ON-PERIOD-01, 2026-09-13)
+
+Nas oito telas de relatório com período (R-02 personalizado, R-03, R-05, R-07, R-08,
+R-09, R-12, R-15), De e até mudavam o filtro e mantinham a página: quem estava na
+página 6 e encurtava o período pedia a página 6 do universo novo e via a tabela
+vazia ("Nenhum … no período") com registros no servidor. Cliente, fornecedor,
+status, tipo, origem, janela e busca já voltavam à página 1; as outras dez telas
+paginadas não têm período.
+
+O reinício entrou no próprio evento do campo (`setPage(1)` junto de
+`setFrom`/`setTo`), o padrão que os demais filtros das telas já usavam: as duas
+atualizações saem num render só, e a primeira consulta do recorte novo já é a da
+página 1 — sem efeito observando filtro, sem consulta da página antiga nem
+repetida. Anterior/Próxima só mudam a página. "Incluir custo de material" (R-05)
+não muda o universo e mantém a página. Datas seguem `YYYY-MM-DD`
+(REPORTS-BUSINESS-DATE-01); CSV e PDF continuam sem página (`ALL_ROWS`); API,
+layout e fórmulas intocados; sem migration.
+
+**Validação.** Web 10 novos (`pages/reports/relatorios-pagina-ao-filtrar.test.tsx`:
+nas oito telas, página 6 → De → página 1 do universo novo, até → 1, outro filtro →
+1, Anterior/Próxima sem reinício, exatamente uma consulta por gesto, CSV sem
+página; R-05 com custo mantém a página; guarda que amarra todo campo de data dos
+Relatórios à lista do teste; o código antigo derruba as oito com "Página 6 de 2").
+Focados (Relatórios, PDF de relatório, período) 140 verdes e typecheck. Smoke
+390px com banco e portas isolados no R-03: 22/22, uma consulta por gesto, sem
+rolagem horizontal, console limpo.
+
+Achado que continua (fora do escopo): na troca de filtro a tabela anterior fica
+visível com "Carregando…" até a resposta (`useReport`, já anotado em
+REPORTS-PAGINATION-01).
 
 ## Próxima prioridade
 
