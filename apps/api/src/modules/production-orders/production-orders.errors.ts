@@ -120,12 +120,15 @@ export class LegacyRouteRepairNeedsConfirmationError extends Error {
   }
 }
 
-/** A ordem tem programação, e aplicar o roteiro a remove. */
+/**
+ * A ordem tem programação, e a alteração pedida a remove — trocar o roteiro ou
+ * mudar a quantidade (OP-SCHEDULE-STALE-ON-QUANTITY-01). A mensagem diz qual.
+ */
 export class ScheduleRemovalNeedsConfirmationError extends Error {
-  constructor() {
-    super(
-      "Alterar o roteiro removerá a programação atual desta ordem, pois tempos e recursos podem mudar. Confirme para continuar.",
-    );
+  constructor(
+    message = "Alterar o roteiro removerá a programação atual desta ordem, pois tempos e recursos podem mudar. Confirme para continuar.",
+  ) {
+    super(message);
     this.name = "ScheduleRemovalNeedsConfirmationError";
   }
 }

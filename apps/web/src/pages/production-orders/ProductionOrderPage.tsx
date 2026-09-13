@@ -58,8 +58,10 @@ import {
   ApiValidationError,
   LotMismatchApiError,
   NotFoundApiError,
+  ScheduleRemovalNeedsConfirmationApiError,
   apiErrorMessage,
 } from "../../lib/api-errors";
+import { parseDecimalInput } from "../../lib/decimal-input";
 import { FormSection } from "../../components/FormSection";
 import { ProductionPlanningSection } from "./ProductionPlanningSection";
 import { ContextHelp, InfoHint } from "../../components/help";
@@ -80,6 +82,18 @@ interface FormulationVersionOption {
   id: string;
   versionLabel: string;
   status: "DRAFT" | "ACTIVE" | "INACTIVE";
+}
+
+const QUANTIDADE_COM_PROGRAMACAO_REMOVIDA =
+  "Quantidade atualizada. A programação anterior foi removida e precisa ser refeita.";
+
+/**
+ * A quantidade digitada é OUTRA quantidade — por valor: `1000` e `1000.000000`
+ * são a mesma. Digitação ilegível não decide nada aqui; a validação responde.
+ */
+function quantidadeMudou(digitada: string, gravada: string): boolean {
+  const lida = parseDecimalInput(digitada);
+  return lida !== null && decimalComparavel(lida) !== decimalComparavel(gravada);
 }
 
 function statusBadgeClass(status: ProductionOrderStatus): string {
@@ -284,10 +298,16 @@ export function ProductionOrderPage() {
   const [formulationOptions, setFormulationOptions] = useState<FormulationVersionOption[]>([]);
 
   const [saving, setSaving] = useState(false);
+  /* O freio `saving` é de várias ações; o rótulo "Salvando…" é só de quem grava. */
+  const [acaoEmCurso, setAcaoEmCurso] = useState<"rascunho" | "observacoes" | null>(null);
+  const [feito, setFeito] = useState<string | null>(null);
   const [planning, setPlanning] = useState(false);
   const [releasing, setReleasing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  /* Programação gravada, como o bloco do roteiro a leu — mudar a quantidade a remove. */
+  const [temProgramacao, setTemProgramacao] = useState(false);
+  const [confirmandoRemocaoDaProgramacao, setConfirmandoRemocaoDaProgramacao] = useState(false);
 
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
@@ -366,6 +386,8 @@ export function ProductionOrderPage() {
     setLabelInstructions(order.labelInstructions ?? "");
     setNotes(order.notes ?? "");
     baseline.current = null;
+    // Uma frase de estado só: a de uma gravação anterior não sobrevive à próxima leitura.
+    setFeito(null);
   }, []);
 
   useEffect(() => {
@@ -508,9 +530,10 @@ export function ProductionOrderPage() {
   if (baseline.current === null) baseline.current = assinaturaAtual;
   /* OP cancelada não tem o que salvar; fora do rascunho ainda se altera a
      observação, e isso também se perde ao sair. */
+  const alteracaoPendente =
+    (isDraft || status !== "CANCELLED") && baseline.current !== assinaturaAtual;
   const { liberarGuarda } = useUnsavedChangesGuard({
-    isDirty:
-      (isDraft || status !== "CANCELLED") && baseline.current !== assinaturaAtual,
+    isDirty: alteracaoPendente,
     substantivo: "ordem de produção",
     genero: "a",
   });
@@ -595,15 +618,35 @@ export function ProductionOrderPage() {
       .catch(() => setFormulationVersionId(""));
   }
 
-  async function handleSaveDraft() {
+  async function handleSaveDraft(confirmarRemocaoDaProgramacao = false) {
     if (!productId) {
       setError("Selecione um produto.");
       return;
     }
 
+    /*
+     * OP-SCHEDULE-STALE-ON-QUANTITY-01: a programação gravada foi calculada
+     * para a quantidade salva. Quantidade que muda de verdade, com programação,
+     * pergunta ANTES de enviar — e o servidor recusa do mesmo jeito se a
+     * pergunta não foi feita. Cancelar não toca no formulário.
+     */
+    if (
+      !confirmarRemocaoDaProgramacao &&
+      !isNew &&
+      productionOrder &&
+      temProgramacao &&
+      quantidadeMudou(plannedQuantity, productionOrder.plannedQuantity)
+    ) {
+      setConfirmandoRemocaoDaProgramacao(true);
+      return;
+    }
+    setConfirmandoRemocaoDaProgramacao(false);
+
     setSaving(true);
+    setAcaoEmCurso("rascunho");
     setError(null);
     setFieldErrors({});
+    setFeito(null);
 
     const payload = {
       productId,
@@ -612,6 +655,7 @@ export function ProductionOrderPage() {
       numberOfParts: Number(numberOfParts) || 1,
       labelInstructions: labelInstructions.trim(),
       notes: notes.trim(),
+      ...(confirmarRemocaoDaProgramacao ? { confirmScheduleRemoval: true } : {}),
     };
 
     try {
@@ -629,9 +673,18 @@ export function ProductionOrderPage() {
         const updated = await updateProductionOrder(id, payload);
         setProductionOrder(updated);
         syncFormFromServer(updated);
+        setFeito(
+          confirmarRemocaoDaProgramacao
+            ? QUANTIDADE_COM_PROGRAMACAO_REMOVIDA
+            : "Ordem de produção atualizada.",
+        );
       }
     } catch (err) {
-      if (err instanceof ApiValidationError) {
+      if (err instanceof ScheduleRemovalNeedsConfirmationApiError) {
+        // A programação nasceu depois da leitura da tela: a mesma pergunta, agora.
+        setTemProgramacao(true);
+        setConfirmandoRemocaoDaProgramacao(true);
+      } else if (err instanceof ApiValidationError) {
         const nextFieldErrors: Record<string, string> = {};
         for (const issue of err.issues) {
           nextFieldErrors[issue.path] = issue.message;
@@ -643,21 +696,26 @@ export function ProductionOrderPage() {
       }
     } finally {
       setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
   async function handleSaveNotesOnly() {
     if (!id) return;
     setSaving(true);
+    setAcaoEmCurso("observacoes");
     setError(null);
+    setFeito(null);
     try {
       const updated = await updateProductionOrder(id, { notes: notes.trim() });
       setProductionOrder(updated);
       syncFormFromServer(updated);
+      setFeito("Ordem de produção atualizada.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao salvar observações");
     } finally {
       setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
@@ -1179,6 +1237,7 @@ export function ProductionOrderPage() {
             onApplied={setProductionOrder}
             canOperate={canOperate}
             focus={focoNoRoteiro}
+            onScheduleChange={setTemProgramacao}
           />
         )}
 
@@ -2178,14 +2237,27 @@ export function ProductionOrderPage() {
         )}
 
         <div className="doc-actions__primary">
+          {/* Pendência antes de confirmação, e a pendência é a MESMA da guarda
+              de saída — nunca uma conta paralela. */}
+          {canOperate && alteracaoPendente ? (
+            <span className="form-status form-status--dirty" role="status">
+              Alterações não salvas
+            </span>
+          ) : (
+            feito && (
+              <span className="form-status" role="status">
+                {feito}
+              </span>
+            )
+          )}
           {isDraft && canOperate && (
             <button
               type="button"
               className="btn btn--secondary"
               disabled={saving || planning || releasing}
-              onClick={handleSaveDraft}
+              onClick={() => void handleSaveDraft()}
             >
-              {saving ? "Salvando…" : "Salvar rascunho"}
+              {acaoEmCurso === "rascunho" ? "Salvando…" : "Salvar rascunho"}
             </button>
           )}
           {!isDraft && status !== "CANCELLED" && !isNew && canOperate && (
@@ -2195,7 +2267,7 @@ export function ProductionOrderPage() {
               disabled={saving || planning || releasing}
               onClick={handleSaveNotesOnly}
             >
-              {saving ? "Salvando…" : "Salvar observações"}
+              {acaoEmCurso === "observacoes" ? "Salvando…" : "Salvar observações"}
             </button>
           )}
           {isPlannable && (
@@ -2336,6 +2408,21 @@ export function ProductionOrderPage() {
         confirmTone="accent"
         onCancel={() => setReleaseDialogOpen(false)}
         onConfirm={handleRelease}
+      />
+
+      <ConfirmDialog
+        open={confirmandoRemocaoDaProgramacao}
+        title="Alterar a quantidade planejada?"
+        message={
+          <p className="schedule-reset-confirm">
+            Alterar a quantidade removerá a programação atual desta ordem, pois os tempos e recursos
+            precisam ser recalculados.
+          </p>
+        }
+        cancelLabel="Cancelar"
+        confirmLabel="Alterar quantidade e remover programação"
+        onCancel={() => setConfirmandoRemocaoDaProgramacao(false)}
+        onConfirm={() => void handleSaveDraft(true)}
       />
 
       {mismatchDialog && (

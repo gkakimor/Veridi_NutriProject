@@ -66,6 +66,12 @@ export const updateProductionOrderSchema = z.object({
   notes: optionalNullableText(2000),
   numberOfParts: numberOfPartsSchema.optional(),
   labelInstructions: optionalNullableText(2000),
+  /*
+   * Só pesa quando a quantidade REALMENTE muda e a ordem tem programação: sem
+   * ela o servidor recusa com 409, e com ela a programação sai na mesma
+   * transação. Nos outros casos é ignorada.
+   */
+  confirmScheduleRemoval: z.boolean().optional(),
 });
 
 export const cancelProductionOrderSchema = z.object({

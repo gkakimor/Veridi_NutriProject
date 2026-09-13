@@ -9,6 +9,7 @@ import {
   ProductionOrderNotFoundError,
   ProductionOrderRouteUomError,
   ProductionOrderWithoutRouteError,
+  ScheduleQuantityChangedError,
   ScheduleRouteChangedError,
   ScheduleLockedError,
   ScheduleNeedsConfirmationError,
@@ -58,6 +59,9 @@ function mapDomainError(error: unknown): { status: number; body: Record<string, 
   }
   if (error instanceof ScheduleRouteChangedError) {
     return { status: 409, body: { error: "route_changed", message: error.message } };
+  }
+  if (error instanceof ScheduleQuantityChangedError) {
+    return { status: 409, body: { error: "quantity_changed", message: error.message } };
   }
   // Fail-closed do calendário: a recusa diz o que falta configurar.
   if (error instanceof CalendarBreakNotPositionedError) {
