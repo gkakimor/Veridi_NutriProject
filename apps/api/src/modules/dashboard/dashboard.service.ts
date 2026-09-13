@@ -11,7 +11,7 @@ import type {
   MovementSummaryDTO,
   RecentMovementDTO,
 } from "@veridi/shared";
-import { ROUTE_PENDING_STATUSES } from "@veridi/shared";
+import { FUSO_COMERCIAL, ROUTE_PENDING_STATUSES, diaCivil } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { marcadorDeHojeComercial } from "../../lib/business-day.js";
 import { buildAttentionList } from "./attention.service.js";
@@ -236,7 +236,14 @@ async function buildMovementSummary(
   return summary;
 }
 
-/** Atividade por dia — contagem de eventos, mesma regra do resumo. */
+/**
+ * Atividade por dia — contagem de eventos, mesma regra do resumo.
+ *
+ * `occurredAt` é instante; a barra é o DIA COMERCIAL dele, lido em São Paulo
+ * (DASHBOARD-MOVEMENT-BUSINESS-DAY-01). O dia UTC (`toISOString().slice(0, 10)`)
+ * punha o movimento das 22:30 na barra do dia seguinte — e o período, que já é
+ * aberto no dia comercial, mostrava uma barra fora dele.
+ */
 async function buildMovementActivity(
   prisma: PrismaOrTx,
   from: Date,
@@ -250,7 +257,7 @@ async function buildMovementActivity(
 
   const byDay = new Map<string, MovementSummaryDTO>();
   for (const movement of movements) {
-    const day = movement.occurredAt.toISOString().slice(0, 10);
+    const day = diaCivil(movement.occurredAt, FUSO_COMERCIAL);
     const bucket = byDay.get(day) ?? emptySummary();
     applyMovementCount(bucket, movement.type, 1);
     byDay.set(day, bucket);

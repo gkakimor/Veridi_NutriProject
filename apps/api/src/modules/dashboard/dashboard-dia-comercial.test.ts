@@ -21,6 +21,11 @@ import { dashboardQuerySchema } from "./dashboard.schemas.js";
  * lugar do dia. A tela mandando o MESMO dia nos três fusos é de
  * `web pages/dashboard-dia-comercial.test.tsx`.
  *
+ * E a barra do gráfico de movimentações (DASHBOARD-MOVEMENT-BUSINESS-DAY-01):
+ * `occurredAt` é instante, e a barra em que ele entra é o dia comercial dele —
+ * não o dia UTC que `occurredAt.toISOString().slice(0, 10)` dava, em que o
+ * movimento das 22:30 de São Paulo aparecia no dia seguinte.
+ *
  * Fora da faixa serial de `dashboard.test.ts` de propósito: o agregado medido
  * é o de um dia histórico sorteado, em que nenhum outro arquivo escreve.
  */
@@ -70,11 +75,16 @@ const BORDAS = {
   DEPOIS: `${SEGUINTE}T03:00:00.000Z`, // dia seguinte 00:00
 } as const;
 
-const criados = { clientes: [] as string[], pedidos: [] as string[] };
+const criados = { clientes: [] as string[], pedidos: [] as string[], itens: [] as string[] };
 
 let app: App;
 
 beforeAll(async () => {
+  await getPrisma().unitOfMeasure.upsert({
+    where: { code: "kg" },
+    update: {},
+    create: { code: "kg", label: "Quilograma", dimension: "MASS", toBaseFactor: "1000" },
+  });
   app = buildTestApp();
   await app.ready();
 });
@@ -83,8 +93,14 @@ afterAll(async () => {
   const prisma = getPrisma();
   await prisma.customerOrder.deleteMany({ where: { id: { in: criados.pedidos } } });
   await prisma.customer.deleteMany({ where: { id: { in: criados.clientes } } });
+  await prisma.inventoryMovement.deleteMany({ where: { itemId: { in: criados.itens } } });
+  await prisma.item.deleteMany({ where: { id: { in: criados.itens } } });
   await app.close();
 });
+
+function marcador(): string {
+  return `DSH${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
+}
 
 afterEach(() => {
   vi.useRealTimers();
@@ -132,7 +148,7 @@ describe("hoje comercial — o relógio da máquina não decide", () => {
 describe("bordas do dia comercial numa coluna de instante", () => {
   it("o mesmo dia cobre 00:00 a 23:59:59.999 em São Paulo, e 01:30 UTC do dia seguinte ainda é dele", async () => {
     const prisma = getPrisma();
-    const m = `DSH${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
+    const m = marcador();
     const cliente = await prisma.customer.create({
       data: { code: `CLI-${m}`, legalName: `Cliente Painel Dia Comercial ${m}`, active: true },
     });
@@ -158,6 +174,99 @@ describe("bordas do dia comercial numa coluna de instante", () => {
     expect((await periodo(VESPERA, DIA)).customerOrdersCreated).toBe(4);
     expect((await periodo(DIA, SEGUINTE)).customerOrdersCreated).toBe(4);
     expect((await periodo(VESPERA, SEGUINTE)).customerOrdersCreated).toBe(5);
+  });
+});
+
+describe("gráfico de movimentações — a barra é o dia comercial do `occurredAt`", () => {
+  /** Um evento por borda, cada um de um tipo: dá para ver em que barra cada um entrou. */
+  const EVENTOS = [
+    { borda: "ANTES", type: "ADJUSTMENT_OUT", sourceType: "MANUAL_ADJUSTMENT" },
+    { borda: "INICIO", type: "RECEIPT_IN", sourceType: "RECEIPT" },
+    { borda: "VIRADA_UTC", type: "LOSS", sourceType: "MANUAL_LOSS" },
+    { borda: "ULTIMO", type: "ADJUSTMENT_IN", sourceType: "MANUAL_ADJUSTMENT" },
+    { borda: "DEPOIS", type: "SAMPLE_CONSUMPTION", sourceType: "PROJECT_SAMPLE" },
+  ] as const;
+
+  const ZERADO = {
+    receiptIn: 0,
+    productionConsumption: 0,
+    sampleConsumption: 0,
+    finishedGoodProduction: 0,
+    shipmentOut: 0,
+    adjustments: 0,
+    loss: 0,
+  };
+
+  beforeAll(async () => {
+    const prisma = getPrisma();
+    const m = marcador();
+    const item = await prisma.item.create({
+      data: {
+        type: "RAW_MATERIAL",
+        code: `MP-${m}`,
+        name: `Movimento Painel ${m}`,
+        unitCode: "kg",
+        controlsLot: false,
+        controlsExpiry: false,
+        requiresQualityRelease: false,
+      },
+    });
+    criados.itens.push(item.id);
+    await prisma.inventoryMovement.createMany({
+      data: EVENTOS.map(({ borda, type, sourceType }) => ({
+        itemId: item.id,
+        type,
+        sourceType,
+        quantity: "1",
+        occurredAt: new Date(BORDAS[borda]),
+      })),
+    });
+  });
+
+  it("22:30 de São Paulo (01:30 UTC do dia seguinte) fica na barra do próprio dia, com a máquina em UTC, UTC-07 ou São Paulo", async () => {
+    const series: string[] = [];
+    for (const fuso of FUSOS) {
+      series.push(
+        await naMaquinaEm(fuso, async () => JSON.stringify((await consulta({ from: DIA, to: DIA })).movementActivity)),
+      );
+    }
+    expect(new Set(series).size).toBe(1);
+    expect(JSON.parse(series[0]!)).toEqual([{ date: DIA, ...ZERADO, receiptIn: 1, loss: 1, adjustments: 1 }]);
+  });
+
+  it("00:00 e 23:59:59.999 de São Paulo ficam no dia; o instante antes vai para a véspera, o seguinte para o outro dia", async () => {
+    const painel = await consulta({ from: VESPERA, to: SEGUINTE });
+    expect(painel.movementActivity).toEqual([
+      { date: VESPERA, ...ZERADO, adjustments: 1 },
+      { date: DIA, ...ZERADO, receiptIn: 1, loss: 1, adjustments: 1 },
+      { date: SEGUINTE, ...ZERADO, sampleConsumption: 1 },
+    ]);
+    // A série conta os mesmos eventos do resumo, só que repartidos por dia.
+    const somados = { ...ZERADO };
+    for (const ponto of painel.movementActivity as (typeof ZERADO)[]) {
+      for (const chave of Object.keys(ZERADO) as (keyof typeof ZERADO)[]) somados[chave] += ponto[chave];
+    }
+    expect(somados).toEqual(painel.movementSummary);
+  });
+
+  it("dia sem movimento continua sem barra: cinco dias de janela, três barras", async () => {
+    const painel = await consulta({ from: dia(-3), to: SEGUINTE });
+    expect((painel.movementActivity as { date: string }[]).map((ponto) => ponto.date)).toEqual([
+      VESPERA,
+      DIA,
+      SEGUINTE,
+    ]);
+  });
+
+  it("guarda estrutural: a barra não volta a sair do dia UTC", () => {
+    const pasta = fileURLToPath(new URL("./", import.meta.url));
+    // Sem comentários: a explicação do bug pode citar o padrão; o código, não.
+    const servico = readFileSync(join(pasta, "dashboard.service.ts"), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    expect(servico).toMatch(/diaCivil\(movement\.occurredAt, FUSO_COMERCIAL\)/);
+    expect(servico).not.toMatch(/occurredAt\.toISOString\(\)\.slice\(/);
+    expect(servico).not.toMatch(/occurredAt\.getUTC(FullYear|Month|Date)\(/);
   });
 });
 
