@@ -463,17 +463,20 @@ queria dizer "hoje" diz "amanhã".
 | Fixture de campo de INSTANTE (`receivedAt`, `occurredAt`, `entryDate`, `createdAt`) continua sendo instante — o que muda é ANCORAR a escolha no dia comercial quando o teste quer dizer "isto aconteceu hoje" | D-17 — recebimento em `new Date()` caía fora da janela de custo do próprio dia comercial, e o significado do teste dependia da hora em que ele rodava | `test-support/dia-comercial.ts` (`instanteNoDiaComercialDeTeste`) |
 | O relógio da suíte NÃO é congelado globalmente: só o teste que precisa da borda usa `vi.useFakeTimers({ toFake: ["Date"] })` | congelar o relógio inteiro empata `createdAt` de registros que existem para ser ordenados, e testes de desempate (FEFO, "a criada por último vence", "a tarifa mais recente vence") passam a falhar sem nada estar errado | `lib/dia-comercial-em-uso.test.ts` · `modules/lots/validade-em-uso.test.ts` · `modules/projects/ciclo-comercial-repetido.test.ts` |
 
-## Onde a suíte da API escreve
+## Onde as suítes de teste escrevem
 
 Regra de TESTE, não de produto. Os testes da API apagam calendário, regravam a
-jornada e criam usuário: escrevem num banco de teste, nunca no da
-`DATABASE_URL`. Contrato em `TECH_BASELINE.md`, "API test database".
+jornada e criam usuário; os do importador gravam o master data do corpus:
+escrevem num banco de teste, nunca no da `DATABASE_URL`. Contrato em
+`TECH_BASELINE.md`, "Test database".
 
 | Regra | Origem do risco | Proteção canônica |
 |---|---|---|
 | Sem `TEST_DATABASE_URL`, o banco da suíte é `<banco da DATABASE_URL>_test` no mesmo servidor — o da `DATABASE_URL` nunca, nem quando o nome dele já tem "test" | TEST-SUPPORT-ISOLATION-WAVE-01: a suíte rodava no `veridi_dev`; a faixa serial dependia de devolver o calendário, e kill antes do `afterAll` deixava o DEV alterado | `test-support/banco-de-teste.test.ts` |
 | Fail closed: nome sem a palavra `test`, marca de produção, host gerenciado, o mesmo banco da `DATABASE_URL` ou credencial de produção no ambiente recusam antes de qualquer teste — no config, no `globalSetup` e no worker. É padrão de nome, não nome fixo: CI com banco dinâmico cabe | idem | `test-support/banco-de-teste.test.ts`; no runner, seis destinos proibidos saíram com exit 1 e zero teste, e a mutação de cada camada foi derrubada pela seguinte (manual, 2026-09-13) |
 | Usuário e sessão do `buildTestApp` saem no fim do arquivo que os criou; fixture que ainda aponta para o usuário (RESTRICT) o segura, sem sessão; o que um kill deixou é varrido pela rodada seguinte, só sem outra conexão aberta no banco | TEST-SUPPORT-ISOLATION-WAVE-01: 683 usuários `USR-TEST-*` e 808 sessões acumulados no `veridi_dev` | `test-support/usuarios-de-teste.test.ts`; o fim de arquivo só se vê de fora — 13 arquivos duas vezes com `users`/`user_sessions` 0 → 0, e sem o descarte (mutação) ficam 6 |
+| A faixa de scripts da raiz (`vitest.scripts.config.ts`) usa o mesmo banco de teste, o mesmo `globalSetup` e a mesma conferência por arquivo da API: o master data que o `importer.test.ts` grava fica só no banco de teste | TEST-SCRIPTS-DB-ISOLATION-01: o config entregava a `DATABASE_URL` da `.env` aos workers, e uma rodada gravava 5.952 linhas de master data em 13 tabelas do banco de quem usa o sistema | `test-support/faixas-de-teste.test.ts`; no runner, a faixa inteira duas vezes (24 arquivos, 405 testes) com o `veridi_dev` idêntico em 77 tabelas (contagem, md5 e contadores de escrita) e nenhuma conexão nova nele; oito destinos proibidos com exit 1 e zero teste (manual, 2026-09-13) |
+| Toda config de Vitest que o `pnpm test` da raiz dispara — direto ou pelo `pnpm -r` — está classificada: monta o ambiente por `ambienteComBancoDeTeste` com o `globalSetup` e o `setupFiles` da foundation, ou é de pacote sem client de banco | TEST-SCRIPTS-DB-ISOLATION-01: o furo era uma faixa que ninguém classificou, não um teste | `test-support/faixas-de-teste.test.ts` — faixa nova na raiz ou num pacote, config sem o contrato, sem `globalSetup`/`setupFiles`, caminho inexistente e client de banco na web: 9 mutações derrubadas |
 
 ## Migração e importadores
 

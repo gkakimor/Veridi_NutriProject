@@ -2,15 +2,17 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import type { TestProject } from "vitest/node";
 import { comBanco, exigirBancoDeTeste } from "./banco-de-teste.js";
 import { descartarUsuarios, listarUsuariosDeRodadaInterrompida } from "./usuarios-de-teste.js";
 
 /**
- * `globalSetup` das duas faixas da API (`vitest.config.ts` e
- * `vitest.serial.config.ts`): deixa o banco de teste pronto antes do primeiro
- * arquivo.
+ * `globalSetup` das faixas que escrevem em banco — as duas da API
+ * (`vitest.config.ts` e `vitest.serial.config.ts`) e a de scripts da raiz
+ * (`vitest.scripts.config.ts`): deixa o banco de teste pronto antes do
+ * primeiro arquivo.
  *
  * 1. confere de novo que o destino é banco de teste (`banco-de-teste.ts`);
  * 2. cria o banco se ele não existe — no mesmo servidor, com a mesma
@@ -26,10 +28,15 @@ const MIGRATION_DESCONHECIDA =
   "o banco de teste tem migration que este checkout não conhece — é de outra branch.\n" +
   "O banco de teste é descartável: remova-o (DROP DATABASE) e a próxima rodada o recria.";
 
+/**
+ * A pasta da API, dona das migrations e do Prisma. Vem deste arquivo, não do
+ * `root` do projeto Vitest: a faixa de scripts tem a raiz do monorepo como root.
+ */
+const RAIZ_DA_API = fileURLToPath(new URL("../../", import.meta.url));
+
 export default async function prepararBancoDeTeste(project: TestProject): Promise<void> {
   const ambiente = { ...process.env, ...project.config.env } as Record<string, string | undefined>;
   const { url, alvo, banco } = exigirBancoDeTeste(ambiente["DATABASE_URL"], ambiente);
-  const raizDaApi = project.config.root;
 
   const prisma = await conectarCriandoSeFaltar(url, banco);
   try {
@@ -37,8 +44,8 @@ export default async function prepararBancoDeTeste(project: TestProject): Promis
     // outra conexão no banco é de uma rodada viva.
     const orfaos = await listarUsuariosDeRodadaInterrompida(prisma);
 
-    const pendentes = await migrationsPendentes(prisma, raizDaApi);
-    if (pendentes > 0) aplicarMigrations(url, raizDaApi);
+    const pendentes = await migrationsPendentes(prisma, RAIZ_DA_API);
+    if (pendentes > 0) aplicarMigrations(url, RAIZ_DA_API);
 
     const descarte = orfaos ? await descartarUsuarios(prisma, orfaos) : null;
     const partes = [`banco de teste: ${alvo}`];

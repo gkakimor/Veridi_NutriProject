@@ -3,8 +3,8 @@ import { exigirBancoDeTeste } from "./banco-de-teste.js";
 import { descartarUsuariosDoArquivo } from "./usuarios-de-teste.js";
 
 /**
- * `setupFiles` das duas faixas da API: roda antes de CADA arquivo de teste,
- * no worker que vai executá-lo.
+ * `setupFiles` das faixas que escrevem em banco — as duas da API e a de scripts
+ * da raiz: roda antes de CADA arquivo de teste, no worker que vai executá-lo.
  *
  * - Antes de o arquivo importar qualquer coisa que abra o banco, o destino é
  *   conferido de novo — no processo que de fato escreve (`banco-de-teste.ts`).
