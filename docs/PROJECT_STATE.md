@@ -2182,13 +2182,44 @@ PDF (`report-content.test.tsx`). Smoke com banco e portas isolados, Chromium com
 `timezoneId`: 61/61.
 
 Achados (não corrigidos, fora do escopo): no R-20, `status`, cliente e período
-escrevem a mesma chave `quoteVersion` no `where` e só o último vale;
+escrevem a mesma chave `quoteVersion` no `where` e só o último vale (corrigido em
+R20-QUOTE-FILTER-COMPOSITION-01, abaixo);
 `QuoteVersion.quoteDate` é coluna mista (a tela grava instante, o importador grava
 `entryDate`); OCs antigas com `orderDate` em instante seguem sem backfill; mudar o
 período não volta à página 1; o R-15 vazio mostra "Valores incompletos"; o
 Dashboard ainda semeia o período personalizado com o dia do navegador; o nome de
 CSV sem período usa o dia UTC do servidor. Aba aberta antes do deploy recebe 400
 nos relatórios até recarregar.
+
+## R-20 combina todos os filtros (R20-QUOTE-FILTER-COMPOSITION-01, 2026-09-12)
+
+No `where` do R-20, status, cliente e período eram três chaves `quoteVersion` no
+mesmo objeto, e a última apagava as anteriores: cliente + status trazia todos os
+status do cliente, e qualquer combinação com período virava o período inteiro, de
+todos os clientes e status. JSON, contagem, CSV e PDF erravam juntos (mesmo
+serviço). A tela do R-20 só oferece busca e origem do preço; cliente, status e
+período chegam pela API, pelo CSV e pela rota de impressão.
+
+O `where` sai de `quotePricingAuditWhere` (`cost-reports.service.ts`): UMA
+condição `quoteVersion` com status, `project.customerId` e `quoteDate` pelo
+`periodoDeInstante` da REPORTS-BUSINESS-DATE-01 (dia comercial, fim exclusivo),
+com origem do preço e busca em AND. Página e contagem usam o mesmo objeto.
+Semântica do status, associação cliente → projeto da versão e tipo de data não
+mudaram. Sem migration.
+
+**Validação.** API 15 testes (`r20-filtros-compostos.test.ts`: 9 orçamentos em que
+cada vizinho erra um dos três filtros; sem filtro, cada filtro sozinho, as quatro
+combinações e variações, bordas do dia comercial dentro da combinação, mesmo dia,
+origem + busca, JSON = contagem = CSV, paginação; mutação: o `where` antigo derruba
+9). Web 1 (tela, CSV e PDF com o mesmo objeto de filtros) e 1 no PDF (os três
+filtros chegam juntos ao CSV do papel). Gate API 121, web 84, typecheck. Smoke com
+banco e portas isolados: 11/11, console limpo.
+
+Achados (sem correção): **o CSV do R-20 não exige perfil** — a rota JSON responde
+403 a PRODUCTION, `.../quote-pricing/export.csv` responde 200 com custo e margem, e
+a rota de impressão lê esse CSV; a tela não oferece cliente, status nem período; o
+papel imprime o id do cliente no filtro "Cliente"; um orçamento com vários produtos
+repete a `key` da linha da tabela (`quoteVersionId`).
 
 ## Próxima prioridade
 

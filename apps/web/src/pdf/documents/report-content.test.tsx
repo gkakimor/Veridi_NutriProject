@@ -207,6 +207,22 @@ describe("relatórios R-01…R-20 em PDF", () => {
     expect(texto).toContain("Documento interno — contém custo e margem.");
   });
 
+  it("R-20: cliente, status e período chegam JUNTOS ao CSV que vira o papel", async () => {
+    apiFetch.mockResolvedValue(respostaCsv([["Orçamento", "Status"], ["ORC-000001 · V1", "Enviado"]]));
+    // R20-QUOTE-FILTER-COMPOSITION-01: o servidor compõe os três em AND; o
+    // papel não pode perder nenhum no caminho até ele.
+    abrir("/print/relatorios/R-20?customerId=cli-a&status=SENT&from=2026-09-01&to=2026-09-30");
+
+    const documento = await documentoGerado("R-20-2026-09-11.pdf");
+    expect(apiFetch).toHaveBeenCalledWith(
+      `${API_URL}/reports/commercial/quote-pricing/export.csv?customerId=cli-a&status=SENT&from=2026-09-01&to=2026-09-30`,
+    );
+    expect(campo(documento, "Cliente")).toBe("cli-a");
+    expect(campo(documento, "Status")).toBe("SENT");
+    expect(campo(documento, "De")).toBe("2026-09-01");
+    expect(campo(documento, "Até")).toBe("2026-09-30");
+  });
+
   it("relatório desconhecido não gera documento", async () => {
     abrir("/print/relatorios/R-99");
 
