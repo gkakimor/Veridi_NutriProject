@@ -5,6 +5,7 @@ import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import { quantityDecimalSchema } from "../../lib/decimal-schema.js";
 import { requiredDateSchema } from "../../lib/date-schema.js";
 import { listaDeStatusSchema } from "../../lib/status-list-schema.js";
+import { bulkSelectionSchema, filtrosDaListagem } from "../../lib/bulk-selection.js";
 
 const customerOrderLineInputSchema = z.object({
   productId: z.string().trim().min(1, "Produto é obrigatório"),
@@ -53,6 +54,14 @@ export const listCustomerOrdersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
+
+/**
+ * Seleção em massa de Pedidos (BULK-DOCUMENTS-01): ids, ou os filtros DA
+ * LISTAGEM — sem paginação — menos as exceções.
+ */
+export const customerOrderSelectionSchema = bulkSelectionSchema(
+  filtrosDaListagem(listCustomerOrdersQuerySchema.omit({ page: true, pageSize: true })),
+);
 
 export type CustomerOrderLineInput = z.infer<typeof customerOrderLineInputSchema>;
 export type CreateCustomerOrderInput = z.infer<typeof createCustomerOrderSchema>;

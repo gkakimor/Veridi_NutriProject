@@ -64,3 +64,4 @@ export * from "./customer-consultation.js";
 export * from "./formulation-quantity.js";
 export * from "./quote-math.js";
 export * from "./part-split.js";
+export * from "./bulk-selection.js";

@@ -1976,6 +1976,55 @@ produto ajustados (`scripts/e2e/lib/roteiro.mjs`) e não rodados.
 
 **Próximo:** BULK-DOCUMENTS-01.
 
+## Documentos da seleção (BULK-DOCUMENTS-01, 2026-09-12)
+
+A seleção em massa ganhou as primeiras ações, só documentais, em Pedidos e
+Ordens de Produção: **um PDF e um CSV com exatamente a seleção**. Nenhuma
+mutação em lote, nenhuma migration. Regra durável em `PRODUCT_RULES.md` §5.11.
+
+**O servidor resolve o conjunto.** `POST /customer-orders/bulk/documents` e
+`…/bulk/export.csv` (idem em `/production-orders`) recebem o descritor: ids,
+ou os filtros da listagem menos as exceções. Fundação pequena em
+`apps/api/src/lib/bulk-selection.ts` (schema, recusas, resolução); os filtros
+passam pelo schema da própria listagem, e campo desconhecido é recusado.
+`whereDaListaDePedidos` e `whereDaListaDeOrdens` saíram do serviço: tela, CSV
+e seleção usam o MESMO `where`, `semRoteiro` inclusive. Ordem da listagem
+(código decrescente), também para ids. Filtrado é o filtro do momento da ação.
+
+**Fail-closed.** Id escolhido que não existe recusa a geração inteira (404 com
+amostra); conjunto vazio recusa; PDF acima de 500 recusa inteiro, nunca os
+primeiros; CSV sem teto. Pedido e OP não têm regra real de elegibilidade de
+documento (o botão "PDF" existe em qualquer status).
+
+**PDF: o sistema de sempre, no navegador.** O repositório gera PDF no navegador
+por desenho (`pdf/render.ts`: nenhuma URL de PDF no servidor); compor no
+servidor exigiria portar o sistema. O servidor devolve o conjunto resolvido
+(Pedido: o DTO do documento; OP: ordem e custo complementar) e `PdfBundle` põe
+cada `CustomerOrderPdf`/`ProductionOrderPdf` num arquivo só — cabeçalho,
+logo, rodapé e "Página X de Y" de cada documento (`subPageNumber`). O avulso
+não mudou: o teste compara folha a folha.
+
+**CSV: a exportação de sempre.** Colunas de `list-exports.ts` reusadas, UTF-8
+com BOM. Nome pelo `Content-Disposition` (o CORS passou a expor o cabeçalho).
+
+**Tela.** `BulkDocumentActions` na barra: "Baixar PDF" e "Exportar CSV"
+secundárias, "Gerando PDF…"/"Gerando CSV…", clique duplo roda uma vez, "PDF
+gerado."/"CSV exportado." ou alerta, seleção fica. Download por `fetch → blob`
+(`lib/download-file.ts`, que o `downloadPdf` passou a usar).
+
+**Validação.** API 20 testes novos e web 14 (mutação provada nos dois), gate API
+95 e web 367, typecheck; smoke real em 1440 e 390 com 25 pedidos e 22 OPs
+criados e apagados — ids, todos os filtrados menos 1, sem roteiro, um download
+por clique, nome com o dia comercial, PDF válido (24 folhas; 42 para 21 OPs),
+CSV com BOM, barra empilhada em 390 sem transbordo, console limpo.
+
+Achados: PDF de 500 OPs no navegador não foi medido (render na thread
+principal); o CSV da listagem continua `veridi_<slug>_<data UTC>.csv`, enquanto
+o da seleção usa o dia comercial; com seleção, "Exportar CSV" aparece no
+cabeçalho (lista inteira) e na barra (seleção).
+
+**Próximo:** OP-SCHEDULE-STALE-ON-QUANTITY-01.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

@@ -16,14 +16,19 @@ import type { ReactNode } from "react";
  * folha — é provado em `pdf-generator.test.tsx`.
  */
 
-type DynamicProps = { pageNumber: number; totalPages: number; subPageNumber: number };
+type DynamicProps = {
+  pageNumber: number;
+  totalPages: number;
+  subPageNumber: number;
+  subPageTotalPages: number;
+};
 type Props = {
   children?: ReactNode;
   render?: (props: DynamicProps) => ReactNode;
   [key: string]: unknown;
 };
 
-const PAGINA_UNICA: DynamicProps = { pageNumber: 1, totalPages: 1, subPageNumber: 1 };
+const PAGINA_UNICA: DynamicProps = { pageNumber: 1, totalPages: 1, subPageNumber: 1, subPageTotalPages: 1 };
 
 /** Só os `data-*` chegam ao DOM: é por eles que o teste acha as peças. */
 function dataAttributes(props: Record<string, unknown>) {

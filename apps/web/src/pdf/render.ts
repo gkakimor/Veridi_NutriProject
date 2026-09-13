@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { downloadFile } from "../lib/download-file";
 
 /**
  * Geração do arquivo PDF.
@@ -34,14 +35,5 @@ export async function renderPdfBlob(documento: ReactElement): Promise<Blob> {
 
 /** Salva o arquivo com o nome do documento — sem diálogo de impressão. */
 export function downloadPdf(blob: Blob, nome: string): void {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = nome;
-  link.rel = "noopener";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  // A URL precisa viver até o download começar.
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  downloadFile(blob, nome);
 }

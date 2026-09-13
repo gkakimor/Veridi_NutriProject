@@ -45,6 +45,8 @@ import {
   assertProductBelongsToCustomer,
   productBelongsToCustomer,
 } from "../../lib/product-customer-ownership.js";
+import type { BulkSelectionInput } from "../../lib/bulk-selection.js";
+import { resolverSelecao } from "../../lib/bulk-selection.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { statusDoWhere } from "../../lib/status-list-schema.js";
@@ -612,10 +614,14 @@ async function requireOrder(id: string): Promise<OrderWithRelations> {
   return order;
 }
 
-export async function listCustomerOrders(
-  query: ListCustomerOrdersQuery,
-  pagination: Pagination = query,): Promise<CustomerOrderListResponse> {
-  const prisma = getPrisma();
+/** Os filtros da listagem de Pedidos, sem paginação. */
+export type CustomerOrderListFilters = Omit<ListCustomerOrdersQuery, "page" | "pageSize">;
+
+/**
+ * O recorte da listagem de Pedidos — UMA regra para a tela, o CSV e a seleção
+ * em massa (BULK-DOCUMENTS-01). Ordem canônica: código decrescente.
+ */
+export function whereDaListaDePedidos(query: CustomerOrderListFilters): Record<string, unknown> {
   const where: Record<string, unknown> = {};
 
   const status = statusDoWhere(query.status);
@@ -629,6 +635,14 @@ export async function listCustomerOrders(
       { customer: { is: { code: { contains: query.search, mode: "insensitive" } } } },
     ];
   }
+  return where;
+}
+
+export async function listCustomerOrders(
+  query: ListCustomerOrdersQuery,
+  pagination: Pagination = query,): Promise<CustomerOrderListResponse> {
+  const prisma = getPrisma();
+  const where = whereDaListaDePedidos(query);
 
   const [orders, total] = await Promise.all([
     prisma.customerOrder.findMany({
@@ -644,6 +658,34 @@ export async function listCustomerOrders(
     customerOrders: orders.map(toCustomerOrderDTO),
     ...pageMeta(pagination, total),
   };
+}
+
+/**
+ * Os Pedidos de uma seleção em massa, resolvidos no banco agora — ids
+ * escolhidos ou o filtro da listagem menos as exceções —, na ordem da
+ * listagem. `limite` é do PDF; o CSV não passa limite.
+ */
+export async function resolveCustomerOrderSelection(
+  selecao: BulkSelectionInput<CustomerOrderListFilters>,
+  limite?: number,
+): Promise<CustomerOrderDTO[]> {
+  const prisma = getPrisma();
+  const pedidos = await resolverSelecao(
+    selecao,
+    whereDaListaDePedidos,
+    {
+      contar: (where) => prisma.customerOrder.count({ where }),
+      buscar: (where, take) =>
+        prisma.customerOrder.findMany({
+          where,
+          include: customerOrderInclude,
+          orderBy: { code: "desc" },
+          ...(take === undefined ? {} : { take }),
+        }),
+    },
+    limite,
+  );
+  return pedidos.map(toCustomerOrderDTO);
 }
 
 export async function getCustomerOrderById(id: string): Promise<CustomerOrderDTO | null> {
