@@ -24,6 +24,27 @@ export class ProductionOrderWithoutRouteError extends Error {
   }
 }
 
+/**
+ * A quantidade da ordem não chega à unidade de referência do roteiro por um
+ * caminho seguro. Sem conversão não há duração honesta para programar.
+ */
+export class ProductionOrderRouteUomError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProductionOrderRouteUomError";
+  }
+}
+
+/** O roteiro da ordem mudou entre a prévia e a gravação da programação. */
+export class ScheduleRouteChangedError extends Error {
+  constructor(code: string) {
+    super(
+      `O roteiro de ${code} mudou enquanto a programação era calculada. Defina o início de novo.`,
+    );
+    this.name = "ScheduleRouteChangedError";
+  }
+}
+
 /** O calendário ainda não sabe ONDE fica o intervalo — fail-closed. */
 export class CalendarBreakNotPositionedError extends Error {
   constructor(message: string) {

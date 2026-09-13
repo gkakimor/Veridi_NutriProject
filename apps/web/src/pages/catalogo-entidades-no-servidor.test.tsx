@@ -78,7 +78,7 @@ vi.mock("../lib/cost-calculation-api", () => ({
   getProductionOrderCost: vi.fn(async () => null),
   discardIndustrialCostCalculation: vi.fn(),
 }));
-vi.mock("../app/AuthProvider", () => ({ useAuth: vi.fn() }));
+vi.mock("../app/AuthProvider", () => ({ useAuth: vi.fn(), useOptionalAuth: () => null }));
 
 import { useAuth } from "../app/AuthProvider";
 import { listCustomers } from "../lib/customers-api";

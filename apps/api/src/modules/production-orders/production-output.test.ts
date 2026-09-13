@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { aplicarRoteiroDeTeste } from "../../test-support/fixture-route.js";
 import { marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
@@ -168,6 +169,7 @@ async function createReleasedOrder(
     payload: { productId: product.id, plannedQuantity },
   });
   fixtureProductionOrderIds.push(orderCreated.json().id);
+  await aplicarRoteiroDeTeste(orderCreated.json().id);
   await app.inject({ method: "POST", url: `/production-orders/${orderCreated.json().id}/plan` });
   const released = await app.inject({
     method: "POST",

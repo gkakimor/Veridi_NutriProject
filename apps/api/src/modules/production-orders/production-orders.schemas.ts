@@ -25,6 +25,14 @@ export const listProductionOrdersQuerySchema = z.object({
    */
   status: listaDeStatusSchema(statusEnum).optional(),
   productId: z.string().trim().min(1).optional(),
+  /*
+   * Roteiro de produção: `1`/`true` = pendentes de roteiro (sem cópia, em
+   * rascunho, planejada ou liberada); `0`/`false` = com roteiro; ausente = todas.
+   */
+  semRoteiro: z
+    .enum(["1", "0", "true", "false"])
+    .optional()
+    .transform((valor) => (valor === undefined ? undefined : valor === "1" || valor === "true")),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -63,7 +71,22 @@ export const cancelProductionOrderSchema = z.object({
   reason: z.string().trim().min(3, "Motivo do cancelamento é obrigatório").max(500),
 });
 
+/**
+ * Corpo de aplicar/trocar o roteiro. Tudo opcional: vazio aplica o padrão
+ * atual do Produto. Quando o motivo é obrigatório decide o serviço, pela
+ * situação da ordem — não o formato do pedido.
+ */
+export const applyProductionRouteSchema = z.object({
+  productionProfileVersionId: z.string().trim().min(1).optional(),
+  setAsProductDefault: z.boolean().optional(),
+  reason: z.string().trim().max(500, "Motivo com no máximo 500 caracteres").optional(),
+  confirmLegacyRepair: z.boolean().optional(),
+  confirmScheduleRemoval: z.boolean().optional(),
+  expectedSourceVersionId: z.string().trim().min(1).nullable().optional(),
+});
+
 export type ListProductionOrdersQuery = z.infer<typeof listProductionOrdersQuerySchema>;
 export type CreateProductionOrderInput = z.infer<typeof createProductionOrderSchema>;
 export type UpdateProductionOrderInput = z.infer<typeof updateProductionOrderSchema>;
 export type CancelProductionOrderInput = z.infer<typeof cancelProductionOrderSchema>;
+export type ApplyProductionRouteParsed = z.infer<typeof applyProductionRouteSchema>;

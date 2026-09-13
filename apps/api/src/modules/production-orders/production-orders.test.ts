@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LotStatus, UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { aplicarRoteiroDeTeste } from "../../test-support/fixture-route.js";
 import { marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
@@ -348,6 +349,7 @@ describe("Production Orders — ciclo de vida DRAFT/PLANNED/CANCELLED", () => {
       data: { plannedQuantity: "0" },
     });
 
+    await aplicarRoteiroDeTeste(created.json().id);
     const plan = await app.inject({ method: "POST", url: `/production-orders/${created.json().id}/plan` });
     expect(plan.statusCode).toBe(400);
     expect(plan.json().error).toBe("plan_validation_failed");
@@ -371,6 +373,7 @@ describe("Production Orders — ciclo de vida DRAFT/PLANNED/CANCELLED", () => {
     fixtureProductionOrderIds.push(created.json().id);
     expect(created.json().formulationVersionId).toBeNull();
 
+    await aplicarRoteiroDeTeste(created.json().id);
     const plan = await app.inject({ method: "POST", url: `/production-orders/${created.json().id}/plan` });
     expect(plan.statusCode).toBe(400);
     expect(plan.json().error).toBe("plan_validation_failed");
@@ -398,6 +401,7 @@ describe("Production Orders — ciclo de vida DRAFT/PLANNED/CANCELLED", () => {
     const v2 = await app.inject({ method: "POST", url: `/formulation-versions/${v1Id}/new-version` });
     await app.inject({ method: "POST", url: `/formulation-versions/${v2.json().id}/activate` });
 
+    await aplicarRoteiroDeTeste(created.json().id);
     const plan = await app.inject({ method: "POST", url: `/production-orders/${created.json().id}/plan` });
     expect(plan.statusCode).toBe(400);
     expect(plan.json().error).toBe("plan_validation_failed");
@@ -422,6 +426,7 @@ describe("Production Orders — ciclo de vida DRAFT/PLANNED/CANCELLED", () => {
     });
     fixtureProductionOrderIds.push(created.json().id);
 
+    await aplicarRoteiroDeTeste(created.json().id);
     const planned = await app.inject({
       method: "POST",
       url: `/production-orders/${created.json().id}/plan`,
@@ -476,6 +481,7 @@ describe("Production Orders — ciclo de vida DRAFT/PLANNED/CANCELLED", () => {
     });
     fixtureProductionOrderIds.push(created.json().id);
 
+    await aplicarRoteiroDeTeste(created.json().id);
     const planned = await app.inject({
       method: "POST",
       url: `/production-orders/${created.json().id}/plan`,
@@ -544,6 +550,7 @@ describe("Production Orders — ciclo de vida DRAFT/PLANNED/CANCELLED", () => {
       payload: { productId: product.id, plannedQuantity: "10" },
     });
     fixtureProductionOrderIds.push(created.json().id);
+    await aplicarRoteiroDeTeste(created.json().id);
     await app.inject({ method: "POST", url: `/production-orders/${created.json().id}/plan` });
 
     const cancelled = await app.inject({

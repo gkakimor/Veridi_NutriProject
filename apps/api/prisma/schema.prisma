@@ -2412,10 +2412,12 @@ model Product {
   projectProducts ProjectProduct[]
   quoteLines      QuoteLine[]
 
-  /// Perfil de Producao padrao (PLANNING-PRODUCTION-PROFILE-01, §89): uma
-  /// VERSAO ATIVA escolhida explicitamente. Opcional — produto sem perfil
-  /// continua valido. E ponteiro de planejamento: nao muda formulacao, custo
-  /// nem OP, e ativar versao nova do perfil nao o move sozinho.
+  /// Roteiro de Producao padrao (PLANNING-PRODUCTION-PROFILE-01, §89): uma
+  /// VERSAO ATIVA escolhida explicitamente, compativel com a unidade do
+  /// produto. Opcional — produto sem roteiro continua valido e a OP dele nasce
+  /// sem roteiro. E ponteiro de planejamento: nao muda formulacao, custo nem
+  /// OP existente. Ativar versao nova do MESMO perfil move este ponteiro junto,
+  /// na transacao da ativacao; produto de outro perfil ou sem perfil nao muda.
   defaultProductionProfileVersionId String?
   defaultProductionProfileVersion   ProductionProfileVersion? @relation("ProductDefaultProductionProfileVersion", fields: [defaultProductionProfileVersionId], references: [id], onDelete: Restrict)
 
@@ -3119,8 +3121,9 @@ model ProductionOrder {
   outputs      ProductionOutput[]
   costSnapshot ProductionOrderCostSnapshot?
 
-  /// Copia congelada do Perfil de Producao — no maximo uma por OP. Ausente e
-  /// situacao legitima: produto sem perfil, ou OP anterior a esta migration.
+  /// Copia congelada do Roteiro de Producao — no maximo uma por OP. Ausente, a
+  /// OP existe (produto sem padrao, ou OP anterior a copia), mas nao planeja,
+  /// nao programa e nao libera ate receber um roteiro.
   planningSnapshot ProductionOrderPlanningSnapshot?
 
   /// A PROGRAMACAO da ordem — quando ela esta prevista para acontecer. No
@@ -4551,8 +4554,24 @@ model ProductionProfileStepResource {
   @@map("production_profile_step_resources")
 }
 
-/// PLANEJAMENTO PREVISTO da OP — a COPIA do Perfil de Producao tirada na
-/// criacao da Ordem (PLANNING-OP-SNAPSHOT-01, PRODUCT_RULES §89).
+/// De onde veio o roteiro gravado na Ordem de Producao
+/// (PRODUCTION-ROUTE-ASSIGNMENT-01, PRODUCT_RULES §89). Null nas copias
+/// anteriores a esta capability: origem nao registrada, e nada e inferido.
+enum ProductionRouteApplicationSource {
+  /// Padrao ativo e compativel do Produto, copiado na criacao da ordem.
+  AUTO_PRODUCT_DEFAULT
+  /// Versao escolhida para esta ordem, sem mexer no Produto.
+  MANUAL_ORDER
+  /// Padrao atual do Produto aplicado a mao numa ordem sem roteiro.
+  PRODUCT_DEFAULT_APPLIED
+  /// Versao escolhida, gravada como padrao do Produto e aplicada — uma transacao.
+  DEFAULT_AND_APPLIED
+  /// Primeira aplicacao numa ordem PLANNED/RELEASED sem roteiro, com motivo.
+  LEGACY_REPAIR
+}
+
+/// ROTEIRO DE PRODUCAO da OP — a COPIA do roteiro gravada na Ordem
+/// (PLANNING-OP-SNAPSHOT-01 e PRODUCTION-ROUTE-ASSIGNMENT-01, PRODUCT_RULES §89).
 ///
 /// Copia por valor, nunca vinculo vivo: ativar V3 do perfil depois NAO muda
 /// uma OP que ja recebeu V2, mesmo em rascunho. Os ids de origem
@@ -4561,8 +4580,13 @@ model ProductionProfileStepResource {
 /// nao ha FK, e renomear ou desativar um recurso nao reescreve o historico.
 ///
 /// A duracao NAO mora aqui: e derivada a cada leitura pelo motor canonico
-/// (`planProductionProfileSnapshot`) para a `plannedQuantity` do momento.
-/// Mudar a quantidade em rascunho refaz a projecao e nunca recopia o perfil.
+/// (`planProductionProfileSnapshotForOrder`) para a `plannedQuantity` do
+/// momento, CONVERTIDA para `referenceUomCode`. Mudar a quantidade em rascunho
+/// refaz a projecao e nunca recopia o perfil.
+///
+/// Sem copia a ordem existe, mas nao planeja, nao programa e nao libera. Troca
+/// so em DRAFT; depois disso a linha congela. Sem historico de trocas: a linha
+/// guarda a origem e o motivo da aplicacao que ficou.
 ///
 /// Nada disto e custo: Estrutura de Custos, CMV e Precificacao seguem
 /// separados e intocados.
@@ -4589,6 +4613,12 @@ model ProductionOrderPlanningSnapshot {
 
   appliedAt DateTime @default(now())
   appliedBy String?
+
+  /// Origem da aplicacao que ficou. Null = copia anterior, origem nao registrada.
+  applicationSource ProductionRouteApplicationSource?
+  /// Motivo informado. Obrigatorio (no servico) para trocar roteiro em DRAFT e
+  /// para LEGACY_REPAIR; opcional na primeira aplicacao em rascunho.
+  applicationReason String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

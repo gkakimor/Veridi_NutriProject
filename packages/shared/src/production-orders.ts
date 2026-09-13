@@ -235,40 +235,130 @@ export interface MaterialReservationDTO {
   lines: MaterialReservationLineDTO[];
 }
 
-/** Perfil de Produção padrão do Produto HOJE — base de "Aplicar"/"Atualizar". */
+/** Roteiro de Produção padrão do Produto HOJE — base de "Aplicar roteiro padrão atual". */
 export interface ProductionOrderAvailableProfileDTO {
   versionId: string;
   profileId: string;
   profileCode: string;
   profileName: string;
   versionNumber: number;
+  referenceQuantity: string;
+  referenceUomCode: string;
 }
 
 /**
- * PLANEJAMENTO PREVISTO da OP — PLANNING-OP-SNAPSHOT-01, `PRODUCT_RULES.md` §89.
+ * De onde veio o roteiro gravado na ordem (PRODUCTION-ROUTE-ASSIGNMENT-01).
+ * `null` nas cópias anteriores a esta capability: origem não registrada.
+ */
+export type ProductionRouteApplicationSource =
+  | "AUTO_PRODUCT_DEFAULT"
+  | "MANUAL_ORDER"
+  | "PRODUCT_DEFAULT_APPLIED"
+  | "DEFAULT_AND_APPLIED"
+  | "LEGACY_REPAIR";
+
+export const PRODUCTION_ROUTE_APPLICATION_SOURCE_LABELS: Record<
+  ProductionRouteApplicationSource,
+  string
+> = {
+  AUTO_PRODUCT_DEFAULT: "Roteiro padrão do produto, aplicado na criação da ordem",
+  MANUAL_ORDER: "Escolhido para esta ordem",
+  PRODUCT_DEFAULT_APPLIED: "Roteiro padrão do produto, aplicado nesta ordem",
+  DEFAULT_AND_APPLIED: "Definido como padrão do produto e aplicado nesta ordem",
+  LEGACY_REPAIR: "Regularização de ordem já planejada ou liberada",
+};
+
+/**
+ * Situações em que a ordem ainda recebe o PRIMEIRO roteiro — e em que a falta
+ * dele é pendência de planejamento. PLANNED e RELEASED sem roteiro são legado:
+ * recebem uma vez, por regularização com motivo.
+ */
+export const ROUTE_PENDING_STATUSES: readonly ProductionOrderStatus[] = [
+  "DRAFT",
+  "PLANNED",
+  "RELEASED",
+];
+
+/** Trocar um roteiro JÁ aplicado só em rascunho: depois disso a cópia congela. */
+export const ROUTE_CHANGE_STATUSES: readonly ProductionOrderStatus[] = ["DRAFT"];
+
+/** A ordem está sem roteiro numa situação em que isso é pendência a resolver. */
+export function roteiroPendente(status: ProductionOrderStatus, temRoteiro: boolean): boolean {
+  return !temRoteiro && ROUTE_PENDING_STATUSES.includes(status);
+}
+
+/**
+ * Corpo de `POST /production-orders/:id/production-profile`. Vazio aplica o
+ * roteiro padrão atual do Produto.
+ */
+export interface ApplyProductionRouteInput {
+  /** Versão ATIVA escolhida explicitamente; ausente = padrão atual do Produto. */
+  productionProfileVersionId?: string;
+  /** Também grava a versão escolhida como padrão do Produto, na mesma transação. */
+  setAsProductDefault?: boolean;
+  /** Obrigatório para trocar um roteiro já aplicado e para regularizar legado. */
+  reason?: string;
+  /** Ordem PLANNED/RELEASED sem roteiro: a regularização é decisão explícita. */
+  confirmLegacyRepair?: boolean;
+  /** A ordem tem programação: aplicar o roteiro a remove, e isso se confirma. */
+  confirmScheduleRemoval?: boolean;
+  /**
+   * A versão que a tela via na ordem (`null` = sem roteiro). Se mudou desde
+   * então, o servidor recusa em vez de sobrescrever a escolha de outra pessoa.
+   */
+  expectedSourceVersionId?: string | null;
+}
+
+export type ProductionRouteUomBlock = "UOM_DESCONHECIDA" | "UOM_INCOMPATIVEL";
+
+/** Unidade com fator, como a conversão canônica precisa. */
+export interface ProductionOrderUnitFactorDTO {
+  code: string;
+  dimension: string;
+  toBaseFactor: string;
+}
+
+/**
+ * ROTEIRO DE PRODUÇÃO da OP — PLANNING-OP-SNAPSHOT-01 e
+ * PRODUCTION-ROUTE-ASSIGNMENT-01, `PRODUCT_RULES.md` §89.
  *
- * `snapshot` é a CÓPIA congelada do Perfil de Produção, tirada na criação da
- * OP. Não é vínculo vivo: ativar uma versão nova do perfil depois nunca muda
- * uma OP que já recebeu a cópia, nem mesmo em rascunho.
+ * `snapshot` é a CÓPIA congelada do roteiro. Não é vínculo vivo: ativar uma
+ * versão nova depois nunca muda uma OP que já recebeu a cópia.
  *
  * `plan` é derivado, nunca gravado: a mesma cópia projetada para a
- * `plannedQuantity` atual. Mudar a quantidade em rascunho refaz a projeção e
- * não recopia o perfil.
+ * `plannedQuantity` atual, CONVERTIDA para a unidade de referência do roteiro.
  *
- * OP sem perfil (produto sem padrão, ou OP anterior à migration) é situação
- * legítima: `snapshot` nulo não bloqueia criação nem liberação.
+ * Sem roteiro a ordem existe, mas não planeja, não programa e não libera.
  */
 export interface ProductionOrderPlanningDTO {
   snapshot: ProductionProfileSnapshot | null;
   plan: ProductionPlan | null;
+  /** Quantidade da ordem na unidade de referência do roteiro; `null` sem roteiro. */
+  quantityInReferenceUom: string | null;
+  /** Unidades da ordem e dos roteiros envolvidos — a tela converte com a mesma função. */
+  conversionUnits: ProductionOrderUnitFactorDTO[];
+  /** A quantidade da ordem não chega à unidade do roteiro: sem projeção. */
+  planBlockedReason: ProductionRouteUomBlock | null;
   appliedAt: string | null;
   appliedBy: string | null;
-  /** `null` fora de DRAFT: o que já saiu de rascunho não recebe perfil novo. */
+  applicationSource: ProductionRouteApplicationSource | null;
+  applicationReason: string | null;
+  /** Roteiro padrão ATIVO do Produto hoje, para mostrar e oferecer; `null` = não definido. */
+  productDefaultProfile: ProductionOrderAvailableProfileDTO | null;
+  /** O padrão do Produto serve para a quantidade desta ordem (versão ativa, unidade convertível). */
+  productDefaultCompatible: boolean;
+  /** Padrão aplicável agora: `productDefaultProfile` quando `canApply` ou `canUpdate`. */
   availableProfile: ProductionOrderAvailableProfileDTO | null;
-  /** DRAFT, sem cópia, e o Produto tem perfil padrão ativo. */
+  /** Sem roteiro, em DRAFT/PLANNED/RELEASED, e o padrão do Produto é aplicável. */
   canApply: boolean;
-  /** DRAFT, com cópia de uma versão diferente da que o Produto aponta hoje. */
+  /** Pode receber roteiro escolhido: primeira aplicação, ou troca em DRAFT. */
+  canChoose: boolean;
+  /** DRAFT com roteiro de versão diferente do padrão atual do Produto. */
   canUpdate: boolean;
+  /** PLANNED/RELEASED sem roteiro: aplicar é regularização, com confirmação e motivo. */
+  requiresLegacyRepair: boolean;
+  /** Sem roteiro numa situação em que isso é pendência. */
+  routePending: boolean;
 }
 
 export interface ProductionOrderDTO {

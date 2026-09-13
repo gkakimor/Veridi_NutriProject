@@ -32,6 +32,7 @@ vi.mock("../../lib/units-api", () => ({ listUnits: vi.fn() }));
 vi.mock("../../app/AuthProvider", () => ({ useAuth: vi.fn() }));
 vi.mock("../../components/AttachmentsSection", () => ({ AttachmentsSection: () => null }));
 vi.mock("./ProductIndustrialCostSummary", () => ({ ProductIndustrialCostSummary: () => null }));
+vi.mock("./ProductDefaultRouteSection", () => ({ ProductDefaultRouteSection: () => null }));
 
 import { createProduct, updateProduct } from "../../lib/products-api";
 import { listCustomers } from "../../lib/customers-api";

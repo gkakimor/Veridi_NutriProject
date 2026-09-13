@@ -1118,7 +1118,8 @@ vivo com o mesmo motor enquanto a quantidade é digitada.
 
 **Produto sem perfil padrão continua válido:** a OP nasce sem cópia, mostra
 "Sem perfil de produção aplicado." e nada é bloqueado — nem a criação, nem o
-planejamento, nem a liberação. Para essa OP, e para a legada, o rascunho
+planejamento, nem a liberação. *(Mudou em PRODUCTION-ROUTE-ASSIGNMENT-01: sem
+roteiro a OP ainda nasce, mas não planeja, não programa e não libera.)* Para essa OP, e para a legada, o rascunho
 oferece **Aplicar perfil de produção** quando o Produto tem padrão ativo; com
 cópia antiga, um aviso discreto e **Atualizar perfil**, com confirmação. Trocar
 o Produto em rascunho substitui a cópia inteira, atomicamente, pelo padrão do
@@ -1913,6 +1914,65 @@ fora), nada vai para URL ou sessão, id estável, seleção não é mutação. I
 segue com a seleção só de página. Gesto de seleção espera a consulta em
 andamento (as linhas à vista podem ser do filtro anterior); `prune(ids)` fica
 para a mutação na própria tela confirmada pelo servidor — recarregar não limpa.
+
+**Próximo:** BULK-DOCUMENTS-01.
+
+## A OP sem roteiro existe, mas não segue (PRODUCTION-ROUTE-ASSIGNMENT-01, 2026-09-12)
+
+Decisão do PO: o Comercial não define como fabricar e o Pedido nunca para por
+falta de roteiro — mas **sem roteiro a ordem não planeja, não programa e não
+libera**. Regra durável em `PRODUCT_RULES.md` §89 e §91. Uma migration aditiva,
+sem backfill: `20260925093024_production_route_application_source` (enum
+`ProductionRouteApplicationSource`, `applicationSource` e `applicationReason`
+na cópia do roteiro).
+
+**Onde nasce o roteiro.** O padrão continua em
+`Product.defaultProductionProfileVersionId`, agora também no cadastro do
+Produto (seção "Roteiro padrão de produção", Produção e Administração, mesma
+rota `PUT /products/:productId/production-profile`). Plano de Atendimento,
+saldo e OP manual copiam o padrão compatível na criação
+(`AUTO_PRODUCT_DEFAULT`); sem ele a OP nasce em rascunho sem cópia, e a
+transação do Pedido não cai.
+
+**Uma regra de compatibilidade, uma conversão.** `compatibilidadeDoRoteiro`
+(shared) e `exigirRoteiroCompativel` (API, versão `FOR SHARE`) valem para o
+padrão, para a escolha na ordem e para "definir padrão e aplicar". A quantidade
+da OP é convertida para a unidade de referência (`converterQuantidadeDeUnidade`,
+a mesma da Formulação) antes da conta: produto em kg com roteiro em g projetava
+tempo mil vezes menor — mutação provada.
+
+**Aplicar, escolher, trocar.** `POST /production-orders/:id/production-profile`
+com a OP travada (`FOR UPDATE`): padrão atual (`PRODUCT_DEFAULT_APPLIED`), só
+nesta OP (`MANUAL_ORDER`) ou padrão + aplicação na mesma transação
+(`DEFAULT_AND_APPLIED`). Troca só em DRAFT e com motivo; programação gravada
+sai junto, com confirmação. PLANNED/RELEASED sem cópia regularizam uma vez
+(`LEGACY_REPAIR`, confirmação + motivo) e congelam; IN_PRODUCTION não recebe.
+Tela velha e corrida viram 409, nunca 500.
+
+**Portas.** `/plan` e `/release` recusam com `route_required`; programar recusa
+com `order_without_route` antes de olhar o calendário. Criar, editar, aplicar,
+planejar, liberar e cancelar pela porta direta da OP ficaram com Produção e
+Administração (403 antes da validação); a OP que nasce do Pedido segue aberta
+ao Comercial.
+
+**Pendência derivada, nunca gravada** (`roteiroPendente`): filtro de roteiro na
+lista de OPs (`semRoteiro` na URL, no CSV e na seleção em massa) com selo "Sem
+roteiro"; "Pendências de planejamento" no quadro, com "Resolver" levando ao
+bloco da própria OP; "OPs sem roteiro" no Dashboard; "Produção pendente de
+roteiro." no Pedido. Na OP o bloco virou "Roteiro de produção — Pendente" ou
+"Roteiro de produção aplicado".
+
+**Validação.** Suítes afetadas de API, shared e web verdes; typecheck; smoke
+real em 1440 e 390 (Pedido sem roteiro até planejar, padrão automático, padrão
+novo não alcança OP antiga, troca com motivo, kg × g = 2 h, Comercial vê e leva
+403), 31 conferências, console limpo, dados apagados. O smoke achou a lista do
+seletor atrás do diálogo (60 × 101) — corrigido em `components.css`.
+
+Achados sem correção: a tabela de "Documentos" alarga o modal do Produto em
+390px (anterior à rodada); mudar a quantidade em DRAFT não refaz a programação
+gravada (anterior); picking, receita e apontamentos seguem sem `requireRole`;
+cancelar a OP ainda grava `SYSTEM_ACTOR`; E2E do golden path e da busca de
+produto ajustados (`scripts/e2e/lib/roteiro.mjs`) e não rodados.
 
 **Próximo:** BULK-DOCUMENTS-01.
 

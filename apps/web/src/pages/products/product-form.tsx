@@ -21,6 +21,7 @@ import { RelatedLinks } from "../../components/RelatedLinks";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { AttachmentsSection } from "../../components/AttachmentsSection";
 import { FormSection } from "../../components/FormSection";
+import { ProductDefaultRouteSection } from "./ProductDefaultRouteSection";
 import { ToggleCard } from "../../components/ToggleCard";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { createProduct, updateProduct } from "../../lib/products-api";
@@ -935,6 +936,10 @@ options={customerOptions.map((customer) => ({
           />
         </div>
       </FormSection>
+
+      {/* Roteiro padrão tem gravação própria: escolher aqui não entra no
+          "Salvar alterações" do produto. */}
+      {mode === "edit" && product && <ProductDefaultRouteSection productId={product.id} />}
 
       {/* Estrutura de custos é documento versionado: aqui só o resumo e
           o caminho para a página própria. */}

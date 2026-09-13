@@ -2,11 +2,21 @@ import { describe, expect, it } from "vitest";
 import {
   ProductionPlanInputError,
   ProductionProfileDraftNotCopyableError,
+  ProductionRouteUomError,
+  compatibilidadeDoRoteiro,
   isCapacityResourceType,
   planProductionProfile,
+  planProductionProfileSnapshotForOrder,
   productionProfileSnapshot,
+  quantidadeNaUnidadeDoRoteiro,
 } from "./production-profiles.js";
-import type { ProductionPlanStepInput, ProductionProfileVersionDTO } from "./production-profiles.js";
+import type {
+  ProductionPlanStepInput,
+  ProductionProfileSnapshot,
+  ProductionProfileVersionDTO,
+} from "./production-profiles.js";
+import { converterQuantidadeDeUnidade } from "./formulation-quantity.js";
+import { roteiroPendente } from "./production-orders.js";
 
 /**
  * A conta do Perfil de Produção — `PRODUCT_RULES.md` §89.
@@ -305,5 +315,65 @@ describe("productionProfileSnapshot — o contrato da cópia para a OP (PLANNING
     expect(() => productionProfileSnapshot(versao({ status: "DRAFT" }))).toThrow(
       ProductionProfileDraftNotCopyableError,
     );
+  });
+});
+
+describe("Quantidade da ordem na unidade do roteiro (PRODUCTION-ROUTE-ASSIGNMENT-01)", () => {
+  const unidades = [
+    { code: "g", dimension: "MASS", toBaseFactor: "1" },
+    { code: "kg", dimension: "MASS", toBaseFactor: "1000" },
+    { code: "un", dimension: "COUNT", toBaseFactor: "1" },
+  ];
+  const copia = (referenceQuantity: string, referenceUomCode: string): ProductionProfileSnapshot => ({
+    sourceProfileId: "p",
+    sourceProfileCode: "PPR-000001",
+    sourceProfileName: "Pó",
+    sourceVersionId: "v",
+    sourceVersionNumber: 1,
+    referenceQuantity,
+    referenceUomCode,
+    steps: [
+      { sequence: 1, name: "Mistura", description: null, setupDurationMinutes: 0, runDurationMinutes: 60, scalingMode: "PROPORTIONAL", resources: [] },
+    ],
+  });
+
+  it("a conversão canônica passa pela unidade-base e recusa o que não converte", () => {
+    expect(String(converterQuantidadeDeUnidade("2", "kg", "g", unidades))).toBe("2000");
+    expect(String(converterQuantidadeDeUnidade("500", "g", "kg", unidades))).toBe("0.5");
+    expect(converterQuantidadeDeUnidade("1", "kg", "un", unidades)).toBe("UOM_INCOMPATIVEL");
+    expect(converterQuantidadeDeUnidade("1", "kg", "lb", unidades)).toBe("UOM_DESCONHECIDA");
+  });
+
+  it("kg para g: 2 kg contra 60 min por 1000 g são 120 min — nunca 0,12", () => {
+    const plano = planProductionProfileSnapshotForOrder(copia("1000", "g"), { quantity: "2", unitCode: "kg" }, unidades);
+    expect(plano.quantity).toBe("2000");
+    expect(plano.totalDurationMinutes).toBe("120");
+  });
+
+  it("g para kg: 500 g contra 60 min por 1 kg são 30 min", () => {
+    expect(quantidadeNaUnidadeDoRoteiro("kg", { quantity: "500", unitCode: "g" }, unidades)).toBe("0.5");
+    const plano = planProductionProfileSnapshotForOrder(copia("1", "kg"), { quantity: "500", unitCode: "g" }, unidades);
+    expect(plano.totalDurationMinutes).toBe("30");
+  });
+
+  it("dimensão diferente ou unidade desconhecida recusa — quantidade crua nunca entra na conta", () => {
+    expect(() => planProductionProfileSnapshotForOrder(copia("1000", "un"), { quantity: "2", unitCode: "kg" }, unidades)).toThrow(ProductionRouteUomError);
+    expect(() => quantidadeNaUnidadeDoRoteiro("g", { quantity: "2", unitCode: "lb" }, unidades)).toThrow(ProductionRouteUomError);
+    expect(() => quantidadeNaUnidadeDoRoteiro("g", { quantity: "abc", unitCode: "kg" }, unidades)).toThrow(ProductionPlanInputError);
+  });
+
+  it("compatibilidade: versão ativa, unidade presente e conversão possível — nesta ordem", () => {
+    expect(compatibilidadeDoRoteiro({ status: "ACTIVE", referenceUomCode: "g" }, "kg", unidades)).toBeNull();
+    expect(compatibilidadeDoRoteiro({ status: "ARCHIVED", referenceUomCode: "g" }, "kg", unidades)).toBe("VERSAO_NAO_ATIVA");
+    expect(compatibilidadeDoRoteiro({ status: "ACTIVE", referenceUomCode: "g" }, null, unidades)).toBe("SEM_UNIDADE");
+    expect(compatibilidadeDoRoteiro({ status: "ACTIVE", referenceUomCode: "un" }, "kg", unidades)).toBe("UOM_INCOMPATIVEL");
+  });
+
+  it("pendência de roteiro é de rascunho, planejada e liberada sem roteiro — em produção é histórico", () => {
+    expect(roteiroPendente("DRAFT", false)).toBe(true);
+    expect(roteiroPendente("PLANNED", false)).toBe(true);
+    expect(roteiroPendente("RELEASED", false)).toBe(true);
+    expect(roteiroPendente("IN_PRODUCTION", false)).toBe(false);
+    expect(roteiroPendente("DRAFT", true)).toBe(false);
   });
 });

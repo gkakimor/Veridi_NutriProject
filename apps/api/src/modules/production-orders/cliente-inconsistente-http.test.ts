@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { aplicarRoteiroDeTeste } from "../../test-support/fixture-route.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
@@ -350,6 +351,7 @@ describe("PROD-ERR-01 — cliente inconsistente é 400, não 500", () => {
       },
     });
 
+    await aplicarRoteiroDeTeste(productionOrder.id);
     const planned = await app.inject({
       method: "POST",
       url: `/production-orders/${productionOrder.id}/plan`,
@@ -392,6 +394,7 @@ describe("PROD-ERR-01 — cliente inconsistente é 400, não 500", () => {
       "100",
     );
 
+    await aplicarRoteiroDeTeste(productionOrder.id);
     const planned = await app.inject({
       method: "POST",
       url: `/production-orders/${productionOrder.id}/plan`,

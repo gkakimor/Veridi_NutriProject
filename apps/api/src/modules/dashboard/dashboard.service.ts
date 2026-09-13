@@ -11,6 +11,7 @@ import type {
   MovementSummaryDTO,
   RecentMovementDTO,
 } from "@veridi/shared";
+import { ROUTE_PENDING_STATUSES } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { marcadorDeHojeComercial } from "../../lib/business-day.js";
 import { buildAttentionList } from "./attention.service.js";
@@ -106,6 +107,7 @@ async function buildCurrentState(prisma: PrismaOrTx): Promise<DashboardCurrentSt
     blockedLots,
     expiredLots,
     nearExpiryLots,
+    withoutRoute,
   ] = await Promise.all([
     prisma.customerOrder.count({ where: { status: "CONFIRMED" } }),
     prisma.customerOrder.count({ where: { status: "IN_FULFILLMENT" } }),
@@ -126,6 +128,10 @@ async function buildCurrentState(prisma: PrismaOrTx): Promise<DashboardCurrentSt
     prisma.lot.findMany({
       where: { expiryDate: { gte: hojeComercialMarcador, lte: nearExpiryLimit } },
       select: { id: true },
+    }),
+    // Pendência de roteiro: a MESMA regra do filtro `semRoteiro` da lista de OPs.
+    prisma.productionOrder.count({
+      where: { status: { in: [...ROUTE_PENDING_STATUSES] }, planningSnapshot: { is: null } },
     }),
   ]);
 
@@ -156,6 +162,7 @@ async function buildCurrentState(prisma: PrismaOrTx): Promise<DashboardCurrentSt
       inProduction: countByStatus.get("IN_PRODUCTION") ?? 0,
       withShortage: shortageOrderIds.length,
       completedWithIncompleteCost: incompleteCostOrderIds.length,
+      withoutRoute,
     },
     purchasing,
     inventory: {

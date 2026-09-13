@@ -1,7 +1,15 @@
 import type { FastifyPluginAsync } from "fastify";
+import { Prisma } from "@prisma/client";
 import { ProductNotOperationalError } from "../../lib/product-lifecycle.js";
-import { requireCurrentUser } from "../../lib/current-user.js";
+import { requireRole } from "../../lib/current-user.js";
 import type { ZodError } from "zod";
+import { ForbiddenError } from "../auth/auth.errors.js";
+import {
+  ProductWithoutUnitError,
+  ProductionProfileUomIncompatibleError,
+  ProductionProfileVersionNotActiveError,
+  ProductionProfileVersionNotFoundError,
+} from "../production-profiles/production-profiles.errors.js";
 import {
   applyProductionProfileToOrder,
   cancelProductionOrder,
@@ -18,20 +26,37 @@ import {
   FormulationVersionProductMismatchError,
   InactiveProductError,
   InvalidTransitionError,
+  LegacyRouteRepairNeedsConfirmationError,
   MissingFinishedItemError,
   NoDefaultProductionProfileError,
   OrderLockedError,
   PlanValidationError,
   ProductNotFoundError,
   ProductionOrderNotFoundError,
+  ProductionRouteChangedError,
   ReleaseValidationError,
+  RouteReasonRequiredError,
+  RouteRequiredError,
+  ScheduleRemovalNeedsConfirmationError,
 } from "./production-orders.errors.js";
 import {
+  applyProductionRouteSchema,
   cancelProductionOrderSchema,
   createProductionOrderSchema,
   listProductionOrdersQuerySchema,
   updateProductionOrderSchema,
 } from "./production-orders.schemas.js";
+
+/**
+ * Quem opera a Ordem de Produção pela porta direta: Produção e Administração
+ * (PRODUCTION-ROUTE-ASSIGNMENT-01). Criar, editar, aplicar ou trocar roteiro,
+ * planejar, liberar e cancelar. Ler continua aberto a toda sessão válida.
+ *
+ * A OP que nasce do Pedido NÃO passa por aqui: o Plano de Atendimento e o
+ * saldo têm rota própria e seguem abertos ao Comercial — o Pedido gera a
+ * necessidade; como fabricar é da Produção.
+ */
+const OPERATION_ROLES = ["ADMIN", "PRODUCTION"] as const;
 
 function formatZodError(error: ZodError) {
   return error.issues.map((issue) => ({
@@ -43,6 +68,49 @@ function formatZodError(error: ZodError) {
 function mapDomainError(
   error: unknown,
 ): { status: number; body: { error: string; message: string } } | null {
+  if (error instanceof ForbiddenError) {
+    return { status: 403, body: { error: "forbidden", message: error.message } };
+  }
+  if (error instanceof RouteRequiredError) {
+    return { status: 400, body: { error: "route_required", message: error.message } };
+  }
+  if (error instanceof RouteReasonRequiredError) {
+    return { status: 400, body: { error: "reason_required", message: error.message } };
+  }
+  if (error instanceof LegacyRouteRepairNeedsConfirmationError) {
+    return { status: 409, body: { error: "legacy_repair_needs_confirmation", message: error.message } };
+  }
+  if (error instanceof ScheduleRemovalNeedsConfirmationError) {
+    return { status: 409, body: { error: "schedule_removal_needs_confirmation", message: error.message } };
+  }
+  if (error instanceof ProductionRouteChangedError) {
+    return { status: 409, body: { error: "route_changed", message: error.message } };
+  }
+  if (error instanceof ProductionProfileVersionNotFoundError) {
+    return { status: 404, body: { error: "not_found", message: error.message } };
+  }
+  if (error instanceof ProductionProfileVersionNotActiveError) {
+    return { status: 409, body: { error: "profile_version_not_active", message: error.message } };
+  }
+  if (error instanceof ProductWithoutUnitError) {
+    return { status: 400, body: { error: "product_without_unit", message: error.message } };
+  }
+  if (error instanceof ProductionProfileUomIncompatibleError) {
+    return { status: 400, body: { error: "incompatible_uom", message: error.message } };
+  }
+  /*
+   * A cópia do roteiro é uma por OP (unique). Com a linha da ordem travada a
+   * corrida não chega aqui; se chegar, é conflito — nunca 500.
+   */
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+    return {
+      status: 409,
+      body: {
+        error: "route_changed",
+        message: "Outra alteração desta ordem terminou antes. Recarregue a ordem e tente de novo.",
+      },
+    };
+  }
   if (error instanceof ProductNotOperationalError) {
     // Produto técnico de projeto não entra em operação comercial/industrial.
     return { status: 400, body: { error: "product_not_operational", message: error.message } };
@@ -126,16 +194,20 @@ export const productionOrdersRoutes: FastifyPluginAsync = async (app) => {
     return reply.send(order);
   });
 
+  /*
+   * Escrita: o perfil vem ANTES da validação do corpo — quem não opera a OP
+   * recebe 403, não uma lista de campos a corrigir.
+   */
   app.post("/production-orders", async (request, reply) => {
-    const parsed = createProductionOrderSchema.safeParse(request.body ?? {});
-    if (!parsed.success) {
-      return reply
-        .status(400)
-        .send({ error: "validation_error", issues: formatZodError(parsed.error) });
-    }
-
     try {
-      const order = await createProductionOrder(parsed.data, requireCurrentUser(request));
+      const actor = requireRole(request, ...OPERATION_ROLES);
+      const parsed = createProductionOrderSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+      const order = await createProductionOrder(parsed.data, actor);
       return reply.status(201).send(order);
     } catch (error) {
       const mapped = mapDomainError(error);
@@ -146,15 +218,15 @@ export const productionOrdersRoutes: FastifyPluginAsync = async (app) => {
 
   app.patch("/production-orders/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const parsed = updateProductionOrderSchema.safeParse(request.body ?? {});
-    if (!parsed.success) {
-      return reply
-        .status(400)
-        .send({ error: "validation_error", issues: formatZodError(parsed.error) });
-    }
-
     try {
-      const order = await updateProductionOrder(id, parsed.data, requireCurrentUser(request));
+      const actor = requireRole(request, ...OPERATION_ROLES);
+      const parsed = updateProductionOrderSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+      const order = await updateProductionOrder(id, parsed.data, actor);
       return reply.send(order);
     } catch (error) {
       const mapped = mapDomainError(error);
@@ -164,14 +236,22 @@ export const productionOrdersRoutes: FastifyPluginAsync = async (app) => {
   });
 
   /*
-   * Aplicar/atualizar o Perfil de Producao da OP — a MESMA operacao nos dois
-   * casos: substituir a copia inteira pelo padrao atual do Produto. So em
-   * DRAFT; fora dele o service recusa.
+   * Aplicar ou trocar o roteiro da OP. Corpo vazio aplica o padrão atual do
+   * Produto; com `productionProfileVersionId` aplica a versão escolhida, e
+   * `setAsProductDefault` grava também o padrão do Produto na mesma transação.
+   * Situação, motivo e confirmações são decididos no serviço.
    */
   app.post("/production-orders/:id/production-profile", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      const order = await applyProductionProfileToOrder(id, requireCurrentUser(request));
+      const actor = requireRole(request, ...OPERATION_ROLES);
+      const parsed = applyProductionRouteSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+      const order = await applyProductionProfileToOrder(id, parsed.data, actor);
       return reply.send(order);
     } catch (error) {
       const mapped = mapDomainError(error);
@@ -183,7 +263,8 @@ export const productionOrdersRoutes: FastifyPluginAsync = async (app) => {
   app.post("/production-orders/:id/plan", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      const order = await planProductionOrder(id, requireCurrentUser(request));
+      const actor = requireRole(request, ...OPERATION_ROLES);
+      const order = await planProductionOrder(id, actor);
       return reply.send(order);
     } catch (error) {
       const mapped = mapDomainError(error);
@@ -196,7 +277,7 @@ export const productionOrdersRoutes: FastifyPluginAsync = async (app) => {
     const { id } = request.params as { id: string };
     try {
       // RELEASE é ação auditada: quem liberou vem da sessão.
-      const actor = requireCurrentUser(request);
+      const actor = requireRole(request, ...OPERATION_ROLES);
       const order = await releaseProductionOrder(id, { id: actor.id, name: actor.name });
       return reply.send(order);
     } catch (error) {
@@ -208,14 +289,14 @@ export const productionOrdersRoutes: FastifyPluginAsync = async (app) => {
 
   app.post("/production-orders/:id/cancel", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const parsed = cancelProductionOrderSchema.safeParse(request.body ?? {});
-    if (!parsed.success) {
-      return reply
-        .status(400)
-        .send({ error: "validation_error", issues: formatZodError(parsed.error) });
-    }
-
     try {
+      requireRole(request, ...OPERATION_ROLES);
+      const parsed = cancelProductionOrderSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
       const order = await cancelProductionOrder(id, parsed.data.reason);
       return reply.send(order);
     } catch (error) {

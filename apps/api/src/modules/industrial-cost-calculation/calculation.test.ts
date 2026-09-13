@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { getPrisma } from "../../db/prisma.js";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { aplicarRoteiroDeTeste } from "../../test-support/fixture-route.js";
 import {
   instanteNoDiaComercialDeTeste,
   marcadorDoDiaComercialDeTeste,
@@ -390,6 +391,7 @@ async function produceOrder(
   ).json();
   fixtureProductionOrderIds.push(order.id);
 
+  await aplicarRoteiroDeTeste(order.id);
   await app.inject({ method: "POST", url: `/production-orders/${order.id}/plan` });
   const released = (
     await app.inject({ method: "POST", url: `/production-orders/${order.id}/release` })

@@ -17,8 +17,8 @@ import "../../lib/decimal.js";
  * 1. versão ativa é CONGELADA — mudar o roteiro é versão nova, que copia tudo;
  * 2. quantidade de recursos é CAPACIDADE: 2 operadores por 2 h são etapa de
  *    2 h e 4 horas-recurso, e energia não entra em etapa;
- * 3. a prévia calcula e não grava; o produto só APONTA para uma versão ativa,
- *    e ativar versão nova não move esse ponteiro sozinho.
+ * 3. a prévia calcula e não grava; o produto só APONTA para uma versão ativa
+ *    e compatível, e ativar versão nova do MESMO perfil leva o ponteiro junto.
  */
 
 type App = ReturnType<typeof buildTestApp>;
@@ -467,12 +467,20 @@ describe("Prévia — a conta para uma quantidade, sem gravar nada", () => {
 
   it("a prévia não grava nada — nem simulação, nem carimbo de atualização", async () => {
     const prisma = getPrisma();
+    /*
+     * Contagem DO PERFIL prevista, não do banco inteiro: outros arquivos da
+     * suíte criam roteiros em paralelo, e o total global media o vizinho em
+     * vez da prévia. O que a prévia poderia gravar mora neste perfil.
+     */
     const contar = () =>
       Promise.all([
-        prisma.productionProfile.count(),
-        prisma.productionProfileVersion.count(),
-        prisma.productionProfileStep.count(),
-        prisma.productionProfileStepResource.count(),
+        prisma.productionProfileVersion.count({ where: { productionProfileId: perfilId } }),
+        prisma.productionProfileStep.count({
+          where: { productionProfileVersion: { productionProfileId: perfilId } },
+        }),
+        prisma.productionProfileStepResource.count({
+          where: { productionProfileStep: { productionProfileVersion: { productionProfileId: perfilId } } },
+        }),
       ]);
     const antes = await contar();
     const perfilAntes = await prisma.productionProfile.findUniqueOrThrow({ where: { id: perfilId } });
@@ -678,6 +686,37 @@ describe("Produto → Perfil de Produção padrão", () => {
 
     const depois = (await app.inject(`/products/${alvo.id}/production-profile`)).json() as ProductProductionProfileDTO;
     expect(depois.version).toMatchObject({ id: v2.id, versionNumber: 2, status: "ACTIVE" });
+  });
+
+  it("mesma dimensão converte: roteiro em g serve para produto em kg; só VIEWER não grava", async () => {
+    const { ativa } = await perfilAtivo([etapa("Mistura")], { referenceQuantity: "1000", referenceUomCode: "g" });
+    const emKg = await produto("kg");
+
+    const definido = await definirPadrao(emKg.id, ativa.id);
+    expect(definido.statusCode).toBe(200);
+    expect((definido.json() as ProductProductionProfileDTO).version).toMatchObject({ id: ativa.id, referenceUomCode: "g" });
+
+    const semPermissao = await leitor.inject({
+      method: "PUT",
+      url: `/products/${emKg.id}/production-profile`,
+      payload: { productionProfileVersionId: null },
+    });
+    expect(semPermissao.statusCode).toBe(403);
+    expect((await leitor.inject(`/products/${emKg.id}/production-profile`)).statusCode).toBe(200);
+  });
+
+  it("a busca de roteiro escolhível traz só quem tem versão ativa, pelo servidor", async () => {
+    const nome = `Escolhivel ${proximo()}`;
+    const { perfil: comAtiva } = await perfilAtivo([etapa("Mistura")], { name: `${nome} ativo` });
+    const soRascunho = await criarPerfil({ name: `${nome} rascunho` });
+
+    const todos = (await app.inject(`/production-profiles?search=${encodeURIComponent(nome)}`)).json();
+    expect(todos.profiles.map((p: { id: string }) => p.id).sort()).toEqual([comAtiva.id, soRascunho.id].sort());
+
+    const escolhiveis = (await app.inject(`/production-profiles?search=${encodeURIComponent(nome)}&activeOnly=true`)).json();
+    expect(escolhiveis.total).toBe(1);
+    expect(escolhiveis.profiles[0].id).toBe(comAtiva.id);
+    expect(escolhiveis.profiles[0].activeVersionId).not.toBeNull();
   });
 
   it("tirar o padrão devolve o produto a \"sem perfil\"", async () => {

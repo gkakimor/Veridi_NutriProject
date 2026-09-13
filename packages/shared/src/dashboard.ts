@@ -141,6 +141,12 @@ export interface DashboardProductionStateDTO {
   withShortage: number;
   /** OPs COMPLETED cuja qualidade de custo é PARTIAL/NO_COST. */
   completedWithIncompleteCost: number;
+  /**
+   * OPs em rascunho, planejadas ou liberadas SEM roteiro de produção — a
+   * pendência que impede planejar, programar e liberar. Mesma regra do filtro
+   * `semRoteiro` da lista de OPs (`roteiroPendente`).
+   */
+  withoutRoute: number;
 }
 
 export interface DashboardPurchasingStateDTO {

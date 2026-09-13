@@ -2648,6 +2648,12 @@ options={customerOptions.map((customer) => ({
                     </div>
                   </div>
                 )}
+                {/* Informativo: o Pedido segue; definir como fabricar é da Produção. */}
+                {customerOrder.generatedProductionOrders.some((op) => op.routePending) && (
+                  <p className="field__hint" role="note">
+                    Produção pendente de roteiro.
+                  </p>
+                )}
                 <div className="table-container">
                   <table className="table table--clickable-rows">
                     <thead>
@@ -2685,6 +2691,11 @@ options={customerOptions.map((customer) => ({
                             <span className="badge badge--neutral">
                               {PRODUCTION_ORDER_STATUS_LABELS[op.status]}
                             </span>
+                            {op.routePending && (
+                              <span className="cell-sub">
+                                <span className="badge badge--warn">Sem roteiro</span>
+                              </span>
+                            )}
                           </td>
                         </tr>
                       ))}

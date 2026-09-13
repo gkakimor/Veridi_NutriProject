@@ -34,6 +34,8 @@ async function read<T>(path: string): Promise<T> {
 
 export interface ProductionProfileListParams {
   search?: string;
+  /** Só roteiros com versão ativa — os escolhíveis para Produto e OP. */
+  activeOnly?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -43,6 +45,7 @@ export function listProductionProfiles(
 ): Promise<ProductionProfileListResponse> {
   const q = new URLSearchParams();
   if (params.search) q.set("search", params.search);
+  if (params.activeOnly) q.set("activeOnly", "true");
   q.set("page", String(params.page ?? 1));
   q.set("pageSize", String(params.pageSize ?? 20));
   return read<ProductionProfileListResponse>(`/production-profiles?${q.toString()}`);
@@ -50,6 +53,13 @@ export function listProductionProfiles(
 
 export const getProductionProfile = (id: string) =>
   read<ProductionProfileDTO>(`/production-profiles/${id}`);
+
+export const getProductionProfileVersion = (id: string) =>
+  read<ProductionProfileVersionDTO>(`/production-profile-versions/${id}`);
+
+/** O roteiro padrão do produto HOJE — `version: null` quando não há. */
+export const getProductProductionProfile = (productId: string) =>
+  read<ProductProductionProfileDTO>(`/products/${productId}/production-profile`);
 
 export const createProductionProfile = (input: CreateProductionProfileInput) =>
   send<ProductionProfileDTO>("/production-profiles", "POST", input);
@@ -68,7 +78,7 @@ export const activateProductionProfileVersion = (id: string) =>
 export const createProductionProfileVersionFrom = (id: string) =>
   send<ProductionProfileVersionDTO>(`/production-profile-versions/${id}/new-version`, "POST", {});
 
-/** `null` tira o padrão: produto sem perfil continua válido. */
+/** `null` tira o padrão: produto sem roteiro continua válido. */
 export const setProductProductionProfile = (
   productId: string,
   productionProfileVersionId: string | null,

@@ -1,4 +1,5 @@
 import { abrirNavegador, WEB } from "./lib/browser.mjs";
+import { aplicarRoteiroNaOrdem } from "./lib/roteiro.mjs";
 import { obterRun } from "./lib/run-id.mjs";
 
 /**
@@ -72,7 +73,7 @@ async function lerValorDoCampoProduto(pagina) {
 }
 
 async function main() {
-  const { pagina, erros, fechar } = await abrirNavegador();
+  const { pagina, api, erros, fechar } = await abrirNavegador();
 
   try {
     console.log(`\nFIX-03 — OP com produto fora da primeira página (run ${run.runId})\n`);
@@ -156,6 +157,13 @@ async function main() {
       exige, no servidor, exatamente o que a tela dizia faltar.
     */
     console.log("\n4. planejar a OP — a ação que a mensagem falsa desaconselhava");
+    // Desde PRODUCTION-ROUTE-ASSIGNMENT-01 a ordem sem roteiro não planeja; o
+    // roteiro não é o assunto desta suíte.
+    await aplicarRoteiroNaOrdem(api, urlDaOrdem.split("/").pop(), {
+      unidade: UNIDADE_DO_PA,
+      nome: `Roteiro FIX-03 ${run.runId}`,
+    });
+    await pagina.goto(urlDaOrdem, { waitUntil: "networkidle" });
     await pagina.getByRole("button", { name: "Planejar OP" }).click();
     await pagina.getByText("Planejada", { exact: true }).first().waitFor({ timeout: 30000 });
     afirmar("ordem chegou a Planejada", true);

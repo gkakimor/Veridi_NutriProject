@@ -31,8 +31,10 @@ vi.mock("../../lib/industrial-resources-api", () => ({
     Promise.resolve({ resources: [], page: 1, pageSize: 50, total: 0 }),
 }));
 
+const papel = vi.hoisted(() => ({ atual: "ADMIN" }));
+
 vi.mock("../../app/AuthProvider", () => ({
-  useAuth: () => ({ user: { id: "u1", name: "Admin", role: "ADMIN" } }),
+  useAuth: () => ({ user: { id: "u1", name: "Usuário", role: papel.atual } }),
 }));
 
 import { ProductionBoardPage } from "./ProductionBoardPage";
@@ -105,6 +107,22 @@ const QUADRO: ProductionBoardResponse = {
       ordens: [{ productionOrderId: "op-1", productionOrderCode: "OP-000001" }],
     },
   ],
+  pendencies: [
+    {
+      tipo: "SEM_ROTEIRO",
+      productionOrderId: "op-7",
+      code: "OP-000007",
+      productCode: "PROD-7",
+      productName: "Pó sabor limão",
+      plannedQuantity: "2",
+      outputUnitCode: "kg",
+      status: "DRAFT",
+      customerOrderId: "ped-3",
+      customerOrderCode: "PED-000003",
+      customerPromiseAt: "2026-09-20T00:00:00.000Z",
+    },
+  ],
+  pendenciesTotal: 3,
 };
 
 function montar(rota = "/planejamento/quadro") {
@@ -120,6 +138,7 @@ const css = () =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  papel.atual = "ADMIN";
   getProductionBoard.mockResolvedValue(QUADRO);
 });
 
@@ -151,6 +170,35 @@ describe("Quadro de Planejamento de Produção", () => {
     const conflitos = await screen.findByRole("region", { name: "Conflitos de capacidade" });
     expect(within(conflitos).getByText(/4 em uso para capacidade 2/)).toBeInTheDocument();
     expect(within(conflitos).getByText(/OP-000001/)).toBeInTheDocument();
+  });
+
+  it("pendências de planejamento: OP sem roteiro com pedido, prazo e situação — Resolver leva ao roteiro da ordem", async () => {
+    montar();
+    const pendencias = await screen.findByRole("region", { name: "Pendências de planejamento" });
+    const linha = within(pendencias).getByText("OP-000007").closest("tr") as HTMLElement;
+    expect(within(linha).getByText("Sem roteiro")).toBeInTheDocument();
+    expect(linha.textContent).toContain("Pó sabor limão");
+    expect(linha.textContent).toContain("2 kg");
+    expect(within(linha).getByRole("link", { name: "PED-000003" })).toHaveAttribute("href", "/comercial/pedidos/ped-3");
+    expect(linha.textContent).toContain("20/09/2026");
+    expect(linha.textContent).toContain("Rascunho");
+    expect(within(linha).getByRole("link", { name: "Resolver" })).toHaveAttribute(
+      "href",
+      "/producao/ordens/op-7?foco=roteiro",
+    );
+    // Há mais do que as mostradas: o caminho para a lista inteira, já filtrada.
+    expect(within(pendencias).getByRole("link", { name: /Ver todas/ })).toHaveAttribute(
+      "href",
+      "/producao/ordens?semRoteiro=1",
+    );
+  });
+
+  it("Comercial vê as pendências, e não recebe a ação de resolver", async () => {
+    papel.atual = "COMMERCIAL";
+    montar();
+    const pendencias = await screen.findByRole("region", { name: "Pendências de planejamento" });
+    expect(within(pendencias).getByText("OP-000007")).toBeInTheDocument();
+    expect(within(pendencias).queryByRole("link", { name: "Resolver" })).toBeNull();
   });
 
   it("ordem sem programação fica numa faixa própria, com a ação de programar", async () => {

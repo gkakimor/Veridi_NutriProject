@@ -1,6 +1,6 @@
 import { formatQuantity } from "../lib/quantity";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type {
   AttentionGroupDTO,
   AttentionItemDTO,
@@ -148,10 +148,11 @@ function MovementActivityChart({ points }: { points: MovementActivityPointDTO[] 
   );
 }
 
-function StateLine({ label, value }: { label: string; value: number }) {
+function StateLine({ label, value, to }: { label: string; value: number; to?: string }) {
   return (
     <div className="dash-state__line">
-      <span>{label}</span>
+      {/* Com destino, a linha leva à lista que resolve — o número é só o começo. */}
+      {to ? <Link to={to}>{label}</Link> : <span>{label}</span>}
       <b>{value}</b>
     </div>
   );
@@ -490,6 +491,11 @@ export function DashboardPage() {
                 <StateLine label="Liberadas" value={state.production.released} />
                 <StateLine label="Em produção" value={state.production.inProduction} />
                 <StateLine label="Com falta de material" value={state.production.withShortage} />
+                <StateLine
+                  label="OPs sem roteiro"
+                  value={state.production.withoutRoute}
+                  to="/producao/ordens?semRoteiro=1"
+                />
                 <StateLine
                   label="Concluídas com custo incompleto"
                   value={state.production.completedWithIncompleteCost}

@@ -82,15 +82,60 @@ export class ReleaseValidationError extends Error {
 export { CustomerMismatchError } from "../../lib/product-customer-ownership.js";
 
 /**
- * Pediram para aplicar o Perfil de Produção numa OP cujo Produto não tem
- * perfil padrão ativo. Não é falha da ordem: produto sem perfil é situação
- * legítima, e a OP continua válida sem planejamento previsto.
+ * Pediram o roteiro padrão atual numa OP cujo Produto não tem padrão ativo. A
+ * saída é escolher um roteiro para a ordem — ou definir o padrão no Produto.
  */
 export class NoDefaultProductionProfileError extends Error {
   constructor(productCode: string) {
     super(
-      `Produto ${productCode} não tem perfil de produção padrão ativo — defina um em Planejamento → Perfis de Produção.`,
+      `O produto ${productCode} não tem roteiro de produção padrão ativo. Escolha um roteiro para esta ordem.`,
     );
     this.name = "NoDefaultProductionProfileError";
+  }
+}
+
+/** Sem roteiro a ordem existe, mas não planeja e não libera (§89). */
+export class RouteRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RouteRequiredError";
+  }
+}
+
+/** Trocar um roteiro já aplicado, ou regularizar legado, pede motivo. */
+export class RouteReasonRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RouteReasonRequiredError";
+  }
+}
+
+/** Ordem PLANNED/RELEASED sem roteiro: aplicar é regularização, e isso se confirma. */
+export class LegacyRouteRepairNeedsConfirmationError extends Error {
+  constructor(orderCode: string) {
+    super(
+      `${orderCode} já saiu do rascunho sem roteiro de produção. Confirme a regularização e informe o motivo.`,
+    );
+    this.name = "LegacyRouteRepairNeedsConfirmationError";
+  }
+}
+
+/** A ordem tem programação, e aplicar o roteiro a remove. */
+export class ScheduleRemovalNeedsConfirmationError extends Error {
+  constructor() {
+    super(
+      "Alterar o roteiro removerá a programação atual desta ordem, pois tempos e recursos podem mudar. Confirme para continuar.",
+    );
+    this.name = "ScheduleRemovalNeedsConfirmationError";
+  }
+}
+
+/** Outra pessoa mudou o roteiro desta ordem enquanto a tela estava aberta. */
+export class ProductionRouteChangedError extends Error {
+  constructor(orderCode: string) {
+    super(
+      `O roteiro de ${orderCode} mudou enquanto a tela estava aberta. Recarregue a ordem antes de aplicar.`,
+    );
+    this.name = "ProductionRouteChangedError";
   }
 }

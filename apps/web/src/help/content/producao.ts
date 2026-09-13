@@ -562,7 +562,7 @@ export const producaoTopics = {
       },
       {
         term: "Quantidade de referência",
-        text: "A quantidade a que os tempos de execução se referem — por exemplo, 60 min para 1.000 un. Precisa estar numa unidade da mesma dimensão da unidade do produto: unidade não vira quilo.",
+        text: "A quantidade a que os tempos de execução se referem — por exemplo, 60 min para 1.000 un. Precisa estar numa unidade da mesma dimensão da unidade do produto: unidade não vira quilo. Na mesma dimensão, a quantidade da ordem é convertida antes da conta — 2 kg numa referência em g são 2.000 g.",
       },
       {
         term: "Preparação",
@@ -619,15 +619,16 @@ export const producaoTopics = {
       {
         label: "Definir o padrão do produto",
         detail:
-          "Escolha os produtos que usam esta versão ativa como Roteiro de Produção padrão.",
+          "Escolha os produtos que usam esta versão ativa como Roteiro de Produção padrão — aqui ou no cadastro do Produto. As próximas ordens desses produtos já nascem com ele.",
       },
     ],
     notes: [
       "Energia não entra em etapa: ela não ocupa capacidade e continua no custo, na Estrutura de Custos.",
       "Recurso aqui é o grupo, não a pessoa nem a máquina: “Mão de obra — Produção” com quantidade 2 são dois operadores quaisquer.",
       "Ativar uma versão nova leva junto os produtos que usavam a versão anterior deste mesmo roteiro: eles passam a usar a nova. Produto sem roteiro, ou com outro roteiro, não é tocado — o sistema nunca escolhe um roteiro por você.",
-      "Quando a ordem de produção passar a usar o roteiro, ela vai receber uma cópia. Mudar o roteiro depois não muda ordem que já existe.",
-      "Ainda não há data sugerida nem conferência de capacidade: os tempos são minutos de trabalho corridos, uma etapa depois da outra. Quando cada ordem começa e termina é assunto do Planejamento, que ainda está por vir.",
+      "Cada ordem de produção guarda a própria cópia do roteiro. Alterar o roteiro padrão do Produto não altera ordens existentes, e ativar uma versão nova também não.",
+      "Uma OP precisa ter um roteiro antes de ser planejada, programada ou liberada. Na própria ordem, a Produção aplica o padrão atual ou escolhe outro roteiro; trocar um roteiro já aplicado pede motivo e só vale em rascunho.",
+      "Os tempos aqui são minutos de trabalho corridos, uma etapa depois da outra. Quando cada ordem começa e termina é assunto do Planejamento de Produção.",
       "Editar e ativar exigem permissão de Administração ou Produção. Os demais perfis de acesso leem.",
     ],
   },
@@ -658,6 +659,10 @@ export const producaoTopics = {
         term: "Sobrecarga",
         text: "Duas ou mais ordens pedindo, no mesmo momento, mais recursos do que existem. É AVISO: a programação é gravada do mesmo jeito, e a decisão de aceitar ou remarcar continua sendo de quem planeja.",
       },
+      {
+        term: "Pendências de planejamento",
+        text: "O que impede uma ordem aberta de seguir. Por ora, a ordem sem roteiro de produção: em rascunho, planejada ou liberada, ela não tem etapas nem tempos para programar. Resolver abre a ordem no bloco do roteiro.",
+      },
     ],
     flow: [
       {
@@ -683,6 +688,7 @@ export const producaoTopics = {
       },
     ],
     notes: [
+      "Uma OP precisa ter um roteiro antes de ser planejada, programada ou liberada. Sem ele a prévia de programação recusa antes de olhar o calendário.",
       "Horário fora da jornada — domingo, feriado, antes de abrir, dentro do intervalo — é recusado com o motivo e com o próximo horário disponível. O sistema nunca desloca o seu horário em silêncio.",
       "Programação gravada é histórico: mudar a jornada, o intervalo ou um feriado depois NÃO reescreve o que já foi calculado. Recalcular é definir o início de novo.",
       "Ordem já liberada para produção só se move com confirmação explícita; em produção, concluída ou cancelada, a programação vira referência e não é mais alterada aqui.",
