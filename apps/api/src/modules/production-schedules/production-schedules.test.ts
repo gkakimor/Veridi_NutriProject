@@ -9,6 +9,11 @@ import type {
 } from "@veridi/shared";
 import { instanteComercial } from "@veridi/shared";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import {
+  devolverCalendarioDeProducao,
+  guardarCalendarioDeProducao,
+  type CalendarioGuardado,
+} from "../../test-support/calendario-de-producao.js";
 import { getPrisma } from "../../db/prisma.js";
 import "../../lib/decimal.js";
 
@@ -33,7 +38,8 @@ import "../../lib/decimal.js";
  *    que já foi calculado — recalcular é uma ação explícita.
  *
  * O calendário é estado GLOBAL: este arquivo roda na faixa serial
- * (`vitest.serial.config.ts`).
+ * (`vitest.serial.config.ts`) e devolve no fim a jornada e as exceções que
+ * encontrou no banco (`test-support/calendario-de-producao.ts`).
  */
 
 type App = ReturnType<typeof buildTestApp>;
@@ -70,6 +76,7 @@ const trecho = (diaISO: string, de: number, ate: number) => ({
 });
 
 let operadorId: string;
+let calendarioDeAntes: CalendarioGuardado | undefined;
 
 const LONGO_COM_ALMOCO = {
   enabled: true,
@@ -131,6 +138,9 @@ const excluirExcecao = (id: string) =>
   app.inject({ method: "DELETE", url: `/production-calendar/exceptions/${id}` });
 
 beforeAll(async () => {
+  // Antes de qualquer escrita: a jornada abaixo regrava a do banco, e a de
+  // antes volta no afterAll — com o arquivo inteiro, uma parte dele ou uma falha.
+  calendarioDeAntes = await guardarCalendarioDeProducao(ANO);
   await app.ready();
   const prisma = getPrisma();
   for (const unit of [
@@ -164,6 +174,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Primeiro o calendário: é o estado de quem usa o banco, e não depende das
+  // fixtures abaixo. As exceções que o arquivo criou em ANO saem aqui.
+  if (calendarioDeAntes) await devolverCalendarioDeProducao(calendarioDeAntes);
   const prisma = getPrisma();
   if (fixtureOrderIds.length > 0) {
     await prisma.productionOrder.deleteMany({ where: { id: { in: fixtureOrderIds } } });
@@ -181,14 +194,6 @@ afterAll(async () => {
   if (fixtureItemIds.length > 0) {
     await prisma.item.deleteMany({ where: { id: { in: fixtureItemIds } } });
   }
-  await prisma.productionCalendarException.deleteMany({
-    where: {
-      date: {
-        gte: new Date(`${ANO}-01-01T00:00:00.000Z`),
-        lt: new Date(`${ANO + 1}-01-01T00:00:00.000Z`),
-      },
-    },
-  });
   await app.close();
 });
 
