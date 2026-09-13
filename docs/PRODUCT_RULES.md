@@ -712,7 +712,9 @@ Rules that outlived the round that produced them. The UI side of them lives in
 - **The customer-facing quotation never shows cost, margin, markup,
   commission, CALC or PREC.** That provenance is internal, delivered only to
   commercial and administration roles; the R-20 audit report carries the same
-  restriction and prints marked as an internal document.
+  restriction and prints marked as an internal document. The restriction holds
+  in **every output format** — screen, JSON, CSV and the PDF built from the CSV:
+  an export or print path never widens who can read the data.
 - A new quotation version copies the commercial values but never the pricing
   link: each proposal confirms its own economic basis.
 - Legacy quotations stay `MANUAL` and never receive retroactive provenance

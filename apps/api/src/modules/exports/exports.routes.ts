@@ -1,5 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
+import { requireRole } from "../../lib/current-user.js";
+import { ForbiddenError } from "../auth/auth.errors.js";
 import type { CsvExportRoute } from "./csv-export.js";
 import { listCsvExports } from "./list-exports.js";
 import { reportCsvExports } from "./report-exports.js";
@@ -22,6 +24,19 @@ export const exportsRoutes: FastifyPluginAsync = async (app) => {
 
   for (const definition of exports) {
     app.get(definition.path, async (request, reply) => {
+      // Perfil antes de tudo, como na rota JSON: formato de arquivo não é
+      // permissão (R20-EXPORT-AUTHORIZATION-01).
+      if (definition.roles) {
+        try {
+          requireRole(request, ...definition.roles);
+        } catch (error) {
+          if (error instanceof ForbiddenError) {
+            return reply.status(403).send({ error: "forbidden", message: error.message });
+          }
+          throw error;
+        }
+      }
+
       const parsed = definition.schema.safeParse(request.query);
       if (!parsed.success) {
         return reply

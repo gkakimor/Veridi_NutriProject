@@ -15,7 +15,7 @@ import type {
   PurchaseOrderReportRowDTO,
   ReceiptReportRowDTO,
 } from "@veridi/shared";
-import { COA_STATUS_LABELS, SUPPLY_RESPONSIBILITY_LABELS } from "@veridi/shared";
+import { COA_STATUS_LABELS, PRICING_PROVENANCE_ROLES, SUPPLY_RESPONSIBILITY_LABELS } from "@veridi/shared";
 import {
   COST_SOURCE_LABELS,
   CUSTOMER_ORDER_BILLING_STATUS_LABELS,
@@ -575,6 +575,8 @@ const r20 = defineCsvExport({
   path: "/reports/commercial/quote-pricing/export.csv",
   slug: "r20_orcamento_precificacao",
   schema: quotePricingAuditQuerySchema,
+  // Custo e margem por proposta: os perfis da rota JSON, e só eles.
+  roles: PRICING_PROVENANCE_ROLES,
   fetch: async (query: QuotePricingAuditQuery) =>
     (await getQuotePricingAuditReport(query, ALL_ROWS)).rows,
   columns: [

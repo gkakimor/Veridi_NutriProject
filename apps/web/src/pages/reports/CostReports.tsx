@@ -5,9 +5,11 @@ import {
   COST_PER_1000_LABEL,
   INDUSTRIAL_COST_QUALITY_LABELS,
   PRICE_MODE_LABELS,
+  PRICING_PROVENANCE_ROLES,
   QUOTE_PRICE_SOURCE_LABELS,
   QUOTE_STATUS_LABELS,
 } from "@veridi/shared";
+import { useOptionalAuth } from "../../app/AuthProvider";
 import { ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
 import {
@@ -237,8 +239,40 @@ export function PricingByProductReportPage() {
  * Auditoria comercial: qual proposta nasceu de precificação estruturada e
  * qual foi exceção. Contém custo e margem — documento interno, restrito a
  * quem negocia.
+ *
+ * O perfil é o da proveniência econômica (`PRICING_PROVENANCE_ROLES`). A API
+ * recusa em JSON, CSV e PDF; para os demais perfis a tela nem consulta nem
+ * oferece CSV e PDF que seriam recusados (R20-EXPORT-AUTHORIZATION-01).
  */
 export function QuotePricingAuditReportPage() {
+  const user = useOptionalAuth()?.user ?? null;
+  if (!user || !PRICING_PROVENANCE_ROLES.includes(user.role)) return <QuotePricingAuditForbidden />;
+  return <QuotePricingAuditReport />;
+}
+
+function QuotePricingAuditForbidden() {
+  const navigate = useNavigate();
+  return (
+    <>
+      <div className="page__header">
+        <div>
+          <h1 className="page__title">R-20 · Orçamento × Precificação</h1>
+          <p className="page__subtitle">Documento interno: mostra custo e margem por proposta.</p>
+        </div>
+        <div className="table__actions">
+          <button type="button" className="btn btn--ghost btn--sm" onClick={() => navigate("/relatorios")}>
+            ← Relatórios
+          </button>
+        </div>
+      </div>
+      <p className="form-alert" role="alert">
+        Seu perfil não permite ver este relatório.
+      </p>
+    </>
+  );
+}
+
+function QuotePricingAuditReport() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [priceSource, setPriceSource] = useState("");

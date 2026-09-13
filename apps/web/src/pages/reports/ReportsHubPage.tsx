@@ -1,5 +1,8 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import type { UserRole } from "@veridi/shared";
+import { PRICING_PROVENANCE_ROLES } from "@veridi/shared";
+import { useOptionalAuth } from "../../app/AuthProvider";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
 import "./reports.css";
@@ -15,6 +18,8 @@ interface ReportLink {
    * endpoint continuam intactos.
    */
   aliases?: string[];
+  /** Perfis que a API atende — a mesma lista dela; ausente é relatório aberto. */
+  roles?: readonly UserRole[];
 }
 
 /**
@@ -190,6 +195,7 @@ const GROUPS: { title: string; reports: ReportLink[] }[] = [
         label: "Orçamento × Precificação",
         hint: "Origem do preço de cada proposta, com cálculo de custo e margem. Uso interno.",
         path: "/relatorios/comercial/orcamento-precificacao",
+        roles: PRICING_PROVENANCE_ROLES,
       },
     ],
   },
@@ -223,14 +229,18 @@ function matches(report: ReportLink, words: string[]): boolean {
 export function ReportsHubPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const role = useOptionalAuth()?.user?.role ?? null;
 
   const groups = useMemo(() => {
     const words = normalize(search.trim()).split(/\s+/).filter(Boolean);
     return GROUPS.map((group) => ({
       ...group,
-      reports: group.reports.filter((report) => matches(report, words)),
+      reports: group.reports.filter(
+        // Relatório restrito some do catálogo de quem a API recusaria.
+        (report) => (!report.roles || (role !== null && report.roles.includes(role))) && matches(report, words),
+      ),
     })).filter((group) => group.reports.length > 0);
-  }, [search]);
+  }, [search, role]);
 
   return (
     <>

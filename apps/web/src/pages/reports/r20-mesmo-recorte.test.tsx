@@ -17,9 +17,10 @@ vi.mock("../../lib/reports-api", () => ({
   getPricingByProductReport: vi.fn(),
   getQuotePricingAuditReport: vi.fn(),
 }));
+// R-20 é de quem negocia (R20-EXPORT-AUTHORIZATION-01): a tela precisa de um perfil que o vê.
 vi.mock("../../app/AuthProvider", () => ({
-  useAuth: () => ({ user: { id: "u-1", role: "ADMIN" } }),
-  useOptionalAuth: () => null,
+  useAuth: () => ({ user: { id: "u-1", role: "COMMERCIAL" } }),
+  useOptionalAuth: () => ({ user: { id: "u-1", name: "Ana", role: "COMMERCIAL" } }),
 }));
 
 import { getQuotePricingAuditReport } from "../../lib/reports-api";
