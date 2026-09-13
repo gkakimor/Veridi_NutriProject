@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { BillingPeriodRowDTO } from "@veridi/shared";
 
@@ -18,6 +18,11 @@ import type { BillingPeriodRowDTO } from "@veridi/shared";
  * Página 1 no filtro novo e uma consulta por gesto são de
  * REPORTS-PAGE-RESET-ON-PERIOD-01 (`relatorios-pagina-ao-filtrar.test.tsx`);
  * aqui só não podem voltar.
+ *
+ * Busca e datas digitadas só viram consulta quando a digitação para
+ * (REPORTS-SEARCH-UX-01, `relatorios-busca-digitada.test.tsx`): antes da pausa
+ * a tela ainda é a do filtro aplicado. O "durante" daqui começa quando o filtro
+ * novo é aplicado.
  */
 
 vi.mock("../../lib/reports-api", () => ({ getBillingPeriodReport: vi.fn() }));
@@ -30,6 +35,7 @@ vi.mock("../../app/AuthProvider", () => ({
 import { getBillingPeriodReport } from "../../lib/reports-api";
 import { listCustomers } from "../../lib/customers-api";
 import { BillingPeriodReportPage } from "./BillingReports";
+import { PAUSA_DA_DIGITACAO_MS } from "./useFiltrosDigitados";
 
 type Filtros = Record<string, unknown>;
 type Resposta = Awaited<ReturnType<typeof getBillingPeriodReport>>;
@@ -75,13 +81,21 @@ async function responder(indice: number, montar: (filters: Filtros) => Resposta)
   await act(async () => pendente.responder(montar(pendente.filters)));
 }
 
+/** Digita no campo e deixa a pausa da digitação passar: o filtro é aplicado. */
+function aplicar(campo: HTMLElement, valor: string) {
+  fireEvent.change(campo, { target: { value: valor } });
+  act(() => {
+    vi.advanceTimersByTime(PAUSA_DA_DIGITACAO_MS);
+  });
+}
+
 async function abrir() {
   const tela = render(
     <MemoryRouter>
       <BillingPeriodReportPage />
     </MemoryRouter>,
   );
-  await waitFor(() => expect(pendentes).toHaveLength(1));
+  expect(pendentes).toHaveLength(1);
   return {
     resumo: () => tela.container.querySelector<HTMLElement>(".report-summary"),
     tabela: () => tela.container.querySelector<HTMLElement>(".table-container"),
@@ -94,6 +108,8 @@ const paginacao = () => screen.queryByText(/^Página \d+ de \d+ ·/);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Sem `waitFor`/`findBy` aqui: com o relógio falso, a pausa é medida.
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   pendentes = [];
   vi.mocked(getBillingPeriodReport).mockImplementation(
     (filters) =>
@@ -102,6 +118,10 @@ beforeEach(() => {
       }),
   );
   vi.mocked(listCustomers).mockResolvedValue({ customers: [], page: 1, pageSize: 20, total: 0 } as never);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("filtro novo: nada do recorte anterior até a resposta nova", () => {
@@ -119,7 +139,7 @@ describe("filtro novo: nada do recorte anterior até a resposta nova", () => {
     expect(faturamentoNaTela(26)).not.toBeNull();
     expect(within(resumo()!).getByText("R$ 3.000,00")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("De"), { target: { value: "2026-09-01" } });
+    aplicar(screen.getByLabelText("De"), "2026-09-01");
 
     // Uma consulta, do recorte novo, já na página 1.
     expect(pendentes).toHaveLength(3);
@@ -149,7 +169,7 @@ describe("filtro novo: nada do recorte anterior até a resposta nova", () => {
     await responder(0, (filters) => recorte(filters, 2, 1));
     expect(faturamentoNaTela(1)).not.toBeNull();
 
-    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "FAT-9" } });
+    aplicar(screen.getByRole("searchbox"), "FAT-9");
     expect(pendentes).toHaveLength(2);
     expect(pendentes[1]!.filters).toMatchObject({ search: "FAT-9", page: 1 });
     expect(faturamentoNaTela(1)).toBeNull();
@@ -166,8 +186,8 @@ describe("filtro novo: nada do recorte anterior até a resposta nova", () => {
     await abrir();
     await responder(0, (filters) => recorte(filters, 2, 1));
 
-    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "B" } });
-    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "BC" } });
+    aplicar(screen.getByRole("searchbox"), "B");
+    aplicar(screen.getByRole("searchbox"), "BC");
     expect(pendentes.map((pendente) => pendente.filters["search"])).toEqual(["", "B", "BC"]);
 
     await responder(1, (filters) => recorte(filters, 1, 501));
@@ -184,16 +204,18 @@ describe("filtro novo: nada do recorte anterior até a resposta nova", () => {
     const { resumo } = await abrir();
     await responder(0, (filters) => recorte(filters, 2, 1));
 
-    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "X" } });
+    aplicar(screen.getByRole("searchbox"), "X");
     await act(async () => pendentes[1]!.recusar(new Error("Serviço indisponível.")));
 
     expect(screen.getByRole("alert")).toHaveTextContent("Não foi possível carregar o relatório: Serviço indisponível.");
     expect(faturamentoNaTela(1)).toBeNull();
     expect(resumo()).toBeNull();
     expect(screen.queryByText("Carregando…")).toBeNull();
+    // Falha não é conclusão: nada de "nenhum faturamento" (REPORTS-SEARCH-UX-01).
+    expect(screen.queryByText(VAZIO)).toBeNull();
 
     // A recusa era da busca "X": outra busca carrega sem o alerta dela.
-    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "XY" } });
+    aplicar(screen.getByRole("searchbox"), "XY");
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getByText("Carregando…")).toBeInTheDocument();
     await responder(2, (filters) => recorte(filters, 1, 301));

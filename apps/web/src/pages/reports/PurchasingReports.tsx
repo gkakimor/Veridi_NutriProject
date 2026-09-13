@@ -12,6 +12,7 @@ import { fornecedorFilterSource } from "../../lib/filter-sources";
 import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
+import { useFiltrosDigitados } from "./useFiltrosDigitados";
 import { ariaDoPeriodoRecusado, diaDoRelatorio } from "./report-period";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { EntityLink } from "../../components/EntityLink";
@@ -39,13 +40,12 @@ function SupplierFilter({ value, onChange }: { value: string; onChange: (value: 
 
 /** R-08 — Ordens de Compra. */
 export function PurchaseOrdersReportPage() {
-  const [search, setSearch] = useState("");
   const [supplierId, setSupplierId] = useState("");
   const [status, setStatus] = useState("");
   const [origin, setOrigin] = useState("");
-  const [from, setFrom] = useState(diaDoRelatorio(-89));
-  const [to, setTo] = useState(diaDoRelatorio(0));
   const [page, setPage] = useState(1);
+  const digitados = useFiltrosDigitados({ search: "", from: diaDoRelatorio(-89), to: diaDoRelatorio(0) }, setPage);
+  const { search, from, to } = digitados.aplicados;
 
   const filters = useMemo(
     () => ({
@@ -74,30 +74,13 @@ export function PurchaseOrdersReportPage() {
       loading={loading}
       error={error}
       periodRefusal={periodoRecusado}
+      filtersPending={digitados.pendente}
       filters={
         <>
           <label htmlFor="po-from">De</label>
-          <input
-            id="po-from"
-            type="date"
-            value={from}
-            {...ariaDoPeriodoRecusado(periodoRecusado)}
-            onChange={(event) => {
-              setPage(1);
-              setFrom(event.target.value);
-            }}
-          />
+          <input id="po-from" type="date" {...digitados.campo("from")} {...ariaDoPeriodoRecusado(periodoRecusado)} />
           <label htmlFor="po-to">até</label>
-          <input
-            id="po-to"
-            type="date"
-            value={to}
-            {...ariaDoPeriodoRecusado(periodoRecusado)}
-            onChange={(event) => {
-              setPage(1);
-              setTo(event.target.value);
-            }}
-          />
+          <input id="po-to" type="date" {...digitados.campo("to")} {...ariaDoPeriodoRecusado(periodoRecusado)} />
           <SupplierFilter
             value={supplierId}
             onChange={(value) => {
@@ -133,15 +116,7 @@ export function PurchaseOrdersReportPage() {
             <option value="CUSTOMER_ORDER">Pedido do cliente</option>
           </select>
           <div className="toolbar__search">
-            <input
-              type="search"
-              placeholder="Buscar por OC ou fornecedor…"
-              value={search}
-              onChange={(event) => {
-                setPage(1);
-                setSearch(event.target.value);
-              }}
-            />
+            <input type="search" placeholder="Buscar por OC ou fornecedor…" {...digitados.campo("search")} />
           </div>
         </>
       }
@@ -196,11 +171,10 @@ export function PurchaseOrdersReportPage() {
 
 /** R-09 — Recebimentos. */
 export function ReceiptsReportPage() {
-  const [search, setSearch] = useState("");
   const [supplierId, setSupplierId] = useState("");
-  const [from, setFrom] = useState(diaDoRelatorio(-29));
-  const [to, setTo] = useState(diaDoRelatorio(0));
   const [page, setPage] = useState(1);
+  const digitados = useFiltrosDigitados({ search: "", from: diaDoRelatorio(-29), to: diaDoRelatorio(0) }, setPage);
+  const { search, from, to } = digitados.aplicados;
 
   const filters = useMemo(
     () => ({
@@ -227,30 +201,13 @@ export function ReceiptsReportPage() {
       loading={loading}
       error={error}
       periodRefusal={periodoRecusado}
+      filtersPending={digitados.pendente}
       filters={
         <>
           <label htmlFor="rec-from">De</label>
-          <input
-            id="rec-from"
-            type="date"
-            value={from}
-            {...ariaDoPeriodoRecusado(periodoRecusado)}
-            onChange={(event) => {
-              setPage(1);
-              setFrom(event.target.value);
-            }}
-          />
+          <input id="rec-from" type="date" {...digitados.campo("from")} {...ariaDoPeriodoRecusado(periodoRecusado)} />
           <label htmlFor="rec-to">até</label>
-          <input
-            id="rec-to"
-            type="date"
-            value={to}
-            {...ariaDoPeriodoRecusado(periodoRecusado)}
-            onChange={(event) => {
-              setPage(1);
-              setTo(event.target.value);
-            }}
-          />
+          <input id="rec-to" type="date" {...digitados.campo("to")} {...ariaDoPeriodoRecusado(periodoRecusado)} />
           <SupplierFilter
             value={supplierId}
             onChange={(value) => {
@@ -259,15 +216,7 @@ export function ReceiptsReportPage() {
             }}
           />
           <div className="toolbar__search">
-            <input
-              type="search"
-              placeholder="Buscar por recebimento, item ou lote…"
-              value={search}
-              onChange={(event) => {
-                setPage(1);
-                setSearch(event.target.value);
-              }}
-            />
+            <input type="search" placeholder="Buscar por recebimento, item ou lote…" {...digitados.campo("search")} />
           </div>
         </>
       }
@@ -322,9 +271,10 @@ export function ReceiptsReportPage() {
 
 /** R-10 — Em Compra. */
 export function OnOrderReportPage() {
-  const [search, setSearch] = useState("");
   const [supplierId, setSupplierId] = useState("");
   const [page, setPage] = useState(1);
+  const digitados = useFiltrosDigitados({ search: "" }, setPage);
+  const { search } = digitados.aplicados;
 
   const filters = useMemo(
     () => ({ search, supplierId, page, pageSize: PAGE_SIZE }),
@@ -342,6 +292,7 @@ export function OnOrderReportPage() {
       subtitle="Quantidade ainda em aberto em ordens confirmadas. Rascunhos não contam como compra em curso."
       loading={loading}
       error={error}
+      filtersPending={digitados.pendente}
       filters={
         <>
           <SupplierFilter
@@ -352,15 +303,7 @@ export function OnOrderReportPage() {
             }}
           />
           <div className="toolbar__search">
-            <input
-              type="search"
-              placeholder="Buscar por OC ou fornecedor…"
-              value={search}
-              onChange={(event) => {
-                setPage(1);
-                setSearch(event.target.value);
-              }}
-            />
+            <input type="search" placeholder="Buscar por OC ou fornecedor…" {...digitados.campo("search")} />
           </div>
         </>
       }

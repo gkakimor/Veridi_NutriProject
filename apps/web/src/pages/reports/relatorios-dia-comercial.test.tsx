@@ -201,6 +201,8 @@ describe("a mesma seleção é o mesmo dia — tela, CSV e PDF", () => {
           abrirPeriodo?.();
           fireEvent.change(screen.getByLabelText("De"), { target: { value: "2026-09-12" } });
           fireEvent.change(screen.getByLabelText("até"), { target: { value: "2026-09-12" } });
+          // Enter aplica sem esperar a pausa da digitação (REPORTS-SEARCH-UX-01).
+          fireEvent.keyDown(screen.getByLabelText("até"), { key: "Enter" });
           await waitFor(() =>
             expect(ultimaChamada(consulta)).toMatchObject({ from: "2026-09-12", to: "2026-09-12" }),
           );

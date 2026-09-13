@@ -12,6 +12,7 @@ import {
 import { useOptionalAuth } from "../../app/AuthProvider";
 import { ReportForbidden, ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
+import { useFiltrosDigitados } from "./useFiltrosDigitados";
 import {
   getIndustrialCostByProductReport,
   getPricingByProductReport,
@@ -33,8 +34,9 @@ const PAGE_SIZE = 25;
  */
 export function IndustrialCostByProductReportPage() {
   const navigate = useNavigate();
-  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const digitados = useFiltrosDigitados({ search: "" }, setPage);
+  const { search } = digitados.aplicados;
 
   const filters = useMemo(() => ({ search, page, pageSize: PAGE_SIZE }), [search, page]);
   const { data, loading, error } = useReport(getIndustrialCostByProductReport, filters);
@@ -49,17 +51,10 @@ export function IndustrialCostByProductReportPage() {
       subtitle="Último cálculo salvo por produto. Cálculo parcial mostra subtotal conhecido, nunca um total."
       loading={loading}
       error={error}
+      filtersPending={digitados.pendente}
       filters={
         <div className="toolbar__search">
-          <input
-            type="search"
-            placeholder="Buscar por código ou nome do produto…"
-            value={search}
-            onChange={(event) => {
-              setPage(1);
-              setSearch(event.target.value);
-            }}
-          />
+          <input type="search" placeholder="Buscar por código ou nome do produto…" {...digitados.campo("search")} />
         </div>
       }
     >
@@ -157,8 +152,9 @@ export function PricingByProductReportPage() {
 
 function PricingByProductReport() {
   const navigate = useNavigate();
-  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const digitados = useFiltrosDigitados({ search: "" }, setPage);
+  const { search } = digitados.aplicados;
 
   const filters = useMemo(() => ({ search, page, pageSize: PAGE_SIZE }), [search, page]);
   const { data, loading, error } = useReport(getPricingByProductReport, filters);
@@ -173,17 +169,10 @@ function PricingByProductReport() {
       subtitle="Faixas de preço ativas com margem de contribuição — não é lucro líquido."
       loading={loading}
       error={error}
+      filtersPending={digitados.pendente}
       filters={
         <div className="toolbar__search">
-          <input
-            type="search"
-            placeholder="Buscar por produto, PREC ou CALC…"
-            value={search}
-            onChange={(event) => {
-              setPage(1);
-              setSearch(event.target.value);
-            }}
-          />
+          <input type="search" placeholder="Buscar por produto, PREC ou CALC…" {...digitados.campo("search")} />
         </div>
       }
     >
@@ -292,9 +281,10 @@ function QuotePricingAuditForbidden() {
 
 function QuotePricingAuditReport() {
   const navigate = useNavigate();
-  const [search, setSearch] = useState("");
   const [priceSource, setPriceSource] = useState("");
   const [page, setPage] = useState(1);
+  const digitados = useFiltrosDigitados({ search: "" }, setPage);
+  const { search } = digitados.aplicados;
 
   const filters = useMemo(
     () => ({ search, priceSource, page, pageSize: PAGE_SIZE }),
@@ -312,6 +302,7 @@ function QuotePricingAuditReport() {
       subtitle="Documento interno: mostra custo e margem por proposta. Não é o orçamento do cliente."
       loading={loading}
       error={error}
+      filtersPending={digitados.pendente}
       filters={
         <>
           <label className="sr-only" htmlFor="r20-source">
@@ -330,15 +321,7 @@ function QuotePricingAuditReport() {
             <option value="MANUAL">Preço manual</option>
           </select>
           <div className="toolbar__search">
-            <input
-              type="search"
-              placeholder="Buscar por ORC, PREC, CALC ou projeto…"
-              value={search}
-              onChange={(event) => {
-                setPage(1);
-                setSearch(event.target.value);
-              }}
-            />
+            <input type="search" placeholder="Buscar por ORC, PREC, CALC ou projeto…" {...digitados.campo("search")} />
           </div>
         </>
       }

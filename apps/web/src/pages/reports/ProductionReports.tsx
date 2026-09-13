@@ -21,6 +21,7 @@ import { ordemDeProducaoFilterSource } from "../../lib/filter-sources";
 import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
+import { useFiltrosDigitados } from "./useFiltrosDigitados";
 import { ariaDoPeriodoRecusado, diaDoRelatorio } from "./report-period";
 import { formatBRL } from "../../lib/currency";
 import { EntityLink } from "../../components/EntityLink";
@@ -30,10 +31,11 @@ const PAGE_SIZE = 25;
 
 /** R-04 — Necessidade / Falta para OP. */
 export function RequirementsReportPage() {
-  const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [onlyShortage, setOnlyShortage] = useState(false);
   const [page, setPage] = useState(1);
+  const digitados = useFiltrosDigitados({ search: "" }, setPage);
+  const { search } = digitados.aplicados;
 
   const filters = useMemo(
     () => ({ search, status, onlyShortage, page, pageSize: PAGE_SIZE }),
@@ -51,18 +53,11 @@ export function RequirementsReportPage() {
       subtitle="Material necessário por Ordem de Produção aberta. A reserva da própria OP não gera falta, e 'Em compra' nunca reduz a falta."
       loading={loading}
       error={error}
+      filtersPending={digitados.pendente}
       filters={
         <>
           <div className="toolbar__search">
-            <input
-              type="search"
-              placeholder="Buscar por OP ou produto…"
-              value={search}
-              onChange={(event) => {
-                setPage(1);
-                setSearch(event.target.value);
-              }}
-            />
+            <input type="search" placeholder="Buscar por OP ou produto…" {...digitados.campo("search")} />
           </div>
           <select
             aria-label="Status da OP"
@@ -128,11 +123,10 @@ export function RequirementsReportPage() {
 /** R-05 — Planejado x Realizado. */
 export function PlannedActualReportPage() {
   const [status, setStatus] = useState("COMPLETED");
-  const [search, setSearch] = useState("");
   const [includeCost, setIncludeCost] = useState(false);
-  const [from, setFrom] = useState(diaDoRelatorio(-29));
-  const [to, setTo] = useState(diaDoRelatorio(0));
   const [page, setPage] = useState(1);
+  const digitados = useFiltrosDigitados({ search: "", from: diaDoRelatorio(-29), to: diaDoRelatorio(0) }, setPage);
+  const { search, from, to } = digitados.aplicados;
 
   const filters = useMemo(
     () => ({
@@ -164,30 +158,13 @@ export function PlannedActualReportPage() {
       loading={loading}
       error={error}
       periodRefusal={periodoRecusado}
+      filtersPending={digitados.pendente}
       filters={
         <>
           <label htmlFor="pa-from">De</label>
-          <input
-            id="pa-from"
-            type="date"
-            value={from}
-            {...ariaDoPeriodoRecusado(periodoRecusado)}
-            onChange={(event) => {
-              setPage(1);
-              setFrom(event.target.value);
-            }}
-          />
+          <input id="pa-from" type="date" {...digitados.campo("from")} {...ariaDoPeriodoRecusado(periodoRecusado)} />
           <label htmlFor="pa-to">até</label>
-          <input
-            id="pa-to"
-            type="date"
-            value={to}
-            {...ariaDoPeriodoRecusado(periodoRecusado)}
-            onChange={(event) => {
-              setPage(1);
-              setTo(event.target.value);
-            }}
-          />
+          <input id="pa-to" type="date" {...digitados.campo("to")} {...ariaDoPeriodoRecusado(periodoRecusado)} />
           <select
             aria-label="Status da OP"
             value={status}
@@ -205,15 +182,7 @@ export function PlannedActualReportPage() {
             ))}
           </select>
           <div className="toolbar__search">
-            <input
-              type="search"
-              placeholder="Buscar por OP ou produto…"
-              value={search}
-              onChange={(event) => {
-                setPage(1);
-                setSearch(event.target.value);
-              }}
-            />
+            <input type="search" placeholder="Buscar por OP ou produto…" {...digitados.campo("search")} />
           </div>
           <label className="field--checkbox">
             <input
@@ -382,10 +351,9 @@ export function ProductionTraceabilityReportPage() {
 
 /** R-07 — Consumo por período. */
 export function ConsumptionReportPage() {
-  const [search, setSearch] = useState("");
-  const [from, setFrom] = useState(diaDoRelatorio(-29));
-  const [to, setTo] = useState(diaDoRelatorio(0));
   const [page, setPage] = useState(1);
+  const digitados = useFiltrosDigitados({ search: "", from: diaDoRelatorio(-29), to: diaDoRelatorio(0) }, setPage);
+  const { search, from, to } = digitados.aplicados;
 
   const filters = useMemo(
     () => ({
@@ -411,40 +379,15 @@ export function ConsumptionReportPage() {
       loading={loading}
       error={error}
       periodRefusal={periodoRecusado}
+      filtersPending={digitados.pendente}
       filters={
         <>
           <label htmlFor="cons-from">De</label>
-          <input
-            id="cons-from"
-            type="date"
-            value={from}
-            {...ariaDoPeriodoRecusado(periodoRecusado)}
-            onChange={(event) => {
-              setPage(1);
-              setFrom(event.target.value);
-            }}
-          />
+          <input id="cons-from" type="date" {...digitados.campo("from")} {...ariaDoPeriodoRecusado(periodoRecusado)} />
           <label htmlFor="cons-to">até</label>
-          <input
-            id="cons-to"
-            type="date"
-            value={to}
-            {...ariaDoPeriodoRecusado(periodoRecusado)}
-            onChange={(event) => {
-              setPage(1);
-              setTo(event.target.value);
-            }}
-          />
+          <input id="cons-to" type="date" {...digitados.campo("to")} {...ariaDoPeriodoRecusado(periodoRecusado)} />
           <div className="toolbar__search">
-            <input
-              type="search"
-              placeholder="Buscar por item, lote ou OP…"
-              value={search}
-              onChange={(event) => {
-                setPage(1);
-                setSearch(event.target.value);
-              }}
-            />
+            <input type="search" placeholder="Buscar por item, lote ou OP…" {...digitados.campo("search")} />
           </div>
         </>
       }
