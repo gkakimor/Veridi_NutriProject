@@ -399,6 +399,14 @@ Com freio de clique duplo compartilhado (`saving` de várias ações), o nome da
 ação em curso decide o rótulo: "Salvando…" nunca aparece no botão de salvar
 enquanto o que está no ar é ativar, confirmar ou cancelar.
 
+Tela sem guarda de alterações não salvas (Faturamento, Expedição) não ganha
+uma só para a frase: o botão de gravar fica clicável, e a frase sai na próxima
+edição ou na próxima ação — nunca fica afirmando "salvo" sobre um formulário
+que já mudou. Ação que encerra o documento (emitir, confirmar, cancelar) não
+ganha frase quando o selo e a tela somente leitura já dizem o resultado, e
+apaga a frase de uma gravação anterior. Frase de uma linha de tabela mora na
+célula de ação daquela linha, embaixo do botão, para não alargar a coluna fixa.
+
 ### Caixa com rótulo (`.checkbox`)
 
 `<label class="checkbox"><input type="checkbox"> Texto</label>` — a caixa

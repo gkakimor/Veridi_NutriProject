@@ -406,3 +406,114 @@ describe("OP gravada — guarda de alterações não salvas", () => {
     expect(await screen.findByRole("heading", { name: "Posição de Estoque" })).toBeInTheDocument();
   });
 });
+
+/**
+ * SAVE-FEEDBACK-REMAINING-01: o botão de gravar da OP acorda com a pendência
+ * da guarda — a mesma que a faixa "Alterações não salvas" mostra — e dorme
+ * quando não há o que gravar. A frase de sucesso só com a resposta.
+ */
+describe("OP — salvar só com alteração pendente", () => {
+  const salvarRascunho = () => screen.getByRole("button", { name: "Salvar rascunho" });
+  const salvarObservacoes = () => screen.getByRole("button", { name: "Salvar observações" });
+  const observacoes = () => document.getElementById("op-notes") as HTMLTextAreaElement;
+
+  it("nova e não tocada: nada a gravar", async () => {
+    await abrirNova();
+
+    expect(salvarRascunho()).toBeDisabled();
+    fireEvent.change(quantidade(), { target: { value: "3000" } });
+    expect(salvarRascunho()).toBeEnabled();
+  });
+
+  it("gravada: sem alteração desabilitado, alterar habilita, salvar desabilita de novo", async () => {
+    vi.mocked(updateProductionOrder).mockResolvedValue(ordem({ numberOfParts: 3 }));
+    await abrirGravada();
+
+    expect(salvarRascunho()).toBeDisabled();
+    expect(screen.queryByRole("status")).toBeNull();
+
+    fireEvent.change(partes(), { target: { value: "3" } });
+    expect(salvarRascunho()).toBeEnabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Alterações não salvas");
+
+    fireEvent.click(salvarRascunho());
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Ordem de produção atualizada.");
+    expect(salvarRascunho()).toBeDisabled();
+    expect(updateProductionOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it("desfazer a alteração devolve o botão ao descanso", async () => {
+    await abrirGravada();
+
+    fireEvent.change(rotulo(), { target: { value: "Rótulo especial" } });
+    expect(salvarRascunho()).toBeEnabled();
+    fireEvent.change(rotulo(), { target: { value: "" } });
+
+    expect(salvarRascunho()).toBeDisabled();
+  });
+
+  it("clique duplo grava uma vez só", async () => {
+    let responder!: (dto: ProductionOrderDTO) => void;
+    vi.mocked(updateProductionOrder).mockReturnValue(
+      new Promise((resolve) => {
+        responder = resolve;
+      }),
+    );
+    await abrirGravada();
+
+    fireEvent.change(partes(), { target: { value: "3" } });
+    fireEvent.click(salvarRascunho());
+    fireEvent.click(screen.getByRole("button", { name: "Salvando…" }));
+
+    expect(screen.getByRole("button", { name: "Salvando…" })).toBeDisabled();
+    expect(updateProductionOrder).toHaveBeenCalledTimes(1);
+
+    responder(ordem({ numberOfParts: 3 }));
+    expect(await screen.findByText("Ordem de produção atualizada.")).toBeInTheDocument();
+    expect(updateProductionOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it("recusa vira alerta e nunca sucesso — nem depois de desfazer a edição", async () => {
+    /*
+     * Com a pendência na tela a frase fica escondida; desfazer a edição tira a
+     * pendência. Uma confirmação posta antes do `await` apareceria aqui.
+     */
+    vi.mocked(updateProductionOrder).mockRejectedValue(new Error("Falha de rede ao gravar a OP"));
+    await abrirGravada();
+
+    fireEvent.change(partes(), { target: { value: "3" } });
+    fireEvent.click(salvarRascunho());
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Falha de rede ao gravar a OP");
+    // A edição fica, e a pendência também.
+    expect(partes()).toHaveValue(3);
+    expect(screen.getByRole("status")).toHaveTextContent("Alterações não salvas");
+    expect(salvarRascunho()).toBeEnabled();
+
+    fireEvent.change(partes(), { target: { value: "1" } });
+
+    expect(screen.queryByText("Ordem de produção atualizada.")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("OP planejada: Salvar observações segue a mesma pendência", async () => {
+    vi.mocked(updateProductionOrder).mockResolvedValue(
+      ordem({ status: "PLANNED", notes: "Conferir embalagem" }),
+    );
+    // Planejada não tem campo de quantidade: a abertura espera o próprio botão.
+    vi.mocked(getProductionOrder).mockResolvedValue(ordem({ status: "PLANNED" }));
+    montar(["/producao/ordens/op-1"]);
+    await screen.findByRole("button", { name: "Salvar observações" });
+
+    expect(salvarObservacoes()).toBeDisabled();
+    fireEvent.change(observacoes(), { target: { value: "Conferir embalagem" } });
+    expect(salvarObservacoes()).toBeEnabled();
+
+    fireEvent.click(salvarObservacoes());
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Ordem de produção atualizada.");
+    expect(salvarObservacoes()).toBeDisabled();
+    expect(vi.mocked(updateProductionOrder).mock.calls[0]![1]).toEqual({ notes: "Conferir embalagem" });
+  });
+});

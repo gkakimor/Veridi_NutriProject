@@ -238,7 +238,17 @@ export function PurchaseOrderPage() {
   const [activeSuppliers, setActiveSuppliers] = useState<SupplierOption[]>([]);
   const [activeItems, setActiveItems] = useState<ItemOption[]>([]);
 
-  const [saving, setSaving] = useState(false);
+  /*
+   * A ação em curso pelo nome: "Salvando…" aparecia nos botões de salvar também
+   * enquanto a OC era confirmada ou cancelada. O freio de clique duplo continua
+   * um só (`saving`); o rótulo, não.
+   */
+  const [acaoEmCurso, setAcaoEmCurso] = useState<
+    "rascunho" | "previsao" | "confirmar" | "cancelar" | null
+  >(null);
+  const saving = acaoEmCurso !== null;
+  /** O que a última gravação confirmou — uma frase, substituída pela próxima. */
+  const [feito, setFeito] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -627,19 +637,21 @@ export function PurchaseOrderPage() {
    * OC cancelada não edita nada; fora do rascunho ainda se altera previsão de
    * entrega e observações, e isso também se perde ao sair.
    */
+  const alteracaoPendente = isForecastEditable && baseline.current !== assinaturaAtual;
   const { liberarGuarda } = useUnsavedChangesGuard({
-    isDirty: isForecastEditable && baseline.current !== assinaturaAtual,
+    isDirty: alteracaoPendente,
     substantivo: "ordem de compra",
     genero: "a",
   });
 
   async function handleSaveDraft() {
+    setFeito(null);
     if (!supplierId) {
       setError("Selecione um fornecedor.");
       return;
     }
 
-    setSaving(true);
+    setAcaoEmCurso("rascunho");
     setError(null);
     setFieldErrors({});
 
@@ -687,6 +699,8 @@ export function PurchaseOrderPage() {
         const updated = await updatePurchaseOrder(id, payload);
         setPurchaseOrder(updated);
         syncFormFromServer(updated);
+        // Só com a resposta do servidor: validação ou rede nunca viram "salvo".
+        setFeito("Rascunho salvo.");
       }
     } catch (err) {
       if (err instanceof ApiValidationError) {
@@ -700,14 +714,15 @@ export function PurchaseOrderPage() {
         setError(apiErrorMessage(err, "Falha ao salvar ordem de compra"));
       }
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
   async function handleSaveForecastOnly() {
     if (!id) return;
-    setSaving(true);
+    setAcaoEmCurso("previsao");
     setError(null);
+    setFeito(null);
     try {
       const updated = await updatePurchaseOrder(id, {
         expectedDeliveryDate: toIsoOrEmpty(expectedDeliveryDate),
@@ -715,18 +730,20 @@ export function PurchaseOrderPage() {
       });
       setPurchaseOrder(updated);
       syncFormFromServer(updated);
+      setFeito("Previsão e observações salvas.");
     } catch (err) {
       setError(apiErrorMessage(err, "Falha ao salvar"));
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
   async function handleConfirm() {
     if (!id) return;
     setConfirmDialogOpen(false);
-    setSaving(true);
+    setAcaoEmCurso("confirmar");
     setError(null);
+    setFeito(null);
     try {
       const updated = await confirmPurchaseOrder(id);
       setPurchaseOrder(updated);
@@ -734,14 +751,15 @@ export function PurchaseOrderPage() {
     } catch (err) {
       setError(apiErrorMessage(err, "Falha ao confirmar pedido"));
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
   async function handleCancelConfirm() {
     if (!id) return;
-    setSaving(true);
+    setAcaoEmCurso("cancelar");
     setError(null);
+    setFeito(null);
     try {
       const updated = await cancelPurchaseOrder(id, { reason: cancelReason.trim() });
       setCancelDialogOpen(false);
@@ -751,7 +769,7 @@ export function PurchaseOrderPage() {
     } catch (err) {
       setError(apiErrorMessage(err, "Falha ao cancelar ordem de compra"));
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
@@ -1194,9 +1212,22 @@ options={supplierOptions.map((supplier) => ({
         )}
 
         <div className="doc-actions__primary">
+          {/* Pendência antes de confirmação, e a pendência é a MESMA da guarda
+              de saída — nunca uma conta paralela. */}
+          {alteracaoPendente ? (
+            <span className="form-status form-status--dirty" role="status">
+              Alterações não salvas
+            </span>
+          ) : (
+            feito && (
+              <span className="form-status" role="status">
+                {feito}
+              </span>
+            )
+          )}
           {isDraftEditable && (
             <button type="button" className="btn btn--secondary" disabled={saving} onClick={handleSaveDraft}>
-              {saving ? "Salvando…" : "Salvar rascunho"}
+              {acaoEmCurso === "rascunho" ? "Salvando…" : "Salvar rascunho"}
             </button>
           )}
           {!isDraftEditable && isForecastEditable && !isNew && (
@@ -1206,7 +1237,7 @@ options={supplierOptions.map((supplier) => ({
               disabled={saving}
               onClick={handleSaveForecastOnly}
             >
-              {saving ? "Salvando…" : "Salvar previsão e observações"}
+              {acaoEmCurso === "previsao" ? "Salvando…" : "Salvar previsão e observações"}
             </button>
           )}
           {isConfirmable && (
@@ -1216,7 +1247,7 @@ options={supplierOptions.map((supplier) => ({
               disabled={saving}
               onClick={() => setConfirmDialogOpen(true)}
             >
-              Confirmar OC
+              {acaoEmCurso === "confirmar" ? "Confirmando…" : "Confirmar OC"}
             </button>
           )}
           {isReceivable && (
@@ -1275,7 +1306,7 @@ options={supplierOptions.map((supplier) => ({
                 disabled={cancelReason.trim().length < 3 || saving}
                 onClick={handleCancelConfirm}
               >
-                Cancelar OC
+                {acaoEmCurso === "cancelar" ? "Cancelando…" : "Cancelar OC"}
               </button>
             </div>
           </ModalDialog>

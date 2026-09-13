@@ -2250,11 +2250,13 @@ export function ProductionOrderPage() {
               </span>
             )
           )}
+          {/* Sem alteração pendente não há o que gravar: o botão só acorda com
+              a pendência da guarda — a mesma que a faixa ao lado mostra. */}
           {isDraft && canOperate && (
             <button
               type="button"
               className="btn btn--secondary"
-              disabled={saving || planning || releasing}
+              disabled={saving || planning || releasing || !alteracaoPendente}
               onClick={() => void handleSaveDraft()}
             >
               {acaoEmCurso === "rascunho" ? "Salvando…" : "Salvar rascunho"}
@@ -2264,7 +2266,7 @@ export function ProductionOrderPage() {
             <button
               type="button"
               className="btn btn--secondary"
-              disabled={saving || planning || releasing}
+              disabled={saving || planning || releasing || !alteracaoPendente}
               onClick={handleSaveNotesOnly}
             >
               {acaoEmCurso === "observacoes" ? "Salvando…" : "Salvar observações"}

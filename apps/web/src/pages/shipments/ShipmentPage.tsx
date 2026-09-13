@@ -469,7 +469,19 @@ export function ShipmentPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  /*
+   * A ação em curso pelo nome: "Salvando…" aparecia no botão de salvar também
+   * enquanto a expedição era confirmada ou cancelada. O freio de clique duplo
+   * continua um só (`saving`); o rótulo, não.
+   */
+  const [acaoEmCurso, setAcaoEmCurso] = useState<"separacao" | "confirmar" | "cancelar" | null>(null);
+  const saving = acaoEmCurso !== null;
+  /*
+   * O que a última gravação confirmou. A tela não tem pendência calculada, então
+   * a frase sai na próxima edição ou na próxima ação — nunca fica afirmando
+   * "salva" sobre uma separação que já mudou.
+   */
+  const [feito, setFeito] = useState<string | null>(null);
 
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState("");
@@ -538,26 +550,30 @@ export function ShipmentPage() {
 
   async function handleSave() {
     if (!id || !shipment) return;
-    setSaving(true);
+    setAcaoEmCurso("separacao");
     setError(null);
+    setFeito(null);
     try {
       const updated = await updateShipment(id, {
         notes: notes.trim(),
         lines: linhasParaEnvio(),
       });
       syncFromServer(updated);
+      // Só com a resposta do servidor: validação ou rede nunca viram "salva".
+      setFeito("Separação salva.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao salvar expedição");
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
   async function handleConfirm() {
     if (!id) return;
     setConfirmDialogOpen(false);
-    setSaving(true);
+    setAcaoEmCurso("confirmar");
     setError(null);
+    setFeito(null);
     try {
       // Confirma o que está na tela antes de efetivar a saída física.
       if (shipment) {
@@ -571,7 +587,7 @@ export function ShipmentPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao confirmar expedição");
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
@@ -603,6 +619,7 @@ export function ShipmentPage() {
     });
     setVerifyingLine(reservationLineId);
     setError(null);
+    setFeito(null);
     try {
       const saved = await updateShipment(id, {
         notes: notes.trim(),
@@ -639,8 +656,9 @@ export function ShipmentPage() {
 
   async function handleCancel() {
     if (!id) return;
-    setSaving(true);
+    setAcaoEmCurso("cancelar");
     setError(null);
+    setFeito(null);
     try {
       const cancelled = await cancelShipment(id, { reason: cancelReason.trim() });
       setCancelDialogOpen(false);
@@ -649,7 +667,7 @@ export function ShipmentPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao cancelar expedição");
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
@@ -869,9 +887,10 @@ export function ShipmentPage() {
               isDraft={isDraft}
               shipmentStatus={shipment.status}
               quantities={quantities}
-              onQuantityChange={(reservationLineId, value) =>
-                setQuantities((prev) => ({ ...prev, [reservationLineId]: value }))
-              }
+              onQuantityChange={(reservationLineId, value) => {
+                setQuantities((prev) => ({ ...prev, [reservationLineId]: value }));
+                setFeito(null);
+              }}
               lotInputs={lotInputs}
               onLotInputChange={(reservationLineId, value) =>
                 setLotInputs((prev) => ({ ...prev, [reservationLineId]: value }))
@@ -899,7 +918,10 @@ export function ShipmentPage() {
               rows={3}
               disabled={!isDraft}
               value={notes}
-              onChange={(event) => setNotes(event.target.value)}
+              onChange={(event) => {
+                setNotes(event.target.value);
+                setFeito(null);
+              }}
             />
           </div>
         </FormSection>
@@ -1000,10 +1022,15 @@ export function ShipmentPage() {
         )}
 
         <div className="doc-actions__primary">
+          {feito && (
+            <span className="form-status" role="status">
+              {feito}
+            </span>
+          )}
           {isDraft && (
             <>
               <button type="button" className="btn btn--secondary" disabled={saving} onClick={handleSave}>
-                {saving ? "Salvando…" : "Salvar separação"}
+                {acaoEmCurso === "separacao" ? "Salvando…" : "Salvar separação"}
               </button>
               <button
                 type="button"
@@ -1031,7 +1058,7 @@ export function ShipmentPage() {
                             : "Existem lotes ainda não conferidos nesta expedição."
                 }
               >
-                Confirmar expedição
+                {acaoEmCurso === "confirmar" ? "Confirmando…" : "Confirmar expedição"}
               </button>
             </>
           )}
@@ -1081,7 +1108,7 @@ export function ShipmentPage() {
                 disabled={cancelReason.trim().length < 3 || saving}
                 onClick={handleCancel}
               >
-                Cancelar expedição
+                {acaoEmCurso === "cancelar" ? "Cancelando…" : "Cancelar expedição"}
               </button>
             </div>
           </ModalDialog>

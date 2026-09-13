@@ -402,11 +402,12 @@ describe("OP em rascunho com programação — mudar a quantidade", () => {
 });
 
 describe("OP em rascunho — quando NÃO se pergunta", () => {
-  it("sem pendência na tela, \"Salvando…\" enquanto espera e a frase só com a resposta", async () => {
+  it("\"Salvando…\" enquanto espera, a frase só com a resposta, e salvar volta a dormir", async () => {
     /*
-     * Salvar sem alteração pendente: aqui "Alterações não salvas" não ocupa o
-     * lugar da frase, então uma confirmação adiantada para antes do `await`
-     * apareceria — é o caso que prova "sucesso só depois da API".
+     * Desde SAVE-FEEDBACK-REMAINING-01 não se salva sem pendência — e com
+     * pendência "Alterações não salvas" ocupa o lugar da frase, escondendo uma
+     * confirmação adiantada. Desfazer a edição DURANTE a requisição tira a
+     * pendência da tela: uma frase posta antes do `await` apareceria ali.
      */
     await abrir(AGENDA);
     let responder!: (dto: ProductionOrderDTO) => void;
@@ -416,22 +417,30 @@ describe("OP em rascunho — quando NÃO se pergunta", () => {
       }),
     );
 
+    fireEvent.change(observacoes(), { target: { value: "Conferir embalagem" } });
     salvar();
 
     expect(await screen.findByRole("button", { name: "Salvando…" })).toBeDisabled();
+    fireEvent.change(observacoes(), { target: { value: "" } });
     expect(screen.queryByRole("status")).toBeNull();
 
-    responder(ordem({ updatedAt: "2026-09-12T13:00:00.000Z" }));
+    responder(ordem({ notes: "Conferir embalagem", updatedAt: "2026-09-12T13:00:00.000Z" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent(ATUALIZADA);
-    expect(screen.getByRole("button", { name: "Salvar rascunho" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Salvar rascunho" })).toBeDisabled();
   });
 
-  it("a mesma quantidade escrita de outro jeito não pergunta e não pede remoção", async () => {
+  it("a mesma quantidade escrita de outro jeito não é pendência, e com outra alteração não pede remoção", async () => {
     await abrir(AGENDA);
-    updateProductionOrderMock.mockResolvedValue(ordem({ updatedAt: "2026-09-12T13:00:00.000Z" }));
+    updateProductionOrderMock.mockResolvedValue(
+      ordem({ notes: "Conferir embalagem", updatedAt: "2026-09-12T13:00:00.000Z" }),
+    );
 
     fireEvent.change(quantidade(), { target: { value: "1000,000" } });
+    // O mesmo número: nada a gravar.
+    expect(screen.getByRole("button", { name: "Salvar rascunho" })).toBeDisabled();
+
+    fireEvent.change(observacoes(), { target: { value: "Conferir embalagem" } });
     salvar();
 
     await waitFor(() => expect(updateProductionOrderMock).toHaveBeenCalledTimes(1));

@@ -1883,9 +1883,9 @@ vazando, fonte igual à do desktop, console limpo. Rascunho de Modelo e de
 Estrutura de Custos simulado por interceptação no Playwright — o banco local
 não tem nenhum, e o smoke não grava.
 
-Achado sem correção: Faturamento, Ordem de Produção, Ordem de Compra,
-Expedição e Recebimento dizem "Salvando…" e não confirmam o salvamento — fora
-das telas desta onda.
+Achado sem correção na onda: Faturamento, Ordem de Produção, Ordem de Compra,
+Expedição e Recebimento diziam "Salvando…" e não confirmavam o salvamento —
+fechado em SAVE-FEEDBACK-REMAINING-01.
 
 **Próximo:** BULK-SELECTION-FOUNDATION-01.
 
@@ -2520,6 +2520,48 @@ lê o relógio uma vez; schema, serviço e consultas não leem). Atenção sem `
 contador com relógio próprio e disponibilidade sem `agora` derrubam o teste. De
 passagem: `lib/dia-comercial-em-uso.test.ts` ainda mandava instante ISO, recusado desde
 DASHBOARD-BUSINESS-DATE-01 — falhava no `origin/main`; agora manda dias.
+
+## Gravou? Todas as telas respondem (SAVE-FEEDBACK-REMAINING-01, 2026-09-13)
+
+Fecha o achado do UX-ACTIONS-FEEDBACK-WAVE-02: telas que diziam "Salvando…" e
+voltavam ao normal sem confirmar. Só estado de interface — status, lifecycle,
+permissão, cálculo, API e migration intocados.
+
+**Faturamento, OC e Expedição.** O `saving` único virou o nome da ação em curso,
+como no Pedido; o freio de clique duplo continua um só. "Salvando…" só no botão de
+salvar; "Emitindo…", "Confirmando…" e "Cancelando…" no botão da própria ação.
+Frases só com a resposta: "Rascunho salvo." (Faturamento, OC), "Previsão e
+observações salvas." (OC fora do rascunho) e "Separação salva.". Emitir, confirmar
+e cancelar não ganham frase — selo e tela somente leitura já dizem — e apagam a
+anterior. Na OC a faixa lê a pendência da guarda antes da frase. Faturamento e
+Expedição não têm guarda, e não ganharam uma: a frase sai na próxima edição
+(preço, referência, quantidade, notas) ou ação (alterar preço acordado, conferir
+lote). Recusa: `role="alert"` com a mensagem da API, como já era.
+
+**Recebimento.** "Salvar custo" já tinha estado próprio; ganhou "Custo salvo." na
+célula de ação da linha que gravou, embaixo do botão (a coluna fixa não alarga),
+até alguma linha voltar a ser editada. Receber OC e Material do Cliente terminam
+navegando ao recebimento: intocados.
+
+**OP.** Feedback já vinha de OP-SCHEDULE-STALE-ON-QUANTITY-01. "Salvar rascunho" e
+"Salvar observações" agora só habilitam com a pendência da guarda. Os dois testes
+que salvavam sem alteração foram reescritos: um prova "sucesso só com a resposta"
+desfazendo a edição durante a requisição; o outro, que a mesma quantidade escrita
+de outro jeito não é pendência.
+
+**Validação.** Web: 33 testes novos, 2 reescritos; 11 mutações (frase antes do
+`await` nas cinco telas, rótulo pelo `saving`, frase que ignora a pendência, edição
+e conferência que não limpam, OP sem a trava) — as 11 derrubam teste. Gate: pastas
+das cinco telas, guarda, UX operacional, 390px e as páginas que as renderizam (44
+arquivos, 462 testes) e typecheck. Smoke Playwright 1440 e 390: OC recebida, OP
+liberada e custo de recebimento gravando de verdade, com retrato e restauro por
+Prisma conferidos; Faturamento e Expedição em rascunho simulados por interceptação
+(nada gravado); 400 controlado na OC com a mensagem na tela e a pendência mantida;
+sem overflow, coluna fixa do Recebimento com a mesma largura; console limpo fora a
+linha do Chromium do 400 controlado.
+
+Achados no BACKLOG, P3: SAVE-ENABLED-NO-DIRTY-01, BILLING-SHIPMENT-UNSAVED-GUARD-01
+e SAVE-THEN-COMMIT-STALE-01.
 
 ## Próxima prioridade
 
