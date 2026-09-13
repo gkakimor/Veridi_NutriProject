@@ -21,6 +21,7 @@ export default defineConfig(({ mode }) => ({
       "node_modules/**",
       "dist/**",
       "src/modules/dashboard/dashboard.test.ts",
+      "src/modules/dashboard/dashboard-retrato-unico.test.ts",
       "src/modules/production-orders/gmp-execution.test.ts",
       "src/modules/controlled-documents/controlled-documents.test.ts",
       "src/modules/production-calendar/production-calendar.test.ts",

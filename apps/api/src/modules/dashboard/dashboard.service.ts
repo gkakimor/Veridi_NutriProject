@@ -30,6 +30,14 @@ const RECENT_MOVEMENTS_LIMIT = 15;
 const ATTENTION_LIMIT = 20;
 
 /**
+ * Espera por uma conexao livre para abrir o retrato — a mesma do pool do
+ * Prisma (`pool_timeout`), para o Painel nao falhar antes do que falhava.
+ */
+const DASHBOARD_SNAPSHOT_MAX_WAIT_MS = 10_000;
+/** Duracao maxima do retrato; o padrao do Prisma (5 s) nao cobre base cheia. */
+const DASHBOARD_SNAPSHOT_TIMEOUT_MS = 30_000;
+
+/**
  * Metricas do PERIODO — sempre contagem de DOCUMENTOS/eventos, nunca soma
  * de quantidades que podem estar em UOMs incompativeis (kg + un + L). Cada
  * metrica usa a data operacional correta do proprio documento, nunca
@@ -400,20 +408,38 @@ function groupAttention(items: AttentionItemDTO[]): AttentionGroupDTO[] {
  * do dia comercial, o contador saia de 23:59:59.999 e a lista de 00:00:00.001,
  * e o mesmo lote era "perto do vencimento" num e "vencido" no outro. Tudo que
  * depende de "agora" neste retrato recebe este valor.
+ *
+ * O BANCO tambem e um so (DASHBOARD-SNAPSHOT-CONSISTENCY-01). Cada consulta
+ * saia do pool por conta propria e enxergava o instante em que rodou: um lote
+ * desbloqueado no meio da montagem contava no contador e ja nao aparecia na
+ * lista de atencao. Tudo agora roda numa transacao `RepeatableRead` — no
+ * PostgreSQL, todas as leituras dela veem o retrato tirado na primeira. So
+ * leitura: nenhuma trava alem da de qualquer SELECT, e nenhuma falha de
+ * serializacao possivel.
+ *
+ * Transacao e UMA conexao: o `Promise.all` la dentro vira fila. E o preco da
+ * consistencia — os tempos de `DASHBOARD_SNAPSHOT_TIMEOUT_MS` tem folga para ele.
  */
 export async function getDashboard(query: DashboardQuery, now: Date): Promise<DashboardDTO> {
-  const prisma = getPrisma();
   const { from, to } = query;
 
   const [period, currentState, movementSummary, recentMovements, movementActivity, attention] =
-    await Promise.all([
-      buildPeriod(prisma, from, to),
-      buildCurrentState(prisma, now),
-      buildMovementSummary(prisma, from, to),
-      buildRecentMovements(prisma, from, to),
-      buildMovementActivity(prisma, from, to),
-      buildAttentionList(prisma, now),
-    ]);
+    await getPrisma().$transaction(
+      (prisma) =>
+        Promise.all([
+          buildPeriod(prisma, from, to),
+          buildCurrentState(prisma, now),
+          buildMovementSummary(prisma, from, to),
+          buildRecentMovements(prisma, from, to),
+          buildMovementActivity(prisma, from, to),
+          buildAttentionList(prisma, now),
+        ]),
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
+        maxWait: DASHBOARD_SNAPSHOT_MAX_WAIT_MS,
+        timeout: DASHBOARD_SNAPSHOT_TIMEOUT_MS,
+      },
+    );
 
   return {
     period,

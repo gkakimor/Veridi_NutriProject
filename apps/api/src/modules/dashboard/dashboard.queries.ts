@@ -133,6 +133,10 @@ export async function getProductionOrdersWithShortage(
  * onde a gestao precisa melhorar o dado de custo. Nunca persiste
  * `quality`; usa o servico central de custo, restrito a OPs COMPLETED que
  * realmente tiveram consumo (as demais nunca teriam custo mesmo).
+ *
+ * O custo e lido pelo MESMO `prisma` da lista — no Painel, a transacao do
+ * retrato. Pelo cliente global, a OP listada no retrato tinha o custo lido
+ * depois dele (DASHBOARD-SNAPSHOT-CONSISTENCY-01).
  */
 export async function getProductionOrdersWithIncompleteCost(
   prisma: PrismaOrTx,
@@ -147,7 +151,7 @@ export async function getProductionOrdersWithIncompleteCost(
 
   const results = await Promise.all(
     orders.map(async (order) => {
-      const cost = await findProductionOrderMaterialCost(order.id);
+      const cost = await findProductionOrderMaterialCost(order.id, prisma);
       // OP que sumiu entre as duas leituras nao e custo pendente de ninguem.
       if (!cost) return null;
       return cost.quality === "PARTIAL" || cost.quality === "NO_COST" ? order : null;
