@@ -89,6 +89,19 @@ export class ReceiptItemNotFoundError extends Error {
   }
 }
 
+/**
+ * Item INATIVO não recebe material novo do cliente
+ * (CUSTOMER-MATERIAL-INACTIVE-GATE-01). A tela só oferece item ativo, mas quem
+ * decide é o servidor, no estado de agora: a pessoa pode ter escolhido o item
+ * antes de alguém inativá-lo.
+ */
+export class InactiveCustomerSuppliedItemError extends Error {
+  constructor(code: string) {
+    super(`O item ${code} está inativo e não pode receber novo material.`);
+    this.name = "InactiveCustomerSuppliedItemError";
+  }
+}
+
 export class InvalidCustomerSuppliedItemTypeError extends Error {
   constructor(code: string) {
     super(

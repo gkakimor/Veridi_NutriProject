@@ -22,6 +22,7 @@ import {
   CustomerNotFoundError,
   EmptyReceiptError,
   InactiveCustomerError,
+  InactiveCustomerSuppliedItemError,
   InvalidCustomerSuppliedItemTypeError,
   ReceiptItemNotFoundError,
   InvalidExpiryDateError,
@@ -391,6 +392,8 @@ export async function createCustomerSuppliedReceipt(
   for (const lineInput of input.lines) {
     const item = await prisma.item.findUnique({ where: { id: lineInput.itemId } });
     if (!item) throw new ReceiptItemNotFoundError(lineInput.itemId);
+    // Estado de AGORA, não o da tela que carregou o item: inativo não recebe.
+    if (!item.active) throw new InactiveCustomerSuppliedItemError(item.code);
     // O mesmo conjunto que o seletor da tela oferece (`?customerSupplied=true`).
     if (!tipoAceitaMaterialDoCliente(item.type)) {
       throw new InvalidCustomerSuppliedItemTypeError(item.code);
@@ -415,6 +418,20 @@ export async function createCustomerSuppliedReceipt(
   const code = await nextSequenceCode(prisma, RECEIPT_CODE_SEQUENCE, RECEIPT_CODE_PREFIX);
 
   const receiptId = await prisma.$transaction(async (tx) => {
+    /*
+     * Reconfirma os itens SOB TRAVA, antes de qualquer escrita — como a OC no
+     * recebimento de compra. `FOR SHARE` espera uma inativação em curso e lê o
+     * resultado dela: sem isto, o item inativado entre a checagem acima e esta
+     * transação ainda ganharia recebimento, lote e movimento.
+     */
+    const travados = await tx.$queryRaw<{ code: string; active: boolean }[]>`
+      SELECT code, active FROM items
+      WHERE id IN (${Prisma.join(prepared.map((line) => line.item.id))})
+      FOR SHARE
+    `;
+    const inativo = travados.find((item) => !item.active);
+    if (inativo) throw new InactiveCustomerSuppliedItemError(inativo.code);
+
     const receipt = await tx.receipt.create({
       data: {
         code,

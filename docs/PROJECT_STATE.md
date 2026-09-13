@@ -2265,7 +2265,8 @@ mesmo lote do fabricante e cada dono só com o seu, rede só `customerSupplied` 
 massa apagada.
 
 Achados, sem correção: `POST /receipts/customer-supplied` NÃO recusa item inativo
-(só a tela o esconde, antes e agora); em 1440 a tabela de linhas ainda rola 28 px
+(só a tela o esconde, antes e agora — corrigido em CUSTOMER-MATERIAL-INACTIVE-GATE-01,
+abaixo); em 1440 a tabela de linhas ainda rola 28 px
 dentro do contêiner (antes 484 px, com o `<select>` de 696 px); seguem com
 `pageSize: 1000` em seletor, fora deste escopo, `CustomerMaterialsPage`,
 `ProjectsPage`, `ProductsPage`, `BillingsPage`, `SupplierItemsPage`,
@@ -2343,6 +2344,34 @@ Smoke com banco e portas isolados e precificação ativa criada pela API: COMMER
 vê, abre com margem e markup, baixa CSV e gera PDF; PRODUCTION leva 403 em JSON, CSV
 e CSV do PDF, sem R-19 no catálogo, URL direta e impressão bloqueadas sem requisição
 — 13/13, console limpo.
+
+## Material do cliente exige Item ativo (CUSTOMER-MATERIAL-INACTIVE-GATE-01, 2026-09-13)
+
+A tela do Receber material do cliente só oferece item ativo, mas
+`POST /receipts/customer-supplied` aceitava item inativo chamado direto. Decisão de
+PO: item inativo não recebe material novo, e o servidor é a autoridade. A checagem
+acontece na chamada (estado de agora, antes de qualquer escrita) e de novo dentro
+da transação, com `SELECT … FOR SHARE` nos itens — o mesmo "antes e sob trava" da
+OC no recebimento de compra —, então uma inativação em curso é esperada e
+respeitada. Recusa 400 `item_inactive`, "O item … está inativo e não pode receber
+novo material."; nada é escrito (recebimento, linha, lote, movimento). Cliente
+ativo, tipos por `TIPOS_DE_MATERIAL_DO_CLIENTE`, controle de lote, dono no lote e o
+rascunho restaurado ficam como estavam. A tela já mostrava a mensagem da API; em
+390px ela ficava fora da vista depois de confirmar, e agora é trazida para a vista
+(o padrão da Ficha de Pesagem). Sem migration.
+
+**Validação.** API 8 testes (`modules/receiving/material-do-cliente-item-inativo.test.ts`:
+ativo recebe com lote do cliente; chamada direta com inativo; o mesmo item antes e
+depois de inativar; embalagem inativa; linha inativa derruba o recebimento inteiro;
+produto acabado e item sem lote como antes; corrida seletor → inativação → POST; e
+inativação em curso durante o POST, com a transação parada na trava; mutação: sem a
+checagem sob trava cai só a corrida em curso, sem nenhuma checagem caem 6). Web 2
+(seletor sem inativo; recusa pelo cliente de API real com mensagem, foco, formulário
+preservado e sem sucesso; mutação: engolir o erro derruba 1). Gate API 129, web 82,
+typecheck. Smoke com banco e portas isolados: ativo recebe; inativado depois de
+escolhido é recusado em 390px com o alerta à vista, sem estouro e sem linha, lote ou
+movimento; inativo fora da busca — 10/10 (o único registro de console é o próprio
+navegador anotando a resposta 400 esperada).
 
 ## Próxima prioridade
 
