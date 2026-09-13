@@ -8,12 +8,11 @@ import type {
 } from "@veridi/shared";
 import { calcularTotaisOrdemCompra } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { diasCivisAte, venceuEm } from "../../lib/business-day.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta, slicePage } from "../../lib/pagination.js";
 import { periodoDeDataCivil, periodoDeInstante } from "./report-period.js";
 import type { OnOrderQuery, PurchaseOrdersQuery, ReceiptsQuery } from "./reports.schemas.js";
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Status em que a OC ainda tem saldo a receber. */
 const OPEN_STATUSES = ["ORDERED", "PARTIALLY_RECEIVED"] as const;
@@ -264,19 +263,24 @@ export async function getOnOrderReport(
 /**
  * R-11 — OCs atrasadas. Criterio oficial: ORDERED/PARTIALLY_RECEIVED +
  * previsao vencida + saldo em aberto. Mais atrasada primeiro.
+ *
+ * A previsao e DATA CIVIL: vencida quando o dia previsto ja acabou na Veridi,
+ * e os dias de atraso contam dias civis — 1 no dia seguinte ao previsto. Com o
+ * relogio, a OC prevista para 12/09 entrava aqui as 21h de 11/09 com "0 dias".
+ * Mesma regra do contador e da lista de atencao do Painel.
  */
 export async function getLatePurchaseOrdersReport(
   query: OnOrderQuery,
   pagination: Pagination = query,
+  now: Date = new Date(),
 ): Promise<ReportPageDTO<LatePurchaseOrderRowDTO>> {
-  const now = new Date();
   const open = await getOpenPurchaseLines(query);
 
   const rows = open
-    .filter((row) => row.expectedDeliveryDate !== null && new Date(row.expectedDeliveryDate) < now)
+    .filter((row) => row.expectedDeliveryDate !== null && venceuEm(new Date(row.expectedDeliveryDate), now))
     .map((row) => ({
       ...row,
-      daysLate: Math.floor((now.getTime() - new Date(row.expectedDeliveryDate!).getTime()) / DAY_MS),
+      daysLate: -diasCivisAte(new Date(row.expectedDeliveryDate!), now),
     }))
     .sort((a, b) => b.daysLate - a.daysLate);
 

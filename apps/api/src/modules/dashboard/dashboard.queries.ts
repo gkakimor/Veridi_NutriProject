@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import type { DashboardPurchasingStateDTO } from "@veridi/shared";
+import { venceuEm } from "../../lib/business-day.js";
 import { getAvailableByItems, getOnHandByLots, isLotAvailableForUse } from "../../lib/inventory-ledger.js";
 import { findProductionOrderMaterialCost } from "../costs/costs.service.js";
 
@@ -188,8 +189,13 @@ export async function getOpenPurchaseOrderState(
     if (open.lessThanOrEqualTo(0)) continue;
 
     itemsOnOrder.add(line.itemId);
-    // Atrasada = previsao vencida E ainda com quantidade aberta.
-    if (line.purchaseOrder.expectedDeliveryDate && line.purchaseOrder.expectedDeliveryDate < now) {
+    /*
+     * Atrasada = o DIA previsto ja passou E ainda ha quantidade aberta. A
+     * previsao e data civil (meia-noite UTC como marcador do dia): comparada
+     * com o relogio, a OC prevista para 12/09 ficava atrasada desde as 21h de
+     * 11/09 em Sao Paulo. Mesma regra da lista de atencao e do R-11.
+     */
+    if (venceuEm(line.purchaseOrder.expectedDeliveryDate, now)) {
       lateOrderIds.add(line.purchaseOrder.id);
     }
   }
