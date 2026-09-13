@@ -5551,45 +5551,74 @@ PLANNING-CALENDAR-01, 2026-09-12. **Absorve OPS-CALENDAR-01** (BACKLOG B · #9)
 por decisão do Product Ownership: é a mesma necessidade, e dois itens criariam
 duas tabelas para um conceito só.
 
-**O calendário de produção responde uma pergunta, e só ela: a fábrica opera
-neste dia, e por quantos minutos?** Não agenda Ordem de Produção, não guarda
+**O calendário de produção responde uma pergunta, e só ela: em que janelas a
+fábrica trabalha neste dia?** Não agenda Ordem de Produção, não guarda
 capacidade de recurso, não tem turno e não desenha quadro — isso é
 PLANNING-CAPACITY-BOARD-01.
+
+**Jornada POR DIA DA SEMANA desde PLANNING-CALENDAR-WEEKLY-SCHEDULE-01
+(2026-09-12)**, no lugar da jornada única com sete booleanos e da exceção
+sempre fechada do primeiro corte:
+
+- **Sete linhas, uma por dia** (`ProductionCalendarWeekday`, unique
+  calendário + dia), e é esta a fonte canônica. Cada linha tem `enabled`,
+  início e fim, e intervalo opcional (os dois nulos, ou os dois preenchidos
+  dentro da jornada e menor que ela). **Dia que não opera não tem horário
+  nenhum** — CHECK —, para que nenhum horário antigo seja usado sem ninguém
+  ver. Minutos úteis continuam DERIVADOS. Ao menos um dia opera.
+- **Salvar é por linha.** `PUT /production-calendar/weekdays/:weekday` troca
+  UM dia e só ele; a gravação da semana inteira de uma vez deixou de existir.
+  O primeiro salvamento de qualquer dia cria o calendário com os sete — os
+  outros com a sugestão que a tela mostrava.
+- **Exceção tem MOTIVO e FUNCIONAMENTO, e são perguntas separadas.** Motivo:
+  `FERIADO`/`RECESSO`/`PARADA_OPERACIONAL`/`OUTRO`. Funcionamento:
+  `SEM_OPERACAO` (dia inteiro fechado, horários NULOS — CHECK) ou
+  `HORARIO_ESPECIAL` (a jornada da data, com as mesmas regras do dia da
+  semana). Feriado com expediente até 12h é `FERIADO` + `HORARIO_ESPECIAL`.
+  **Não existe "meio dia"**: 08–12, 13–17 e 08–14 são todos horário especial.
+  O horário especial pode ser menor OU maior que a jornada do dia — e abre um
+  dia que normalmente não opera (decisão do PO: cobre trabalho
+  extraordinário).
+- **A regra canônica de um dia** (`janelasDoDia`, um motor só): 1) a data tem
+  exceção? `SEM_OPERACAO` → nenhuma janela; `HORARIO_ESPECIAL` → as janelas da
+  exceção; 2) sem exceção → a jornada daquele dia da semana, e nenhuma janela
+  se ele não opera.
+- **Migração da jornada única, aditiva.** Dia marcado copiou início, fim e
+  intervalo; dia desmarcado nasceu sem operação e sem horário; exceção antiga
+  virou `SEM_OPERACAO`. Intervalo com duração e SEM horário não virou "sem
+  intervalo": ficou em `unpositionedBreakMinutes`, o dia rende o mesmo e a
+  agenda exata recusa até alguém salvar aquele dia. As colunas de jornada
+  única de `production_calendars` ficaram deprecadas e sem leitura
+  (CALENDAR-LEGACY-COLUMNS-CLEANUP-01 no BACKLOG).
 
 - **Um calendário, global, e o banco garante.** A chave primária é o próprio
   conceito (`GLOBAL`, com CHECK): não existe lista de calendários, não existe
   coluna `active` e não há como uma segunda linha nascer. Mão de obra e
   equipamento continuam POOLS (§89) e herdam esta jornada. Calendário por
-  recurso, setor, turno ou cliente fica para necessidade real.
-- **Jornada = janela do dia − intervalo.** Horário inicial e final em MINUTO DO
-  DIA, inteiros de 0 a 1440, com `0 <= início < fim <= 1440` e
-  `0 <= intervalo < (fim − início)` — CHECK no banco, e a mesma regra em
-  `@veridi/shared` para a mensagem da tela. O intervalo é o TOTAL do dia, uma
-  soma e não um horário: não há pausa nomeada nem parada parcial por hora nesta
-  fase. **Minutos úteis são derivados a cada leitura**, nunca uma coluna.
+  recurso, setor, turno, escala por funcionário ou dois turnos no mesmo dia
+  ficam para necessidade real.
+- **Hora do dia é MINUTO DO DIA**, inteiro de 0 a 1440, com
+  `0 <= início < fim <= 1440` — CHECK no banco, e a mesma regra em
+  `@veridi/shared` para a mensagem da tela.
 - **Hora do dia não é instante.** `08:00` não tem data, não tem fuso e não muda
   no horário de verão; um `DateTime` fabricado para representá-la obrigaria a
   inventar um dia e um deslocamento, e a jornada andaria uma hora cinco meses
   por ano. A tela mostra `HH:mm`; o que viaja e o que se guarda é o minuto.
-- **Dias operantes são sete perguntas independentes**, com CHECK de "ao menos
-  um" — calendário sem nenhum dia é cadastro sem sentido, não fábrica parada.
-  **Sábado e domingo operantes são JORNADA, nunca exceção.** Calendário novo
-  nasce segunda a sexta, 08:00–17:00, 1 h de intervalo, e esse padrão vale só
-  no primeiro salvamento: **ler nunca cria**, e quem já salvou nunca é
-  sobrescrito por ele.
-- **Exceção é DIA CIVIL INTEIRO sem operação** — `FERIADO`, `RECESSO`,
-  `PARADA_OPERACIONAL` ou `OUTRO`, com motivo livre. **Uma exceção por data**,
-  garantida por unique: cadastrar de novo a mesma data é recusa explícita com o
-  motivo que já está lá (409), nunca sobrescrita silenciosa nem dois motivos
-  empilhados. Editar troca tipo e motivo; **a data não se move** — mudar de dia
-  é excluir esta e cadastrar a outra, para que um feriado nunca ande sem
-  registro. Feriado é declarado à mão: sem recorrência anual (`25/12/2026` é um
-  registro de data, não a regra "todo 25/12", e feriado móvel não tem algoritmo
-  cívico aqui) e sem API externa.
-- **Dia útil operacional = dia permitido pela semana E não cadastrado como
-  exceção.** As duas metades são independentes, e a conta vive em DIA CIVIL e
-  MINUTO DO DIA — `diaDaSemanaComercial`, `ehDiaOperacional`,
-  `minutosUteisDoDia`, `proximoDiaOperacional`, `proximoInicioUtil`. Aritmética
+- **Sábado e domingo operantes são JORNADA, nunca exceção.** Calendário novo é
+  sugerido como segunda a sexta, 08:00–17:00, 1 h de intervalo sem horário, e
+  essa sugestão vale só no primeiro salvamento: **ler nunca cria**, e quem já
+  salvou nunca é sobrescrito por ela.
+- **Uma exceção por data**, garantida por unique: cadastrar de novo a mesma
+  data é recusa explícita com o motivo que já está lá (409), nunca sobrescrita
+  silenciosa nem dois motivos empilhados. Editar troca motivo, observação e
+  funcionamento; **a data não se move** — mudar de dia é excluir esta e
+  cadastrar a outra, para que um feriado nunca ande sem registro. Feriado é
+  declarado à mão: sem recorrência anual (`25/12/2026` é um registro de data,
+  não a regra "todo 25/12", e feriado móvel não tem algoritmo cívico aqui) e
+  sem API externa nem banco de feriados nacionais.
+- **A conta vive em DIA CIVIL e MINUTO DO DIA** — `diaDaSemanaComercial`,
+  `janelasDoDia`, `ehDiaOperacional`, `minutosUteisDoDia`,
+  `proximoDiaOperacional`, `proximoInicioUtil`. Aritmética
   de calendário não é aritmética de relógio: somar 24 h a um instante atravessa
   a meia-noite comercial na hora errada num dia de 23 ou 25 horas. Quem parte de
   um INSTANTE converte uma vez, por `hojeComercial` (§81), no `FUSO_COMERCIAL` —
@@ -5603,14 +5632,13 @@ PLANNING-CAPACITY-BOARD-01.
   `plannedStartAt`, sem agenda, sem etapa com data, e `plannedAt` continua sendo
   o carimbo do ATO de planejar, nunca a data planejada.
 - **Escrita para produção e administração**, leitura para todos: mesmo gate dos
-  Perfis de Produção. Excluir uma exceção é seguro enquanto nenhum planejamento
-  depende do calendário; a regra para data que já participou de planejamento
-  calculado nasce com PLANNING-CAPACITY-BOARD-01.
-- **O intervalo ganhou HORÁRIO em PLANNING-CAPACITY-BOARD-01** (§91):
-  `breakStartMinuteOfDay`/`breakEndMinuteOfDay`, e `breakMinutes` passa a ser
-  derivado da diferença quando a posição existe. Calendário anterior chega com
-  as duas colunas NULAS e continua válido — só a agenda com hora exata é que
-  recusa até alguém configurar.
+  Perfis de Produção. Mudar a jornada de um dia, cadastrar, editar ou excluir
+  uma exceção NÃO reescreve agenda já gravada (§91): recalcular é definir o
+  início de novo, e aí vale o calendário novo.
+- **O intervalo tem HORÁRIO** (PLANNING-CAPACITY-BOARD-01, §91): sem a posição
+  da pausa não sai hora exata. Na jornada semanal isso vale por dia — o dia
+  com intervalo legado sem horário continua válido para o resto, e só a agenda
+  com hora exata recusa, nomeando o dia, até alguém salvá-lo.
 
 ---
 

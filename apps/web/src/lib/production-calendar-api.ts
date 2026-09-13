@@ -1,9 +1,11 @@
 import type {
-  ProductionCalendarConfigInput,
+  DiaDaSemana,
   ProductionCalendarDTO,
   ProductionCalendarExceptionDTO,
   ProductionCalendarExceptionInput,
   ProductionCalendarExceptionListResponse,
+  ProductionCalendarExceptionUpdateInput,
+  ProductionCalendarWeekdayInput,
 } from "@veridi/shared";
 import { API_URL, apiFetch } from "./api";
 import { parseJsonOrThrow } from "./api-errors";
@@ -13,6 +15,7 @@ import { parseJsonOrThrow } from "./api-errors";
  *
  * Rotas no singular e sem id: existe UM calendário de produção. Nada aqui
  * pergunta "qual calendário" — e não há CRUD de calendários para construir.
+ * A jornada se grava por DIA (PLANNING-CALENDAR-WEEKLY-SCHEDULE-01).
  */
 
 async function read<T>(path: string): Promise<T> {
@@ -31,8 +34,11 @@ async function send<T>(path: string, method: "POST" | "PATCH" | "PUT", body?: un
 
 export const getProductionCalendar = () => read<ProductionCalendarDTO>("/production-calendar");
 
-export const updateProductionCalendar = (input: ProductionCalendarConfigInput) =>
-  send<ProductionCalendarDTO>("/production-calendar", "PUT", input);
+/** Uma linha da jornada semanal. A resposta é o calendário inteiro, relido. */
+export const updateProductionCalendarWeekday = (
+  weekday: DiaDaSemana,
+  input: ProductionCalendarWeekdayInput,
+) => send<ProductionCalendarDTO>(`/production-calendar/weekdays/${weekday}`, "PUT", input);
 
 export function listProductionCalendarExceptions(
   params: { from?: string; to?: string } = {},
@@ -51,7 +57,7 @@ export const createProductionCalendarException = (input: ProductionCalendarExcep
 
 export const updateProductionCalendarException = (
   id: string,
-  input: { type?: ProductionCalendarExceptionInput["type"]; reason?: string | null },
+  input: ProductionCalendarExceptionUpdateInput,
 ) =>
   send<ProductionCalendarExceptionDTO>(
     `/production-calendar/exceptions/${id}`,

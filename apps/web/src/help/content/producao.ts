@@ -663,7 +663,7 @@ export const producaoTopics = {
       {
         label: "Configurar a jornada",
         detail:
-          "No Calendário de Produção, com o HORÁRIO do intervalo — sem ele não há como dizer que uma etapa termina às 13:20.",
+          "No Calendário de Produção, a jornada de cada dia da semana, com o HORÁRIO do intervalo — sem ele não há como dizer que uma etapa termina às 13:20.",
       },
       {
         label: "Cadastrar a capacidade",
@@ -694,51 +694,56 @@ export const producaoTopics = {
     module: "producao",
     title: "Calendário de Produção: quando a fábrica trabalha",
     summary:
-      "Um calendário só, para a fábrica inteira: em que dias da semana ela opera, de que hora a que hora, quando é o intervalo, e quais datas não operam por feriado, recesso ou parada. É daqui que o Planejamento de Produção tira as janelas de trabalho para projetar as ordens. Não define capacidade de recurso, não agenda ordem e não mexe em prazo de cliente.",
+      "Um calendário só, para a fábrica inteira: a jornada de cada dia da semana — de que hora a que hora, com ou sem intervalo — e as regras de datas específicas, como feriado, recesso ou parada. É daqui que o Planejamento de Produção tira as janelas de trabalho para projetar as ordens. Não define capacidade de recurso, não agenda ordem e não mexe em prazo de cliente.",
     concepts: [
       {
-        term: "Jornada",
-        text: "O horário inicial e o final de um dia operante, no relógio de São Paulo. É hora civil: 08:00 continua sendo 08:00 o ano inteiro.",
+        term: "Jornada semanal",
+        text: "O horário normal de cada dia da semana, no relógio de São Paulo. Cada dia tem o seu: segunda a quinta das 08:00 às 17:00 e sexta só até 12:00, por exemplo. Dia que não opera fica sem horário.",
       },
       {
         term: "Intervalo",
-        text: "A pausa do dia, com hora de início e de fim. Os minutos são derivados da diferença: 12:00 às 13:00 são 60 min. Sem o horário, o dia sabe quanto rende, mas nenhuma etapa recebe hora exata.",
-      },
-      {
-        term: "Dias operantes",
-        text: "Os dias da semana em que a fábrica trabalha. Sábado e domingo entram aqui quando ela opera neles — não são exceção, são jornada.",
+        text: "A pausa do dia, com hora de início e de fim — ou nenhuma. 08:00 às 17:00 com intervalo das 12:00 às 13:00 rendem 8 h; 08:00 às 12:00 sem intervalo, 4 h. As horas úteis são sempre calculadas desse horário.",
       },
       {
         term: "Exceção",
-        text: "Uma data que não opera, o dia inteiro: feriado, recesso, parada operacional ou outro motivo. Uma por data, com o motivo escrito.",
+        text: "Uma regra específica para uma data: o motivo (feriado, recesso, parada operacional ou outro) e como a fábrica funciona naquele dia. Uma por data, e ela vale acima da jornada semanal.",
+      },
+      {
+        term: "Sem operação",
+        text: "A fábrica não trabalha na data, o dia inteiro. Não há horário a informar.",
+      },
+      {
+        term: "Horário especial",
+        text: "A fábrica opera em outro horário naquela data — para menos ou para mais. Exemplo: feriado com expediente somente até 12h, ou um sábado normalmente fechado que trabalha das 08:00 às 12:00.",
       },
     ],
     flow: [
       {
-        label: "Definir a jornada",
+        label: "Definir a jornada de cada dia",
         detail:
-          "Horário inicial, final e o intervalo com hora de início e fim. Enquanto ninguém salva, a tela mostra uma sugestão — e diz que ela ainda não foi confirmada.",
+          "Editar o dia, informar início, fim e o intervalo (ou deixá-lo em branco) e salvar. Um dia por vez: salvar a sexta não mexe na segunda.",
       },
       {
-        label: "Marcar os dias operantes",
-        detail: "Ao menos um dia da semana. É a regra que vale para todo dia sem exceção cadastrada.",
+        label: "Marcar os dias que não operam",
+        detail:
+          "Desmarcar \"Opera\" no dia. Ao menos um dia da semana precisa operar.",
       },
       {
         label: "Cadastrar as exceções",
         detail:
-          "Feriados e recessos do período, com o motivo. A data repetida é recusada com o motivo que já está lá, nunca sobrescrita.",
+          "Data, motivo e funcionamento: sem operação ou horário especial, com o horário daquela data. A data repetida é recusada com o motivo que já está lá, nunca sobrescrita.",
       },
       {
         label: "Usar no planejamento",
         tone: "accent",
         detail:
-          "O Planejamento de Produção passa a projetar as ordens sobre estas janelas, pulando o intervalo, a noite e os dias que não operam.",
+          "O Planejamento de Produção projeta as ordens sobre as janelas de cada dia, pulando o intervalo, a noite e os dias que não operam — e respeitando o horário especial da data.",
       },
     ],
     notes: [
-      "Alterar a jornada, o intervalo ou uma exceção NÃO reescreve programação já gravada: o que foi calculado fica como está, e recalcular é definir o início da ordem de novo.",
-      "Excluir a exceção que motivou uma programação também não a altera. Manutenção do calendário nunca fica presa ao histórico.",
-      "Mão de obra e equipamento seguem esta mesma jornada: não há calendário por recurso, por setor nem por cliente, e não há turnos múltiplos nesta fase.",
+      "Alterar a jornada de um dia ou uma exceção NÃO reescreve programação já gravada: o que foi calculado fica como está, e recalcular é definir o início da ordem de novo.",
+      "Feriado não é sinônimo de dia fechado: o motivo diz por que a data é diferente, e o funcionamento diz se a fábrica opera. Para mudar a data de uma exceção, exclua e cadastre de novo.",
+      "Mão de obra e equipamento seguem esta mesma jornada: não há calendário por recurso, por setor nem por cliente, e não há dois turnos no mesmo dia nesta fase.",
       "Nada aqui passa a depender de dia útil fora da produção: tarifa, oferta de fornecedor, validade de lote, faturamento e promessa de entrega ao cliente seguem como estavam.",
     ],
   },

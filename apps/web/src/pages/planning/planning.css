@@ -243,22 +243,14 @@
 /*
  * Planejamento → Calendário de Produção.
  *
- * Duas seções e uma tabela: a jornada é um formulário curto, os dias da
- * semana são sete cartões de seleção e as exceções cabem numa lista. Nada de
- * grade mensal — o que se lê aqui é "quando a fábrica trabalha", e uma
- * tabela responde isso melhor que um desenho.
+ * Duas seções e duas tabelas: a jornada semanal é uma linha por dia, editada
+ * no lugar, e as exceções cabem numa lista. Nada de grade mensal — o que se lê
+ * aqui é "quando a fábrica trabalha", e uma tabela responde isso melhor que um
+ * desenho.
  */
 
 .calendar-section + .calendar-section {
   margin-top: var(--sp-5);
-}
-
-.calendar-subtitle {
-  margin-top: var(--sp-5);
-}
-
-.calendar-journey {
-  align-items: start;
 }
 
 .calendar-derived__label {
@@ -271,38 +263,62 @@
   padding-top: var(--sp-1);
 }
 
-/* Sete dias: sete colunas em tela larga, duas em tela estreita. */
-.calendar-weekdays {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: var(--sp-2);
-}
-
-.calendar-weekdays .toggle-card {
-  padding: var(--sp-3);
-  min-width: 0;
-}
-
-.calendar-weekdays .toggle-card b {
-  overflow-wrap: anywhere;
-}
-
 .calendar-problems {
   margin: var(--sp-3) 0 0;
   padding-left: var(--sp-5);
 }
 
-.calendar-actions {
-  display: flex;
+.calendar-status {
+  display: block;
+  margin: var(--sp-3) 0 0;
+}
+
+.calendar-cards__title {
+  font-weight: var(--fw-semibold);
+}
+
+/* A linha em edição se destaca das seis em leitura. */
+.calendar-week__row--editing td,
+.calendar-week__feedback td {
+  background: var(--canvas);
+}
+
+.calendar-week__feedback td {
+  white-space: normal;
+  padding-top: 0;
+}
+
+.calendar-week__feedback .field__hint {
+  margin: 0;
+}
+
+.calendar-week input[type="time"] {
+  width: 7.25rem;
+  max-width: 100%;
+}
+
+.calendar-week__break {
+  display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-3);
-  margin-top: var(--sp-4);
+  gap: var(--sp-1);
+}
+
+/* Intervalo legado sem horário: pendência, não valor normal. */
+.calendar-week__pending {
+  color: var(--warn-fg);
+  font-weight: var(--fw-semibold);
+}
+
+/* Dentro da célula a barra de ações não ganha a margem de formulário. */
+.calendar-week__form-actions {
+  margin-top: 0;
+  flex-wrap: nowrap;
 }
 
 .calendar-exception-form {
   display: grid;
-  grid-template-columns: minmax(0, 10rem) minmax(0, 12rem) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 10rem) minmax(0, 12rem) minmax(0, 12rem) minmax(0, 1fr);
   align-items: end;
   gap: var(--sp-3);
   margin-bottom: var(--sp-4);
@@ -318,10 +334,27 @@
   width: 100%;
 }
 
+/* Horário especial: os quatro horários e as horas úteis numa faixa própria. */
+.calendar-exception-form__hours {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 9rem));
+  align-items: end;
+  gap: var(--sp-3);
+}
+
+.calendar-exception-form__reason,
+.calendar-exception-form .calendar-problems,
 .calendar-exception-form__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
+  grid-column: 1 / -1;
+}
+
+.calendar-exception-form__actions {
+  margin-top: 0;
+}
+
+.calendar-exceptions__reason {
+  white-space: normal;
 }
 
 .calendar-row-actions {
@@ -330,13 +363,87 @@
   gap: var(--sp-2);
 }
 
-/* Tela estreita (390px): nada de rolagem lateral. */
+/*
+ * Tela estreita (390px): cada dia — e cada exceção — vira CARTÃO. Mesma
+ * mecânica da tabela de componentes da Formulação: o nome no topo, cada valor
+ * sob o seu rótulo (`data-label`), a ação no fim do cartão. Nada de rolagem
+ * lateral, e em edição os campos empilham.
+ */
 @media (max-width: 720px) {
-  .calendar-weekdays {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .calendar-cards,
+  .calendar-cards tbody,
+  .calendar-cards tr,
+  .calendar-cards td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
   }
 
-  .calendar-exception-form {
+  .calendar-cards thead {
+    display: none;
+  }
+
+  .calendar-cards tbody tr {
+    padding: var(--sp-2) 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .calendar-cards tbody tr.calendar-week__row--editing {
+    border-bottom: 0;
+  }
+
+  /* `.table.` na frente: vence `.table td` (nowrap, borda, número à direita)
+     sem depender da ordem em que as folhas carregam. Com `nowrap` a observação
+     longa estourava o cartão e a tabela rolava de lado dentro do contêiner. */
+  .table.calendar-cards td {
+    border: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    padding: var(--sp-1) var(--sp-3);
+  }
+
+  .table.calendar-cards td.is-numeric {
+    text-align: left;
+  }
+
+  .calendar-cards td[data-label] {
+    display: grid;
+    grid-template-columns: minmax(6.5rem, 40%) minmax(0, 1fr);
+    column-gap: var(--sp-3);
+    align-items: center;
+  }
+
+  .calendar-cards td[data-label]::before {
+    content: attr(data-label);
+    grid-column: 1;
+    font-size: var(--fs-xs);
+    color: var(--ink-2);
+  }
+
+  .calendar-cards td[data-label] > * {
+    grid-column: 2;
+  }
+
+  .calendar-cards__actions {
+    padding-top: var(--sp-2);
+  }
+
+  .calendar-week input[type="time"] {
+    width: 100%;
+  }
+
+  .calendar-week__break {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  }
+
+  .calendar-week__form-actions {
+    flex-wrap: wrap;
+  }
+
+  .calendar-exception-form,
+  .calendar-exception-form__hours {
     grid-template-columns: 1fr;
   }
 }

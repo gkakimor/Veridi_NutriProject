@@ -35,6 +35,13 @@ import { defineConfig, loadEnv } from "vite";
  * critério do GMP: provar que a Qualidade ATIVA revisão troca a vigente do
  * banco inteiro enquanto o teste dura.
  *
+ * `production-calendar.test.ts` e `production-schedules.test.ts`
+ * (PLANNING-CALENDAR-WEEKLY-SCHEDULE-01) entraram pelo mesmo critério: o
+ * Calendário de Produção é UM, global, e os dois arquivos o regravam — o
+ * primeiro apaga o calendário para provar "ainda não configurado" e a
+ * migração da jornada legada; o segundo troca a jornada da semana para provar
+ * a agenda. Em paralelo, um apagava o calendário no meio da agenda do outro.
+ *
  * Só entra aqui arquivo que dependa de estado global de forma inevitável.
  * Todo o resto continua em paralelo, no `vitest.config.ts`.
  */
@@ -45,6 +52,8 @@ export default defineConfig(({ mode }) => ({
       "src/modules/dashboard/dashboard.test.ts",
       "src/modules/production-orders/gmp-execution.test.ts",
       "src/modules/controlled-documents/controlled-documents.test.ts",
+      "src/modules/production-calendar/production-calendar.test.ts",
+      "src/modules/production-schedules/production-schedules.test.ts",
     ],
     // Um worker, um arquivo por vez: nenhum vizinho escrevendo no banco
     // enquanto um agregado global é medido.

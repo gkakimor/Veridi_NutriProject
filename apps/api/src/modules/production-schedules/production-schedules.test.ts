@@ -13,7 +13,8 @@ import { getPrisma } from "../../db/prisma.js";
 import "../../lib/decimal.js";
 
 /**
- * PROGRAMAÇÃO DE PRODUÇÃO — PLANNING-CAPACITY-BOARD-01.
+ * PROGRAMAÇÃO DE PRODUÇÃO — PLANNING-CAPACITY-BOARD-01, sobre a jornada
+ * semanal do PLANNING-CALENDAR-WEEKLY-SCHEDULE-01.
  *
  * O que estes testes protegem:
  *
@@ -22,11 +23,17 @@ import "../../lib/decimal.js";
  * 2. **o calendário manda, e fail-closed.** Sem a posição do intervalo não sai
  *    hora exata; início fora da jornada é recusado COM sugestão, nunca
  *    deslocado em silêncio;
- * 3. **o ciclo de vida da ordem manda na agenda.** Rascunho e planejada se
+ * 3. **cada dia trabalha a sua jornada.** A ordem que atravessa quinta longa,
+ *    sexta curta, sábado curto e domingo fechado grava `workSegments`
+ *    exatamente assim; horário especial e exceção de fechamento também;
+ * 4. **o ciclo de vida da ordem manda na agenda.** Rascunho e planejada se
  *    movem; liberada exige confirmação; em produção e concluída, a agenda é
  *    histórico;
- * 4. **agenda gravada é snapshot.** Mudar o calendário depois não reescreve o
+ * 5. **agenda gravada é snapshot.** Mudar o calendário depois não reescreve o
  *    que já foi calculado — recalcular é uma ação explícita.
+ *
+ * O calendário é estado GLOBAL: este arquivo roda na faixa serial
+ * (`vitest.serial.config.ts`).
  */
 
 type App = ReturnType<typeof buildTestApp>;
@@ -46,36 +53,82 @@ const proximo = () => `${marca}-${++contador}`;
 const ANO = 2033;
 /** `2033-09-12` é segunda-feira. */
 const SEGUNDA = `${ANO}-09-12`;
+const TERCA = `${ANO}-09-13`;
+const QUARTA = `${ANO}-09-14`;
+const QUINTA = `${ANO}-09-15`;
+const SEXTA = `${ANO}-09-16`;
+const SABADO = `${ANO}-09-17`;
+const DOMINGO = `${ANO}-09-18`;
+const SEGUNDA_SEGUINTE = `${ANO}-09-19`;
 const em = (diaISO: string, hora: number, minuto = 0) =>
   instanteComercial(diaISO, hora * 60 + minuto).toISOString();
+const trecho = (diaISO: string, de: number, ate: number) => ({
+  diaISO,
+  startAt: instanteComercial(diaISO, de).toISOString(),
+  endAt: instanteComercial(diaISO, ate).toISOString(),
+  durationMinutes: ate - de,
+});
 
 let operadorId: string;
 
-async function salvarJornada(sobre: Record<string, unknown> = {}) {
+const LONGO_COM_ALMOCO = {
+  enabled: true,
+  startMinuteOfDay: 480,
+  endMinuteOfDay: 1020,
+  breakStartMinuteOfDay: 720,
+  breakEndMinuteOfDay: 780,
+};
+const ATE_MEIO_DIA = {
+  enabled: true,
+  startMinuteOfDay: 480,
+  endMinuteOfDay: 720,
+  breakStartMinuteOfDay: null,
+  breakEndMinuteOfDay: null,
+};
+const FECHADO = { enabled: false };
+
+/** A jornada de UM dia — a gravação por linha do calendário semanal. */
+async function salvarDia(weekday: string, payload: Record<string, unknown>) {
   const resposta = await app.inject({
     method: "PUT",
-    url: "/production-calendar",
-    payload: {
-      startMinuteOfDay: 480,
-      endMinuteOfDay: 1020,
-      breakMinutes: 60,
-      breakStartMinuteOfDay: 720,
-      breakEndMinuteOfDay: 780,
-      weekdays: {
-        monday: true,
-        tuesday: true,
-        wednesday: true,
-        thursday: true,
-        friday: true,
-        saturday: false,
-        sunday: false,
-      },
-      ...sobre,
-    },
+    url: `/production-calendar/weekdays/${weekday}`,
+    payload,
   });
   expect(resposta.statusCode).toBe(200);
   return resposta.json();
 }
+
+/** Segunda a sexta 08–17 com almoço 12–13; sábado e domingo fechados. */
+async function salvarJornada() {
+  for (const weekday of ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"]) {
+    await salvarDia(weekday, LONGO_COM_ALMOCO);
+  }
+  await salvarDia("SATURDAY", FECHADO);
+  await salvarDia("SUNDAY", FECHADO);
+}
+
+/** A semana da Veridi: seg–qui longa, sexta e sábado até 12:00, domingo fechado. */
+async function salvarSemanaVeridi() {
+  for (const weekday of ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY"]) {
+    await salvarDia(weekday, LONGO_COM_ALMOCO);
+  }
+  await salvarDia("FRIDAY", ATE_MEIO_DIA);
+  await salvarDia("SATURDAY", ATE_MEIO_DIA);
+  await salvarDia("SUNDAY", FECHADO);
+}
+
+async function criarExcecao(payload: Record<string, unknown>): Promise<string> {
+  const resposta = await app.inject({
+    method: "POST",
+    url: "/production-calendar/exceptions",
+    payload,
+  });
+  expect(resposta.statusCode).toBe(201);
+  return resposta.json().id as string;
+}
+
+const excluirExcecao = (id: string) =>
+  app.inject({ method: "DELETE", url: `/production-calendar/exceptions/${id}` });
 
 beforeAll(async () => {
   await app.ready();
@@ -312,20 +365,30 @@ describe("Capacidade do recurso", () => {
 });
 
 describe("Calendário e a hora exata", () => {
-  it("intervalo sem horário: o calendário vale, mas a agenda não sai", async () => {
-    await salvarJornada({ breakStartMinuteOfDay: null, breakEndMinuteOfDay: null });
+  it("intervalo legado sem horário: o calendário vale, mas a agenda não sai", async () => {
+    // Nenhuma gravação da API produz este estado — só a migração da jornada
+    // única. Por isso ele é montado direto no banco.
+    await getPrisma().productionCalendarWeekday.update({
+      where: { calendarId_weekday: { calendarId: "GLOBAL", weekday: "WEDNESDAY" } },
+      data: { breakStartMinuteOfDay: null, breakEndMinuteOfDay: null, unpositionedBreakMinutes: 60 },
+    });
     const ordem = await ordemComRoteiro();
 
-    const resposta = await prever(ordem.id, em(SEGUNDA, 8));
-    expect(resposta.statusCode).toBe(409);
-    expect(resposta.json().error).toBe("calendar_break_not_positioned");
+    try {
+      // Recusa ANTES de projetar, mesmo que a ordem de segunda nem chegue à quarta.
+      const resposta = await prever(ordem.id, em(SEGUNDA, 8));
+      expect(resposta.statusCode).toBe(409);
+      expect(resposta.json().error).toBe("calendar_break_not_positioned");
+      expect(resposta.json().message).toContain("Quarta-feira");
 
-    // O calendário continua legível e válido para o resto.
-    const calendario = await app.inject("/production-calendar");
-    expect(calendario.statusCode).toBe(200);
-    expect(calendario.json().breakPositionWarning).toContain("Defina o horário do intervalo");
-
-    await salvarJornada();
+      // O calendário continua legível e válido para o resto.
+      const calendario = await app.inject("/production-calendar");
+      expect(calendario.statusCode).toBe(200);
+      expect(calendario.json().breakPositionWarning).toContain("Defina o horário do intervalo");
+    } finally {
+      await salvarDia("WEDNESDAY", LONGO_COM_ALMOCO);
+    }
+    expect((await prever(ordem.id, em(SEGUNDA, 8))).statusCode).toBe(200);
   });
 
   it("início fora da jornada é recusado COM sugestão, e não deslocado", async () => {
@@ -418,14 +481,107 @@ describe("Ciclo de vida da ordem", () => {
   });
 });
 
+describe("Jornada de cada dia na agenda gravada", () => {
+  it("OP atravessa quinta longa, sexta curta, sábado curto e domingo fechado — workSegments exatos", async () => {
+    await salvarSemanaVeridi();
+    try {
+      // 15 h de trabalho a partir da quinta às 16:00.
+      const ordem = await ordemComRoteiro(900);
+      const gravada = await programar(ordem.id, em(QUINTA, 16));
+      expect(gravada.statusCode).toBe(200);
+      const agenda = gravada.json() as ProductionOrderScheduleDTO;
+
+      expect(agenda.steps[0]!.workSegments).toEqual([
+        trecho(QUINTA, 960, 1020),
+        trecho(SEXTA, 480, 720),
+        trecho(SABADO, 480, 720),
+        trecho(SEGUNDA_SEGUINTE, 480, 720),
+        trecho(SEGUNDA_SEGUINTE, 780, 900),
+      ]);
+      expect(agenda.steps[0]!.workSegments.map((s) => s.diaISO)).not.toContain(DOMINGO);
+      expect(agenda.plannedStartAt).toBe(em(QUINTA, 16));
+      expect(agenda.plannedEndAt).toBe(em(SEGUNDA_SEGUINTE, 15));
+      expect(agenda.workingMinutes).toBe(900);
+
+      // A sexta à tarde não é jornada: começar ali é recusado, com o sábado sugerido.
+      const tardeDeSexta = await prever(ordem.id, em(SEXTA, 14));
+      expect(tardeDeSexta.statusCode).toBe(400);
+      expect(tardeDeSexta.json().suggestionAt).toBe(em(SABADO, 8));
+    } finally {
+      await salvarJornada();
+    }
+  });
+
+  it("horário especial até 12:00 numa terça: a etapa não trabalha a tarde e segue na quarta", async () => {
+    const excecaoId = await criarExcecao({
+      date: TERCA,
+      type: "FERIADO",
+      operation: "HORARIO_ESPECIAL",
+      startMinuteOfDay: 480,
+      endMinuteOfDay: 720,
+      reason: "Expediente curto",
+    });
+    try {
+      const ordem = await ordemComRoteiro(180);
+      const gravada = await programar(ordem.id, em(TERCA, 10));
+      expect(gravada.statusCode).toBe(200);
+      expect((gravada.json() as ProductionOrderScheduleDTO).steps[0]!.workSegments).toEqual([
+        trecho(TERCA, 600, 720),
+        trecho(QUARTA, 480, 540),
+      ]);
+
+      // 14:00 da terça, que seria jornada normal, não é nesta data.
+      const tarde = await prever(ordem.id, em(TERCA, 14));
+      expect(tarde.statusCode).toBe(400);
+      expect(tarde.json().suggestionAt).toBe(em(QUARTA, 8));
+    } finally {
+      expect((await excluirExcecao(excecaoId)).statusCode).toBe(204);
+    }
+  });
+
+  it("horário especial num domingo abre a data; exceção sem operação fecha a segunda", async () => {
+    const domingo = await criarExcecao({
+      date: DOMINGO,
+      type: "OUTRO",
+      operation: "HORARIO_ESPECIAL",
+      startMinuteOfDay: 480,
+      endMinuteOfDay: 720,
+    });
+    const segunda = await criarExcecao({ date: SEGUNDA_SEGUINTE, type: "FERIADO" });
+    try {
+      // Sexta 16:00 + 5 h: sexta 16–17, DOMINGO 08–12 (exceção), segunda
+      // fechada pela exceção, terça 08:00 em diante não é preciso.
+      const ordem = await ordemComRoteiro(300);
+      const gravada = await programar(ordem.id, em(SEXTA, 16));
+      expect(gravada.statusCode).toBe(200);
+      expect((gravada.json() as ProductionOrderScheduleDTO).steps[0]!.workSegments).toEqual([
+        trecho(SEXTA, 960, 1020),
+        trecho(DOMINGO, 480, 720),
+      ]);
+
+      const longa = await ordemComRoteiro(360);
+      const atravessa = await programar(longa.id, em(SEXTA, 16));
+      expect(atravessa.statusCode).toBe(200);
+      const dias = (atravessa.json() as ProductionOrderScheduleDTO).steps[0]!.workSegments.map(
+        (s) => s.diaISO,
+      );
+      expect(dias).toEqual([SEXTA, DOMINGO, `${ANO}-09-20`]);
+      expect(dias).not.toContain(SEGUNDA_SEGUINTE);
+    } finally {
+      expect((await excluirExcecao(domingo)).statusCode).toBe(204);
+      expect((await excluirExcecao(segunda)).statusCode).toBe(204);
+    }
+  });
+});
+
 describe("Agenda é snapshot", () => {
   it("mudar a jornada depois NÃO reescreve a agenda gravada; recalcular é explícito", async () => {
     const ordem = await ordemComRoteiro();
     expect((await programar(ordem.id, em(SEGUNDA, 8))).statusCode).toBe(200);
 
     try {
-      // A fábrica passa a abrir às 09:00.
-      await salvarJornada({ startMinuteOfDay: 540 });
+      // A fábrica passa a abrir às 09:00 — só na segunda.
+      await salvarDia("MONDAY", { ...LONGO_COM_ALMOCO, startMinuteOfDay: 540 });
       const inalterada = await app.inject(`/production-orders/${ordem.id}/schedule`);
       expect((inalterada.json().schedule as ProductionOrderScheduleDTO).plannedStartAt).toBe(
         em(SEGUNDA, 8),
@@ -473,6 +629,42 @@ describe("Agenda é snapshot", () => {
 
     const depois = await app.inject(`/production-orders/${ordem.id}/schedule`);
     expect((depois.json().schedule as ProductionOrderScheduleDTO).plannedEndAt).toBe(antes);
+  });
+
+  it("horário especial cadastrado DEPOIS não mexe na agenda; recalcular passa a respeitá-lo", async () => {
+    // Segunda 14:00 + 4 h: 14–17 e terça 08–09, pela jornada normal.
+    const ordem = await ordemComRoteiro(240);
+    const gravada = await programar(ordem.id, em(SEGUNDA, 14));
+    expect(gravada.statusCode).toBe(200);
+    const antes = gravada.json() as ProductionOrderScheduleDTO;
+    expect(antes.steps[0]!.workSegments).toEqual([
+      trecho(SEGUNDA, 840, 1020),
+      trecho(TERCA, 480, 540),
+    ]);
+
+    // Depois de gravada, a segunda passa a fechar às 15:00 nesta data.
+    const excecaoId = await criarExcecao({
+      date: SEGUNDA,
+      type: "OUTRO",
+      operation: "HORARIO_ESPECIAL",
+      startMinuteOfDay: 480,
+      endMinuteOfDay: 900,
+      breakStartMinuteOfDay: 720,
+      breakEndMinuteOfDay: 780,
+    });
+    try {
+      const inalterada = await app.inject(`/production-orders/${ordem.id}/schedule`);
+      expect(inalterada.json().schedule).toEqual(antes);
+
+      const recalculada = await programar(ordem.id, em(SEGUNDA, 14));
+      expect(recalculada.statusCode).toBe(200);
+      expect((recalculada.json() as ProductionOrderScheduleDTO).steps[0]!.workSegments).toEqual([
+        trecho(SEGUNDA, 840, 900),
+        trecho(TERCA, 480, 660),
+      ]);
+    } finally {
+      expect((await excluirExcecao(excecaoId)).statusCode).toBe(204);
+    }
   });
 });
 

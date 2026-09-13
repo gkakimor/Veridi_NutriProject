@@ -1200,6 +1200,18 @@ constantes). `scripts/prisma-bin.mjs`, criado no MIG-ORDER-01b, já resolve o
 binário do Prisma sem shell — a correção é trocar a chamada por ele. Ficou
 fora daquela capability de propósito, para não aumentar escopo.
 
+### 16. CALENDAR-LEGACY-COLUMNS-CLEANUP-01 — colunas de jornada única — LOW
+
+PLANNING-CALENDAR-WEEKLY-SCHEDULE-01 (2026-09-12) passou a jornada para
+`production_calendar_weekdays` e deixou em `production_calendars` as colunas
+da jornada única — `startMinuteOfDay`, `endMinuteOfDay`, `breakMinutes`,
+`breakStartMinuteOfDay`, `breakEndMinuteOfDay` e `monday`…`sunday` —, com os
+CHECKs delas. Nenhum código as lê; ficaram só para a migration não precisar
+remover coluna junto com o backfill. Limpeza: migration que remova colunas e
+CHECKs, depois de a jornada semanal estar em produção e o backup lógico
+conferido. Sem impacto funcional até lá — o risco é alguém ler a coluna velha
+achando que ela é a jornada.
+
 ---
 
 ## E. Watchlist — observado, sem ação conhecida

@@ -1551,6 +1551,10 @@ filtro e contexto.
 
 ## Calendário de Produção (PLANNING-CALENDAR-01, 2026-09-12)
 
+> Jornada única e exceção sempre fechada foram substituídas pela jornada por
+> dia da semana e pela exceção com horário especial — ver
+> PLANNING-CALENDAR-WEEKLY-SCHEDULE-01, abaixo.
+
 A jornada operacional da fábrica, e os dias em que ela não opera. Em
 `Planejamento → Calendário de Produção` (`/planejamento/calendario`).
 **Absorve o OPS-CALENDAR-01 do BACKLOG (B · #9) por decisão do PO:** um
@@ -1735,6 +1739,49 @@ rodadas.
 **Próximo:** FILTER-OPERATIONS-WAVE-03, ou a onda de ações do
 UX-ACTIONS-FEEDBACK-WAVE-02, a critério do Product Owner. Autoagendamento
 continua fora de escopo.
+
+## Cada dia com a sua jornada (PLANNING-CALENDAR-WEEKLY-SCHEDULE-01, 2026-09-12)
+
+A jornada única com sete caixas de dia operante não descrevia a fábrica real
+— segunda a quinta 08–17 com almoço, sexta e sábado 08–12, domingo fechado.
+Regra durável em `PRODUCT_RULES.md` §90. Uma migration aditiva.
+
+**Sete linhas, e a fonte é uma só.** `ProductionCalendarWeekday` (unique
+calendário + dia): opera ou não, início, fim e intervalo opcional. Dia que não
+opera não tem horário (CHECK). As colunas de jornada única de
+`production_calendars` ficaram deprecadas e sem leitura — remoção em
+CALENDAR-LEGACY-COLUMNS-CLEANUP-01 (BACKLOG D).
+
+**Migração sem perda.** Dia marcado copiou jornada e intervalo; desmarcado
+nasceu sem operação; exceção antiga virou `SEM_OPERACAO`. Intervalo com
+duração e sem horário foi para `unpositionedBreakMinutes`: rende o mesmo, e a
+agenda exata recusa nomeando o dia até alguém salvá-lo. O teste da API executa
+o bloco de backfill da própria migration sobre calendários legados.
+
+**Salvar é por linha.** `PUT /production-calendar/weekdays/:weekday`; o PUT da
+semana inteira saiu. Primeiro salvamento cria os sete dias. Ao menos um dia
+opera, conferido com o calendário travado na transação.
+
+**Exceção = motivo + funcionamento.** `SEM_OPERACAO` (horários nulos) ou
+`HORARIO_ESPECIAL` (jornada da data, para menos ou para mais, inclusive em dia
+fechado). Sem "meio dia". Precedência canônica em `janelasDoDia`: exceção da
+data, depois a jornada do dia da semana. A agenda da OP, o quadro e a prévia
+consomem o mesmo motor; agenda gravada segue snapshot e recalcular usa o
+calendário novo.
+
+**Tela.** Tabela de sete dias (Dia, Opera, Início, Intervalo, Fim, Horas
+úteis, Ação) com edição NO lugar, uma linha por vez — trocar de linha com
+alteração passa pela guarda de alterações não salvas —, "Salvando…",
+"Sexta-feira salva." em `role="status"` e erro em `role="alert"`. Em 390px
+dias e exceções viram cartões. Exceções com Data, Motivo, Funcionamento,
+Horário, Observação; horário só aparece em horário especial. "Como funciona"
+reescrito.
+
+**Testes em faixa serial.** `production-calendar.test.ts` e
+`production-schedules.test.ts` regravam o calendário global e passaram para
+`vitest.serial.config.ts`.
+
+**Próximo:** PRODUCTION-ROUTE-ASSIGNMENT-01, depois do Bulk.
 
 ## As quatro filas abrem no que falta fazer (FILTER-OPERATIONS-WAVE-03, 2026-09-12)
 
