@@ -15,13 +15,8 @@ import { FUSO_COMERCIAL, ROUTE_PENDING_STATUSES, diaCivil } from "@veridi/shared
 import { getPrisma } from "../../db/prisma.js";
 import { marcadorDeHojeComercial } from "../../lib/business-day.js";
 import { buildAttentionList } from "./attention.service.js";
-import {
-  getOpenPurchaseOrderState,
-  getOrdersAwaitingShipmentIds,
-  getProductionOrdersWithIncompleteCost,
-  getProductionOrdersWithShortage,
-  lotsWithBalance,
-} from "./dashboard.queries.js";
+import type { ConjuntosDoRetrato } from "./dashboard.queries.js";
+import { carregarConjuntosDoRetrato, getOpenPurchaseOrderState, lotsWithBalance } from "./dashboard.queries.js";
 import type { DashboardQuery } from "./dashboard.schemas.js";
 
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
@@ -96,9 +91,15 @@ async function buildPeriod(prisma: PrismaOrTx, from: Date, to: Date): Promise<Da
  * historica selecionada.
  *
  * `now` e o instante da requisicao, o mesmo da lista de atencao — nunca um
- * relogio lido aqui dentro.
+ * relogio lido aqui dentro. `conjuntos` sao os mesmos que a lista de atencao
+ * recebe: pedidos aguardando expedicao, falta de material e custo incompleto,
+ * carregados uma vez no retrato (PERFORMANCE-CLEANUP-WAVE-01).
  */
-async function buildCurrentState(prisma: PrismaOrTx, now: Date): Promise<DashboardCurrentStateDTO> {
+async function buildCurrentState(
+  prisma: PrismaOrTx,
+  now: Date,
+  conjuntos: Promise<ConjuntosDoRetrato>,
+): Promise<DashboardCurrentStateDTO> {
   /* Vencimento se mede em dias civis: a janela sai do marcador de hoje. */
   const hojeComercialMarcador = marcadorDeHojeComercial(now);
   const nearExpiryLimit = new Date(hojeComercialMarcador.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -107,11 +108,9 @@ async function buildCurrentState(prisma: PrismaOrTx, now: Date): Promise<Dashboa
     confirmedOrders,
     inFulfillmentOrders,
     partiallyShippedOrders,
-    awaitingShipmentIds,
+    { ordersAwaitingShipmentIds, productionOrdersWithShortage, productionOrdersWithIncompleteCost },
     shipmentsAwaitingBilling,
     productionCounts,
-    shortageOrderIds,
-    incompleteCostOrderIds,
     purchasing,
     awaitingQualityLots,
     blockedLots,
@@ -122,11 +121,9 @@ async function buildCurrentState(prisma: PrismaOrTx, now: Date): Promise<Dashboa
     prisma.customerOrder.count({ where: { status: "CONFIRMED" } }),
     prisma.customerOrder.count({ where: { status: "IN_FULFILLMENT" } }),
     prisma.customerOrder.count({ where: { status: "PARTIALLY_SHIPPED" } }),
-    getOrdersAwaitingShipmentIds(prisma),
+    conjuntos,
     prisma.shipment.count({ where: { status: "CONFIRMED", billings: { none: { status: "ISSUED" } } } }),
     prisma.productionOrder.groupBy({ by: ["status"], _count: { _all: true } }),
-    getProductionOrdersWithShortage(prisma, now),
-    getProductionOrdersWithIncompleteCost(prisma),
     getOpenPurchaseOrderState(prisma, now),
     prisma.lot.findMany({ where: { status: "AWAITING_RELEASE" }, select: { id: true } }),
     prisma.lot.findMany({ where: { status: "BLOCKED" }, select: { id: true } }),
@@ -162,7 +159,7 @@ async function buildCurrentState(prisma: PrismaOrTx, now: Date): Promise<Dashboa
       confirmedOrders,
       inFulfillmentOrders,
       partiallyShippedOrders,
-      ordersAwaitingShipment: awaitingShipmentIds.length,
+      ordersAwaitingShipment: ordersAwaitingShipmentIds.length,
       shipmentsAwaitingBilling,
     },
     production: {
@@ -170,8 +167,8 @@ async function buildCurrentState(prisma: PrismaOrTx, now: Date): Promise<Dashboa
       planned: countByStatus.get("PLANNED") ?? 0,
       released: countByStatus.get("RELEASED") ?? 0,
       inProduction: countByStatus.get("IN_PRODUCTION") ?? 0,
-      withShortage: shortageOrderIds.length,
-      completedWithIncompleteCost: incompleteCostOrderIds.length,
+      withShortage: productionOrdersWithShortage.length,
+      completedWithIncompleteCost: productionOrdersWithIncompleteCost.length,
       withoutRoute,
     },
     purchasing,
@@ -419,21 +416,28 @@ function groupAttention(items: AttentionItemDTO[]): AttentionGroupDTO[] {
  *
  * Transacao e UMA conexao: o `Promise.all` la dentro vira fila. E o preco da
  * consistencia — os tempos de `DASHBOARD_SNAPSHOT_TIMEOUT_MS` tem folga para ele.
+ *
+ * O que o estado atual e a atencao tem em comum — aguardando expedicao, falta
+ * de material e custo incompleto — sai uma vez, dentro do retrato, e os dois
+ * leem a mesma promessa (PERFORMANCE-CLEANUP-WAVE-01). Criada aqui dentro, ela
+ * morre com a requisicao.
  */
 export async function getDashboard(query: DashboardQuery, now: Date): Promise<DashboardDTO> {
   const { from, to } = query;
 
   const [period, currentState, movementSummary, recentMovements, movementActivity, attention] =
     await getPrisma().$transaction(
-      (prisma) =>
-        Promise.all([
+      (prisma) => {
+        const conjuntos = carregarConjuntosDoRetrato(prisma, now);
+        return Promise.all([
           buildPeriod(prisma, from, to),
-          buildCurrentState(prisma, now),
+          buildCurrentState(prisma, now, conjuntos),
           buildMovementSummary(prisma, from, to),
           buildRecentMovements(prisma, from, to),
           buildMovementActivity(prisma, from, to),
-          buildAttentionList(prisma, now),
-        ]),
+          buildAttentionList(prisma, now, conjuntos),
+        ]);
+      },
       {
         isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
         maxWait: DASHBOARD_SNAPSHOT_MAX_WAIT_MS,

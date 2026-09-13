@@ -161,6 +161,32 @@ export async function getProductionOrdersWithIncompleteCost(
 }
 
 /**
+ * Os três conjuntos caros que o estado atual e a lista de atenção leem do MESMO
+ * retrato (PERFORMANCE-CLEANUP-WAVE-01).
+ *
+ * Cada bloco calculava os três por conta própria. No mesmo retrato e com o
+ * mesmo `now` o resultado é idêntico — e o custo incompleto, uma resolução de
+ * custo por OP concluída, era pago duas vezes a cada requisição. O Painel
+ * carrega os três uma vez e entrega aos dois. Vale só para a requisição: nada
+ * fica guardado entre uma e outra.
+ */
+export interface ConjuntosDoRetrato {
+  ordersAwaitingShipmentIds: string[];
+  productionOrdersWithShortage: { id: string; code: string }[];
+  productionOrdersWithIncompleteCost: { id: string; code: string; completedAt: Date | null }[];
+}
+
+export async function carregarConjuntosDoRetrato(prisma: PrismaOrTx, now: Date): Promise<ConjuntosDoRetrato> {
+  const [ordersAwaitingShipmentIds, productionOrdersWithShortage, productionOrdersWithIncompleteCost] =
+    await Promise.all([
+      getOrdersAwaitingShipmentIds(prisma),
+      getProductionOrdersWithShortage(prisma, now),
+      getProductionOrdersWithIncompleteCost(prisma),
+    ]);
+  return { ordersAwaitingShipmentIds, productionOrdersWithShortage, productionOrdersWithIncompleteCost };
+}
+
+/**
  * Estado de Compras. `itemsOnOrder` conta ITENS DISTINTOS com quantidade
  * aberta — nunca soma kg + un, que seria um numero sem significado.
  */

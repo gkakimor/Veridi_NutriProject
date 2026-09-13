@@ -57,6 +57,10 @@ import { ambienteComBancoDeTeste } from "./src/test-support/banco-de-teste.js";
  * uma escrita — com vizinho escrevendo, "antes" e "durante" diferem sem nada
  * estar errado.
  *
+ * `dashboard-conjuntos-uma-vez.test.ts` (PERFORMANCE-CLEANUP-WAVE-01), pelo
+ * mesmo critério: compara o Painel com cada conjunto do banco inteiro calculado
+ * à parte logo depois.
+ *
  * Só entra aqui arquivo que dependa de estado global de forma inevitável.
  * Todo o resto continua em paralelo, no `vitest.config.ts`.
  */
@@ -69,6 +73,7 @@ export default defineConfig(({ mode }) => ({
     include: [
       "src/modules/dashboard/dashboard.test.ts",
       "src/modules/dashboard/dashboard-retrato-unico.test.ts",
+      "src/modules/dashboard/dashboard-conjuntos-uma-vez.test.ts",
       "src/modules/production-orders/gmp-execution.test.ts",
       "src/modules/controlled-documents/controlled-documents.test.ts",
       "src/modules/production-calendar/production-calendar.test.ts",

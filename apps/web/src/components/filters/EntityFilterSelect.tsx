@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { EntityOption } from "../SearchableEntitySelect";
 import { SearchableEntitySelect } from "../SearchableEntitySelect";
 
@@ -85,21 +85,28 @@ export function EntityFilterSelect({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [acumular]);
 
-  /* O escolhido que não veio na primeira página — quase sempre da URL. */
+  /*
+   * O escolhido que não veio na primeira página — quase sempre da URL.
+   *
+   * Uma pergunta por valor (PERFORMANCE-CLEANUP-WAVE-01). O efeito roda de novo
+   * a cada opção que chega; quando a limpeza descartava a pergunta em andamento,
+   * a primeira página chegando antes do nome perguntava outra vez pelo mesmo id —
+   * e cada busca também, e um id que não existe mais, para sempre. A resposta
+   * não é descartada: juntar a opção de um valor anterior só a põe na lista.
+   */
+  const nomePedido = useRef("");
   useEffect(() => {
-    if (!value || opcoes.some((opcao) => opcao.id === value)) return;
-    let vivo = true;
+    if (!value || nomePedido.current === value) return;
+    if (opcoes.some((opcao) => opcao.id === value)) return;
+    nomePedido.current = value;
     source
       .porId(value)
       .then((opcao) => {
-        if (vivo && opcao) acumular([opcao]);
+        if (opcao) acumular([opcao]);
       })
       .catch(() => {
         // Sem o rótulo o filtro continua valendo; só o nome fica ausente.
       });
-    return () => {
-      vivo = false;
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, opcoes, acumular]);
 

@@ -3,12 +3,11 @@ import type { PrismaClient } from "@prisma/client";
 import type { AttentionItemDTO, AttentionSeverity } from "@veridi/shared";
 import { isLotExpired, getOnHandByLots } from "../../lib/inventory-ledger.js";
 import { marcadorDeHojeComercial } from "../../lib/business-day.js";
+import type { ConjuntosDoRetrato } from "./dashboard.queries.js";
 import {
   OPERATIONAL_ORDER_STATUSES,
+  carregarConjuntosDoRetrato,
   getOrdersAwaitingProductionIds,
-  getOrdersAwaitingShipmentIds,
-  getProductionOrdersWithIncompleteCost,
-  getProductionOrdersWithShortage,
 } from "./dashboard.queries.js";
 
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
@@ -35,10 +34,15 @@ function formatDate(date: Date): string {
  *
  * Ordenacao: severidade, depois data mais urgente/antiga, depois codigo
  * (determinismo estavel entre requisicoes).
+ *
+ * `conjuntos` e o que o Painel ja carregou para o estado atual no mesmo
+ * retrato (PERFORMANCE-CLEANUP-WAVE-01) — promessa, para esta lista comecar as
+ * proprias consultas sem esperar por ele. Sem ele, a lista carrega os tres.
  */
 export async function buildAttentionList(
   prisma: PrismaOrTx,
   now: Date = new Date(),
+  conjuntos?: Promise<ConjuntosDoRetrato>,
 ): Promise<AttentionItemDTO[]> {
   /*
    * A fronteira do vencimento é um DIA, não o relógio: vencido é o lote cujo
@@ -51,9 +55,11 @@ export async function buildAttentionList(
 
   const [
     problematicLots,
-    shortageOrders,
-    incompleteCostOrders,
-    awaitingShipmentIds,
+    {
+      productionOrdersWithShortage: shortageOrders,
+      productionOrdersWithIncompleteCost: incompleteCostOrders,
+      ordersAwaitingShipmentIds: awaitingShipmentIds,
+    },
     awaitingProductionIds,
     shipmentsAwaitingBilling,
     latePurchaseOrders,
@@ -79,9 +85,7 @@ export async function buildAttentionList(
         item: { select: { code: true } },
       },
     }),
-    getProductionOrdersWithShortage(prisma, now),
-    getProductionOrdersWithIncompleteCost(prisma),
-    getOrdersAwaitingShipmentIds(prisma),
+    conjuntos ?? carregarConjuntosDoRetrato(prisma, now),
     getOrdersAwaitingProductionIds(prisma),
     prisma.shipment.findMany({
       where: { status: "CONFIRMED", billings: { none: { status: "ISSUED" } } },
