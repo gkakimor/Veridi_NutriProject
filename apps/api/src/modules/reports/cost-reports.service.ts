@@ -161,25 +161,28 @@ export async function getPricingByProductReport(
 }
 
 /**
- * R-20 — Orçamento × Precificação.
+ * O `where` do R-20 — todo filtro ativo entra, e em AND.
  *
- * Mostra a cadeia ORC → PREC → faixa → CALC de cada proposta e deixa
- * explícito o que foi preço de exceção. Proposta enviada lê o snapshot
- * congelado; rascunho lê o vínculo vivo — nada é recalculado.
+ * Status, cliente e período moram na VERSÃO do orçamento, então viram UMA
+ * condição sobre `quoteVersion`. Escritos como três chaves `quoteVersion` no
+ * mesmo objeto, a última apagava as anteriores: cliente + status trazia todos
+ * os status do cliente, e o período descartava os dois
+ * (R20-QUOTE-FILTER-COMPOSITION-01). Tela, CSV e PDF passam por aqui, e a
+ * contagem usa o mesmo objeto da página.
  */
-export async function getQuotePricingAuditReport(
-  query: QuotePricingAuditQuery,
-  pagination: Pagination = query,
-): Promise<ReportPageDTO<QuotePricingAuditRowDTO>> {
-  const prisma = getPrisma();
+function quotePricingAuditWhere(query: QuotePricingAuditQuery): PrismaTypes.QuoteLineWhereInput {
   // `quoteDate` nasce como instante (`new Date()` ao criar a versão).
   const periodo = periodoDeInstante(query);
+  const versao: PrismaTypes.QuoteVersionWhereInput = {
+    ...(query.status ? { status: query.status } : {}),
+    // O cliente é o do PROJETO da versão — a associação de sempre.
+    ...(query.customerId ? { project: { customerId: query.customerId } } : {}),
+    ...(periodo ? { quoteDate: periodo } : {}),
+  };
 
-  const where: PrismaTypes.QuoteLineWhereInput = {
-    ...(query.status ? { quoteVersion: { status: query.status } } : {}),
+  return {
+    ...(Object.keys(versao).length > 0 ? { quoteVersion: versao } : {}),
     ...(query.priceSource ? { priceSource: query.priceSource } : {}),
-    ...(query.customerId ? { quoteVersion: { project: { customerId: query.customerId } } } : {}),
-    ...(periodo ? { quoteVersion: { quoteDate: periodo } } : {}),
     ...(query.search
       ? {
           OR: [
@@ -202,6 +205,21 @@ export async function getQuotePricingAuditReport(
         }
       : {}),
   };
+}
+
+/**
+ * R-20 — Orçamento × Precificação.
+ *
+ * Mostra a cadeia ORC → PREC → faixa → CALC de cada proposta e deixa
+ * explícito o que foi preço de exceção. Proposta enviada lê o snapshot
+ * congelado; rascunho lê o vínculo vivo — nada é recalculado.
+ */
+export async function getQuotePricingAuditReport(
+  query: QuotePricingAuditQuery,
+  pagination: Pagination = query,
+): Promise<ReportPageDTO<QuotePricingAuditRowDTO>> {
+  const prisma = getPrisma();
+  const where = quotePricingAuditWhere(query);
 
   // R-20 é auditoria de PREÇO, e preço vive na linha: numa proposta com três
   // produtos, cada um tem a própria faixa, o próprio cálculo e a própria
