@@ -15,6 +15,7 @@ import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { nextLotCode } from "../../lib/lot-code.js";
+import { ordemDeCompraRecebe } from "../purchase-orders/purchase-order-receivable.js";
 import {
   CustomerMaterialRequiresLotControlError,
   CustomerNotFoundError,
@@ -189,7 +190,7 @@ export async function createReceipt(
     include: { lines: true },
   });
   if (!po) throw new PurchaseOrderNotFoundError(purchaseOrderId);
-  if (po.status !== "ORDERED" && po.status !== "PARTIALLY_RECEIVED") {
+  if (!ordemDeCompraRecebe(po.status)) {
     throw new InvalidPurchaseOrderStatusError(po.status);
   }
 
@@ -230,7 +231,7 @@ export async function createReceipt(
       SELECT status FROM purchase_orders WHERE id = ${purchaseOrderId} FOR UPDATE
     `;
     const lockedStatus = lockedRows[0]?.status;
-    if (lockedStatus !== "ORDERED" && lockedStatus !== "PARTIALLY_RECEIVED") {
+    if (!ordemDeCompraRecebe(lockedStatus)) {
       throw new InvalidPurchaseOrderStatusError(lockedStatus ?? "DESCONHECIDO");
     }
 

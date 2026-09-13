@@ -9,6 +9,7 @@ import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { intervaloDeDiasCivis } from "../../lib/business-day.js";
 import { statusDoWhere } from "../../lib/status-list-schema.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
+import { STATUS_QUE_RECEBEM } from "./purchase-order-receivable.js";
 import {
   DuplicateLineItemError,
   EmptyOrderError,
@@ -226,6 +227,12 @@ export async function listPurchaseOrders(
 
   const status = statusDoWhere(query.status);
   if (status) where["status"] = status;
+  /*
+   * "Pode receber agora" é resposta do servidor, com o mesmo conjunto que o
+   * recebimento aplica ao gravar. Em `AND` para compor com `status`: junto
+   * dele, restringe — nunca amplia o que foi pedido.
+   */
+  if (query.receivable) where["AND"] = [{ status: { in: [...STATUS_QUE_RECEBEM] } }];
   if (query.supplierId) where["supplierId"] = query.supplierId;
   /*
    * `orderDate` é DATA CIVIL (data de documento), não instante: o dia é o
