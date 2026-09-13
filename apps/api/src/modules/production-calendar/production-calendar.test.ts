@@ -135,8 +135,8 @@ async function migrarCalendarioLegado(legado: {
 }
 
 beforeAll(async () => {
-  // Antes de qualquer escrita: o calendário do banco é de quem usa o DEV, e
-  // volta no afterAll — com o arquivo inteiro, uma parte dele ou uma falha.
+  // Antes de qualquer escrita: o calendário do banco de teste volta no
+  // afterAll — com o arquivo inteiro, uma parte dele ou uma falha.
   calendarioDeAntes = await guardarCalendarioDeProducao(ANO_DE_TESTE);
   await app.ready();
   await leitor.ready();

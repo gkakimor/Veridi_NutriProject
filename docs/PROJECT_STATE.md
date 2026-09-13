@@ -2831,6 +2831,42 @@ os 409 simulados.
 
 Achado no BACKLOG, P3: CONFIRM-DISCARDS-DIRTY-01.
 
+## A suíte da API tem banco próprio (TEST-SUPPORT-ISOLATION-WAVE-01, 2026-09-13)
+
+Os testes da API rodavam no banco da `DATABASE_URL` — no DEV, o `veridi_dev`. A
+faixa serial dependia de guardar e devolver o Calendário, um kill antes do
+`afterAll` deixava o DEV alterado, e o `buildTestApp` tinha deixado lá 683
+usuários `USR-TEST-*` e 808 sessões.
+
+**Regra.** A suíte escreve só em banco de teste: `TEST_DATABASE_URL` (contrato
+de CI) ou, sem ela, `<banco da DATABASE_URL>_test` no mesmo servidor, criado e
+migrado pelo `globalSetup`. Destino que não se prova de teste — nome sem a
+palavra `test`, marca de produção, host gerenciado, o mesmo banco da
+`DATABASE_URL`, credencial de produção no ambiente — recusa antes de qualquer
+teste, no config, no `globalSetup` e em cada worker
+(`test-support/banco-de-teste.ts`). Usuário e sessão do `buildTestApp` saem no
+fim do arquivo que os criou: o `afterAll` do setup de arquivo roda depois dos do
+próprio arquivo (`test-support/usuarios-de-teste.ts`); o que um kill deixou, a
+rodada seguinte varre. A devolução do calendário continua, como defesa a mais.
+Contrato em `TECH_BASELINE.md`; domínio, Calendário, auth e migrations
+intocados.
+
+**Validação.** `.env` do worktree apontando para um banco que NÃO existe
+(canário): 13 arquivos — 11 paralelos, calendário e agenda na faixa serial, 251
+testes — duas vezes seguidas; `users`, `user_sessions` e calendário 0 → 0, e na
+segunda nenhuma tabela mudou de contagem. Kill forçado da árvore no meio do
+calendário: o banco de teste ficou sem o calendário sentinela e com 1 usuário e
+1 sessão; a rodada seguinte varreu e passou 64/64. Seis destinos proibidos
+saíram com exit 1 e zero teste; 12 mutações derrubadas. Com a `.env` do checkout
+principal (`veridi_dev`), a suíte criou e migrou `veridi_dev_test` sozinha e as
+mesmas duas rodadas deram o mesmo resultado. No `veridi_dev`, nenhuma conexão
+das rodadas (`pg_stat_database.sessions` parado em cada janela) e contadores de
+escrita por tabela idênticos antes e depois.
+
+**Fora do escopo.** A suíte de scripts segue no banco da `.env`
+(TEST-SCRIPTS-DB-ISOLATION-01), e os usuários de teste antigos continuam no
+`veridi_dev` (TEST-USERS-LEGACY-RESIDUE-01).
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
@@ -2916,9 +2952,10 @@ Caminho canônico, nesta ordem (os passos 2 a 4 só quando o PO pedir a carga):
 4. `pnpm veridi:examples -- --apply`
 
 Nunca `db push`, nunca edição manual de `_prisma_migrations`. Runbook do
-importador em [`VERIDI_MIGRATION.md`](VERIDI_MIGRATION.md). `pnpm test` escreve
-no mesmo banco: rodar a suíte depois do reset avança a numeração (OP, lote,
-expedição) antes de qualquer massa de rodada.
+importador em [`VERIDI_MIGRATION.md`](VERIDI_MIGRATION.md). A suíte da API
+escreve em `veridi_dev_test`, não aqui (TEST-SUPPORT-ISOLATION-WAVE-01); a de
+scripts ainda grava o corpus no `veridi_dev` quando ele está presente
+(TEST-SCRIPTS-DB-ISOLATION-01).
 
 ## Produção
 

@@ -6,6 +6,7 @@ import type { App } from "../app.js";
 import { getPrisma } from "../db/prisma.js";
 import { hashPassword } from "../lib/password.js";
 import { SESSION_COOKIE, hashSessionToken } from "../modules/auth/auth.service.js";
+import { PREFIXO_DO_USUARIO_DE_TESTE, registrarUsuarioDeTeste } from "./usuarios-de-teste.js";
 
 /**
  * Suporte de teste para o sistema autenticado.
@@ -15,6 +16,8 @@ import { SESSION_COOKIE, hashSessionToken } from "../modules/auth/auth.service.j
  * devolve a mesma interface do `buildApp` com o cookie de sessão anexado
  * automaticamente — a autenticação é real (usuário, hash de senha e sessão
  * no banco), não um bypass.
+ *
+ * Usuário e sessão são do arquivo: saem no fim dele (`usuarios-de-teste.ts`).
  */
 
 const cachedUsers = new Map<UserRole, { user: User; cookie: string }>();
@@ -35,7 +38,7 @@ export async function createAuthenticatedUser(
   const marker = `${Date.now()}-${randomBytes(3).toString("hex")}`;
   const user = await prisma.user.create({
     data: {
-      code: `USR-TEST-${role}-${marker}`,
+      code: `${PREFIXO_DO_USUARIO_DE_TESTE}${role}-${marker}`,
       name: `Usuário de Teste ${role}`,
       email: `teste-${role.toLowerCase()}-${marker}@veridi.local`,
       passwordHash: await hashPassword(`senha-de-teste-${marker}`),
@@ -43,6 +46,7 @@ export async function createAuthenticatedUser(
       active: true,
     },
   });
+  registrarUsuarioDeTeste(user.id);
 
   const token = randomBytes(32).toString("base64url");
   await prisma.userSession.create({

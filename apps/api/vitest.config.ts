@@ -1,13 +1,21 @@
 import { defineConfig, loadEnv } from "vite";
+import { ambienteComBancoDeTeste } from "./src/test-support/banco-de-teste.js";
 
 /**
- * Os testes leem as mesmas variaveis do `.env` na raiz do monorepo.
- * `loadEnv` retorna vazio se o arquivo nao existir, entao o suite nao quebra
- * em um clone limpo — apenas reporta o banco como indisponivel.
+ * Os testes leem as variaveis do `.env` na raiz do monorepo (e do ambiente,
+ * que vence o arquivo) — menos o banco: a suíte escreve num banco de TESTE,
+ * nunca no da `DATABASE_URL` (`src/test-support/banco-de-teste.ts`). Sem banco
+ * reconhecido como de teste, nenhum arquivo roda.
+ *
+ * `globalSetup` cria o banco de teste se faltar e aplica as migrations;
+ * `setupFiles` confere o destino em cada worker e tira, no fim de cada arquivo,
+ * os usuários e as sessões que ele criou.
  */
 export default defineConfig(({ mode }) => ({
   test: {
-    env: loadEnv(mode, "../../", ""),
+    env: ambienteComBancoDeTeste(loadEnv(mode, "../../", "")),
+    globalSetup: ["./src/test-support/preparar-banco-de-teste.ts"],
+    setupFiles: ["./src/test-support/ciclo-do-arquivo-de-teste.ts"],
     // Cada arquivo de teste sobe a app e abre o proprio pool do Prisma.
     // Sem teto de workers o Postgres local esgota os connection slots
     // ("remaining connection slots are reserved...") e testes corretos
