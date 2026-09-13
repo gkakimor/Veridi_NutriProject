@@ -4454,9 +4454,11 @@ Isso **não** significa converter o que está guardado. Três conceitos, e só t
 1. **Instante** — `createdAt`, `acceptedAt`, `shippedAt`. Continua persistido em
    UTC; a LEITURA é no fuso operacional. `2026-09-09T01:30:00Z` aparece como
    `08/09/2026 22:30`.
-2. **Data civil** — `validUntil`, data de documento, vigência, validade de lote.
-   É `YYYY-MM-DD` e não ganha semântica de instante: a meia-noite UTC gravada é
-   o MARCADOR do dia, e o dia são os seus componentes UTC (§71).
+2. **Data civil** — `validUntil`, data de documento, vigência, validade de lote,
+   previsão de entrega da OC. É `YYYY-MM-DD` e não ganha semântica de instante: a
+   meia-noite UTC gravada é o MARCADOR do dia, e o dia são os seus componentes UTC
+   (§71). "Vencido" e "atrasado" se medem entre dias: a OC prevista para 12/09 não
+   está atrasada em 12/09 e passa a estar às 00:00 de 13/09, se ainda aberta.
 3. **Dia comercial** — o dia civil da Veridi e os instantes que o limitam. É o
    que "hoje" significa numa consulta: de 00:00:00.000 a 23:59:59.999 em São
    Paulo.

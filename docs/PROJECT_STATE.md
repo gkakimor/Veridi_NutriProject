@@ -2409,7 +2409,8 @@ UTC (`occurredAt.toISOString().slice(0, 10)`), e o movimento das 22:30 de São P
 cai na barra do dia seguinte (corrigido em DASHBOARD-MOVEMENT-BUSINESS-DAY-01, abaixo);
 "Atrasadas" de Compras (estado atual e atenção) compara
 o marcador de `expectedDeliveryDate` com o instante de agora, e a OC prevista para
-12/09 conta como atrasada desde 21h de 11/09 em São Paulo. Aba aberta antes do deploy
+12/09 conta como atrasada desde 21h de 11/09 em São Paulo (corrigido em
+PURCHASE-OVERDUE-CIVIL-DATE-01, abaixo). Aba aberta antes do deploy
 recebe 400 no Painel até recarregar.
 
 ## Barra do gráfico no dia comercial (DASHBOARD-MOVEMENT-BUSINESS-DAY-01, 2026-09-13)
@@ -2433,6 +2434,34 @@ resumo; dia vazio sem barra; guarda contra o slice UTC; o serviço antigo derrub
 Achado (não corrigido): `diaCivil` monta um `Intl.DateTimeFormat` por chamada, ~54 µs
 na máquina do laboratório — 10 mil movimentos na janela somam ~0,5 s ao Painel; um
 formatador reaproveitado custa ~3 µs.
+
+## OC atrasada no dia civil (PURCHASE-OVERDUE-CIVIL-DATE-01, 2026-09-13)
+
+`expectedDeliveryDate` é data civil (a tela grava a meia-noite UTC do dia escolhido),
+mas os três lugares que dizem "OC atrasada" a comparavam com o relógio: o contador
+"Atrasadas" do Estado atual (`getOpenPurchaseOrderState`), a lista de atenção
+(`PURCHASE_ORDER_LATE`) e o R-11 (tela, CSV e impressão). A OC prevista para 12/09
+ficava atrasada desde 21h de 11/09 em São Paulo, e o R-11 a mostrava com "0 dias".
+
+**Regra.** Atrasada quando o dia previsto já acabou no dia comercial: durante o dia
+12 inteiro, até 23:59:59.999 de São Paulo, não está; a partir de 13/09 00:00 está, se
+ainda aberta. Contador e R-11 usam `venceuEm`; a atenção filtra por
+`marcadorDeHojeComercial` (a fronteira que já servia ao vencimento de lote); o
+`daysLate` do R-11 é `diasCivisAte` com sinal trocado (1 no dia seguinte, nunca 0).
+Status elegíveis sem mudança — ORDERED/PARTIALLY_RECEIVED com saldo aberto; RECEIVED,
+CANCELLED e DRAFT seguem fora. `buildAttentionList` e `getLatePurchaseOrdersReport`
+ganharam `now` opcional (padrão: agora). Sem migration, sem backfill; prazo, status e
+Movimentações do Painel intocados.
+
+**Validação.** API 3 (`dashboard/compras-atrasadas-dia-civil.test.ts`: OCs prevista
+12/09, prevista 11/09, parcial, recebida, cancelada e rascunho em nove instantes de
+11/09 12:00 a 13/09 12:00 de São Paulo, com a máquina em UTC, UTC-07 e São Paulo;
+contador medido com e sem as OCs do teste no mesmo retrato REPEATABLE READ, desfeito
+no fim; contador = lista = R-11 em cada borda; o código antigo derruba os três já em
+11/09 12:00). Focados verdes (Painel serial e dia comercial, validade em uso, OCs,
+Relatórios, exportações, dia civil, fuso) e typecheck. Smoke HTTP com banco e porta
+isolados, relógio real: prevista hoje fora; prevista ontem no contador (+1), na
+atenção, no R-11 com 1 dia e no CSV.
 
 ## Próxima prioridade
 

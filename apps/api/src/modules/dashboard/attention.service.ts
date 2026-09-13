@@ -36,8 +36,10 @@ function formatDate(date: Date): string {
  * Ordenacao: severidade, depois data mais urgente/antiga, depois codigo
  * (determinismo estavel entre requisicoes).
  */
-export async function buildAttentionList(prisma: PrismaOrTx): Promise<AttentionItemDTO[]> {
-  const now = new Date();
+export async function buildAttentionList(
+  prisma: PrismaOrTx,
+  now: Date = new Date(),
+): Promise<AttentionItemDTO[]> {
   /*
    * A fronteira do vencimento é um DIA, não o relógio: vencido é o lote cujo
    * dia de validade é anterior ao dia comercial de hoje. O marcador de hoje é
@@ -94,7 +96,9 @@ export async function buildAttentionList(prisma: PrismaOrTx): Promise<AttentionI
     prisma.purchaseOrder.findMany({
       where: {
         status: { in: ["ORDERED", "PARTIALLY_RECEIVED"] },
-        expectedDeliveryDate: { lt: now },
+        // A previsão também é DIA: atrasada só depois do dia previsto, com a
+        // mesma fronteira do vencimento de lote — nunca o relógio.
+        expectedDeliveryDate: { lt: hoje },
       },
       select: {
         id: true,
