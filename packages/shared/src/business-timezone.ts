@@ -25,14 +25,37 @@
  */
 export const FUSO_COMERCIAL = "America/Sao_Paulo";
 
+/**
+ * Um formatador de dia por fuso, criado na primeira pergunta e reaproveitado
+ * (PERFORMANCE-CLEANUP-WAVE-01).
+ *
+ * Criar um `Intl.DateTimeFormat` custava ~55 µs a CADA dia lido — o Painel lê um
+ * por movimento da janela e um por consumo no custo das OPs. Formatar num que já
+ * existe custa poucos µs. O formatador não guarda nada da data anterior, e o fuso
+ * continua indo nele pelo nome IANA: quem decide o deslocamento de cada data,
+ * horário de verão incluído, segue sendo a base de fusos do `Intl`. Os chamadores
+ * passam constantes (`FUSO_COMERCIAL`, `"UTC"`); nome inválido lança na criação
+ * e não entra no mapa.
+ */
+const formatadoresDeDia = new Map<string, Intl.DateTimeFormat>();
+
+function formatadorDeDia(fuso: string): Intl.DateTimeFormat {
+  let formatador = formatadoresDeDia.get(fuso);
+  if (!formatador) {
+    formatador = new Intl.DateTimeFormat("pt-BR", {
+      timeZone: fuso,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    formatadoresDeDia.set(fuso, formatador);
+  }
+  return formatador;
+}
+
 /** `YYYY-MM-DD` de um instante, lido em `fuso`. */
 export function diaCivil(instante: Date, fuso: string): string {
-  const partes = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: fuso,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(instante);
+  const partes = formatadorDeDia(fuso).formatToParts(instante);
   const parte = (tipo: string) => partes.find((p) => p.type === tipo)?.value ?? "";
   return `${parte("year")}-${parte("month")}-${parte("day")}`;
 }

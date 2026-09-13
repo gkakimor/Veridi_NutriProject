@@ -2434,7 +2434,7 @@ resumo; dia vazio sem barra; guarda contra o slice UTC; o serviço antigo derrub
 (São Paulo) e Chromium em UTC, UTC-07 e São Paulo: API e barras da tela idênticas
 (11/09, 12/09 com três segmentos, 13/09), console limpo.
 
-Achado (não corrigido): `diaCivil` monta um `Intl.DateTimeFormat` por chamada, ~54 µs
+Achado (fechado em PERFORMANCE-CLEANUP-WAVE-01): `diaCivil` monta um `Intl.DateTimeFormat` por chamada, ~54 µs
 na máquina do laboratório — 10 mil movimentos na janela somam ~0,5 s ao Painel; um
 formatador reaproveitado custa ~3 µs.
 
@@ -2749,7 +2749,7 @@ formulários e num filtro sem transbordo; console limpo fora o 400 de
 `reservation-status` que a simulação provoca; massa apagada.
 
 Achado: Item × Fornecedor pede a primeira página de fornecedores duas vezes
-(barra e formulário) — junto do `porId` duplicado, em PERFORMANCE-CLEANUP-WAVE-01.
+(barra e formulário) — fechado, junto do `porId` duplicado, em PERFORMANCE-CLEANUP-WAVE-01.
 
 ## Um retrato do banco por requisição do Painel (DASHBOARD-SNAPSHOT-CONSISTENCY-01, 2026-09-13)
 
@@ -2787,7 +2787,7 @@ derrubam: sem transação (contador 101 × lista 100), custo sem o `prisma` na c
 novo devolvem o mesmo DTO em quatro períodos. Smoke no servidor real com a massa: 200 em
 sequência e em 5 paralelas com respostas iguais; período invertido segue 400.
 
-Achado (não corrigido, fora do escopo): estado atual e atenção calculam duas vezes o
+Achado (fechado em PERFORMANCE-CLEANUP-WAVE-01, abaixo): estado atual e atenção calculam duas vezes o
 custo incompleto, a falta de material e os pedidos aguardando expedição. No mesmo
 retrato o resultado é idêntico — resolver uma vez cortaria perto de metade das SQL em
 fila. Com latência de rede entre API e banco, cada 1 ms por SQL soma ~5 s nessa massa.
@@ -3081,6 +3081,63 @@ filtros do PDF saem `YYYY-MM-DD`; plural fixo fora dos Relatórios (prazo e parc
 Orçamento: `QuotePdf`, `QuoteConditionsForm`, `CommercialOriginSection`); ids que a API
 aceita e nenhuma tela manda (`itemId`, `lotId`, `productId`…) sairiam crus se digitados
 na URL de impressão.
+
+## Performance sem mudar regra (PERFORMANCE-CLEANUP-WAVE-01, 2026-09-13)
+
+Cinco achados de performance já conhecidos, medidos antes e depois. Sem migration,
+sem contrato de API novo, sem cache entre requisições; Pedido e OC intocados.
+
+**Painel.** Estado atual e atenção calculavam cada um os pedidos aguardando
+expedição, a falta de material e o custo incompleto — no mesmo retrato, com o mesmo
+`now`. `carregarConjuntosDoRetrato` (`dashboard.queries.ts`) carrega os três uma vez
+dentro da transação `RepeatableRead`, e `buildCurrentState`/`buildAttentionList`
+leem a mesma promessa; nada volta ao `getPrisma()` no meio. A atenção chamada sozinha
+carrega os três como antes. Massa de 200 OPs concluídas sem custo (2 consumos), 300
+lotes-problema, 100 OCs, 60 OPs com falta e 30 pedidos, `now` fixo: 5.262 → 2.651 SQL;
+mediana 4,27 → 1,44 s (hoje) e 4,29 → 1,63 s (período) — 1,60/1,76 s só com o
+compartilhamento, o resto é o `diaCivil`; DTO idêntico nos dois períodos. Contagens
+baratas do mesmo conjunto ficaram (expedições a faturar, lotes-problema: ~8 SQL).
+
+**`diaCivil`.** Um `Intl.DateTimeFormat` por fuso, criado na primeira chamada e
+reaproveitado: ~56 → ~2,6 µs, 100 mil instantes de 1900 a 2100 em São Paulo, UTC,
+UTC-07 e Vancouver sem divergência. Fuso IANA de sempre, sem offset fixo.
+
+**R-15.** O resumo lia todo faturamento do filtro com todas as linhas. Agora
+`billingCount` é o `count` da paginação; completos, um `count` de documento com linha
+e sem linha sem preço; valor, quantidade somada por preço (`groupBy`) × preço na
+`Decimal` de 40 dígitos, só com todos completos (linha sem preço vista no meio também
+tira o total). 2.000 faturamentos de 3 linhas: 8.101 → 108 registros devolvidos, 129
+→ 16 ms, 6 SQL como antes; resumo, total, página e linhas idênticos em sete recortes.
+Resumo segue do filtro inteiro; CSV e paginação iguais; índice novo não foi preciso.
+
+**Seletores.** `EntityFilterSelect` pergunta o nome pelo id uma vez por valor: a
+limpeza do efeito descartava a pergunta em andamento, e a primeira página chegando
+antes do nome perguntava de novo (2 vezes; 4 com duas buscas no meio; 3 para id que
+não existe mais). Item × Fornecedor pedia a mesma primeira página na barra e no
+formulário, na mesma montagem: `fornecedoresAtivosDaTela` (`filter-sources.ts`, em
+`useMemo`) pede uma vez e entrega aos dois; busca e id seguem no servidor.
+
+**Validação.** API: `dashboard-conjuntos-uma-vez.test.ts` (faixa serial; cada
+consulta-raiz uma vez, custo resolvido uma vez por OP, contador e atenção iguais a cada
+conjunto calculado à parte), `dashboard-retrato-unico.test.ts` ajustado (uma leitura
+das OPs do custo), `r15-resumo-agregado.test.ts` (0 documentos, incompleto, 45
+documentos em 7 páginas, busca, resultado completo e CSV, resumo sem ler documento;
+igual à conta de antes). Shared: `dia-civil-formatador.test.ts` (anterior × novo em
+sete fusos, bordas, horário de verão, fuso do processo trocado). Web:
+`filtro-por-id-uma-vez.test.tsx` e `fornecedores-primeira-pagina-uma-vez.test.tsx`
+(servidor falso de 1002). 14 mutações, todas derrubadas. Focados: API serial 13, API
+paralela 142 (Painel, Relatórios, exportações, validade em uso, dia comercial), shared
+283, web 360 (filtros, Item × Fornecedor, Relatórios, Planejamento, Faturamento,
+Painel); typecheck. Smoke com banco e portas isolados, web antiga (origin/main) × nova
+contra a mesma API, dev com StrictMode: primeira página de fornecedores 4 → 1 na
+listagem e no formulário, nome pelo id 2 → 1, busca da barra acha o #31; Painel 200 e
+invertido 400; R-15 pela rota com o resumo de antes e CSV de 2.000; console limpo —
+19/19.
+
+**Achados.** Custo incompleto ainda resolve OP a OP (~2.600 das 2.651 SQL), e dentro
+do retrato os `findUnique` não se compactam — DASHBOARD-COST-BATCH-01.
+`instanteComercial`, `minutoDoDiaComercial` e `limitesDoDiaComercial` ainda criam
+formatador por chamada — TZ-FORMATTER-REUSE-01. Os dois no BACKLOG, P3.
 
 ## Próxima prioridade
 

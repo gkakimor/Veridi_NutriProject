@@ -104,6 +104,43 @@ export const fornecedorAtivoFilterSource: EntityFilterSource = {
   porId: fornecedorFilterSource.porId,
 };
 
+/**
+ * Fornecedores ATIVOS da tela Item × Fornecedor, com a primeira página dividida
+ * entre a barra e o formulário de nova relação (PERFORMANCE-CLEANUP-WAVE-01).
+ *
+ * Os dois abrem com a MESMA página — 20 ativos — e cada um a pedia por conta
+ * própria: duas consultas idênticas a cada montagem da listagem, com o
+ * formulário aberto ou não. Agora ela sai uma vez: `primeiraPagina` entrega os
+ * fornecedores ao formulário e `source` entrega as opções à barra. Busca e nome
+ * pelo id continuam os de `fornecedorAtivoFilterSource`, sempre no servidor.
+ *
+ * É fábrica, e não literal: criar dentro de `useMemo`, uma por montagem — nada
+ * fica guardado de uma tela para a próxima. Pedido que falhou não fica guardado:
+ * quem perguntar depois pergunta de novo, em vez de herdar o erro.
+ */
+export function fornecedoresAtivosDaTela(): {
+  primeiraPagina: () => Promise<SupplierDTO[]>;
+  source: EntityFilterSource;
+} {
+  let pedido: Promise<SupplierDTO[]> | null = null;
+  const primeiraPagina = () => {
+    pedido ??= listSuppliers({ active: true, pageSize: PAGINA })
+      .then((resultado) => resultado.suppliers)
+      .catch((erro: unknown) => {
+        pedido = null;
+        throw erro;
+      });
+    return pedido;
+  };
+  return {
+    primeiraPagina,
+    source: {
+      ...fornecedorAtivoFilterSource,
+      inicial: async () => (await primeiraPagina()).map(opcaoDeFornecedor),
+    },
+  };
+}
+
 function opcaoDeItem(item: ItemDTO): EntityOption {
   return {
     id: item.id,

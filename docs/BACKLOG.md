@@ -949,6 +949,8 @@ mudou.
 | ~~BILLING-SHIPMENT-UNSAVED-GUARD-01~~ | **Fechado em 2026-09-13** por SAVE-FLOW-HARDENING-01: Faturamento e Expedição registram a guarda, com faixa e botão de salvar lendo a mesma pendência | — | — |
 | ~~SAVE-THEN-COMMIT-STALE-01~~ | **Fechado em 2026-09-13** por SAVE-FLOW-HARDENING-01: emitir, confirmar e conferir releem a resposta da gravação antes da segunda chamada | — | — |
 | ~~CONFIRM-DISCARDS-DIRTY-01~~ | **Fechado em 2026-09-13** por CONFIRM-DISCARDS-DIRTY-01 ([`PROJECT_STATE.md`](PROJECT_STATE.md), seção própria): decisão do PO, gravar antes de agir — com a pendência da guarda, "Confirmar pedido" e "Confirmar OC" gravam pelo salvar da tela, esperam a resposta e só então confirmam; sem pendência, confirmam direto | — | — |
+| **DASHBOARD-COST-BATCH-01** | Custo incompleto do Painel ainda resolve o custo OP a OP (`findProductionOrderMaterialCost` por OP, e por consumo a referência de custo): na massa de 200 OPs com 2 consumos, ~2.600 das 2.651 SQL por requisição depois de PERFORMANCE-CLEANUP-WAVE-01. Dentro do retrato os 200 `findUnique` saem um a um — o lote da transação do Prisma mistura consultas e não compacta —, e a mesma chamada avulsa faz 1.608. Pede resolução em lote no serviço de custo, com a mesma regra de qualidade; fora da wave, que não mexeu em custo | LOW | M |
+| **TZ-FORMATTER-REUSE-01** | `instanteComercial` (~110 µs), `minutoDoDiaComercial` (~52 µs) e `limitesDoDiaComercial` (~224 µs) ainda criam `Intl.DateTimeFormat` a cada chamada — o padrão que PERFORMANCE-CLEANUP-WAVE-01 tirou de `diaCivil` (~56 → ~2,6 µs). Cinco chamadores, no Planejamento e na agenda; volume por requisição não medido | LOW | S |
 
 ### Achados do FAST-DEVELOPMENT-RESET-02 (2026-09-11)
 

@@ -1,5 +1,5 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { ItemDTO, SupplierDTO, SupplierItemDTO, SupplierItemQualificationStatus } from "@veridi/shared";
 import {
@@ -12,9 +12,8 @@ import {
 } from "@veridi/shared";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
-import { fornecedorAtivoFilterSource } from "../../lib/filter-sources";
+import { fornecedoresAtivosDaTela } from "../../lib/filter-sources";
 import { listItems } from "../../lib/items-api";
-import { listSuppliers } from "../../lib/suppliers-api";
 import { listSupplierItems } from "../../lib/supplier-items-api";
 import { useAuth } from "../../app/AuthProvider";
 import { useInitialFilters } from "../../lib/filter-params";
@@ -44,16 +43,6 @@ const FILTER_SCOPE = "supplier-items";
  * fica a página de abertura.
  */
 const PRIMEIRA_PAGINA_DE_ITENS = 50;
-
-/**
- * Primeira página de fornecedores ativos do formulário de relação.
- *
- * Era 1000, e a mesma lista abastecia a barra de filtros: do fornecedor ativo
- * 1001 em diante ele não era filtrável nem escolhível. A barra tem busca
- * própria no servidor; o formulário busca por conta dele — como já faz com
- * item — e aqui só fica a abertura.
- */
-const PRIMEIRA_PAGINA_DE_FORNECEDORES = 20;
 
 export function qualificationBadgeClass(status: SupplierItemQualificationStatus): string {
   switch (status) {
@@ -188,6 +177,16 @@ export function SupplierItemsPage() {
   const [suppliers, setSuppliers] = useState<SupplierDTO[]>([]);
   const [items, setItems] = useState<ItemDTO[]>([]);
 
+  /**
+   * Primeira página de fornecedores ativos — a mesma para a barra e para o
+   * formulário de relação, pedida uma vez por montagem (PERFORMANCE-CLEANUP-WAVE-01).
+   *
+   * Era 1000, e a mesma lista abastecia a barra: do fornecedor ativo 1001 em
+   * diante ele não era filtrável nem escolhível. Barra e formulário buscam no
+   * servidor por conta própria; daqui só sai a abertura.
+   */
+  const fornecedoresAtivos = useMemo(fornecedoresAtivosDaTela, []);
+
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput), 300);
     return () => clearTimeout(handle);
@@ -199,13 +198,14 @@ export function SupplierItemsPage() {
   }, [search, qualificationStatus, supplierId, itemFamily, preferredOnly, activeOnly]);
 
   useEffect(() => {
-    listSuppliers({ active: true, pageSize: PRIMEIRA_PAGINA_DE_FORNECEDORES })
-      .then((result) => setSuppliers(result.suppliers))
+    fornecedoresAtivos
+      .primeiraPagina()
+      .then(setSuppliers)
       .catch(() => setSuppliers([]));
     listItems({ active: true, pageSize: PRIMEIRA_PAGINA_DE_ITENS })
       .then((result) => setItems(result.items))
       .catch(() => setItems([]));
-  }, []);
+  }, [fornecedoresAtivos]);
 
   // Link contextual traz identidade exata; nunca combina com filtro anterior.
   const navigate = useNavigate();
@@ -311,7 +311,7 @@ export function SupplierItemsPage() {
           placeholder="Todos os fornecedores"
           value={supplierId}
           onChange={setSupplierId}
-          source={fornecedorAtivoFilterSource}
+          source={fornecedoresAtivos.source}
         />
 
         <label className="sr-only" htmlFor="supplier-items-family">

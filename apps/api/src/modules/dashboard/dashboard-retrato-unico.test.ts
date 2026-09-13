@@ -71,7 +71,8 @@ vi.mock("../../db/prisma.js", async (importOriginal) => {
           >;
           // A lista de atenção lê os lotes-problema num único findMany com OR.
           const lotesDaAtencao = model === "Lot" && operation === "findMany" && "OR" in where;
-          // As OPs concluídas cujo custo vai ser resolvido — no contador e na atenção.
+          // As OPs concluídas cujo custo vai ser resolvido — uma leitura, que o
+          // contador e a atenção compartilham.
           const opsDoCusto = model === "ProductionOrder" && operation === "findMany" && where["status"] === "COMPLETED";
           if (lotesDaAtencao || opsDoCusto) {
             estado.retidas.push(`${model}.${operation}`);
@@ -347,8 +348,9 @@ describe("Painel — um retrato do banco por requisição (DASHBOARD-SNAPSHOT-CO
     const depois = await getDashboard(consulta, agora);
 
     // As leituras seguradas rodaram DEPOIS da escrita: a lista de lotes da
-    // atenção e as OPs do custo, nas duas metades do retrato.
-    expect(retidas).toEqual(["Lot.findMany", "ProductionOrder.findMany", "ProductionOrder.findMany"]);
+    // atenção e as OPs do custo — lidas uma vez para as duas metades do retrato
+    // (PERFORMANCE-CLEANUP-WAVE-01; antes, uma leitura por metade).
+    expect(retidas).toEqual(["Lot.findMany", "ProductionOrder.findMany"]);
 
     // A escrita mexe exatamente nestas contas — o teste não é vazio.
     expect((await findProductionOrderMaterialCost(orderId))?.quality).toBe("REAL");

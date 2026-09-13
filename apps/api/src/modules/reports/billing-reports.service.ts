@@ -47,7 +47,23 @@ export async function getBillingPeriodReport(
       : {}),
   };
 
-  const [billings, total, allForSummary] = await Promise.all([
+  /*
+   * Resumo cobre o FILTRO inteiro, não a página — senão o total mudaria
+   * conforme a navegação. E sai do BANCO agregado (PERFORMANCE-CLEANUP-WAVE-01):
+   * o resumo carregava todo documento do filtro com todas as linhas só para
+   * contar e somar — 2.000 faturamentos de 3 linhas eram 8 mil registros a cada
+   * página pedida.
+   *
+   * - quantos documentos: o `count` do filtro, o mesmo da paginação;
+   * - quantos com preço completo: os que têm linha e nenhuma linha sem preço;
+   * - o valor: `quantidade × preço` somado por preço distinto — só quando todos
+   *   estão completos, que é quando o total existe. A soma das quantidades vem
+   *   exata do PostgreSQL, e a multiplicação é a mesma `Decimal` de antes.
+   */
+  const completo: Prisma.BillingWhereInput = {
+    AND: [where, { lines: { some: {} } }, { lines: { none: { unitPrice: null } } }],
+  };
+  const [billings, total, completeCount, quantityByPrice] = await Promise.all([
     prisma.billing.findMany({
       where,
       include: { lines: true, customerOrder: { select: { customerId: true } } },
@@ -55,9 +71,8 @@ export async function getBillingPeriodReport(
       ...pageArgs(pagination),
     }),
     prisma.billing.count({ where }),
-    // Resumo cobre o FILTRO inteiro, não a página — senão o total mudaria
-    // conforme a navegação.
-    prisma.billing.findMany({ where, select: { lines: { select: { quantity: true, unitPrice: true } } } }),
+    prisma.billing.count({ where: completo }),
+    prisma.billingLine.groupBy({ by: ["unitPrice"], where: { billing: { is: where } }, _sum: { quantity: true } }),
   ]);
 
   function amountOf(lines: { quantity: Prisma.Decimal; unitPrice: Prisma.Decimal | null }[]) {
@@ -66,15 +81,15 @@ export async function getBillingPeriodReport(
     return lines.reduce((sum, line) => sum.plus(line.quantity.times(line.unitPrice!)), new Prisma.Decimal(0));
   }
 
-  let completeCount = 0;
-  let summaryTotal = new Prisma.Decimal(0);
-  for (const billing of allForSummary) {
-    const amount = amountOf(billing.lines);
-    if (amount === null) continue;
-    completeCount += 1;
-    summaryTotal = summaryTotal.plus(amount);
-  }
-  const allComplete = allForSummary.length > 0 && completeCount === allForSummary.length;
+  // Linha sem preço somada no meio do caminho (documento emitido entre as
+  // consultas) também tira o total: nunca soma parcial apresentada como total.
+  const allComplete =
+    total > 0 && completeCount === total && quantityByPrice.every((group) => group.unitPrice !== null);
+  const summaryTotal = quantityByPrice.reduce(
+    (sum, group) =>
+      group.unitPrice === null ? sum : sum.plus(group.unitPrice.times(group._sum.quantity ?? new Prisma.Decimal(0))),
+    new Prisma.Decimal(0),
+  );
 
   const rows = billings.map((billing): BillingPeriodRowDTO => {
     const amount = amountOf(billing.lines);
@@ -99,7 +114,7 @@ export async function getBillingPeriodReport(
     rows,
     ...pageMeta(pagination, total),
     summary: {
-      billingCount: allForSummary.length,
+      billingCount: total,
       billingsWithCompletePricing: completeCount,
       totalAmount: allComplete ? summaryTotal.toFixed(2) : null,
     },
