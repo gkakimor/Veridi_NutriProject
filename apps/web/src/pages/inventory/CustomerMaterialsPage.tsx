@@ -4,8 +4,9 @@ import type { CustomerMaterialRowDTO, LotStatus } from "@veridi/shared";
 import { LOT_STATUSES, LOT_STATUS_LABELS } from "@veridi/shared";
 import { useInitialFilters } from "../../lib/filter-params";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
+import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { listCustomerMaterials } from "../../lib/customer-materials-api";
-import { listCustomers } from "../../lib/customers-api";
+import { clienteAtivoFilterSource } from "../../lib/filter-sources";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
 import { ContextHelp, InfoHint } from "../../components/help";
@@ -53,7 +54,6 @@ export function CustomerMaterialsPage() {
   const [customerId, setCustomerId] = useState(urlFilter("customerId"));
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [onlyWithBalance, setOnlyWithBalance] = useState(true);
-  const [customers, setCustomers] = useState<{ id: string; code: string; legalName: string }[]>([]);
 
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput), 300);
@@ -63,20 +63,6 @@ export function CustomerMaterialsPage() {
   useEffect(() => {
     setPage(1);
   }, [search, customerId, statusFilter, onlyWithBalance]);
-
-  useEffect(() => {
-    listCustomers({ active: true, pageSize: 1000 })
-      .then((result) =>
-        setCustomers(
-          result.customers.map((customer) => ({
-            id: customer.id,
-            code: customer.code,
-            legalName: customer.legalName,
-          })),
-        ),
-      )
-      .catch(() => setCustomers([]));
-  }, []);
 
   const reload = useCallback(() => {
     setLoading(true);
@@ -144,21 +130,16 @@ export function CustomerMaterialsPage() {
           />
         </div>
 
-        <label className="sr-only" htmlFor="customer-materials-customer">
-          Filtrar por cliente
-        </label>
-        <select
+        {/* O filtro é pelo DONO do lote; a lista de clientes é a mesma de
+            antes — só ativos —, agora com busca no servidor em vez de 1000. */}
+        <EntityFilterSelect
           id="customer-materials-customer"
+          label="Filtrar por cliente"
+          placeholder="Todos os clientes"
           value={customerId}
-          onChange={(event) => setCustomerId(event.target.value)}
-        >
-          <option value="">Todos os clientes</option>
-          {customers.map((customer) => (
-            <option key={customer.id} value={customer.id}>
-              {customer.code} — {customer.legalName}
-            </option>
-          ))}
-        </select>
+          onChange={setCustomerId}
+          source={clienteAtivoFilterSource}
+        />
 
         <label className="sr-only" htmlFor="customer-materials-status">
           Filtrar por qualidade

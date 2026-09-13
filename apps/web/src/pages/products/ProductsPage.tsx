@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
+import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { useNavigate } from "react-router-dom";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
-import type { CustomerDTO, ProductDTO } from "@veridi/shared";
+import type { ProductDTO } from "@veridi/shared";
 import { DOSAGE_FORM_LABELS, PRESENTATION_TYPE_LABELS } from "@veridi/shared";
 import { listProducts, setProductActive } from "../../lib/products-api";
-import { listCustomers } from "../../lib/customers-api";
+import { clienteFilterSource } from "../../lib/filter-sources";
 import { ProductFormModal } from "./ProductFormModal";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
@@ -56,7 +56,6 @@ export function ProductsPage() {
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
   const [lifecycleFilter, setLifecycleFilter] = useState<LifecycleFilter>("all");
 
-  const [customers, setCustomers] = useState<CustomerDTO[]>([]);
   const [modalState, setModalState] = useState<ModalState>({ mode: "closed" });
 
   // Contexto exato substitui filtros incompatíveis: combinar o cliente da
@@ -138,12 +137,6 @@ export function ProductsPage() {
     reload();
   }, [reload]);
 
-  useEffect(() => {
-    listCustomers({ pageSize: 1000 })
-      .then((result) => setCustomers(result.customers))
-      .catch(() => setCustomers([]));
-  }, []);
-
   function handleToggleActive(product: ProductDTO) {
     if (product.active) {
       setConfirmDeactivate(product);
@@ -200,22 +193,17 @@ export function ProductsPage() {
           />
         </div>
 
-        <label className="sr-only" htmlFor="products-customer-filter">
-          Filtrar por cliente
-        </label>
-        <div className="toolbar__entity">
-          <SearchableEntitySelect
-            id="products-customer-filter"
-            value={customerFilter}
-            onChange={setCustomerFilter}
-            placeholder="Todos os clientes"
-            options={customers.map((customer) => ({
-              id: customer.id,
-              code: customer.code,
-              name: customer.tradeName ?? customer.legalName,
-            }))}
-          />
-        </div>
+        {/* Mesmo filtro de Cliente de Pedidos: abre com a primeira página e
+            busca no servidor entre todos, inativo inclusive — o universo que a
+            lista de 1000 oferecia, sem o teto. */}
+        <EntityFilterSelect
+          id="products-customer-filter"
+          label="Filtrar por cliente"
+          placeholder="Todos os clientes"
+          value={customerFilter}
+          onChange={setCustomerFilter}
+          source={clienteFilterSource}
+        />
 
         <label className="sr-only" htmlFor="products-active-filter">
           Filtrar por status

@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import type { CustomerDTO, ProjectDTO, ProjectStatus } from "@veridi/shared";
+import type { ProjectDTO, ProjectStatus } from "@veridi/shared";
 import { PROJECT_STATUSES, PROJECT_STATUS_LABELS } from "@veridi/shared";
 import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
+import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 import { listProjects, getProjectVocabulary } from "../../lib/projects-api";
-import { listCustomers } from "../../lib/customers-api";
+import { clienteAtivoFilterSource } from "../../lib/filter-sources";
 import { ProjectFormModal } from "./ProjectFormModal";
 import { useAuth } from "../../app/AuthProvider";
 import { useInitialFilters } from "../../lib/filter-params";
@@ -114,7 +115,6 @@ export function ProjectsPage() {
     setChannel("");
     clearStoredFilters(user?.id ?? null, FILTER_SCOPE);
   }
-  const [customers, setCustomers] = useState<CustomerDTO[]>([]);
   const [channels, setChannels] = useState<string[]>([]);
 
   useEffect(() => {
@@ -128,9 +128,6 @@ export function ProjectsPage() {
   }, [search, status, customerId, channel]);
 
   useEffect(() => {
-    listCustomers({ active: true, pageSize: 1000 })
-      .then((result) => setCustomers(result.customers))
-      .catch(() => setCustomers([]));
     getProjectVocabulary()
       .then((vocabulary) => setChannels(vocabulary.channels))
       .catch(() => setChannels([]));
@@ -222,21 +219,16 @@ export function ProjectsPage() {
           ))}
         </select>
 
-        <label className="sr-only" htmlFor="projects-customer">
-          Filtrar por cliente
-        </label>
-        <select
+        {/* Primeira página e busca no servidor, só entre clientes ativos — o
+            universo que o `<select>` de 1000 oferecia, agora sem teto. */}
+        <EntityFilterSelect
           id="projects-customer"
+          label="Filtrar por cliente"
+          placeholder="Todos os clientes"
           value={customerId}
-          onChange={(event) => setCustomerId(event.target.value)}
-        >
-          <option value="">Todos os clientes</option>
-          {customers.map((customer) => (
-            <option key={customer.id} value={customer.id}>
-              {customer.code} — {customer.legalName}
-            </option>
-          ))}
-        </select>
+          onChange={setCustomerId}
+          source={clienteAtivoFilterSource}
+        />
 
         <label className="sr-only" htmlFor="projects-channel">
           Filtrar por canal

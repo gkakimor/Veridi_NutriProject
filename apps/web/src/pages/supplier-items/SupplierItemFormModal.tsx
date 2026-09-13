@@ -19,6 +19,7 @@ import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { getItem, listItems } from "../../lib/items-api";
 import { createSupplierItem } from "../../lib/supplier-items-api";
+import { listSuppliers } from "../../lib/suppliers-api";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal } from "../../lib/decimal-field";
 import { listUnits } from "../../lib/units-api";
@@ -51,15 +52,29 @@ type RascunhoRelacao = {
 /** Quantos resultados a busca no servidor traz por tipo. */
 const PAGINA_DA_BUSCA = 50;
 
+/** Quantos fornecedores a busca no servidor traz. */
+const PAGINA_DA_BUSCA_DE_FORNECEDORES = 20;
+
 /** Um formato só de rótulo: o da lista inicial e o da busca não podem divergir. */
 function opcaoDoItem(item: ItemDTO): EntityOption {
   return { id: item.id, code: item.code, name: item.name, hint: item.unitCode };
 }
 
+/** Razão social na linha, nome fantasia ao lado, e o CNPJ só para a busca. */
+function opcaoDoFornecedor(supplier: SupplierDTO): EntityOption {
+  return {
+    id: supplier.id,
+    code: supplier.code,
+    name: supplier.legalName,
+    ...(supplier.tradeName ? { hint: supplier.tradeName } : {}),
+    searchTerms: [supplier.tradeName ?? "", supplier.cnpj ?? ""].filter(Boolean).join(" "),
+  };
+}
+
 /** Mescla sem duplicar e sem trocar a referência à toa. */
-function mesclarItens(atual: ItemDTO[], novos: ItemDTO[]): ItemDTO[] {
-  const conhecidos = new Set(atual.map((item) => item.id));
-  const ineditos = novos.filter((item) => !conhecidos.has(item.id));
+function mesclarPorId<T extends { id: string }>(atual: T[], novos: T[]): T[] {
+  const conhecidos = new Set(atual.map((registro) => registro.id));
+  const ineditos = novos.filter((registro) => !conhecidos.has(registro.id));
   return ineditos.length === 0 ? atual : [...atual, ...ineditos];
 }
 
@@ -161,9 +176,10 @@ export function SupplierItemFormModal({
   /*
    * Cadastro no contexto — item e fornecedor.
    *
-   * As duas listas chegam por prop da listagem, e ela as recarrega ao
-   * montar. Como sair para cadastrar DESMONTA este formulário, o que nasce
-   * lá fora já vem na lista quando a listagem remonta e reabre a relação:
+   * As duas listas chegam por prop da listagem — só a primeira página —, e
+   * ela as recarrega ao montar. Como sair para cadastrar DESMONTA este
+   * formulário, o que nasce lá fora volta escolhido pelo id, e o rótulo é
+   * resolvido pelo id quando o registro novo não está na primeira página:
    * não há o que guardar aqui.
    */
   const origem = useContextualCreateOrigin<RascunhoRelacao>({
@@ -214,7 +230,7 @@ export function SupplierItemFormModal({
    * formulário: a listagem só abastece a abertura.
    */
   const [encontrados, setEncontrados] = useState<ItemDTO[]>([]);
-  const catalogo = mesclarItens(items, encontrados);
+  const catalogo = mesclarPorId(items, encontrados);
 
   // Produto acabado é produzido, não comprado — fica fora da lista.
   const purchasableItems = catalogo.filter(
@@ -238,7 +254,7 @@ export function SupplierItemFormModal({
       listItems({ type: "PACKAGING", active: true, search: termo, pageSize: PAGINA_DA_BUSCA }),
     ]);
     const achados = [...materiaPrima.items, ...embalagem.items];
-    setEncontrados((atual) => mesclarItens(atual, achados));
+    setEncontrados((atual) => mesclarPorId(atual, achados));
     return achados.map(opcaoDoItem);
   }
 
@@ -256,11 +272,53 @@ export function SupplierItemFormModal({
     if (catalogo.some((item) => item.id === itemId)) return;
     rotuloPedido.current = itemId;
     void getItem(itemId)
-      .then((item) => setEncontrados((atual) => mesclarItens(atual, [item])))
+      .then((item) => setEncontrados((atual) => mesclarPorId(atual, [item])))
       .catch(() => undefined);
     // `catalogo` é recalculado a cada render; as fontes dele é que importam.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemId, items, encontrados]);
+
+  /**
+   * Fornecedor: primeira página que a listagem passou, somada ao que a busca
+   * no servidor achou e ao escolhido que chegou de fora.
+   *
+   * Eram 1000 ativos passados pela listagem e filtrados só no navegador: do
+   * fornecedor ativo 1001 em diante ele existia, o servidor aceitaria a
+   * relação, e o campo não o achava — com "+ Novo fornecedor" logo ali
+   * convidando a duplicar.
+   */
+  const [fornecedoresEncontrados, setFornecedoresEncontrados] = useState<SupplierDTO[]>([]);
+  const catalogoDeFornecedores = mesclarPorId(suppliers, fornecedoresEncontrados);
+
+  /** Busca no servidor com o MESMO filtro da primeira página: só ativos. */
+  async function buscarFornecedores(termo: string): Promise<EntityOption[]> {
+    const { suppliers: achados } = await listSuppliers({
+      active: true,
+      search: termo,
+      pageSize: PAGINA_DA_BUSCA_DE_FORNECEDORES,
+    });
+    setFornecedoresEncontrados((atual) => mesclarPorId(atual, achados));
+    return achados.map(opcaoDoFornecedor);
+  }
+
+  /**
+   * Rótulo do fornecedor que chega de FORA da lista — cadastro no contexto
+   * (código novo, fora da primeira página) ou rascunho restaurado. Pelo id e
+   * com o mesmo filtro: o que deixou de ser ativo não volta como se pudesse.
+   */
+  const fornecedorPedido = useRef("");
+  useEffect(() => {
+    if (!supplierId || fornecedorPedido.current === supplierId) return;
+    if (catalogoDeFornecedores.some((supplier) => supplier.id === supplierId)) return;
+    fornecedorPedido.current = supplierId;
+    void listSuppliers({ ids: [supplierId], active: true, pageSize: 1 })
+      .then(({ suppliers: achados }) =>
+        setFornecedoresEncontrados((atual) => mesclarPorId(atual, achados)),
+      )
+      .catch(() => undefined);
+    // `catalogoDeFornecedores` é recalculado a cada render; as fontes dele é que importam.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supplierId, suppliers, fornecedoresEncontrados]);
 
   /*
    * A unidade do preço acompanha a unidade de estoque do item por padrão.
@@ -409,15 +467,8 @@ export function SupplierItemFormModal({
                 onChange={setSupplierId}
                 required
                 placeholder="Digite código ou nome do fornecedor…"
-                options={suppliers.map((supplier) => ({
-                  id: supplier.id,
-                  code: supplier.code,
-                  name: supplier.legalName,
-                  ...(supplier.tradeName ? { hint: supplier.tradeName } : {}),
-                  searchTerms: [supplier.tradeName ?? "", supplier.cnpj ?? ""]
-                    .filter(Boolean)
-                    .join(" "),
-                }))}
+                options={catalogoDeFornecedores.map(opcaoDoFornecedor)}
+                onSearch={buscarFornecedores}
                 canCreate
                 createLabel="Novo fornecedor"
                 onCreateNew={() =>

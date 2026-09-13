@@ -2272,7 +2272,8 @@ abaixo); em 1440 a tabela de linhas ainda rola 28 px
 dentro do contêiner (antes 484 px, com o `<select>` de 696 px); seguem com
 `pageSize: 1000` em seletor, fora deste escopo, `CustomerMaterialsPage`,
 `ProjectsPage`, `ProductsPage`, `BillingsPage`, `SupplierItemsPage`,
-`CustomerOrderPage` e `ProjectProductsSection`.
+`CustomerOrderPage` e `ProjectProductsSection` — fechados em
+SELECTOR-CUTOFF-WAVE-01, abaixo.
 
 ## Formato de saída não é permissão (R20-EXPORT-AUTHORIZATION-01, 2026-09-13)
 
@@ -2704,6 +2705,49 @@ no período (Dashboard fora do escopo); a busca dos relatórios consulta a cada 
 e agora esvazia a tabela até cada resposta; erro de consulta mostra o alerta junto
 da frase de vazio da tabela; célula de relatório é `nowrap`, então frase de vazio
 acima de ~50 caracteres fica no limite de 390px (a maior hoje tem 52; não medida).
+
+## Seletores sem corte silencioso (SELECTOR-CUTOFF-WAVE-01, 2026-09-13)
+
+Os sete seletores que CUSTOMER-MATERIAL-ITEM-CUTOFF-01 deixou com catálogo de 1000,
+e dois do mesmo padrão achados na varredura (Amostras com 100; `porId` do
+Planejamento nos 20 primeiros), passaram à busca no servidor. Nenhum `pageSize`
+de três dígitos do web era exportação ou cálculo; os tetos de 100 que sobram são
+listagem ou contexto pequeno (BACKLOG W8). Sem API nova, sem migration.
+
+**Filtros de listagem → `EntityFilterSelect`, universo de antes.** Projetos,
+Amostras e Materiais de Clientes: `clienteAtivoFilterSource`; Item × Fornecedor:
+`fornecedorAtivoFilterSource` — primeira página e busca só entre ativos, e `porId`
+por `ids` dá nome ao id já aplicado (link, filtro lembrado), ativo ou não.
+Produtos e Faturamento: `clienteFilterSource` (busca em todos, como a lista de
+1000). O chip do Faturamento nomeia pelo `onResolve` — fora das 1000 mostrava o id.
+
+**Formulários → `SearchableEntitySelect` com `onSearch`** (precisam de "+ Novo",
+obrigatório ou rótulo visível). Nova relação Item × Fornecedor: a listagem passa
+20 ativos, o campo busca ativos e resolve o escolhido que chega de fora (cadastro
+no contexto, rascunho) por `ids` + `active`, como o Item do mesmo formulário.
+Vincular produto ao projeto: 20 do cliente do projeto, busca sempre com
+`customerId`, vinculado continua fora, escolhido fora da página volta por
+`productId`. Sugestão de Compra do Pedido: o `<select>` "Homologados" + "Demais
+fornecedores ativos" virou combobox por linha — homologados primeiro, com a dica
+"Homologado"; 20 ativos uma vez para a seção; busca de ativos somada aos
+homologados que casam; a página entra sem substituir. Quantidade recomendada,
+reserva e geração intocadas.
+
+**Validação.** Web: 5 arquivos novos com servidor falso honesto de 1002 registros
+(primeira página sem o #1001; busca, escolha e uso/gravação; recarregar pelo id
+sem busca; universo ativo/todos; exclusões do vínculo; guarda estrutural) e o
+chip do Faturamento ajustado. 19 mutações, todas derrubadas. Gate: 79 arquivos,
+934 testes, e typecheck. Smoke Playwright no `veridi_dev` com massa temporária
+(1002 clientes, 1002 fornecedores, 1001 produtos de um cliente; alvos na posição
+1086, 1117 e 1001): seis filtros, relação gravada com o fornecedor #1001, produto
+#1001 vinculado ao PROJ-000007 e visto após recarregar, Planejamento pelo id;
+Pedido com status e sugestão simulados por interceptação (o dev não tem pedido em
+atendimento), POST capturado com o #1001, nada gravado; 390px nos três
+formulários e num filtro sem transbordo; console limpo fora o 400 de
+`reservation-status` que a simulação provoca; massa apagada.
+
+Achado: Item × Fornecedor pede a primeira página de fornecedores duas vezes
+(barra e formulário) — junto do `porId` duplicado, em PERFORMANCE-CLEANUP-WAVE-01.
 
 ## Próxima prioridade
 

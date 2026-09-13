@@ -11,6 +11,8 @@ import {
   SUPPLIER_OFFER_ELIGIBILITY_HINTS,
 } from "@veridi/shared";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
+import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
+import { fornecedorAtivoFilterSource } from "../../lib/filter-sources";
 import { listItems } from "../../lib/items-api";
 import { listSuppliers } from "../../lib/suppliers-api";
 import { listSupplierItems } from "../../lib/supplier-items-api";
@@ -42,6 +44,16 @@ const FILTER_SCOPE = "supplier-items";
  * fica a página de abertura.
  */
 const PRIMEIRA_PAGINA_DE_ITENS = 50;
+
+/**
+ * Primeira página de fornecedores ativos do formulário de relação.
+ *
+ * Era 1000, e a mesma lista abastecia a barra de filtros: do fornecedor ativo
+ * 1001 em diante ele não era filtrável nem escolhível. A barra tem busca
+ * própria no servidor; o formulário busca por conta dele — como já faz com
+ * item — e aqui só fica a abertura.
+ */
+const PRIMEIRA_PAGINA_DE_FORNECEDORES = 20;
 
 export function qualificationBadgeClass(status: SupplierItemQualificationStatus): string {
   switch (status) {
@@ -187,7 +199,7 @@ export function SupplierItemsPage() {
   }, [search, qualificationStatus, supplierId, itemFamily, preferredOnly, activeOnly]);
 
   useEffect(() => {
-    listSuppliers({ active: true, pageSize: 1000 })
+    listSuppliers({ active: true, pageSize: PRIMEIRA_PAGINA_DE_FORNECEDORES })
       .then((result) => setSuppliers(result.suppliers))
       .catch(() => setSuppliers([]));
     listItems({ active: true, pageSize: PRIMEIRA_PAGINA_DE_ITENS })
@@ -291,21 +303,16 @@ export function SupplierItemsPage() {
           ))}
         </select>
 
-        <label className="sr-only" htmlFor="supplier-items-supplier">
-          Filtrar por fornecedor
-        </label>
-        <select
+        {/* Só fornecedores ativos, como o `<select>` de 1000 oferecia —
+            agora com busca no servidor. */}
+        <EntityFilterSelect
           id="supplier-items-supplier"
+          label="Filtrar por fornecedor"
+          placeholder="Todos os fornecedores"
           value={supplierId}
-          onChange={(event) => setSupplierId(event.target.value)}
-        >
-          <option value="">Todos os fornecedores</option>
-          {suppliers.map((supplier) => (
-            <option key={supplier.id} value={supplier.id}>
-              {supplier.code} — {supplier.legalName}
-            </option>
-          ))}
-        </select>
+          onChange={setSupplierId}
+          source={fornecedorAtivoFilterSource}
+        />
 
         <label className="sr-only" htmlFor="supplier-items-family">
           Filtrar por família

@@ -82,7 +82,7 @@ beforeEach(() => {
   vi.mocked(listCustomers).mockResolvedValue({
     customers: [CLIENTE],
     page: 1,
-    pageSize: 1000,
+    pageSize: 20,
     total: 1,
   });
 });
@@ -225,9 +225,14 @@ describe("chips, contador e limpar", () => {
     expect(ultimaConsulta()).toMatchObject({ search: "NF-1" });
   });
 
-  it("o chip do cliente mostra o NOME, não o id", async () => {
-    await abrir("/?customerId=cust-1");
-    await waitFor(() => expect(screen.getByText("Nutrifarm")).toBeInTheDocument());
+  it("o chip do cliente mostra o NOME, não o id — resolvido pelo próprio filtro", async () => {
+    const { container } = await abrir("/?customerId=cust-1");
+    await waitFor(() => {
+      const chips = container.querySelector(".filter-chips") as HTMLElement | null;
+      expect(chips).not.toBeNull();
+      expect(within(chips as HTMLElement).getByText(/CLI-000001 · Nutrifarm Indústria Ltda/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText("cust-1")).toBeNull();
   });
 
   it("remover o período devolve o default operacional, não a base inteira", async () => {

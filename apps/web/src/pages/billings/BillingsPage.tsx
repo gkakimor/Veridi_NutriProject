@@ -1,10 +1,10 @@
 import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import type { CustomerDTO } from "@veridi/shared";
-import { listCustomers } from "../../lib/customers-api";
+import { clienteFilterSource } from "../../lib/filter-sources";
 import { EntityLink } from "../../components/EntityLink";
-import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
+import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
 import type { AwaitingBillingRowDTO, BillingDTO, BillingStatus } from "@veridi/shared";
@@ -94,7 +94,7 @@ export function BillingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [preparingShipmentId, setPreparingShipmentId] = useState<string | null>(null);
-  const [customers, setCustomers] = useState<CustomerDTO[]>([]);
+  const [clienteEscolhido, setClienteEscolhido] = useState<EntityOption | null>(null);
 
   const { values, page, set, setPage, clear, isActive } = useListFilters({
     defaults: FILTROS_PADRAO,
@@ -104,12 +104,6 @@ export function BillingsPage() {
   const { search, customerId } = values;
   const status = values.status as ActiveFilter;
   const period: ListPeriodPreset = ehListPeriodPreset(values.period) ? values.period : "mes-atual";
-
-  useEffect(() => {
-    listCustomers({ pageSize: 1000 })
-      .then((result) => setCustomers(result.customers))
-      .catch(() => setCustomers([]));
-  }, []);
 
   /*
    * O período em dias comerciais — `YYYY-MM-DD`, nunca instante. O servidor
@@ -184,11 +178,6 @@ export function BillingsPage() {
     reloadAwaiting();
   }, [reloadAwaiting]);
 
-  const customerName = (id: string) => {
-    const customer = customers.find((candidate) => candidate.id === id);
-    return customer ? (customer.tradeName ?? customer.legalName) : id;
-  };
-
   /*
    * Os chips saem do que está FORA do default — e o período personalizado é
    * um chip só, embora sejam três campos na URL. O × devolve o filtro ao
@@ -206,9 +195,19 @@ export function BillingsPage() {
     });
   }
   if (customerId) {
+    /*
+     * O nome sai do próprio filtro, que resolve o id no servidor: o cliente
+     * pode estar fora da primeira página e a lista filtrada pode vir vazia.
+     * Antes, fora das 1000 carregadas, o chip mostrava o UUID.
+     */
+    const nome =
+      clienteEscolhido?.id === customerId
+        ? `${clienteEscolhido.code} · ${clienteEscolhido.name}`
+        : (billings.find((billing) => billing.customerId === customerId)?.customerName ??
+          "selecionado");
     chips.push({
       label: "Cliente",
-      value: customerName(customerId),
+      value: nome,
       onRemove: () => set({ customerId: "" }),
     });
   }
@@ -380,22 +379,15 @@ export function BillingsPage() {
           ))}
         </select>
 
-        <div className="toolbar__entity">
-          <label className="sr-only" htmlFor="billing-customer-filter">
-            Filtrar por cliente
-          </label>
-          <SearchableEntitySelect
-            id="billing-customer-filter"
-            value={customerId}
-            onChange={(value) => set({ customerId: value })}
-            placeholder="Todos os clientes"
-            options={customers.map((customer) => ({
-              id: customer.id,
-              code: customer.code,
-              name: customer.tradeName ?? customer.legalName,
-            }))}
-          />
-        </div>
+        <EntityFilterSelect
+          id="billing-customer-filter"
+          label="Filtrar por cliente"
+          placeholder="Todos os clientes"
+          value={customerId}
+          onChange={(value) => set({ customerId: value })}
+          source={clienteFilterSource}
+          onResolve={setClienteEscolhido}
+        />
       </div>
 
       <ActiveFilterChips chips={chips} onClear={clear} />
