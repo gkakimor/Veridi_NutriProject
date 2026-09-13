@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import type { PrismaClient } from "@prisma/client";
+import type { InventoryOwnerType, PrismaClient } from "@prisma/client";
 import type {
   CostQuality,
   CostReferenceDTO,
@@ -10,7 +10,12 @@ import type {
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { marcadorDeHojeComercial } from "../../lib/business-day.js";
-import { getConsumedLotCostReference, getItemCostReference } from "../../lib/cost-reference.js";
+import {
+  getConsumedLotCostReference,
+  getConsumedLotCostReferences,
+  getItemCostReference,
+} from "../../lib/cost-reference.js";
+import type { CostReference } from "../../lib/cost-reference.js";
 import { selectItemCostSource } from "../../lib/cost-source-selection.js";
 import type { CostSourceResolution } from "../../lib/cost-source-selection.js";
 import { FormulationContextIncompleteError } from "../../lib/formulation-math.js";
@@ -260,6 +265,107 @@ export async function findProductionOrderMaterialCost(
   });
   if (!order) return null;
 
+  const references = new Map<string, CostReference>();
+  for (const consumption of order.consumptions) {
+    if (isCustomerOwnedConsumption(consumption)) continue;
+    references.set(
+      consumption.id,
+      await getConsumedLotCostReference(prisma, {
+        itemId: consumption.itemId,
+        lotId: consumption.lotId,
+        consumedAt: consumption.consumedAt,
+      }),
+    );
+  }
+  return materialCostOfOrder(order, references);
+}
+
+/**
+ * `findProductionOrderMaterialCost` de muitas OPs de uma vez: o mesmo DTO por
+ * OP, no mapa pelo id; OP que não existe fica fora do mapa, como o `null` da
+ * função unitária (DASHBOARD-COST-BATCH-01).
+ *
+ * OP a OP, cada custo era uma leitura da OP com consumos, itens, lotes e
+ * produção, e até quatro consultas por consumo — no Painel, 200 OPs concluídas
+ * davam ~2.600 SQL por requisição. Aqui as OPs saem numa leitura e as
+ * referências de custo de todos os consumos em lote
+ * (`getConsumedLotCostReferences`); a conta de cada OP é a MESMA
+ * (`materialCostOfOrder`), sobre os mesmos dados.
+ *
+ * Feita para quem lista muitas OPs dentro de um retrato (o Painel). Quem pede
+ * uma OP, ou já pagina em fatias, continua na função unitária. `prisma` é o
+ * contexto de quem pergunta.
+ */
+export async function findProductionOrderMaterialCosts(
+  productionOrderIds: readonly string[],
+  prisma: PrismaOrTx = getPrisma(),
+): Promise<Map<string, ProductionOrderMaterialCostDTO>> {
+  const ids = [...new Set(productionOrderIds)];
+  if (ids.length === 0) return new Map();
+
+  const orders = await prisma.productionOrder.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      outputUnitCode: true,
+      consumptions: {
+        select: {
+          id: true,
+          itemId: true,
+          lotId: true,
+          quantity: true,
+          consumedAt: true,
+          item: { select: { code: true, name: true, unitCode: true } },
+          lot: { select: { code: true, ownerType: true, ownerCustomer: { select: { legalName: true } } } },
+        },
+        orderBy: { createdAt: "asc" },
+      },
+      outputs: { select: { quantity: true } },
+    },
+  });
+
+  const veridiConsumptions = orders.flatMap((order) =>
+    order.consumptions.filter((consumption) => !isCustomerOwnedConsumption(consumption)),
+  );
+  const resolved = await getConsumedLotCostReferences(prisma, veridiConsumptions);
+  const references = new Map(veridiConsumptions.map((consumption, index) => [consumption.id, resolved[index]!]));
+  return new Map(orders.map((order) => [order.id, materialCostOfOrder(order, references)]));
+}
+
+/** O que o custo de material de uma OP lê dela. */
+interface OrderForMaterialCost {
+  id: string;
+  outputUnitCode: string;
+  consumptions: {
+    id: string;
+    itemId: string;
+    lotId: string | null;
+    quantity: Prisma.Decimal;
+    consumedAt: Date;
+    item: { code: string; name: string; unitCode: string };
+    lot: { code: string; ownerType: InventoryOwnerType; ownerCustomer: { legalName: string } | null } | null;
+  }[];
+  outputs: { quantity: Prisma.Decimal }[];
+}
+
+/**
+ * Material do cliente NAO tem custo de aquisicao da Veridi. Isso nao e
+ * "custo desconhecido": e propriedade de terceiro. Fica fora do total, fora
+ * da qualidade e nunca vira zero persistido — e nem pergunta referencia.
+ */
+function isCustomerOwnedConsumption(consumption: { lot: { ownerType: InventoryOwnerType } | null }): boolean {
+  return consumption.lot?.ownerType === "CUSTOMER";
+}
+
+/**
+ * A conta do custo de material de uma OP, a partir dos consumos e da referencia
+ * de custo de cada consumo da Veridi (por id do consumo). Unica para a funcao
+ * unitaria e para o lote: o que muda entre as duas e so como os dados chegam.
+ */
+function materialCostOfOrder(
+  order: OrderForMaterialCost,
+  references: ReadonlyMap<string, CostReference>,
+): ProductionOrderMaterialCostDTO {
   const consumptions: ProductionConsumptionCostDTO[] = [];
   const missingCostItems: string[] = [];
   let knownSubtotal = new Prisma.Decimal(0);
@@ -269,18 +375,14 @@ export async function findProductionOrderMaterialCost(
   let allReal = true;
 
   for (const consumption of order.consumptions) {
-    // Material do cliente NAO tem custo de aquisicao da Veridi. Isso nao e
-    // "custo desconhecido": e propriedade de terceiro. Fica fora do total,
-    // fora da qualidade e nunca vira zero persistido.
-    const isCustomerOwned = consumption.lot?.ownerType === "CUSTOMER";
+    const isCustomerOwned = isCustomerOwnedConsumption(consumption);
 
     const reference = isCustomerOwned
       ? { unitCost: null, source: "NO_COST" as const, details: null }
-      : await getConsumedLotCostReference(prisma, {
-          itemId: consumption.itemId,
-          lotId: consumption.lotId,
-          consumedAt: consumption.consumedAt,
-        });
+      : references.get(consumption.id);
+    // Referencia que nao chegou nunca vira "sem custo": seria um NO_COST que o
+    // banco nao disse.
+    if (!reference) throw new Error(`Referência de custo do consumo ${consumption.id} não resolvida.`);
 
     const materialCost =
       !isCustomerOwned && reference.unitCost ? consumption.quantity.times(reference.unitCost) : null;
