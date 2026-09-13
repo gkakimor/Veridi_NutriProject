@@ -103,6 +103,49 @@ export interface AttentionGroupDTO {
   items: AttentionItemDTO[];
 }
 
+/** Por que um período do Painel não se consulta: a ponta a corrigir e a frase. */
+export interface RecusaDoPeriodoDoPainel {
+  campo: "from" | "to";
+  mensagem: string;
+}
+
+/**
+ * Por que o período do Painel não pode ser consultado — `null` quando pode.
+ *
+ * Ponta vazia é hoje comercial (DASHBOARD-BUSINESS-DATE-01), e é DEPOIS de
+ * completá-la que o período se compara. Sem isto, "De" vazio com "Até" no
+ * passado virava `from` hoje e `to` no passado, e a consulta invertida
+ * respondia com todos os KPIs em zero: pergunta inválida lida como "nada
+ * aconteceu" (DASHBOARD-INVERTED-PERIOD-01).
+ *
+ * O servidor recusa com esta regra e a tela a usa para não perguntar o que ele
+ * recusaria — a mesma frase nos dois lados. `from`/`to` são dias `YYYY-MM-DD`
+ * já validados (ou vazios), e `hoje` é o dia comercial do instante da
+ * requisição; dia bem formado se compara como texto.
+ */
+export function recusaDoPeriodoDoPainel(
+  from: string | undefined,
+  to: string | undefined,
+  hoje: string,
+): RecusaDoPeriodoDoPainel | null {
+  if ((from || hoje) <= (to || hoje)) return null;
+  // Uma ponta vazia só pode ser a causa se a outra passou de hoje: a frase
+  // conta de onde veio o "hoje", que ninguém digitou.
+  if (!from) {
+    return {
+      campo: "to",
+      mensagem: "Sem data inicial, o período começa hoje — a data final não pode ser anterior a hoje.",
+    };
+  }
+  if (!to) {
+    return {
+      campo: "from",
+      mensagem: "Sem data final, o período termina hoje — a data inicial não pode ser posterior a hoje.",
+    };
+  }
+  return { campo: "from", mensagem: "A data inicial não pode ser posterior à data final." };
+}
+
 export interface DashboardPeriodDTO {
   from: string;
   to: string;

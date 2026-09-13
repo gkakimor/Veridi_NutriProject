@@ -2521,6 +2521,38 @@ contador com relógio próprio e disponibilidade sem `agora` derrubam o teste. D
 passagem: `lib/dia-comercial-em-uso.test.ts` ainda mandava instante ISO, recusado desde
 DASHBOARD-BUSINESS-DATE-01 — falhava no `origin/main`; agora manda dias.
 
+## Período invertido do Painel é recusa (DASHBOARD-INVERTED-PERIOD-01, 2026-09-13)
+
+`GET /dashboard` completava a ponta vazia com hoje comercial e não comparava as pontas:
+"De" vazio com "Até" no passado virava `from` hoje e `to` no passado, e a janela
+`gte`/`lte` invertida respondia 200 com todos os KPIs em zero. O mesmo com "De" depois de
+"Até" e com "De" no futuro e "Até" vazio.
+
+**Regra.** Ponta vazia continua hoje comercial (contrato de DASHBOARD-BUSINESS-DATE-01);
+completada, `from` depois de `to` é 400 `validation_error` com a ponta e a frase — "A
+data inicial não pode ser posterior à data final." (as duas preenchidas), "Sem data
+inicial, o período começa hoje — a data final não pode ser anterior a hoje." e "Sem data
+final, o período termina hoje — a data inicial não pode ser posterior a hoje.". Regra
+única em `@veridi/shared` (`recusaDoPeriodoDoPainel`): o schema recusa (servidor é a
+autoridade) e `lib/period.ts` usa a mesma para a tela não pedir o período recusado — a
+frase fica junto dos campos (`role=alert`, `aria-invalid`), "No período" e
+"Movimentações" saem, "Precisa de atenção" e "Operação atual" ficam. Recusa que ainda
+venha do servidor chega à faixa com a frase dele (`apiErrorMessage`). KPIs, gráfico,
+presets, fuso e Relatórios intocados; sem migration.
+
+**Validação.** API 11 (`dashboard-periodo-invertido.test.ts`: schema com `now` injetado
+nos casos, 01:30 UTC com a máquina em UTC, UTC-07 e São Paulo, rota direta com dia
+histórico que tem pedido; o schema antigo derruba 8). Web 9
+(`dashboard-periodo-invertido.test.tsx`: casos, nenhum pedido na recusa, blocos do
+período fora, corrigir volta a consultar, três fusos às 01:30 UTC, frase do servidor).
+14 mutações (tela, regra e schema) derrubam teste. Smoke com banco e portas isolados:
+tela e API diretas nos oito casos, console limpo, 390px sem overflow com a frase à vista.
+
+Achado (não corrigido, fora do escopo): listas e Relatórios com as duas pontas
+invertidas continuam 200 vazio (`intervaloDeDiasComerciais` não compara; visto em
+`/billings?dateFrom=2026-09-13&dateTo=2026-09-12` e
+`/reports/inventory/movements?from=2026-09-13&to=2026-09-12`).
+
 ## Gravou? Todas as telas respondem (SAVE-FEEDBACK-REMAINING-01, 2026-09-13)
 
 Fecha o achado do UX-ACTIONS-FEEDBACK-WAVE-02: telas que diziam "Salvando…" e

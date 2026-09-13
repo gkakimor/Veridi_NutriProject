@@ -1,3 +1,4 @@
+import { hojeComercial, recusaDoPeriodoDoPainel } from "@veridi/shared";
 import { resolveListPeriod } from "./list-period";
 import type { ListPeriodPreset } from "./list-period";
 
@@ -33,6 +34,12 @@ export interface PeriodBounds {
   /** `YYYY-MM-DD`, ou vazio quando o campo ficou limpo. */
   from: string;
   to: string;
+  /**
+   * Por que este período não se consulta, ou `null`. É a regra e a frase do
+   * servidor (`recusaDoPeriodoDoPainel`): período invertido não vira pedido
+   * nem KPI zerado (DASHBOARD-INVERTED-PERIOD-01).
+   */
+  recusa: string | null;
 }
 
 /**
@@ -40,7 +47,8 @@ export interface PeriodBounds {
  *
  * O `<input type="date">` entrega `YYYY-MM-DD` — data civil — e é isso que
  * segue. Campo limpo volta vazio, sem virar data: o servidor lê a ponta vazia
- * como hoje, como sempre leu a ponta ausente.
+ * como hoje, como sempre leu a ponta ausente — e é com esse hoje que a recusa
+ * compara as pontas.
  */
 export function resolvePeriodBounds(
   preset: PeriodPreset,
@@ -49,5 +57,6 @@ export function resolvePeriodBounds(
   agora: Date = new Date(),
 ): PeriodBounds {
   const dias = resolveListPeriod(PRESET_DAS_LISTAS[preset], customFrom, customTo, agora);
-  return { from: dias.dateFrom, to: dias.dateTo };
+  const recusa = recusaDoPeriodoDoPainel(dias.dateFrom, dias.dateTo, hojeComercial(agora));
+  return { from: dias.dateFrom, to: dias.dateTo, recusa: recusa?.mensagem ?? null };
 }

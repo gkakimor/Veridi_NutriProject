@@ -16,6 +16,11 @@
   color: var(--ink-2);
 }
 
+/* Período recusado: a frase numa linha só dela, logo abaixo dos campos. */
+.dash-filter__error {
+  flex-basis: 100%;
+}
+
 .dash-section {
   margin-bottom: var(--sp-6);
 }
