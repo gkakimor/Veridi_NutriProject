@@ -15,6 +15,8 @@ import {
   ATTENTION_SEVERITY_LABELS,
   ATTENTION_TYPE_LABELS,
   INVENTORY_MOVEMENT_TYPE_LABELS,
+  diaCivilDeslocado,
+  hojeComercial,
 } from "@veridi/shared";
 import type { InventoryMovementType } from "@veridi/shared";
 import { EntityLink } from "../components/EntityLink";
@@ -23,11 +25,11 @@ import { helpTopics } from "../help/help-content";
 import { getDashboard } from "../lib/dashboard-api";
 import type { UserRole } from "@veridi/shared";
 import type { PeriodPreset } from "../lib/period";
-import { PERIOD_PRESET_LABELS, dateInputValueOffset, resolvePeriodBounds } from "../lib/period";
+import { PERIOD_PRESET_LABELS, resolvePeriodBounds } from "../lib/period";
 import { formatBRL } from "../lib/currency";
 import { useAuth } from "../app/AuthProvider";
 import "./dashboard.css";
-import { formatDate, formatDateTime } from "../lib/dates";
+import { formatDate, formatDateTime, formatEventDate } from "../lib/dates";
 
 function severityBadgeClass(severity: AttentionSeverity): string {
   switch (severity) {
@@ -278,8 +280,10 @@ export function DashboardPage() {
   );
 
   const [preset, setPreset] = useState<PeriodPreset>("today");
-  const [customFrom, setCustomFrom] = useState(dateInputValueOffset(-6));
-  const [customTo, setCustomTo] = useState(dateInputValueOffset(0));
+  // Os campos nascem no dia da Veridi: às 22h30 de São Paulo um navegador em
+  // UTC já está no dia seguinte, e o personalizado abria nele.
+  const [customFrom, setCustomFrom] = useState(() => diaCivilDeslocado(hojeComercial(), -6));
+  const [customTo, setCustomTo] = useState(() => hojeComercial());
   const [data, setData] = useState<DashboardDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -410,8 +414,10 @@ export function DashboardPage() {
           <section className="dash-section">
             <div className="dash-section__head">
               <h2>No período</h2>
+              {/* Os limites são instantes do dia comercial: lidos no fuso da
+                  operação, 12/09 é 12/09 em qualquer navegador. */}
               <span className="dash-section__hint">
-                {formatDate(period.from)} até {formatDate(period.to)} — contagem de documentos
+                {formatEventDate(period.from)} até {formatEventDate(period.to)} — contagem de documentos
               </span>
             </div>
             <div className="dash-cards">
