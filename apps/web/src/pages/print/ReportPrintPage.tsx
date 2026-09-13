@@ -1,11 +1,24 @@
 import { useParams, useSearchParams } from "react-router-dom";
 import type { UserRole } from "@veridi/shared";
-import { PRICING_PROVENANCE_ROLES } from "@veridi/shared";
+import {
+  CUSTOMER_ORDER_STATUS_LABELS,
+  INVENTORY_MOVEMENT_TYPE_LABELS,
+  ITEM_TYPE_LABELS,
+  LOT_STATUS_LABELS,
+  PRICING_PROVENANCE_ROLES,
+  PRODUCTION_ORDER_STATUS_LABELS,
+  PURCHASE_ORDER_ORIGIN_LABELS,
+  PURCHASE_ORDER_STATUS_LABELS,
+  QUOTE_PRICE_SOURCE_LABELS,
+  QUOTE_STATUS_LABELS,
+} from "@veridi/shared";
 import { useOptionalAuth } from "../../app/AuthProvider";
 import { API_URL, apiFetch } from "../../lib/api";
 import { apiErrorMessage, parseJsonOrThrow } from "../../lib/api-errors";
-import { clienteFilterSource } from "../../lib/filter-sources";
+import { clienteFilterSource, fornecedorFilterSource } from "../../lib/filter-sources";
+import type { EntityFilterSource } from "../../components/filters/EntityFilterSelect";
 import { PdfScreen } from "../../pdf/PdfScreen";
+import { JANELAS_DE_VENCIMENTO } from "../reports/report-period";
 
 /**
  * Relatórios R-01…R-20 em PDF, em ROTA DEDICADA.
@@ -21,6 +34,12 @@ import { PdfScreen } from "../../pdf/PdfScreen";
 
 /** Separador e BOM usados pelo `buildCsv` da API. */
 const SEPARATOR = ";";
+
+/** Valor da URL → o que o papel escreve, por filtro. */
+type FilterValueLabels = Readonly<Record<string, Readonly<Record<string, string>>>>;
+
+/** Filtro liga/desliga: a URL leva `true`/`false`, o papel diz Sim/Não. */
+const SIM_OU_NAO: Readonly<Record<string, string>> = { true: "Sim", false: "Não" };
 
 interface ReportPrintDefinition {
   code: string;
@@ -42,6 +61,13 @@ interface ReportPrintDefinition {
    * mesma linha de detalhe. Nada some do papel — só deixa de disputar largura.
    */
   primaryColumns?: string[];
+  /**
+   * Rótulos dos filtros de lista fechada, com o MESMO mapa que a tela usa no
+   * seletor. `status` muda de sentido de um relatório para outro — lote, OP,
+   * OC, pedido, orçamento —, por isso o mapa é de cada relatório. Filtro fora
+   * daqui sai como veio (REPORTS-PRESENTATION-WAVE-01).
+   */
+  filterValues?: FilterValueLabels;
 }
 
 export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
@@ -64,6 +90,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
       "Unidade",
       "Qualidade",
     ],
+    filterValues: { itemType: ITEM_TYPE_LABELS, status: LOT_STATUS_LABELS, onlyWithBalance: SIM_OU_NAO },
   },
   "R-02": {
     code: "R-02",
@@ -82,12 +109,14 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
       "Unidade",
       "Qualidade",
     ],
+    filterValues: { itemType: ITEM_TYPE_LABELS, window: JANELAS_DE_VENCIMENTO, onlyWithBalance: SIM_OU_NAO },
   },
   "R-03": {
     code: "R-03",
     title: "Movimentações",
     csvPath: "/reports/inventory/movements/export.csv",
     screenPath: "/relatorios/estoque/movimentacoes",
+    filterValues: { type: INVENTORY_MOVEMENT_TYPE_LABELS },
   },
   "R-04": {
     code: "R-04",
@@ -106,6 +135,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
       "Falta",
       "Unidade",
     ],
+    filterValues: { status: PRODUCTION_ORDER_STATUS_LABELS, onlyShortage: SIM_OU_NAO },
   },
   "R-05": {
     code: "R-05",
@@ -126,6 +156,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
       "Custo material unitário",
       "Qualidade do custo",
     ],
+    filterValues: { status: PRODUCTION_ORDER_STATUS_LABELS, includeCost: SIM_OU_NAO },
   },
   "R-07": {
     code: "R-07",
@@ -138,6 +169,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Ordens de Compra",
     csvPath: "/reports/purchasing/orders/export.csv",
     screenPath: "/relatorios/compras/ordens",
+    filterValues: { status: PURCHASE_ORDER_STATUS_LABELS, origin: PURCHASE_ORDER_ORIGIN_LABELS },
   },
   "R-09": {
     code: "R-09",
@@ -175,6 +207,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Pedidos do Cliente",
     csvPath: "/reports/commercial/orders/export.csv",
     screenPath: "/relatorios/comercial/pedidos",
+    filterValues: { status: CUSTOMER_ORDER_STATUS_LABELS },
   },
   "R-13": {
     code: "R-13",
@@ -192,6 +225,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
       "Falta expedir",
       "Unidade",
     ],
+    filterValues: { status: CUSTOMER_ORDER_STATUS_LABELS },
   },
   "R-15": {
     code: "R-15",
@@ -222,6 +256,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
       "Falta entregar",
       "Unidade",
     ],
+    filterValues: { status: CUSTOMER_ORDER_STATUS_LABELS },
   },
   "R-18": {
     code: "R-18",
@@ -281,6 +316,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
       "Total",
       "Origem do preço",
     ],
+    filterValues: { status: QUOTE_STATUS_LABELS, priceSource: QUOTE_PRICE_SOURCE_LABELS },
   },
 };
 
@@ -300,9 +336,17 @@ const FILTER_LABELS: Record<string, string> = {
   customerOrderId: "Pedido",
   type: "Tipo",
   sourceType: "Origem",
-  onlyWithStock: "Somente com saldo",
+  onlyWithBalance: "Somente com saldo",
   daysAhead: "Dias à frente",
+  window: "Janela de vencimento",
+  onlyShortage: "Somente com falta",
+  includeCost: "Incluir custo",
+  origin: "Origem",
+  priceSource: "Origem do preço",
 };
+
+/** Nome do cliente e do fornecedor filtrados, já resolvidos pela página. */
+export type ReportFilterNames = { customer?: string | null; supplier?: string | null };
 
 /**
  * Filtros da URL, rotulados, na ordem em que vieram.
@@ -310,32 +354,47 @@ const FILTER_LABELS: Record<string, string> = {
  * Paginação da tela (`page`, `pageSize`) não é filtro: o documento traz o
  * recorte inteiro, e "pageSize 25" no papel sugeriria um corte que não existe.
  *
- * `customerId` é id técnico e nunca vai ao papel: sai o cliente como o
- * seletor da tela o escreve, resolvido pela página. Sem nome — id legado ou
- * consulta que falhou —, o valor fica vazio e o documento o escreve "—",
- * como todo desconhecido (R20-UX-CLEANUP-WAVE-01).
+ * `customerId` e `supplierId` são id técnico e nunca vão ao papel: sai o
+ * cliente ou o fornecedor como o seletor da tela o escreve, resolvido pela
+ * página. Sem nome — id legado ou consulta que falhou —, o valor fica vazio e
+ * o documento o escreve "—", como todo desconhecido (R20-UX-CLEANUP-WAVE-01,
+ * REPORTS-PRESENTATION-WAVE-01).
+ *
+ * Filtro de lista fechada sai pelo rótulo da tela (`filterValues`): "SENT" e
+ * "RAW_MATERIAL" são a língua da API, não a de quem lê o papel.
  */
 export function reportAppliedFilters(
   params: URLSearchParams,
-  customerLabel: string | null = null,
+  names: ReportFilterNames = {},
+  filterValues: FilterValueLabels = {},
 ): { label: string; value: string }[] {
   return [...params.entries()]
     .filter(([key, value]) => value !== "" && key !== "all" && key !== "page" && key !== "pageSize")
     .map(([key, value]) => ({
       label: FILTER_LABELS[key] ?? key,
-      value: key === "customerId" ? (customerLabel ?? "") : value,
+      value:
+        key === "customerId"
+          ? (names.customer ?? "")
+          : key === "supplierId"
+            ? (names.supplier ?? "")
+            : rotuloDoValor(filterValues[key], value),
     }));
 }
 
+/** Só a chave do próprio mapa: `?type=constructor` não vira o `Object` do protótipo. */
+function rotuloDoValor(rotulos: Readonly<Record<string, string>> | undefined, value: string): string {
+  return rotulos && Object.hasOwn(rotulos, value) ? (rotulos[value] ?? value) : value;
+}
+
 /**
- * "CLI-000012 · Razão social" do cliente filtrado — o rótulo do seletor de
- * Cliente, pela mesma consulta por id. Uma requisição, e só quando há filtro;
- * falhar não impede o documento.
+ * "CLI-000012 · Razão social" do cliente, "FOR-000003 · Nome" do fornecedor —
+ * o rótulo do seletor da tela, pela mesma consulta por id. Uma requisição, e
+ * só quando há filtro; falhar não impede o documento.
  */
-async function customerFilterLabel(customerId: string | null): Promise<string | null> {
-  if (!customerId) return null;
-  const cliente = await clienteFilterSource.porId(customerId).catch(() => null);
-  return cliente ? `${cliente.code} · ${cliente.name}` : null;
+async function entityFilterLabel(source: EntityFilterSource, id: string | null): Promise<string | null> {
+  if (!id) return null;
+  const entidade = await source.porId(id).catch(() => null);
+  return entidade ? `${entidade.code} · ${entidade.name}` : null;
 }
 
 /**
@@ -427,10 +486,16 @@ export function ReportPrintPage() {
         }
         const response = await apiFetch(`${API_URL}${definition.csvPath}${query ? `?${query}` : ""}`);
         if (!response.ok) throw new Error(await motivoDaFalha(response));
+        const csv = parseReportCsv(await response.text());
+        // Nomes só depois do CSV aceito: perfil recusado não consulta ninguém.
+        const [customer, supplier] = await Promise.all([
+          entityFilterLabel(clienteFilterSource, params.get("customerId")),
+          entityFilterLabel(fornecedorFilterSource, params.get("supplierId")),
+        ]);
         return {
           definition,
-          ...parseReportCsv(await response.text()),
-          filters: reportAppliedFilters(params, await customerFilterLabel(params.get("customerId"))),
+          ...csv,
+          filters: reportAppliedFilters(params, { customer, supplier }, definition.filterValues),
         };
       }}
       build={async ({ definition: relatorio, header, rows, filters }) => {

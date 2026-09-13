@@ -365,7 +365,7 @@ function relatorio(codigo: string, registros: number): ReportPdfInput {
     primaryColumns: definicao.primaryColumns,
     header,
     rows,
-    filters: reportAppliedFilters(new URLSearchParams(FILTROS[codigo] ?? {})),
+    filters: reportAppliedFilters(new URLSearchParams(FILTROS[codigo] ?? {}), {}, definicao.filterValues),
     generatedBy: "Maria Aparecida dos Santos",
   };
 }
@@ -414,6 +414,10 @@ describe("relatórios R-01…R-20 — arquivo", () => {
       expect(pagina).toContain("Gerado por Maria Aparecida dos Santos");
       expect(pagina).toContain("FILTROS APLICADOS");
       expect(pagina).toContain("REGISTROS");
+      // O valor da API não chega ao papel: o filtro sai pelo rótulo da tela.
+      for (const valor of Object.values(FILTROS[codigo] ?? {})) {
+        if (/^[A-Z][A-Z0-9_]+$/.test(valor)) expect(pagina, valor).not.toContain(valor);
+      }
       // Os quatro registros estão na folha, com a primeira coluna do CSV.
       for (let indice = 0; indice < 4; indice += 1) {
         expect(pagina).toContain(amostra(codigo, dados.header[0]!, indice).split(" ")[0]!);

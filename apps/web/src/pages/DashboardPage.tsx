@@ -464,22 +464,31 @@ export function DashboardPage() {
                 </article>
                 <article className="dash-card">
                   <div className="dash-card__label">Valor faturado</div>
-                  {period.billedAmount === null ? (
+                  {period.billingsIssued === 0 ? (
+                    <>
+                      {/* Sem documento não há preço faltando: o `null` do
+                          servidor aqui é "nada a somar", não "incompleto". */}
+                      <div className="dash-card__value">—</div>
+                      <div className="dash-card__note">Sem faturamentos no período.</div>
+                    </>
+                  ) : period.billedAmount === null ? (
                     <>
                       {/* Soma parcial jamais é apresentada como total. */}
                       <div className="dash-card__value dash-card__value--unavailable">
                         Valores incompletos
                       </div>
                       <div className="dash-card__note">
-                        {period.billingsWithCompletePricing} de {period.billingsIssued} documentos com
-                        preço completo.
+                        {period.billingsWithCompletePricing} de {period.billingsIssued}{" "}
+                        {period.billingsIssued === 1 ? "documento" : "documentos"} com preço completo.
                       </div>
                     </>
                   ) : (
                     <>
                       <div className="dash-card__value">{formatBRL(period.billedAmount)}</div>
                       <div className="dash-card__note">
-                        {period.billingsIssued} documentos, todos com preço completo.
+                        {period.billingsIssued === 1
+                          ? "1 documento, com preço completo."
+                          : `${period.billingsIssued} documentos, todos com preço completo.`}
                       </div>
                     </>
                   )}

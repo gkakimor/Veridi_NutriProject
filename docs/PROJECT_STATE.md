@@ -3040,6 +3040,48 @@ esperados.
 Achado, sem correção: em 390px a mensagem de erro do Pedido e da OC mora no topo
 da página, longe dos botões de ação no rodapé (padrão já existente).
 
+## Apresentação dos Relatórios (REPORTS-PRESENTATION-WAVE-01, 2026-09-13)
+
+Fecha os achados de apresentação de R20-UX-CLEANUP-WAVE-01 e SMALL-UX-CLEANUP-WAVE-01.
+Só web: sem API, sem CSV, sem cálculo, sem permissão, sem migration. R-15 e backend do
+Painel intocados.
+
+**Plural.** R-02 ("Vence em 1 dia", "Vencido há 1 dia") e R-16 (1 dia aguardando) pelo
+`emDias` de `pages/reports/report-period.ts`; a contagem continua a da API. O
+cabeçalho da impressão HTML do `ReportPage` dizia "1 registros".
+
+**Fornecedor no PDF.** `ReportPrintPage` resolve `supplierId` (R-08 a R-11) pelo
+`porId` do `fornecedorFilterSource`, como já fazia com o cliente: `código · nome` do
+seletor, uma consulta só com filtro e só depois do CSV aceito; sem nome, "—", e o
+documento sai.
+
+**Lista fechada no PDF.** Cada definição declara `filterValues` com o mapa que a tela
+usa no seletor (status de lote, OP, OC, pedido e orçamento; tipo de item e de
+movimento; origem da OC e do preço). `status` muda de sentido por relatório, por isso
+o mapa é de cada um. A janela do R-02 virou `JANELAS_DE_VENCIMENTO`, lida pela tela e
+pelo PDF. Liga/desliga (`onlyWithBalance`, `onlyShortage`, `includeCost`) sai
+rotulado, Sim/Não. Valor fora do mapa sai como veio, sem cair no protótipo.
+
+**Painel.** "Valor faturado" sem faturamento no período: "—" e "Sem faturamentos no
+período.", sem cor de aviso; "documento" no singular com 1. Mesmo DTO.
+
+**Validação.** Web: 29 testes novos (`dashboard-valor-faturado.test.tsx`,
+`relatorios-vazio-e-plural.test.tsx`, `report-content.test.tsx`) e 3 asserções que
+fixavam o enum cru (`AVAILABLE`, `SENT`) trocadas pelo rótulo; 3 mutações (fontes
+antigas: 27 caem; guarda do protótipo: 1; consulta antes do CSV: 5). Focados 285/285
+(Relatórios, Painel, conteúdo e arquivo do PDF, rotas, ajuda); typecheck. Smoke (web
+do worktree contra a API dev, respostas sintéticas, nada gravado): 390px em R-02, R-16
+e Painel (três casos) sem transbordo; PDF real de R-01, R-02, R-08 a R-11 e R-20 lido
+de volta — fornecedor por código e nome, sem UUID, sem enum, nenhuma consulta sem
+filtro — 23/23, console limpo.
+
+**Achados, sem correção.** CSV de R-05 e R-09 escreve "Qualidade do custo" como enum
+(`REAL`, `ESTIMATED`), e o PDF repete — conteúdo gerado pela API; datas De/Até dos
+filtros do PDF saem `YYYY-MM-DD`; plural fixo fora dos Relatórios (prazo e parcelas do
+Orçamento: `QuotePdf`, `QuoteConditionsForm`, `CommercialOriginSection`); ids que a API
+aceita e nenhuma tela manda (`itemId`, `lotId`, `productId`…) sairiam crus se digitados
+na URL de impressão.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

@@ -2,7 +2,12 @@ import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import type { BillingPeriodRowDTO, LatePurchaseOrderRowDTO } from "@veridi/shared";
+import type {
+  AwaitingBillingReportRowDTO,
+  BillingPeriodRowDTO,
+  ExpiryRowDTO,
+  LatePurchaseOrderRowDTO,
+} from "@veridi/shared";
 
 /**
  * Relatórios — o que a tela diz quando não há documento, e quando é um dia só
@@ -14,12 +19,15 @@ import type { BillingPeriodRowDTO, LatePurchaseOrderRowDTO } from "@veridi/share
  * tela lia o `null` como preço faltando. O cálculo continua o mesmo; a tela é
  * que separa "nenhum documento" de "documento sem preço".
  *
- * R-11 dizia "1 dias".
+ * R-11 dizia "1 dias"; R-02 e R-16 também (REPORTS-PRESENTATION-WAVE-01). A
+ * contagem continua a da API — só a palavra muda.
  */
 
 vi.mock("../../lib/reports-api", () => ({
   getBillingPeriodReport: vi.fn(),
   getLatePurchaseOrdersReport: vi.fn(),
+  getExpiryReport: vi.fn(),
+  getAwaitingBillingReport: vi.fn(),
 }));
 vi.mock("../../lib/customers-api", () => ({ listCustomers: vi.fn() }));
 vi.mock("../../lib/suppliers-api", () => ({ listSuppliers: vi.fn() }));
@@ -28,10 +36,16 @@ vi.mock("../../app/AuthProvider", () => ({
   useOptionalAuth: () => null,
 }));
 
-import { getBillingPeriodReport, getLatePurchaseOrdersReport } from "../../lib/reports-api";
+import {
+  getAwaitingBillingReport,
+  getBillingPeriodReport,
+  getExpiryReport,
+  getLatePurchaseOrdersReport,
+} from "../../lib/reports-api";
 import { listCustomers } from "../../lib/customers-api";
 import { listSuppliers } from "../../lib/suppliers-api";
-import { BillingPeriodReportPage } from "./BillingReports";
+import { AwaitingBillingReportPage, BillingPeriodReportPage } from "./BillingReports";
+import { ExpiryReportPage } from "./InventoryReports";
 import { LatePurchaseOrdersReportPage } from "./PurchasingReports";
 
 const VAZIO = "Nenhum faturamento para os filtros informados.";
@@ -76,8 +90,55 @@ function atrasada(n: number, daysLate: number): LatePurchaseOrderRowDTO {
   };
 }
 
+function lote(n: number, daysToExpiry: number): ExpiryRowDTO {
+  return {
+    itemId: `item-${n}`,
+    itemCode: `MP-${String(n).padStart(6, "0")}`,
+    itemName: `Matéria-prima ${n}`,
+    unitCode: "kg",
+    lotId: `lote-${n}`,
+    lotCode: `LT-20260901-${String(n).padStart(6, "0")}`,
+    lotOrigin: "RECEIPT",
+    businessLotNumber: null,
+    supplierLot: null,
+    expiryDate: "2026-09-13T00:00:00.000Z",
+    daysToExpiry,
+    onHand: "10",
+    reserved: "0",
+    available: "10",
+    status: "AVAILABLE",
+    isExpired: daysToExpiry < 0,
+    location: null,
+  };
+}
+
+function aguardando(n: number, daysWaiting: number): AwaitingBillingReportRowDTO {
+  return {
+    shipmentId: `exp-${n}`,
+    shipmentCode: `EXP-${String(n).padStart(6, "0")}`,
+    confirmedAt: "2026-09-10T15:00:00.000Z",
+    customerOrderId: `ped-${n}`,
+    customerOrderCode: `PED-${String(n).padStart(6, "0")}`,
+    customerId: "cli-1",
+    customerName: "NutriViva",
+    lineCount: 1,
+    productCodes: ["PROD-000001"],
+    situation: "PENDING",
+    billingId: null,
+    billingCode: null,
+    daysWaiting,
+  };
+}
+
 function abrir(tela: ReactElement) {
   return render(<MemoryRouter>{tela}</MemoryRouter>);
+}
+
+/** Texto da coluna `coluna` na linha do documento `codigo`. */
+function celula(codigo: string, coluna: string): string | null | undefined {
+  const linha = screen.getByRole("button", { name: codigo }).closest("tr") as HTMLElement;
+  const indice = screen.getAllByRole("columnheader").findIndex((th) => th.textContent === coluna);
+  return within(linha).getAllByRole("cell")[indice]?.textContent;
 }
 
 beforeEach(() => {
@@ -143,6 +204,60 @@ describe("R-11 — atraso no singular e no plural", () => {
     expect(atraso("OC-000001")).toBe("1 dia");
     expect(atraso("OC-000002")).toBe("2 dias");
     expect(atraso("OC-000003")).toBe("0 dias");
+    expect(screen.queryByText(/\b1 dias\b/)).toBeNull();
+  });
+});
+
+describe("R-02 — vencimento no singular e no plural", () => {
+  it("Vence em 1 dia / 2 dias, Vencido há 1 dia / 2 dias, Vence hoje", async () => {
+    vi.mocked(getExpiryReport).mockResolvedValue({
+      rows: [lote(1, 1), lote(2, 2), lote(3, -1), lote(4, -2), lote(5, 0)],
+      page: 1,
+      pageSize: 25,
+      total: 5,
+    });
+    abrir(<ExpiryReportPage />);
+
+    await screen.findByRole("button", { name: "LT-20260901-000001" });
+    expect(celula("LT-20260901-000001", "Situação")).toBe("Vence em 1 dia");
+    expect(celula("LT-20260901-000002", "Situação")).toBe("Vence em 2 dias");
+    expect(celula("LT-20260901-000003", "Situação")).toBe("Vencido há 1 dia");
+    expect(celula("LT-20260901-000004", "Situação")).toBe("Vencido há 2 dias");
+    expect(celula("LT-20260901-000005", "Situação")).toBe("Vence hoje");
+    expect(screen.queryByText(/\b1 dias\b/)).toBeNull();
+  });
+
+  it("a janela continua a mesma lista, agora de um mapa só com o PDF", async () => {
+    vi.mocked(getExpiryReport).mockResolvedValue({ rows: [], page: 1, pageSize: 25, total: 0 });
+    abrir(<ExpiryReportPage />);
+
+    const janela = screen.getByRole("combobox", { name: "Janela de vencimento" }) as HTMLSelectElement;
+    expect([...janela.options].map((opcao) => [opcao.value, opcao.textContent])).toEqual([
+      ["EXPIRED", "Vencidos"],
+      ["D7", "Próximos 7 dias"],
+      ["D30", "Próximos 30 dias"],
+      ["D60", "Próximos 60 dias"],
+      ["CUSTOM", "Período personalizado"],
+    ]);
+    expect(janela.value).toBe("D30");
+    await screen.findByText("Nenhum lote nesta janela de vencimento.");
+  });
+});
+
+describe("R-16 — aguardando no singular e no plural", () => {
+  it("Aguardando há 1 dia / 2 dias / 0 dias", async () => {
+    vi.mocked(getAwaitingBillingReport).mockResolvedValue({
+      rows: [aguardando(1, 1), aguardando(2, 2), aguardando(3, 0)],
+      page: 1,
+      pageSize: 25,
+      total: 3,
+    });
+    abrir(<AwaitingBillingReportPage />);
+
+    await screen.findByRole("button", { name: "EXP-000001" });
+    expect(celula("EXP-000001", "Aguardando há")).toBe("1 dia");
+    expect(celula("EXP-000002", "Aguardando há")).toBe("2 dias");
+    expect(celula("EXP-000003", "Aguardando há")).toBe("0 dias");
     expect(screen.queryByText(/\b1 dias\b/)).toBeNull();
   });
 });

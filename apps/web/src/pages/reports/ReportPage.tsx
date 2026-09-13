@@ -130,7 +130,9 @@ export function ReportPage({
               executou cada ato no sistema. */}
           <div className="print-doc__status">Gerado por {user?.name ?? "—"}</div>
           {total !== undefined && (
-            <div className="print-doc__status">{total} registros</div>
+            <div className="print-doc__status">
+              {total} {total === 1 ? "registro" : "registros"}
+            </div>
           )}
         </div>
       </div>
