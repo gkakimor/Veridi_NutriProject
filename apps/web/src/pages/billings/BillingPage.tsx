@@ -51,7 +51,19 @@ export function BillingPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  /*
+   * A ação em curso pelo nome: "Salvando…" aparecia no botão de salvar também
+   * enquanto o faturamento era emitido ou cancelado. O freio de clique duplo
+   * continua um só (`saving`); o rótulo, não.
+   */
+  const [acaoEmCurso, setAcaoEmCurso] = useState<"rascunho" | "emitir" | "cancelar" | null>(null);
+  const saving = acaoEmCurso !== null;
+  /*
+   * O que a última gravação confirmou. A tela não tem pendência calculada, então
+   * a frase sai na próxima edição ou na próxima ação — nunca fica afirmando
+   * "salvo" sobre um formulário que já mudou.
+   */
+  const [feito, setFeito] = useState<string | null>(null);
 
   const [prices, setPrices] = useState<Record<string, string>>({});
   const [overrideLineId, setOverrideLineId] = useState<string | null>(null);
@@ -104,22 +116,26 @@ export function BillingPage() {
 
   async function handleSave() {
     if (!id) return;
-    setSaving(true);
+    setAcaoEmCurso("rascunho");
     setError(null);
+    setFeito(null);
     try {
       syncFromServer(await updateBilling(id, buildPayload()));
+      // Só com a resposta do servidor: validação ou rede nunca viram "salvo".
+      setFeito("Rascunho salvo.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao salvar faturamento");
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
   async function handleIssue() {
     if (!id) return;
     setIssueDialogOpen(false);
-    setSaving(true);
+    setAcaoEmCurso("emitir");
     setError(null);
+    setFeito(null);
     try {
       // Salva o que está na tela antes de congelar o documento.
       await updateBilling(id, buildPayload());
@@ -127,14 +143,15 @@ export function BillingPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao emitir faturamento");
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
   async function handleCancel() {
     if (!id) return;
-    setSaving(true);
+    setAcaoEmCurso("cancelar");
     setError(null);
+    setFeito(null);
     try {
       const cancelled = await cancelBilling(id, { reason: cancelReason.trim() });
       setCancelDialogOpen(false);
@@ -143,7 +160,7 @@ export function BillingPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao cancelar faturamento");
     } finally {
-      setSaving(false);
+      setAcaoEmCurso(null);
     }
   }
 
@@ -340,7 +357,10 @@ export function BillingPage() {
               placeholder="Ex.: NF 12345"
               disabled={!isDraft}
               value={externalReference}
-              onChange={(event) => setExternalReference(event.target.value)}
+              onChange={(event) => {
+                setExternalReference(event.target.value);
+                setFeito(null);
+              }}
             />
             <p className="field__hint">
               Referência a documento externo/ERP quando existir — o sistema não valida nem emite esse documento.
@@ -421,12 +441,13 @@ export function BillingPage() {
                                   aria-invalid={ilegivel || undefined}
                                   className={ilegivel ? "is-invalid" : undefined}
                                   value={prices[line.id] ?? ""}
-                                  onChange={(event) =>
+                                  onChange={(event) => {
                                     setPrices((prev) => ({
                                       ...prev,
                                       [line.id]: event.target.value,
-                                    }))
-                                  }
+                                    }));
+                                    setFeito(null);
+                                  }}
                                 />
                                 {ilegivel && (
                                   <p className="field__error">
@@ -553,7 +574,10 @@ export function BillingPage() {
               rows={3}
               disabled={!isDraft}
               value={notes}
-              onChange={(event) => setNotes(event.target.value)}
+              onChange={(event) => {
+                setNotes(event.target.value);
+                setFeito(null);
+              }}
             />
           </div>
         </FormSection>
@@ -583,10 +607,15 @@ export function BillingPage() {
         )}
 
         <div className="doc-actions__primary">
+          {feito && (
+            <span className="form-status" role="status">
+              {feito}
+            </span>
+          )}
           {isDraft && (
             <>
               <button type="button" className="btn btn--secondary" disabled={saving} onClick={handleSave}>
-                {saving ? "Salvando…" : "Salvar rascunho"}
+                {acaoEmCurso === "rascunho" ? "Salvando…" : "Salvar rascunho"}
               </button>
               <button
                 type="button"
@@ -599,7 +628,7 @@ export function BillingPage() {
                     : undefined
                 }
               >
-                Emitir faturamento
+                {acaoEmCurso === "emitir" ? "Emitindo…" : "Emitir faturamento"}
               </button>
             </>
           )}
@@ -614,6 +643,8 @@ export function BillingPage() {
           onOverridden={(atualizado) => {
             setOverrideLineId(null);
             setBilling(atualizado);
+            // Outra gravação, com efeito próprio na linha: "Rascunho salvo." não fala dela.
+            setFeito(null);
           }}
         />
       )}
@@ -665,7 +696,7 @@ export function BillingPage() {
                 disabled={cancelReason.trim().length < 3 || saving}
                 onClick={handleCancel}
               >
-                Cancelar faturamento
+                {acaoEmCurso === "cancelar" ? "Cancelando…" : "Cancelar faturamento"}
               </button>
             </div>
           </ModalDialog>

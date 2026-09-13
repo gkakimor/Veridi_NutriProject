@@ -41,10 +41,23 @@ export function ReceiptDetailPage() {
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
   const [costDraft, setCostDraft] = useState("");
   const [savingCost, setSavingCost] = useState(false);
+  /*
+   * Linha cujo custo a última gravação confirmou. Fechar o campo e mostrar o
+   * valor não dizia que gravou — parecia o mesmo que Cancelar. A frase sai
+   * quando qualquer linha volta a ser editada.
+   */
+  const [custoSalvoLineId, setCustoSalvoLineId] = useState<string | null>(null);
+
+  function editarCusto(lineId: string, custoAtual: string) {
+    setEditingLineId(lineId);
+    setCostDraft(custoAtual);
+    setCustoSalvoLineId(null);
+  }
 
   async function handleSaveCost(lineId: string) {
     setSavingCost(true);
     setError(null);
+    setCustoSalvoLineId(null);
     try {
       // Campo em branco continua limpando o custo (volta a desconhecido) —
       // é o contrato da API e a razão do placeholder. Só o que foi digitado
@@ -55,6 +68,8 @@ export function ReceiptDetailPage() {
       setReceipt(updated);
       setEditingLineId(null);
       setCostDraft("");
+      // Só com a resposta do servidor: validação ou rede nunca viram "salvo".
+      setCustoSalvoLineId(lineId);
     } catch (err) {
       setError(apiErrorMessage(err, "Falha ao salvar custo de aquisição"));
     } finally {
@@ -303,16 +318,23 @@ export function ReceiptDetailPage() {
                           </button>
                         </div>
                       ) : (
-                        <button
-                          type="button"
-                          className="btn btn--ghost btn--sm"
-                          onClick={() => {
-                            setEditingLineId(line.id);
-                            setCostDraft(line.actualUnitCost ?? "");
-                          }}
-                        >
-                          {line.actualUnitCost !== null ? "Atualizar custo" : "Definir custo"}
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--sm"
+                            onClick={() => editarCusto(line.id, line.actualUnitCost ?? "")}
+                          >
+                            {line.actualUnitCost !== null ? "Atualizar custo" : "Definir custo"}
+                          </button>
+                          {/* Embaixo do botão, não ao lado: a coluna de ação é
+                              fixa e sem quebra, e a frase ao lado a alargaria
+                              sobre a tabela em tela estreita. */}
+                          {custoSalvoLineId === line.id && (
+                            <p className="form-status" role="status">
+                              Custo salvo.
+                            </p>
+                          )}
+                        </>
                       )}
                     </td>
                   </tr>
