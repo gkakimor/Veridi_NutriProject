@@ -77,9 +77,25 @@ export function CustomerOrdersReportPage() {
       filters={
         <>
           <label htmlFor="co-from">De</label>
-          <input id="co-from" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+          <input
+            id="co-from"
+            type="date"
+            value={from}
+            onChange={(event) => {
+              setPage(1);
+              setFrom(event.target.value);
+            }}
+          />
           <label htmlFor="co-to">até</label>
-          <input id="co-to" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+          <input
+            id="co-to"
+            type="date"
+            value={to}
+            onChange={(event) => {
+              setPage(1);
+              setTo(event.target.value);
+            }}
+          />
           <CustomerFilter
             value={customerId}
             onChange={(value) => {
