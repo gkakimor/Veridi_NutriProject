@@ -41,6 +41,9 @@ import { defineConfig, loadEnv } from "vite";
  * primeiro apaga o calendário para provar "ainda não configurado" e a
  * migração da jornada legada; o segundo troca a jornada da semana para provar
  * a agenda. Em paralelo, um apagava o calendário no meio da agenda do outro.
+ * Desde TEST-ISOLATION-CALENDAR-01 cada um guarda o calendário que encontrou e
+ * o devolve no fim (`src/test-support/calendario-de-producao.ts`) — o que não
+ * dispensa a faixa: enquanto o arquivo roda, o calendário é só dele.
  *
  * Só entra aqui arquivo que dependa de estado global de forma inevitável.
  * Todo o resto continua em paralelo, no `vitest.config.ts`.

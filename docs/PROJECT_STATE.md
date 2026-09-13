@@ -2563,6 +2563,33 @@ linha do Chromium do 400 controlado.
 Achados no BACKLOG, P3: SAVE-ENABLED-NO-DIRTY-01, BILLING-SHIPMENT-UNSAVED-GUARD-01
 e SAVE-THEN-COMMIT-STALE-01.
 
+## O teste devolve o calendário (TEST-ISOLATION-CALENDAR-01, 2026-09-13)
+
+Os testes da API rodam no banco da `.env`. `production-calendar.test.ts` apagava
+o Calendário de Produção no `beforeAll` e no `afterAll`, com as exceções de 2031;
+`production-schedules.test.ts` regravava a semana e apagava as exceções de 2033.
+Depois da faixa serial o `veridi_dev` ficava sem jornada, e toda prévia de
+programação recusava.
+
+**Regra.** Teste que usa o calendário o empresta:
+`test-support/calendario-de-producao.ts` guarda, antes de qualquer escrita, as
+linhas inteiras do calendário, dos dias e das exceções do ano reservado; no
+`afterAll` tira o que ficou, regrava essas linhas numa transação (tipo da própria
+tabela: mesmos ids, horários, autores e datas) e relê — divergência derruba a
+suíte. Calendário ausente continua ausente; exceção de outro ano não é tocada.
+Singleton, jornada, exceções e migrations intocados; os dois arquivos seguem na
+faixa serial, porque o calendário é do arquivo enquanto ele roda. Limite: processo
+morto no meio não chega ao `afterAll`. O `veridi_dev` segue sem calendário,
+apagado por rodadas antigas — a suíte não o recria.
+
+**Validação.** Banco isolado com sentinela (calendário legado, sete dias com datas
+próprias, exceções em 2031, 2033 e 2027, duas nas datas dos testes): o código
+antigo apagou calendário, dias e três exceções; o novo deixou tudo idêntico coluna
+a coluna em duas execuções seguidas (64/64), com falha no meio dos dois arquivos,
+com `--bail=1` em cada um, com `beforeAll` falhando depois de apagar, e sem
+calendário prévio (nada fica). Devolução sem as exceções (mutação) derrubada pela
+releitura. Typecheck.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

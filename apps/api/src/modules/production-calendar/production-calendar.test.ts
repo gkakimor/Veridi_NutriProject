@@ -7,6 +7,11 @@ import type {
   ProductionCalendarWeekdayDTO,
 } from "@veridi/shared";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import {
+  devolverCalendarioDeProducao,
+  guardarCalendarioDeProducao,
+  type CalendarioGuardado,
+} from "../../test-support/calendario-de-producao.js";
 import { getPrisma } from "../../db/prisma.js";
 
 /**
@@ -26,16 +31,18 @@ import { getPrisma } from "../../db/prisma.js";
  *    explícito — nunca sobrescrita silenciosa.
  *
  * O calendário é estado GLOBAL: este arquivo roda na faixa serial
- * (`vitest.serial.config.ts`), sem vizinho mexendo nele ao mesmo tempo.
+ * (`vitest.serial.config.ts`), sem vizinho mexendo nele ao mesmo tempo, e
+ * devolve no fim o calendário que encontrou no banco
+ * (`test-support/calendario-de-producao.ts`).
  */
 
 type App = ReturnType<typeof buildTestApp>;
 const app: App = buildTestApp("ADMIN");
 const leitor: App = buildTestApp("VIEWER");
 
-/** Marca as datas desta rodada, para limpar só o que este arquivo criou. */
+/** Ano reservado deste arquivo: as exceções da rodada vivem só nele. */
 const ANO_DE_TESTE = 2031;
-const criadas: string[] = [];
+let calendarioDeAntes: CalendarioGuardado | undefined;
 
 const dia = (mes: number, diaDoMes: number) =>
   `${ANO_DE_TESTE}-${String(mes).padStart(2, "0")}-${String(diaDoMes).padStart(2, "0")}`;
@@ -85,16 +92,12 @@ async function salvarSemanaVeridi() {
   expect((await salvarDia("SUNDAY", SEM_OPERAR)).statusCode).toBe(200);
 }
 
-async function criarExcecao(payload: Record<string, unknown>): Promise<Resposta> {
-  const resposta = await app.inject({
+function criarExcecao(payload: Record<string, unknown>): Promise<Resposta> {
+  return app.inject({
     method: "POST",
     url: "/production-calendar/exceptions",
     payload,
   });
-  if (resposta.statusCode === 201) {
-    criadas.push((resposta.json() as ProductionCalendarExceptionDTO).id);
-  }
-  return resposta;
 }
 
 /**
@@ -132,12 +135,14 @@ async function migrarCalendarioLegado(legado: {
 }
 
 beforeAll(async () => {
+  // Antes de qualquer escrita: o calendário do banco é de quem usa o DEV, e
+  // volta no afterAll — com o arquivo inteiro, uma parte dele ou uma falha.
+  calendarioDeAntes = await guardarCalendarioDeProducao(ANO_DE_TESTE);
   await app.ready();
   await leitor.ready();
   const prisma = getPrisma();
-  // Rodada limpa: o singleton é estado global, e um resto de execução
-  // anterior faria "ainda não configurado" falhar sem motivo. As sete linhas
-  // da semana saem junto (ON DELETE CASCADE).
+  // Ponto de partida do arquivo: "ainda não configurado" e o ano de teste sem
+  // exceção. As sete linhas da semana saem junto (ON DELETE CASCADE).
   await prisma.productionCalendar.deleteMany({});
   await prisma.productionCalendarException.deleteMany({
     where: {
@@ -150,13 +155,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  const prisma = getPrisma();
-  if (criadas.length > 0) {
-    await prisma.productionCalendarException.deleteMany({ where: { id: { in: criadas } } });
+  try {
+    if (calendarioDeAntes) await devolverCalendarioDeProducao(calendarioDeAntes);
+  } finally {
+    await app.close();
+    await leitor.close();
   }
-  await prisma.productionCalendar.deleteMany({});
-  await app.close();
-  await leitor.close();
 });
 
 describe("a jornada semanal — um calendário, sete dias", () => {
