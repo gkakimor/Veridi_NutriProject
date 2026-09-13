@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
 import { getDashboard } from "./dashboard.service.js";
-import { dashboardQuerySchema } from "./dashboard.schemas.js";
+import { dashboardQuerySchemaEm } from "./dashboard.schemas.js";
 
 function formatZodError(error: ZodError) {
   return error.issues.map((issue) => ({
@@ -18,13 +18,16 @@ function formatZodError(error: ZodError) {
  */
 export const dashboardRoutes: FastifyPluginAsync = async (app) => {
   app.get("/dashboard", async (request, reply) => {
-    const parsed = dashboardQuerySchema.safeParse(request.query);
+    // Um instante por requisição (DASHBOARD-CONSISTENT-NOW-01): o "hoje" do
+    // período, o estado atual e a lista de atenção saem do mesmo relógio.
+    const now = new Date();
+    const parsed = dashboardQuerySchemaEm(now).safeParse(request.query);
     if (!parsed.success) {
       return reply
         .status(400)
         .send({ error: "validation_error", issues: formatZodError(parsed.error) });
     }
 
-    return reply.send(await getDashboard(parsed.data));
+    return reply.send(await getDashboard(parsed.data, now));
   });
 };

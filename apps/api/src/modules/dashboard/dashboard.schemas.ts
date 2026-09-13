@@ -15,18 +15,24 @@ import { diaCivilDeFiltroSchema } from "../../lib/date-schema.js";
  * Ponta ausente ou vazia é "hoje", e "hoje" é o dia civil da Veridi em
  * `America/Sao_Paulo` — não o dia do relógio da máquina. Em Railway o servidor
  * roda em UTC, e o KPI do dia passava a começar às 21h da véspera.
+ *
+ * `agora` é o instante único da requisição (DASHBOARD-CONSISTENT-NOW-01): o
+ * "hoje" da ponta ausente é o mesmo dia do estado atual e da lista de atenção,
+ * e não uma segunda leitura do relógio feita no parse.
  */
-export const dashboardQuerySchema = z
-  .object({
-    from: diaCivilDeFiltroSchema,
-    to: diaCivilDeFiltroSchema,
-  })
-  .transform((value) => {
-    const hoje = hojeComercial();
-    return {
-      from: limitesDoDiaComercial(value.from ?? hoje).inicio,
-      to: limitesDoDiaComercial(value.to ?? hoje).fim,
-    };
-  });
+export function dashboardQuerySchemaEm(agora: Date) {
+  return z
+    .object({
+      from: diaCivilDeFiltroSchema,
+      to: diaCivilDeFiltroSchema,
+    })
+    .transform((value) => {
+      const hoje = hojeComercial(agora);
+      return {
+        from: limitesDoDiaComercial(value.from ?? hoje).inicio,
+        to: limitesDoDiaComercial(value.to ?? hoje).fim,
+      };
+    });
+}
 
-export type DashboardQuery = z.infer<typeof dashboardQuerySchema>;
+export type DashboardQuery = z.output<ReturnType<typeof dashboardQuerySchemaEm>>;

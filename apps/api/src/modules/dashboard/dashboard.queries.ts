@@ -89,9 +89,13 @@ export async function getOrdersAwaitingProductionIds(prisma: PrismaOrTx): Promis
  * propria, e contar o proprio compromisso como falta geraria shortage
  * falso. Reutiliza `getAvailableByItems` — a MESMA semantica exibida na
  * tela da OP, nunca um calculo de shortage paralelo.
+ *
+ * `now` decide quais lotes ja venceram (vencido nao e disponivel): e o
+ * instante do retrato de quem chama, para o contador e a atencao concordarem.
  */
 export async function getProductionOrdersWithShortage(
   prisma: PrismaOrTx,
+  now: Date,
 ): Promise<{ id: string; code: string }[]> {
   const orders = await prisma.productionOrder.findMany({
     where: { status: { in: ["DRAFT", "PLANNED"] }, requirements: { some: {} } },
@@ -114,7 +118,7 @@ export async function getProductionOrdersWithShortage(
       });
     }
   }
-  const availableByItem = await getAvailableByItems(prisma, [...itemScopes.values()]);
+  const availableByItem = await getAvailableByItems(prisma, [...itemScopes.values()], undefined, now);
 
   return orders.filter((order) =>
     order.requirements.some((requirement) => {

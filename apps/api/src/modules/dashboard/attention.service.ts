@@ -79,7 +79,7 @@ export async function buildAttentionList(
         item: { select: { code: true } },
       },
     }),
-    getProductionOrdersWithShortage(prisma),
+    getProductionOrdersWithShortage(prisma, now),
     getProductionOrdersWithIncompleteCost(prisma),
     getOrdersAwaitingShipmentIds(prisma),
     getOrdersAwaitingProductionIds(prisma),

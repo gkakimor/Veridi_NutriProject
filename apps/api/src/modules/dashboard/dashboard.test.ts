@@ -1,11 +1,17 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
+import type { AttentionType, DashboardDTO } from "@veridi/shared";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { aplicarRoteiroDeTeste } from "../../test-support/fixture-route.js";
 import { diaComercialDeTeste, marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 import { buildAttentionList } from "./attention.service.js";
+import { dashboardQuerySchemaEm } from "./dashboard.schemas.js";
+import { getDashboard } from "./dashboard.service.js";
 
 const fixtureCustomerOrderIds: string[] = [];
 const fixtureProductionOrderIds: string[] = [];
@@ -766,5 +772,191 @@ describe("Dashboard — movimentações", () => {
     expect(dashboard.movementActivity).toHaveLength(0);
 
     await app.close();
+  });
+});
+
+describe("Dashboard — um instante por requisição (DASHBOARD-CONSISTENT-NOW-01)", () => {
+  /*
+   * O estado atual e a lista de atenção liam cada um o próprio relógio: na
+   * virada do dia comercial o contador podia sair de 23:59:59.999 e a lista de
+   * 00:00:00.001. Aqui o instante é injetado em `getDashboard`, e as duas metades
+   * do MESMO retrato têm de virar juntas — lote, OC e falta de material.
+   *
+   * O dia é sorteado de 2031 em diante, longe do relógio real: um pedaço do
+   * retrato que ainda lesse o relógio por conta própria cairia em 2026, onde o
+   * lote e a OC do teste nem venceram nem estão perto, e a conta dele não
+   * viraria. Os contadores são agregado do banco inteiro — por isso esta faixa
+   * serial, com cada instante medido antes e depois das fixtures.
+   */
+  const diaISO = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  const BASE_FUTURA = Date.UTC(2031, 0, 2) + Math.floor(Math.random() * 1400) * DAY_MS;
+  const [VESPERA, DIA, SEGUINTE] = [diaISO(BASE_FUTURA - DAY_MS), diaISO(BASE_FUTURA), diaISO(BASE_FUTURA + DAY_MS)];
+
+  type Contas = { vencidos: number; perto: number; atrasadas: number; falta: number };
+
+  /**
+   * Cada instante, o dia dele em São Paulo e o que as fixtures somam nele — à
+   * mão, nunca recalculado com o helper que o código usa. O lote vence na
+   * véspera: vale a véspera inteira (perto do vencimento) e vence à meia-noite.
+   */
+  const RETRATOS: { quando: string; saoPaulo: string; hoje: string; periodo: [string, string]; soma: Contas }[] = [
+    {
+      quando: `${VESPERA}T15:00:00.000Z`,
+      saoPaulo: "véspera 12:00",
+      hoje: VESPERA,
+      periodo: [`${VESPERA}T03:00:00.000Z`, `${DIA}T02:59:59.999Z`],
+      soma: { vencidos: 0, perto: 1, atrasadas: 0, falta: 0 },
+    },
+    {
+      quando: `${DIA}T02:59:59.999Z`,
+      saoPaulo: "véspera 23:59:59.999",
+      hoje: VESPERA,
+      periodo: [`${VESPERA}T03:00:00.000Z`, `${DIA}T02:59:59.999Z`],
+      soma: { vencidos: 0, perto: 1, atrasadas: 0, falta: 0 },
+    },
+    {
+      quando: `${DIA}T03:00:00.000Z`,
+      saoPaulo: "dia 00:00",
+      hoje: DIA,
+      periodo: [`${DIA}T03:00:00.000Z`, `${SEGUINTE}T02:59:59.999Z`],
+      soma: { vencidos: 1, perto: 0, atrasadas: 1, falta: 1 },
+    },
+    {
+      quando: `${DIA}T15:00:00.000Z`,
+      saoPaulo: "dia 12:00",
+      hoje: DIA,
+      periodo: [`${DIA}T03:00:00.000Z`, `${SEGUINTE}T02:59:59.999Z`],
+      soma: { vencidos: 1, perto: 0, atrasadas: 1, falta: 1 },
+    },
+  ];
+
+  /** O Painel num instante — o mesmo caminho da rota, com o `now` na mão do teste. */
+  async function retratoEm(quando: string): Promise<DashboardDTO> {
+    const agora = new Date(quando);
+    return getDashboard(dashboardQuerySchemaEm(agora).parse({}), agora);
+  }
+
+  /** As quatro contas no contador do estado atual e na lista de atenção de UM retrato. */
+  function contasDo(painel: DashboardDTO) {
+    const naLista = (tipo: AttentionType) => painel.attentionGroups.find((grupo) => grupo.type === tipo)?.count ?? 0;
+    return {
+      contador: {
+        vencidos: painel.currentState.inventory.lotsExpired,
+        perto: painel.currentState.inventory.lotsNearExpiry,
+        atrasadas: painel.currentState.purchasing.lateOrders,
+        falta: painel.currentState.production.withShortage,
+      },
+      atencao: {
+        vencidos: naLista("LOT_EXPIRED"),
+        perto: naLista("LOT_NEAR_EXPIRY"),
+        atrasadas: naLista("PURCHASE_ORDER_LATE"),
+        falta: naLista("PRODUCTION_ORDER_SHORTAGE"),
+      },
+      total: painel.attentionTotal,
+    };
+  }
+
+  const menos = (a: Contas, b: Contas): Contas => ({
+    vencidos: a.vencidos - b.vencidos,
+    perto: a.perto - b.perto,
+    atrasadas: a.atrasadas - b.atrasadas,
+    falta: a.falta - b.falta,
+  });
+
+  it("na virada do dia comercial, contador e lista de atenção viram juntos — e fora da borda seguem o dia", async () => {
+    const app = buildTestApp();
+    await app.ready();
+    const prisma = getPrisma();
+
+    // A borda é a de São Paulo, conferida pelo Intl — não pelo helper do código.
+    const diaEmSaoPaulo = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" });
+    for (const retrato of RETRATOS) {
+      expect(diaEmSaoPaulo.format(new Date(retrato.quando)), retrato.saoPaulo).toBe(retrato.hoje);
+    }
+
+    const antes: ReturnType<typeof contasDo>[] = [];
+    for (const retrato of RETRATOS) antes.push(contasDo(await retratoEm(retrato.quando)));
+
+    // Um lote que vence na véspera e é a única fonte do material de uma OP em
+    // rascunho, e uma OC aberta prevista para a véspera.
+    const vespera = new Date(`${VESPERA}T00:00:00.000Z`);
+    const supplier = await createSupplier();
+    const rawMaterial = await createItem("RAW_MATERIAL");
+    await stockLot(rawMaterial.id, "1000", { expiryDate: vespera });
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+    await activateFormulation(app, product.id, rawMaterial.id);
+
+    const op = await app.inject({
+      method: "POST",
+      url: "/production-orders",
+      payload: { productId: product.id, plannedQuantity: "10" },
+    });
+    expect(op.statusCode, op.body.slice(0, 300)).toBe(201);
+    fixtureProductionOrderIds.push(op.json().id);
+
+    const oc = await app.inject({
+      method: "POST",
+      url: "/purchase-orders",
+      payload: {
+        supplierId: supplier.id,
+        orderDate: new Date().toISOString(),
+        expectedDeliveryDate: vespera.toISOString(),
+        lines: [{ itemId: rawMaterial.id, orderedQuantity: "100" }],
+      },
+    });
+    expect(oc.statusCode, oc.body.slice(0, 300)).toBe(201);
+    fixturePurchaseOrderIds.push(oc.json().id);
+    const confirmada = await app.inject({ method: "POST", url: `/purchase-orders/${oc.json().id}/confirm` });
+    expect(confirmada.statusCode, confirmada.body.slice(0, 300)).toBe(200);
+
+    // As fixtures são o que dizem ser — senão "não falta" poderia ser OP sem requisito.
+    const requisitos = await prisma.productionOrderRequirement.findMany({
+      where: { productionOrderId: op.json().id },
+      select: { itemId: true, requiredQuantity: true, productionOrder: { select: { status: true } } },
+    });
+    expect(
+      requisitos.map((requisito) => [requisito.productionOrder.status, requisito.itemId, requisito.requiredQuantity.toString()]),
+    ).toEqual([["DRAFT", rawMaterial.id, "10"]]);
+
+    for (const [indice, retrato] of RETRATOS.entries()) {
+      const rotulo = `${retrato.saoPaulo} em São Paulo (${retrato.quando})`;
+      const painel = await retratoEm(retrato.quando);
+      const depois = contasDo(painel);
+      const semFixtures = antes[indice]!;
+
+      expect(menos(depois.contador, semFixtures.contador), `contador · ${rotulo}`).toEqual(retrato.soma);
+      expect(menos(depois.atencao, semFixtures.atencao), `atenção · ${rotulo}`).toEqual(retrato.soma);
+      // Nada além dessas contas entrou na lista por causa das fixtures.
+      const { vencidos, perto, atrasadas, falta } = retrato.soma;
+      expect(depois.total - semFixtures.total, `total da atenção · ${rotulo}`).toBe(vencidos + perto + atrasadas + falta);
+      // O "hoje" do período sem filtro é o mesmo dia do estado atual.
+      expect([painel.period.from, painel.period.to], `período · ${rotulo}`).toEqual(retrato.periodo);
+    }
+
+    await app.close();
+  });
+
+  it("guarda estrutural: a rota lê o relógio uma vez e o retrato não lê de novo", () => {
+    const pasta = fileURLToPath(new URL("./", import.meta.url));
+    // Sem comentários: a explicação do bug pode citar o padrão; o código, não.
+    const codigo = (arquivo: string) =>
+      readFileSync(join(pasta, arquivo), "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+    const RELOGIO = /new Date\(\)|Date\.now\(\)|hojeComercial\(\)|marcadorDeHojeComercial\(\)/g;
+
+    const rota = codigo("dashboard.routes.ts");
+    expect(rota.match(RELOGIO)).toEqual(["new Date()"]);
+    expect(rota).toMatch(/dashboardQuerySchemaEm\(now\)/);
+    expect(rota).toMatch(/getDashboard\(parsed\.data, now\)/);
+
+    for (const arquivo of ["dashboard.schemas.ts", "dashboard.service.ts", "dashboard.queries.ts"]) {
+      expect(codigo(arquivo).match(RELOGIO), arquivo).toBeNull();
+    }
+    // A atenção guarda o padrão só para quem a chama sozinha; o Painel passa `now`.
+    const atencao = codigo("attention.service.ts");
+    expect(atencao.match(RELOGIO)).toEqual(["new Date()"]);
+    expect(atencao).toMatch(/now: Date = new Date\(\)/);
   });
 });
