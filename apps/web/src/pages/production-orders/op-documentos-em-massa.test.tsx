@@ -162,7 +162,7 @@ describe("OPs — PDF e CSV da seleção", () => {
     fireEvent.click(cabecalho());
     fireEvent.click(screen.getByRole("button", { name: `Selecionar todos os ${TOTAL} resultados filtrados` }));
 
-    fireEvent.click(botao("Exportar CSV"));
+    fireEvent.click(botao("Exportar selecionados em CSV"));
     expect(await within(barra()!).findByRole("status")).toHaveTextContent("CSV exportado.");
     expect(exportProductionOrderSelectionCsv).toHaveBeenCalledWith({
       mode: "filtered",
@@ -181,7 +181,7 @@ describe("OPs — PDF e CSV da seleção", () => {
     fireEvent.click(caixa(4));
     fireEvent.click(caixa(9));
 
-    fireEvent.click(botao("Exportar CSV"));
+    fireEvent.click(botao("Exportar selecionados em CSV"));
     await waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1));
     expect(exportProductionOrderSelectionCsv).toHaveBeenCalledWith({ mode: "ids", ids: ["op-4", "op-9"] });
     expect(contagem()).toBe("2 selecionados");

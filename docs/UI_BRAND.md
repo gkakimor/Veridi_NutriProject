@@ -436,7 +436,9 @@ célula de seleção não abre a linha. Pilotos: Pedidos e Ordens de Produção.
 Itens segue com a seleção só de página (`TableSelection`).
 
 **Ações documentais (BULK-DOCUMENTS-01).** `BulkDocumentActions` na barra:
-"Baixar PDF" e "Exportar CSV", secundárias — leem, não gravam, e não competem
+"Baixar PDF" e "Exportar selecionados em CSV" (o "Exportar CSV" do cabeçalho
+segue sendo a lista filtrada inteira — dois conjuntos, dois nomes;
+SMALL-UX-CLEANUP-WAVE-01), secundárias — leem, não gravam, e não competem
 com as ações de commit. "Gerando PDF…"/"Gerando CSV…" só no botão clicado,
 clique duplo roda uma vez, "PDF gerado."/"CSV exportado." em `role="status"`
 numa linha própria no fim do grupo, recusa em `role="alert"`; a seleção

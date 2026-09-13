@@ -85,7 +85,11 @@ export function BillingPeriodReportPage() {
       loading={loading}
       error={error}
       summary={
-        data && (
+        // Sem documento no recorte, não há valor a completar: "Valores
+        // incompletos" apontaria um preço faltando que não existe. O vazio é
+        // dito pela tabela.
+        data &&
+        data.summary.billingCount > 0 && (
           <>
             <ReportSummaryItem label="Documentos emitidos" value={data.summary.billingCount} />
             <ReportSummaryItem
@@ -156,7 +160,9 @@ export function BillingPeriodReportPage() {
           "Precificação",
           "Referência externa",
         ]}
-        emptyMessage="Nenhum faturamento emitido no período."
+        // Curta de propósito: a célula da tabela não quebra linha, e em 390px
+        // a frase inteira precisa caber na área visível.
+        emptyMessage="Nenhum faturamento para os filtros informados."
         rows={(data?.rows ?? []).map((row) => (
           <tr key={row.billingId}>
             <td>

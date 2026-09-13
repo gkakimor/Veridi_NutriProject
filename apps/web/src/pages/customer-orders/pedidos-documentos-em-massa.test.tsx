@@ -12,7 +12,7 @@ import type {
 /**
  * Pedidos — documentos da seleção em massa (BULK-DOCUMENTS-01).
  *
- * A barra da seleção ganha "Baixar PDF" e "Exportar CSV". O que se prova: as
+ * A barra da seleção ganha "Baixar PDF" e "Exportar selecionados em CSV". O que se prova: as
  * ações só existem com seleção, mandam o DESCRITOR (ids, ou filtro com as
  * exceções) e nunca buscam os 300 ids no navegador; o PDF é UM arquivo e o
  * CSV é o do servidor; cada clique roda uma vez; sucesso e erro respondem na
@@ -139,17 +139,47 @@ describe("ações documentais na barra da seleção", () => {
   it("só existem com seleção, e saem com ela", async () => {
     await abrir();
     expect(screen.queryByRole("button", { name: "Baixar PDF" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Exportar CSV" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Exportar selecionados em CSV" })).toBeNull();
 
     fireEvent.click(caixa(2));
     expect(botao("Baixar PDF")).toBeEnabled();
-    expect(botao("Exportar CSV")).toBeEnabled();
+    expect(botao("Exportar selecionados em CSV")).toBeEnabled();
     // Documental: nenhuma das duas tem o peso de uma ação que grava.
     expect(botao("Baixar PDF").className).not.toContain("btn--accent");
-    expect(botao("Exportar CSV").className).not.toContain("btn--accent");
+    expect(botao("Exportar selecionados em CSV").className).not.toContain("btn--accent");
 
     fireEvent.click(botao("Limpar seleção"));
     expect(screen.queryByRole("button", { name: "Baixar PDF" })).toBeNull();
+  });
+
+  it("dois CSVs, dois nomes: o do cabeçalho é a lista filtrada, o da barra é a seleção", async () => {
+    // SMALL-UX-CLEANUP-WAVE-01: com seleção, os dois se chamavam "Exportar CSV".
+    await abrir();
+    const daLista = () => screen.getByRole("link", { name: "Exportar CSV" });
+    const controlesDeCsv = () =>
+      [...screen.queryAllByRole("link"), ...screen.queryAllByRole("button")]
+        .map((controle) => controle.textContent ?? "")
+        .filter((nome) => nome.includes("CSV"));
+    const enderecoDaLista = daLista().getAttribute("href") ?? "";
+    expect(enderecoDaLista).toContain("/customer-orders/export.csv");
+    expect(enderecoDaLista).not.toMatch(/ids=/i);
+
+    // Nenhuma seleção: um CSV só, o da lista.
+    expect(controlesDeCsv()).toEqual(["Exportar CSV"]);
+
+    // Seleção marcada uma a uma.
+    fireEvent.click(caixa(2));
+    expect(controlesDeCsv()).toEqual(["Exportar CSV", "Exportar selecionados em CSV"]);
+    expect(within(barra()!).queryByRole("button", { name: "Exportar CSV" })).toBeNull();
+    expect(daLista().closest(".bulk-bar")).toBeNull();
+
+    // Todos os filtrados.
+    fireEvent.click(botao("Limpar seleção"));
+    await todosOsFiltrados();
+    expect(controlesDeCsv()).toEqual(["Exportar CSV", "Exportar selecionados em CSV"]);
+
+    // Mudou o nome, não o conjunto: a lista segue no mesmo endereço, sem seleção nele.
+    expect(daLista().getAttribute("href")).toBe(enderecoDaLista);
   });
 
   it("IDS: o PDF sai de UM pedido ao servidor, UM arquivo, e a seleção fica", async () => {
@@ -181,7 +211,7 @@ describe("ações documentais na barra da seleção", () => {
     expect(contagem()).toBe("298 selecionados");
     const consultasAntes = vi.mocked(listCustomerOrders).mock.calls.length;
 
-    fireEvent.click(botao("Exportar CSV"));
+    fireEvent.click(botao("Exportar selecionados em CSV"));
     expect(await within(barra()!).findByRole("status")).toHaveTextContent("CSV exportado.");
 
     expect(exportCustomerOrderSelectionCsv).toHaveBeenCalledTimes(1);
@@ -211,7 +241,7 @@ describe("ações documentais na barra da seleção", () => {
     expect(baixar).toHaveTextContent("Gerando PDF…");
     expect(baixar).toBeDisabled();
 
-    const exportar = botao("Exportar CSV");
+    const exportar = botao("Exportar selecionados em CSV");
     fireEvent.click(exportar);
     fireEvent.click(exportar);
     expect(exportar).toHaveTextContent("Gerando CSV…");
@@ -225,7 +255,7 @@ describe("ações documentais na barra da seleção", () => {
       csv.resolver({ blob: CSV_BLOB, fileName: "pedidos-selecionados-2026-09-12.csv" });
     });
     await waitFor(() => expect(botao("Baixar PDF")).toBeEnabled());
-    expect(botao("Exportar CSV")).toBeEnabled();
+    expect(botao("Exportar selecionados em CSV")).toBeEnabled();
     expect(downloadPdf).toHaveBeenCalledTimes(1);
     expect(downloadFile).toHaveBeenCalledTimes(1);
   });
