@@ -45,6 +45,11 @@ import { defineConfig, loadEnv } from "vite";
  * o devolve no fim (`src/test-support/calendario-de-producao.ts`) — o que não
  * dispensa a faixa: enquanto o arquivo roda, o calendário é só dele.
  *
+ * `dashboard-retrato-unico.test.ts` (DASHBOARD-SNAPSHOT-CONSISTENCY-01) entrou
+ * pelo critério do painel: compara o Painel inteiro antes, durante e depois de
+ * uma escrita — com vizinho escrevendo, "antes" e "durante" diferem sem nada
+ * estar errado.
+ *
  * Só entra aqui arquivo que dependa de estado global de forma inevitável.
  * Todo o resto continua em paralelo, no `vitest.config.ts`.
  */
@@ -53,6 +58,7 @@ export default defineConfig(({ mode }) => ({
     env: loadEnv(mode, "../../", ""),
     include: [
       "src/modules/dashboard/dashboard.test.ts",
+      "src/modules/dashboard/dashboard-retrato-unico.test.ts",
       "src/modules/production-orders/gmp-execution.test.ts",
       "src/modules/controlled-documents/controlled-documents.test.ts",
       "src/modules/production-calendar/production-calendar.test.ts",

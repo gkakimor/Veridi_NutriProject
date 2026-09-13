@@ -2749,6 +2749,47 @@ formulários e num filtro sem transbordo; console limpo fora o 400 de
 Achado: Item × Fornecedor pede a primeira página de fornecedores duas vezes
 (barra e formulário) — junto do `porId` duplicado, em PERFORMANCE-CLEANUP-WAVE-01.
 
+## Um retrato do banco por requisição do Painel (DASHBOARD-SNAPSHOT-CONSISTENCY-01, 2026-09-13)
+
+Depois de DASHBOARD-CONSISTENT-NOW-01 o relógio era um só, mas o banco não: cada
+consulta de `getDashboard` saía do pool por conta própria e via o instante em que
+rodou. Escrita no meio da montagem partia a resposta — lote desbloqueado contado no
+estado atual e ausente da lista de atenção. E `getProductionOrdersWithIncompleteCost`
+recebia o `prisma` do retrato, mas resolvia o custo por
+`findProductionOrderMaterialCost`, que lia pelo `getPrisma()` global.
+
+**Regra.** `getDashboard` monta período, estado atual, movimentos e atenção numa
+transação interativa `RepeatableRead` (`maxWait` 10 s, o `pool_timeout` do Prisma;
+`timeout` 30 s): no PostgreSQL toda leitura dela vê o retrato da primeira. Só SELECT —
+nenhuma trava além da de qualquer leitura, nenhuma falha de serialização.
+`findProductionOrderMaterialCost(id, prisma = getPrisma())` usa o contexto recebido, e
+o Painel passa o da transação; Produtos Acabados, relatórios de produção, documentos da
+seleção e o custo da OP seguem no global, sem mudança. Mesmo `now`, KPIs, fórmulas,
+períodos, dia comercial, movimentos e regras da atenção; sem migration.
+
+**Custo.** Transação é uma conexão: o `Promise.all` interno vira fila. Massa no banco
+isolado (200 OPs concluídas sem custo com 2 consumos cada, 300 lotes-problema, 100 OCs,
+60 OPs com falta, 30 pedidos): rota via `inject` de ~2,1 s para ~3,3 s (hoje) e ~2,1 s
+para ~3,7 s (365 dias); cinco requisições simultâneas ~9,5 s cada antes e ~9,2 s depois
+(o gargalo é o processo, não o pool). 5.270 SQL por requisição, quase todas do custo
+incompleto.
+
+**Validação.** `dashboard-retrato-unico.test.ts` (faixa serial): extensão de consulta no
+cliente da aplicação segura por promise a lista de lotes da atenção e as OPs do custo
+depois que o contador de lotes bloqueados leu; outra conexão desbloqueia o lote e informa
+o custo do lote consumido; a resposta montada no meio é a de antes (contador, lista,
+custo e o resto do DTO fora os movimentos recentes), e a seguinte difere em exatamente 1
+lote bloqueado e 1 OP com custo incompleto, no contador e na atenção. Quatro mutações
+derrubam: sem transação (contador 101 × lista 100), custo sem o `prisma` na chamada,
+`ReadCommitted` e custo voltando ao global dentro da função. Sem escrita, serviço antigo e
+novo devolvem o mesmo DTO em quatro períodos. Smoke no servidor real com a massa: 200 em
+sequência e em 5 paralelas com respostas iguais; período invertido segue 400.
+
+Achado (não corrigido, fora do escopo): estado atual e atenção calculam duas vezes o
+custo incompleto, a falta de material e os pedidos aguardando expedição. No mesmo
+retrato o resultado é idêntico — resolver uma vez cortaria perto de metade das SQL em
+fila. Com latência de rede entre API e banco, cada 1 ms por SQL soma ~5 s nessa massa.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

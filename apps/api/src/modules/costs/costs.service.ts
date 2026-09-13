@@ -238,11 +238,16 @@ export async function getFormulationCostEstimate(
  * obsoleta — nunca motivo para a tela inteira falhar. Quem pede o custo de
  * UMA OP identificada usa `getProductionOrderMaterialCost`, que continua
  * respondendo 404.
+ *
+ * `prisma` e o contexto de quem pergunta. Quem monta um retrato maior (o
+ * Painel, dentro da propria transacao) passa o dele: com o cliente global, o
+ * custo saia de um instante do banco diferente do resto do retrato
+ * (DASHBOARD-SNAPSHOT-CONSISTENCY-01).
  */
 export async function findProductionOrderMaterialCost(
   productionOrderId: string,
+  prisma: PrismaOrTx = getPrisma(),
 ): Promise<ProductionOrderMaterialCostDTO | null> {
-  const prisma = getPrisma();
   const order = await prisma.productionOrder.findUnique({
     where: { id: productionOrderId },
     include: {
