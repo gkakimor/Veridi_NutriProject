@@ -22,6 +22,7 @@ import type { InventoryMovementType } from "@veridi/shared";
 import { EntityLink } from "../components/EntityLink";
 import { ContextHelp } from "../components/help";
 import { helpTopics } from "../help/help-content";
+import { apiErrorMessage } from "../lib/api-errors";
 import { getDashboard } from "../lib/dashboard-api";
 import type { UserRole } from "@veridi/shared";
 import type { PeriodPreset } from "../lib/period";
@@ -294,12 +295,19 @@ export function DashboardPage() {
   );
 
   const reload = useCallback(() => {
-    setLoading(true);
     setError(null);
+    // Período invertido não se pergunta: a resposta seria KPI zerado para uma
+    // pergunta inválida. A frase fica junto dos campos.
+    if (bounds.recusa) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     getDashboard(bounds.from, bounds.to)
       .then(setData)
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Falha ao carregar o dashboard");
+        // A recusa do servidor chega com a frase dele, não "Erro de validação".
+        setError(apiErrorMessage(err, "Falha ao carregar o dashboard"));
       })
       .finally(() => setLoading(false));
   }, [bounds]);
@@ -348,6 +356,8 @@ export function DashboardPage() {
               id="dash-from"
               type="date"
               value={customFrom}
+              aria-invalid={bounds.recusa ? true : undefined}
+              aria-describedby={bounds.recusa ? "dash-period-error" : undefined}
               onChange={(event) => setCustomFrom(event.target.value)}
             />
             <label className="sr-only" htmlFor="dash-to">
@@ -357,9 +367,16 @@ export function DashboardPage() {
               id="dash-to"
               type="date"
               value={customTo}
+              aria-invalid={bounds.recusa ? true : undefined}
+              aria-describedby={bounds.recusa ? "dash-period-error" : undefined}
               onChange={(event) => setCustomTo(event.target.value)}
             />
           </>
+        )}
+        {bounds.recusa && (
+          <p id="dash-period-error" className="form-alert dash-filter__error" role="alert">
+            {bounds.recusa}
+          </p>
         )}
       </div>
 
@@ -411,60 +428,65 @@ export function DashboardPage() {
             </div>
           </section>
 
-          <section className="dash-section">
-            <div className="dash-section__head">
-              <h2>No período</h2>
-              {/* Os limites são instantes do dia comercial: lidos no fuso da
-                  operação, 12/09 é 12/09 em qualquer navegador. */}
-              <span className="dash-section__hint">
-                {formatEventDate(period.from)} até {formatEventDate(period.to)} — contagem de documentos
-              </span>
-            </div>
-            <div className="dash-cards">
-              <article className="dash-card">
-                <div className="dash-card__label">Pedidos criados</div>
-                <div className="dash-card__value">{period.customerOrdersCreated}</div>
-              </article>
-              <article className="dash-card">
-                <div className="dash-card__label">Recebimentos</div>
-                <div className="dash-card__value">{period.receiptsCompleted}</div>
-              </article>
-              <article className="dash-card">
-                <div className="dash-card__label">OPs concluídas</div>
-                <div className="dash-card__value">{period.productionOrdersCompleted}</div>
-              </article>
-              <article className="dash-card">
-                <div className="dash-card__label">Expedições</div>
-                <div className="dash-card__value">{period.shipmentsConfirmed}</div>
-              </article>
-              <article className="dash-card">
-                <div className="dash-card__label">Faturamentos emitidos</div>
-                <div className="dash-card__value">{period.billingsIssued}</div>
-              </article>
-              <article className="dash-card">
-                <div className="dash-card__label">Valor faturado</div>
-                {period.billedAmount === null ? (
-                  <>
-                    {/* Soma parcial jamais é apresentada como total. */}
-                    <div className="dash-card__value dash-card__value--unavailable">
-                      Valores incompletos
-                    </div>
-                    <div className="dash-card__note">
-                      {period.billingsWithCompletePricing} de {period.billingsIssued} documentos com
-                      preço completo.
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="dash-card__value">{formatBRL(period.billedAmount)}</div>
-                    <div className="dash-card__note">
-                      {period.billingsIssued} documentos, todos com preço completo.
-                    </div>
-                  </>
-                )}
-              </article>
-            </div>
-          </section>
+          {/* Com o período recusado, os blocos do período saem: o número que
+              ficou na tela é de outro período, e ao lado dos campos novos ele
+              se leria como a resposta. O estado atual não depende do período. */}
+          {!bounds.recusa && (
+            <section className="dash-section">
+              <div className="dash-section__head">
+                <h2>No período</h2>
+                {/* Os limites são instantes do dia comercial: lidos no fuso da
+                    operação, 12/09 é 12/09 em qualquer navegador. */}
+                <span className="dash-section__hint">
+                  {formatEventDate(period.from)} até {formatEventDate(period.to)} — contagem de documentos
+                </span>
+              </div>
+              <div className="dash-cards">
+                <article className="dash-card">
+                  <div className="dash-card__label">Pedidos criados</div>
+                  <div className="dash-card__value">{period.customerOrdersCreated}</div>
+                </article>
+                <article className="dash-card">
+                  <div className="dash-card__label">Recebimentos</div>
+                  <div className="dash-card__value">{period.receiptsCompleted}</div>
+                </article>
+                <article className="dash-card">
+                  <div className="dash-card__label">OPs concluídas</div>
+                  <div className="dash-card__value">{period.productionOrdersCompleted}</div>
+                </article>
+                <article className="dash-card">
+                  <div className="dash-card__label">Expedições</div>
+                  <div className="dash-card__value">{period.shipmentsConfirmed}</div>
+                </article>
+                <article className="dash-card">
+                  <div className="dash-card__label">Faturamentos emitidos</div>
+                  <div className="dash-card__value">{period.billingsIssued}</div>
+                </article>
+                <article className="dash-card">
+                  <div className="dash-card__label">Valor faturado</div>
+                  {period.billedAmount === null ? (
+                    <>
+                      {/* Soma parcial jamais é apresentada como total. */}
+                      <div className="dash-card__value dash-card__value--unavailable">
+                        Valores incompletos
+                      </div>
+                      <div className="dash-card__note">
+                        {period.billingsWithCompletePricing} de {period.billingsIssued} documentos com
+                        preço completo.
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="dash-card__value">{formatBRL(period.billedAmount)}</div>
+                      <div className="dash-card__note">
+                        {period.billingsIssued} documentos, todos com preço completo.
+                      </div>
+                    </>
+                  )}
+                </article>
+              </div>
+            </section>
+          )}
 
           <section className="dash-section">
             <div className="dash-section__head">
@@ -533,108 +555,110 @@ export function DashboardPage() {
             </div>
           </section>
 
-          <section className="dash-section">
-            <div className="dash-section__head">
-              <h2>Movimentações</h2>
-              <span className="dash-section__hint">Contagem de eventos no período</span>
-            </div>
-            <div className="dash-cards">
-              <article className="dash-card">
-                <div className="dash-card__label">Entradas por recebimento</div>
-                <div className="dash-card__value">{data.movementSummary.receiptIn}</div>
-              </article>
-              <article className="dash-card">
-                <div className="dash-card__label">Consumos de produção</div>
-                <div className="dash-card__value">{data.movementSummary.productionConsumption}</div>
-              </article>
-              <article className="dash-card">
-                <div className="dash-card__label">Consumos em amostra</div>
-                <div className="dash-card__value">{data.movementSummary.sampleConsumption}</div>
-              </article>
-              <article className="dash-card">
-                <div className="dash-card__label">Entradas por produção</div>
-                <div className="dash-card__value">
-                  {data.movementSummary.finishedGoodProduction}
-                </div>
-              </article>
-              <article className="dash-card">
-                <div className="dash-card__label">Saídas por expedição</div>
-                <div className="dash-card__value">{data.movementSummary.shipmentOut}</div>
-              </article>
-              <article className="dash-card">
-                <div className="dash-card__label">Ajustes</div>
-                <div className="dash-card__value">{data.movementSummary.adjustments}</div>
-              </article>
-              <article className="dash-card">
-                <div className="dash-card__label">Perdas</div>
-                <div className="dash-card__value">{data.movementSummary.loss}</div>
-              </article>
-            </div>
-
-            {data.movementActivity.length > 0 && (
-              <div style={{ marginTop: "var(--sp-3)" }}>
-                <MovementActivityChart points={data.movementActivity} />
+          {!bounds.recusa && (
+            <section className="dash-section">
+              <div className="dash-section__head">
+                <h2>Movimentações</h2>
+                <span className="dash-section__hint">Contagem de eventos no período</span>
               </div>
-            )}
+              <div className="dash-cards">
+                <article className="dash-card">
+                  <div className="dash-card__label">Entradas por recebimento</div>
+                  <div className="dash-card__value">{data.movementSummary.receiptIn}</div>
+                </article>
+                <article className="dash-card">
+                  <div className="dash-card__label">Consumos de produção</div>
+                  <div className="dash-card__value">{data.movementSummary.productionConsumption}</div>
+                </article>
+                <article className="dash-card">
+                  <div className="dash-card__label">Consumos em amostra</div>
+                  <div className="dash-card__value">{data.movementSummary.sampleConsumption}</div>
+                </article>
+                <article className="dash-card">
+                  <div className="dash-card__label">Entradas por produção</div>
+                  <div className="dash-card__value">
+                    {data.movementSummary.finishedGoodProduction}
+                  </div>
+                </article>
+                <article className="dash-card">
+                  <div className="dash-card__label">Saídas por expedição</div>
+                  <div className="dash-card__value">{data.movementSummary.shipmentOut}</div>
+                </article>
+                <article className="dash-card">
+                  <div className="dash-card__label">Ajustes</div>
+                  <div className="dash-card__value">{data.movementSummary.adjustments}</div>
+                </article>
+                <article className="dash-card">
+                  <div className="dash-card__label">Perdas</div>
+                  <div className="dash-card__value">{data.movementSummary.loss}</div>
+                </article>
+              </div>
 
-            <div className="table-container table-container--spaced">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Quando</th>
-                    <th>Tipo</th>
-                    <th>Item</th>
-                    <th>Lote</th>
-                    <th className="is-numeric">Quantidade</th>
-                    <th>Origem</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.recentMovements.map((movement) => {
-                    const path = movementPath(movement);
-                    return (
-                      <tr key={movement.id}>
-                        <td>{formatDateTime(movement.occurredAt)}</td>
-                        <td>
-                          {INVENTORY_MOVEMENT_TYPE_LABELS[movement.type as InventoryMovementType] ??
-                            movement.type}
-                        </td>
-                        <td>
-                          <EntityLink kind="item" id={movement.itemId} code={movement.itemCode} name={movement.itemName} />
-                        </td>
-                        <td className="is-code">{movement.lotCode ?? "—"}</td>
-                        {/* Cada linha traz a própria unidade — nada é somado entre linhas. */}
-                        <td className="is-numeric">
-                          {formatQuantity(movement.quantity)} {movement.unitCode}
-                        </td>
-                        <td>
-                          {movement.sourceCode && path ? (
-                            <button
-                              type="button"
-                              className="btn btn--ghost btn--sm"
-                              onClick={() => navigate(path)}
-                            >
-                              {movement.sourceCode}
-                            </button>
-                          ) : (
-                            (movement.sourceCode ?? "—")
-                          )}
+              {data.movementActivity.length > 0 && (
+                <div style={{ marginTop: "var(--sp-3)" }}>
+                  <MovementActivityChart points={data.movementActivity} />
+                </div>
+              )}
+
+              <div className="table-container table-container--spaced">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Quando</th>
+                      <th>Tipo</th>
+                      <th>Item</th>
+                      <th>Lote</th>
+                      <th className="is-numeric">Quantidade</th>
+                      <th>Origem</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.recentMovements.map((movement) => {
+                      const path = movementPath(movement);
+                      return (
+                        <tr key={movement.id}>
+                          <td>{formatDateTime(movement.occurredAt)}</td>
+                          <td>
+                            {INVENTORY_MOVEMENT_TYPE_LABELS[movement.type as InventoryMovementType] ??
+                              movement.type}
+                          </td>
+                          <td>
+                            <EntityLink kind="item" id={movement.itemId} code={movement.itemCode} name={movement.itemName} />
+                          </td>
+                          <td className="is-code">{movement.lotCode ?? "—"}</td>
+                          {/* Cada linha traz a própria unidade — nada é somado entre linhas. */}
+                          <td className="is-numeric">
+                            {formatQuantity(movement.quantity)} {movement.unitCode}
+                          </td>
+                          <td>
+                            {movement.sourceCode && path ? (
+                              <button
+                                type="button"
+                                className="btn btn--ghost btn--sm"
+                                onClick={() => navigate(path)}
+                              >
+                                {movement.sourceCode}
+                              </button>
+                            ) : (
+                              (movement.sourceCode ?? "—")
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                    {data.recentMovements.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="table__empty">
+                          Nenhuma movimentação no período.
                         </td>
                       </tr>
-                    );
-                  })}
-
-                  {data.recentMovements.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="table__empty">
-                        Nenhuma movimentação no período.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
         </>
       )}
     </>

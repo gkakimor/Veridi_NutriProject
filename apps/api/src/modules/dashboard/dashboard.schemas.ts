@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { hojeComercial, limitesDoDiaComercial } from "@veridi/shared";
+import { hojeComercial, limitesDoDiaComercial, recusaDoPeriodoDoPainel } from "@veridi/shared";
 import { diaCivilDeFiltroSchema } from "../../lib/date-schema.js";
 
 /**
@@ -19,6 +19,10 @@ import { diaCivilDeFiltroSchema } from "../../lib/date-schema.js";
  * `agora` é o instante único da requisição (DASHBOARD-CONSISTENT-NOW-01): o
  * "hoje" da ponta ausente é o mesmo dia do estado atual e da lista de atenção,
  * e não uma segunda leitura do relógio feita no parse.
+ *
+ * Completada a ponta vazia, `from` depois de `to` é 400 — nunca 200 com KPIs
+ * zerados (DASHBOARD-INVERTED-PERIOD-01): "De" vazio com "Até" no passado era
+ * a janela invertida que a consulta lia como "nada aconteceu".
  */
 export function dashboardQuerySchemaEm(agora: Date) {
   return z
@@ -26,8 +30,13 @@ export function dashboardQuerySchemaEm(agora: Date) {
       from: diaCivilDeFiltroSchema,
       to: diaCivilDeFiltroSchema,
     })
-    .transform((value) => {
+    .transform((value, ctx) => {
       const hoje = hojeComercial(agora);
+      const recusa = recusaDoPeriodoDoPainel(value.from, value.to, hoje);
+      if (recusa) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: [recusa.campo], message: recusa.mensagem });
+        return z.NEVER;
+      }
       return {
         from: limitesDoDiaComercial(value.from ?? hoje).inicio,
         to: limitesDoDiaComercial(value.to ?? hoje).fim,
