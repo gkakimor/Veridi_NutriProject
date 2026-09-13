@@ -122,20 +122,24 @@ beforeEach(() => {
 
 describe("OC em rascunho — Salvar rascunho responde", () => {
   it("\"Salvando…\" só no botão de salvar e \"Rascunho salvo.\" só com a resposta", async () => {
-    /* Sem pendência na tela: nada ocupa o lugar da frase, então uma confirmação
-       adiantada para antes do `await` apareceria já durante a requisição. */
+    /* O botão só acorda com pendência (SAVE-FLOW-HARDENING-01), e a pendência
+       ocupa o lugar da frase. Desfazer a edição durante a requisição tira a
+       pendência da tela: uma confirmação adiantada para antes do `await`
+       apareceria aqui. */
     const gravacao = pendente<PurchaseOrderDTO>();
     vi.mocked(updatePurchaseOrder).mockReturnValue(gravacao.promessa);
     await abrir();
 
+    fireEvent.change(observacoes(), { target: { value: "Entregar pela manhã" } });
     fireEvent.click(botao("Salvar rascunho"));
 
     expect(await screen.findByRole("button", { name: "Salvando…" })).toBeDisabled();
     // O vizinho recusa o clique, mas não rouba o rótulo.
     expect(botao("Confirmar OC")).toBeDisabled();
+    fireEvent.change(observacoes(), { target: { value: "" } });
     expect(screen.queryByRole("status")).toBeNull();
 
-    gravacao.resolver(ordem());
+    gravacao.resolver(ordem({ notes: "Entregar pela manhã" }));
 
     const frase = await screen.findByText("Rascunho salvo.");
     expect(frase).toHaveAttribute("role", "status");
@@ -148,12 +152,14 @@ describe("OC em rascunho — Salvar rascunho responde", () => {
     vi.mocked(updatePurchaseOrder).mockReturnValue(gravacao.promessa);
     await abrir();
 
+    fireEvent.change(observacoes(), { target: { value: "Entregar pela manhã" } });
     fireEvent.click(botao("Salvar rascunho"));
     fireEvent.click(botao("Salvando…"));
 
     expect(updatePurchaseOrder).toHaveBeenCalledTimes(1);
-    gravacao.resolver(ordem());
+    gravacao.resolver(ordem({ notes: "Entregar pela manhã" }));
     expect(await screen.findByText("Rascunho salvo.")).toBeInTheDocument();
+    expect(updatePurchaseOrder).toHaveBeenCalledTimes(1);
   });
 
   it("recusa fica em role=alert com a mensagem da API e nunca vira sucesso", async () => {
@@ -161,14 +167,19 @@ describe("OC em rascunho — Salvar rascunho responde", () => {
     vi.mocked(updatePurchaseOrder).mockReturnValue(gravacao.promessa);
     await abrir();
 
+    fireEvent.change(observacoes(), { target: { value: "Entregar pela manhã" } });
     fireEvent.click(botao("Salvar rascunho"));
     await screen.findByRole("button", { name: "Salvando…" });
     gravacao.recusar(new Error("Fornecedor inativo não pode receber OC."));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Fornecedor inativo não pode receber OC.");
     expect(screen.queryByText("Rascunho salvo.")).toBeNull();
-    expect(screen.queryByRole("status")).toBeNull();
     expect(botao("Salvar rascunho")).toBeEnabled();
+
+    // Sem a pendência na frente, nenhuma confirmação escondida aparece.
+    fireEvent.change(observacoes(), { target: { value: "" } });
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(botao("Salvar rascunho")).toBeDisabled();
   });
 
   it("recusa com edição pendente: a edição e a pendência ficam", async () => {
@@ -188,12 +199,15 @@ describe("OC em rascunho — Salvar rascunho responde", () => {
     vi.mocked(updatePurchaseOrder).mockResolvedValue(ordem({ notes: "Entregar pela manhã" }));
     await abrir();
 
+    expect(botao("Salvar rascunho")).toBeDisabled();
     fireEvent.change(observacoes(), { target: { value: "Entregar pela manhã" } });
     expect(screen.getByRole("status")).toHaveTextContent("Alterações não salvas");
+    expect(botao("Salvar rascunho")).toBeEnabled();
     fireEvent.click(botao("Salvar rascunho"));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Rascunho salvo.");
     expect(screen.queryByText("Alterações não salvas")).toBeNull();
+    expect(botao("Salvar rascunho")).toBeDisabled();
 
     fireEvent.change(observacoes(), { target: { value: "Entregar à tarde" } });
 
@@ -207,12 +221,13 @@ describe("OC em rascunho — Salvar rascunho responde", () => {
 describe("OC — ações de domínio não herdam o salvamento", () => {
   it("confirmar diz \"Confirmando…\" no próprio botão e não anuncia salvamento", async () => {
     const user = userEvent.setup();
-    vi.mocked(updatePurchaseOrder).mockResolvedValue(ordem());
+    vi.mocked(updatePurchaseOrder).mockResolvedValue(ordem({ notes: "Entregar pela manhã" }));
     const confirmacao = pendente<PurchaseOrderDTO>();
     vi.mocked(confirmPurchaseOrder).mockReturnValue(confirmacao.promessa);
     await abrir();
 
     // Uma frase de salvamento anterior não sobrevive à ação seguinte.
+    fireEvent.change(observacoes(), { target: { value: "Entregar pela manhã" } });
     fireEvent.click(botao("Salvar rascunho"));
     expect(await screen.findByText("Rascunho salvo.")).toBeInTheDocument();
 
@@ -224,9 +239,10 @@ describe("OC — ações de domínio não herdam o salvamento", () => {
     expect(botao("Salvar rascunho")).toBeDisabled();
     expect(screen.queryByText("Rascunho salvo.")).toBeNull();
 
-    confirmacao.resolver(ordem({ status: "ORDERED" }));
+    confirmacao.resolver(ordem({ status: "ORDERED", notes: "Entregar pela manhã" }));
 
-    expect(await screen.findByRole("button", { name: "Salvar previsão e observações" })).toBeEnabled();
+    // Confirmada sem nada pendente: o salvar de previsão existe e descansa.
+    expect(await screen.findByRole("button", { name: "Salvar previsão e observações" })).toBeDisabled();
     expect(screen.queryByText("Rascunho salvo.")).toBeNull();
     expect(screen.queryByText("Previsão e observações salvas.")).toBeNull();
   });
@@ -260,18 +276,23 @@ describe("OC confirmada — Salvar previsão e observações", () => {
     vi.mocked(updatePurchaseOrder).mockReturnValue(gravacao.promessa);
     await abrir(ordem({ status: "ORDERED" }));
 
+    expect(botao("Salvar previsão e observações")).toBeDisabled();
+    fireEvent.change(observacoes(), { target: { value: "Conferir laudo" } });
     fireEvent.click(botao("Salvar previsão e observações"));
 
     expect(await screen.findByRole("button", { name: "Salvando…" })).toBeDisabled();
+    // Desfazer a edição tira a pendência: uma frase adiantada apareceria aqui.
+    fireEvent.change(observacoes(), { target: { value: "" } });
     expect(screen.queryByRole("status")).toBeNull();
 
-    gravacao.resolver(ordem({ status: "ORDERED" }));
+    gravacao.resolver(ordem({ status: "ORDERED", notes: "Conferir laudo" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Previsão e observações salvas.");
     expect(screen.queryByText("Rascunho salvo.")).toBeNull();
+    expect(botao("Salvar previsão e observações")).toBeDisabled();
     expect(vi.mocked(updatePurchaseOrder).mock.calls[0]![1]).toEqual({
       expectedDeliveryDate: "",
-      notes: "",
+      notes: "Conferir laudo",
     });
   });
 });

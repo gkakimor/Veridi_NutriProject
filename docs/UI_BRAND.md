@@ -394,18 +394,24 @@ calcula, nunca um `dirty` paralelo.
 Onde o salvar também valida e leva ao primeiro erro (a versão da Formulação),
 o botão continua clicável sem pendência: desabilitá-lo tiraria da pessoa o
 caminho que diz o que está errado. A frase de estado vale do mesmo jeito.
+Documento NOVO (Pedido, OC, OP) não é essa exceção: sem nada digitado não há
+o que validar, e a primeira edição — o cliente, o fornecedor, o produto —
+acorda o botão e devolve a mensagem de validação.
 
 Com freio de clique duplo compartilhado (`saving` de várias ações), o nome da
 ação em curso decide o rótulo: "Salvando…" nunca aparece no botão de salvar
 enquanto o que está no ar é ativar, confirmar ou cancelar.
 
-Tela sem guarda de alterações não salvas (Faturamento, Expedição) não ganha
-uma só para a frase: o botão de gravar fica clicável, e a frase sai na próxima
-edição ou na próxima ação — nunca fica afirmando "salvo" sobre um formulário
-que já mudou. Ação que encerra o documento (emitir, confirmar, cancelar) não
-ganha frase quando o selo e a tela somente leitura já dizem o resultado, e
-apaga a frase de uma gravação anterior. Frase de uma linha de tabela mora na
-célula de ação daquela linha, embaixo do botão, para não alargar a coluna fixa.
+Ação que encerra o documento (emitir, confirmar, cancelar) não ganha frase
+quando o selo e a tela somente leitura já dizem o resultado, e apaga a frase de
+uma gravação anterior. Frase de uma linha de tabela mora na célula de ação
+daquela linha, embaixo do botão, para não alargar a coluna fixa.
+
+Ação que grava ANTES de agir (emitir o Faturamento, confirmar ou conferir na
+Expedição) faz duas chamadas, e a primeira vale por si: a tela relê a resposta
+da gravação antes da segunda. Se a segunda for recusada, a tela mostra o que
+ficou gravado — nunca a leitura de antes nem uma pendência que já não existe —
+e o erro da ação. As duas chamadas não viram um endpoint só por causa da tela.
 
 ### Caixa com rótulo (`.checkbox`)
 

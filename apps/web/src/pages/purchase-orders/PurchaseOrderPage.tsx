@@ -1225,8 +1225,16 @@ options={supplierOptions.map((supplier) => ({
               </span>
             )
           )}
+          {/* Sem alteração pendente não há o que gravar: o botão só acorda com
+              a pendência da guarda — a mesma que a faixa ao lado mostra. Na OC
+              nova também: sem nada digitado não há o que validar. */}
           {isDraftEditable && (
-            <button type="button" className="btn btn--secondary" disabled={saving} onClick={handleSaveDraft}>
+            <button
+              type="button"
+              className="btn btn--secondary"
+              disabled={saving || !alteracaoPendente}
+              onClick={handleSaveDraft}
+            >
               {acaoEmCurso === "rascunho" ? "Salvando…" : "Salvar rascunho"}
             </button>
           )}
@@ -1234,7 +1242,7 @@ options={supplierOptions.map((supplier) => ({
             <button
               type="button"
               className="btn btn--secondary"
-              disabled={saving}
+              disabled={saving || !alteracaoPendente}
               onClick={handleSaveForecastOnly}
             >
               {acaoEmCurso === "previsao" ? "Salvando…" : "Salvar previsão e observações"}

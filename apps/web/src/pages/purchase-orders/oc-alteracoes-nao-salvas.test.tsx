@@ -285,6 +285,85 @@ describe("OC gravada — guarda de alterações não salvas", () => {
   });
 });
 
+/**
+ * SAVE-FLOW-HARDENING-01: o botão de salvar só acorda com a pendência da guarda.
+ *
+ * "Salvar rascunho" e "Salvar previsão e observações" seguiam clicáveis sem nada
+ * a gravar — `UI_BRAND.md` pede desabilitado, e a OP já fazia. A autoridade é a
+ * mesma pendência que prende a saída e acende a faixa: nenhum `dirty` paralelo.
+ */
+describe("OC — salvar só com alteração pendente", () => {
+  const salvarRascunho = () => screen.getByRole("button", { name: "Salvar rascunho" });
+  const salvarPrevisao = () => screen.getByRole("button", { name: "Salvar previsão e observações" });
+
+  it("nova e não tocada: nada a gravar; escolher o fornecedor acorda o botão", async () => {
+    await abrirNova();
+
+    expect(salvarRascunho()).toBeDisabled();
+    escolherFornecedor();
+    await waitFor(() => expect(salvarRascunho()).toBeEnabled());
+  });
+
+  it("gravada: sem alteração desabilitado, alterar habilita, salvar desabilita de novo", async () => {
+    vi.mocked(updatePurchaseOrder).mockResolvedValue(
+      ordem({ lines: [linha({ orderedQuantity: "12.000000" })] }),
+    );
+    await abrirGravada();
+
+    expect(salvarRascunho()).toBeDisabled();
+    expect(screen.queryByText("Alterações não salvas")).toBeNull();
+
+    fireEvent.change(quantidade(), { target: { value: "12" } });
+    expect(salvarRascunho()).toBeEnabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Alterações não salvas");
+
+    fireEvent.click(salvarRascunho());
+
+    expect(await screen.findByText("Rascunho salvo.")).toBeInTheDocument();
+    expect(salvarRascunho()).toBeDisabled();
+    expect(updatePurchaseOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it("desfazer a alteração — ou reescrever o mesmo decimal — devolve o botão ao descanso", async () => {
+    await abrirGravada();
+
+    fireEvent.change(quantidade(), { target: { value: "12" } });
+    expect(salvarRascunho()).toBeEnabled();
+    fireEvent.change(quantidade(), { target: { value: "10,0" } });
+
+    expect(salvarRascunho()).toBeDisabled();
+  });
+
+  it("recusa ao salvar: a edição continua pendente, e o botão também", async () => {
+    vi.mocked(updatePurchaseOrder).mockRejectedValue(new Error("Fornecedor inativo não pode receber OC."));
+    await abrirGravada();
+
+    fireEvent.change(quantidade(), { target: { value: "12" } });
+    fireEvent.click(salvarRascunho());
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Fornecedor inativo não pode receber OC.");
+    expect(quantidade()).toHaveValue("12");
+    expect(screen.getByRole("status")).toHaveTextContent("Alterações não salvas");
+    expect(salvarRascunho()).toBeEnabled();
+  });
+
+  it("confirmada: Salvar previsão e observações segue a mesma pendência", async () => {
+    vi.mocked(getPurchaseOrder).mockResolvedValue(ordem({ status: "ORDERED" }));
+    vi.mocked(updatePurchaseOrder).mockResolvedValue(ordem({ status: "ORDERED", notes: "Conferir laudo" }));
+    montar(["/compras/ordens/oc-1"]);
+    await screen.findByRole("button", { name: "Salvar previsão e observações" });
+
+    expect(salvarPrevisao()).toBeDisabled();
+    fireEvent.change(observacoes(), { target: { value: "Conferir laudo" } });
+    expect(salvarPrevisao()).toBeEnabled();
+
+    fireEvent.click(salvarPrevisao());
+
+    expect(await screen.findByText("Previsão e observações salvas.")).toBeInTheDocument();
+    expect(salvarPrevisao()).toBeDisabled();
+  });
+});
+
 describe("diálogo com campo digitável — o foco fica onde a pessoa está", () => {
   /*
    * O mesmo defeito que a foundation achou no modal de workspace, agora no

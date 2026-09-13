@@ -659,9 +659,11 @@ export function CustomerOrderPage() {
 
   if (baseline.current === null) baseline.current = assinaturaAtual;
   /* Pedido cancelado não tem o que salvar; fora do rascunho ainda se altera
-     prazo e observações, e isso também se perde ao sair. */
+     prazo e observações, e isso também se perde ao sair. A mesma pendência
+     prende a saída, acende a faixa e acorda os botões de salvar. */
+  const alteracaoPendente = temBotaoDeSalvar && baseline.current !== assinaturaAtual;
   const { liberarGuarda } = useUnsavedChangesGuard({
-    isDirty: temBotaoDeSalvar && baseline.current !== assinaturaAtual,
+    isDirty: alteracaoPendente,
     substantivo: "pedido",
   });
 
@@ -2791,7 +2793,7 @@ options={customerOptions.map((customer) => ({
         <div className="doc-actions__primary">
           {/* Pendência antes de confirmação, e a pendência é a MESMA da guarda
               de saída — nunca uma conta paralela. */}
-          {temBotaoDeSalvar && baseline.current !== assinaturaAtual ? (
+          {alteracaoPendente ? (
             <span className="form-status form-status--dirty" role="status">
               Alterações não salvas
             </span>
@@ -2802,13 +2804,26 @@ options={customerOptions.map((customer) => ({
               </span>
             )
           )}
+          {/* Sem alteração pendente não há o que gravar: o botão só acorda com
+              a pendência da guarda — a mesma que a faixa ao lado mostra. No
+              pedido novo também: sem nada digitado não há o que validar. */}
           {isDraft && (
-            <button type="button" className="btn btn--secondary" disabled={saving} onClick={handleSaveDraft}>
+            <button
+              type="button"
+              className="btn btn--secondary"
+              disabled={saving || !alteracaoPendente}
+              onClick={handleSaveDraft}
+            >
               {acaoEmCurso === "rascunho" ? "Salvando…" : "Salvar rascunho"}
             </button>
           )}
           {!isDraft && status !== "CANCELLED" && !isNew && (
-            <button type="button" className="btn btn--secondary" disabled={saving} onClick={handleSaveNotesOnly}>
+            <button
+              type="button"
+              className="btn btn--secondary"
+              disabled={saving || !alteracaoPendente}
+              onClick={handleSaveNotesOnly}
+            >
               {acaoEmCurso === "prazo" ? "Salvando…" : "Salvar prazo e observações"}
             </button>
           )}

@@ -1,6 +1,8 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
+import { assinaturaDoDocumento, decimalComparavel, textoComparavel } from "../../lib/dirty-fields";
 import type { BillingDTO, BillingStatus } from "@veridi/shared";
 import {
   BILLING_STATUS_LABELS,
@@ -59,9 +61,9 @@ export function BillingPage() {
   const [acaoEmCurso, setAcaoEmCurso] = useState<"rascunho" | "emitir" | "cancelar" | null>(null);
   const saving = acaoEmCurso !== null;
   /*
-   * O que a última gravação confirmou. A tela não tem pendência calculada, então
-   * a frase sai na próxima edição ou na próxima ação — nunca fica afirmando
-   * "salvo" sobre um formulário que já mudou.
+   * O que a última gravação confirmou. Enquanto o formulário difere do gravado
+   * a pendência da guarda toma o lugar dela — nunca fica afirmando "salvo"
+   * sobre um formulário que já mudou —, e a próxima ação a apaga.
    */
   const [feito, setFeito] = useState<string | null>(null);
 
@@ -74,6 +76,15 @@ export function BillingPage() {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
 
+  /**
+   * A assinatura do faturamento de referência — o que sair daqui não se perde.
+   *
+   * `null` é "retome na próxima renderização": toda leitura do servidor passa
+   * por `syncFromServer` — carregar, salvar, emitir, cancelar —, então a
+   * pendência zera sem cada caminho ter que lembrar disso.
+   */
+  const baseline = useRef<string | null>(null);
+
   const syncFromServer = useCallback((next: BillingDTO) => {
     setBilling(next);
     setExternalReference(next.externalReference ?? "");
@@ -83,6 +94,7 @@ export function BillingPage() {
       nextPrices[line.id] = line.unitPrice ?? "";
     }
     setPrices(nextPrices);
+    baseline.current = null;
   }, []);
 
   useEffect(() => {
@@ -96,6 +108,27 @@ export function BillingPage() {
   }, [id, syncFromServer]);
 
   const isDraft = billing?.status === "DRAFT";
+
+  /**
+   * O faturamento como ele está na tela, em forma comparável.
+   *
+   * Só o que "Salvar rascunho" envia: referência, notas e o preço das linhas
+   * SEM preço acordado. A linha acordada fica fora como fica fora do PATCH —
+   * ela só muda por "Alterar preço de faturamento", que grava na hora e não
+   * deixa nada pendente. Quantidade, lote e totais vêm do servidor.
+   */
+  const assinaturaAtual = assinaturaDoDocumento({
+    externalReference: textoComparavel(externalReference),
+    notes: textoComparavel(notes),
+    lines: (billing?.lines ?? [])
+      .filter((line) => line.agreedUnitPrice === null)
+      .map((line) => ({ id: line.id, unitPrice: decimalComparavel(prices[line.id]) })),
+  });
+  if (baseline.current === null) baseline.current = assinaturaAtual;
+  /* Emitido e cancelado não editam nada. A mesma pendência prende a saída,
+     acende a faixa e acorda o botão de salvar. */
+  const alteracaoPendente = isDraft && baseline.current !== assinaturaAtual;
+  useUnsavedChangesGuard({ isDirty: alteracaoPendente, substantivo: "faturamento" });
 
   function buildPayload() {
     return {
@@ -138,7 +171,13 @@ export function BillingPage() {
     setFeito(null);
     try {
       // Salva o que está na tela antes de congelar o documento.
-      await updateBilling(id, buildPayload());
+      const salvo = await updateBilling(id, buildPayload());
+      /*
+       * A gravação vale por si, com ou sem emissão. Se emitir for recusado, a
+       * tela fica com o que o servidor guardou — preços e "Subtotal gravado" —,
+       * e não com a leitura de antes do salvamento.
+       */
+      syncFromServer(salvo);
       syncFromServer(await issueBilling(id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao emitir faturamento");
@@ -357,10 +396,7 @@ export function BillingPage() {
               placeholder="Ex.: NF 12345"
               disabled={!isDraft}
               value={externalReference}
-              onChange={(event) => {
-                setExternalReference(event.target.value);
-                setFeito(null);
-              }}
+              onChange={(event) => setExternalReference(event.target.value)}
             />
             <p className="field__hint">
               Referência a documento externo/ERP quando existir — o sistema não valida nem emite esse documento.
@@ -441,13 +477,12 @@ export function BillingPage() {
                                   aria-invalid={ilegivel || undefined}
                                   className={ilegivel ? "is-invalid" : undefined}
                                   value={prices[line.id] ?? ""}
-                                  onChange={(event) => {
+                                  onChange={(event) =>
                                     setPrices((prev) => ({
                                       ...prev,
                                       [line.id]: event.target.value,
-                                    }));
-                                    setFeito(null);
-                                  }}
+                                    }))
+                                  }
                                 />
                                 {ilegivel && (
                                   <p className="field__error">
@@ -574,10 +609,7 @@ export function BillingPage() {
               rows={3}
               disabled={!isDraft}
               value={notes}
-              onChange={(event) => {
-                setNotes(event.target.value);
-                setFeito(null);
-              }}
+              onChange={(event) => setNotes(event.target.value)}
             />
           </div>
         </FormSection>
@@ -607,14 +639,29 @@ export function BillingPage() {
         )}
 
         <div className="doc-actions__primary">
-          {feito && (
-            <span className="form-status" role="status">
-              {feito}
+          {/* Pendência antes de confirmação, e a pendência é a MESMA da guarda
+              de saída — nunca uma conta paralela. */}
+          {alteracaoPendente ? (
+            <span className="form-status form-status--dirty" role="status">
+              Alterações não salvas
             </span>
+          ) : (
+            feito && (
+              <span className="form-status" role="status">
+                {feito}
+              </span>
+            )
           )}
           {isDraft && (
             <>
-              <button type="button" className="btn btn--secondary" disabled={saving} onClick={handleSave}>
+              {/* Sem alteração pendente não há o que gravar: o botão só acorda
+                  com a pendência da guarda. Emitir continua gravando antes. */}
+              <button
+                type="button"
+                className="btn btn--secondary"
+                disabled={saving || !alteracaoPendente}
+                onClick={handleSave}
+              >
                 {acaoEmCurso === "rascunho" ? "Salvando…" : "Salvar rascunho"}
               </button>
               <button

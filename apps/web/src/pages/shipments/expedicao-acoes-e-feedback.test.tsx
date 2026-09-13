@@ -8,9 +8,13 @@ import type { ShipmentDTO, ShipmentLineDTO, ShipmentProductGroupDTO } from "@ver
  *
  * "Salvar separação" dizia "Salvando…" e voltava ao normal sem dizer que
  * gravou, e o mesmo `saving` punha "Salvando…" no botão de salvar enquanto a
- * expedição era confirmada ou cancelada. A tela não calcula pendência: a frase
- * sai na próxima edição ou na próxima ação. Conferir lote continua com o
- * próprio estado e o próprio resultado (o selo "Conferido").
+ * expedição era confirmada ou cancelada. Conferir lote continua com o próprio
+ * estado e o próprio resultado (o selo "Conferido").
+ *
+ * Desde SAVE-FLOW-HARDENING-01 a tela tem a pendência da guarda: o botão de
+ * salvar só acorda com ela, e ela ocupa o lugar da frase. Por isso as provas de
+ * "só com a resposta" desfazem a edição durante a requisição ou depois da
+ * recusa — com a pendência na tela, uma frase adiantada ficaria escondida.
  */
 
 vi.mock("../../lib/shipments-api", () => ({
@@ -142,6 +146,8 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+const notas = () => screen.getByLabelText("Notas internas") as HTMLTextAreaElement;
+
 describe("Expedição — Salvar separação responde", () => {
   it("\"Salvando…\" só no botão de salvar e \"Separação salva.\" só com a resposta", async () => {
     const gravacao = pendente<ShipmentDTO>();
@@ -154,6 +160,9 @@ describe("Expedição — Salvar separação responde", () => {
     expect(await screen.findByRole("button", { name: "Salvando…" })).toBeDisabled();
     // O vizinho recusa o clique, mas não rouba o rótulo.
     expect(botao("Confirmar expedição")).toBeDisabled();
+    /* Desfazer a edição tira a pendência da tela: uma confirmação adiantada
+       para antes do `await` apareceria aqui. */
+    fireEvent.change(quantidade(), { target: { value: "20" } });
     expect(screen.queryByRole("status")).toBeNull();
 
     gravacao.resolver(expedicao({ lines: [linha({ quantity: "25" })], products: [grupo({ shippingNow: "25" })] }));
@@ -169,12 +178,14 @@ describe("Expedição — Salvar separação responde", () => {
     vi.mocked(updateShipment).mockReturnValue(gravacao.promessa);
     await abrir();
 
+    fireEvent.change(quantidade(), { target: { value: "25" } });
     fireEvent.click(botao("Salvar separação"));
     fireEvent.click(botao("Salvando…"));
 
     expect(updateShipment).toHaveBeenCalledTimes(1);
     gravacao.resolver(expedicao());
     expect(await screen.findByText("Separação salva.")).toBeInTheDocument();
+    expect(updateShipment).toHaveBeenCalledTimes(1);
   });
 
   it("recusa fica em role=alert com a mensagem da API; nada de sucesso, e o digitado fica", async () => {
@@ -188,16 +199,22 @@ describe("Expedição — Salvar separação responde", () => {
     gravacao.recusar(new Error("A reserva deste lote foi liberada."));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("A reserva deste lote foi liberada.");
+    // O digitado fica, e a pendência também.
+    expect(quantidade()).toHaveValue("25");
+    expect(screen.getByRole("status")).toHaveTextContent("Alterações não salvas");
+    expect(botao("Salvar separação")).toBeEnabled();
+
+    // Sem a pendência na frente, nenhuma confirmação escondida aparece.
+    fireEvent.change(quantidade(), { target: { value: "20" } });
     expect(screen.queryByText("Separação salva.")).toBeNull();
     expect(screen.queryByRole("status")).toBeNull();
-    expect(quantidade()).toHaveValue("25");
-    expect(botao("Salvar separação")).toBeEnabled();
   });
 
   it("editar de novo — quantidade ou notas — tira a frase antiga", async () => {
     vi.mocked(updateShipment).mockResolvedValue(expedicao());
     await abrir();
 
+    fireEvent.change(quantidade(), { target: { value: "22" } });
     fireEvent.click(botao("Salvar separação"));
     expect(await screen.findByText("Separação salva.")).toBeInTheDocument();
     fireEvent.change(quantidade(), { target: { value: "18" } });
@@ -205,8 +222,11 @@ describe("Expedição — Salvar separação responde", () => {
 
     fireEvent.click(botao("Salvar separação"));
     expect(await screen.findByText("Separação salva.")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Notas internas"), { target: { value: "Doca 2" } });
+    fireEvent.change(notas(), { target: { value: "Doca 2" } });
     expect(screen.queryByText("Separação salva.")).toBeNull();
+    // Uma faixa só: a pendência no lugar da frase.
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+    expect(screen.getByRole("status")).toHaveTextContent("Alterações não salvas");
   });
 });
 
@@ -227,6 +247,7 @@ describe("Expedição — ações vizinhas não herdam o salvamento", () => {
     );
     await abrir(aConferir);
 
+    fireEvent.change(notas(), { target: { value: "Doca 2" } });
     fireEvent.click(botao("Salvar separação"));
     expect(await screen.findByText("Separação salva.")).toBeInTheDocument();
 
@@ -247,6 +268,7 @@ describe("Expedição — ações vizinhas não herdam o salvamento", () => {
     vi.mocked(confirmShipment).mockReturnValue(confirmacao.promessa);
     await abrir();
 
+    fireEvent.change(notas(), { target: { value: "Doca 2" } });
     fireEvent.click(botao("Salvar separação"));
     expect(await screen.findByText("Separação salva.")).toBeInTheDocument();
 

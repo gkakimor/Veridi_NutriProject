@@ -8,9 +8,12 @@ import type { BillingDTO, BillingLineDTO } from "@veridi/shared";
  *
  * "Salvar rascunho" dizia "Salvando…" e voltava ao normal sem dizer que gravou,
  * e o mesmo `saving` punha "Salvando…" no botão de salvar enquanto o
- * faturamento era emitido ou cancelado. A tela não calcula pendência: a frase
- * sai na próxima edição ou na próxima ação, em vez de afirmar "salvo" sobre um
- * formulário que já mudou.
+ * faturamento era emitido ou cancelado.
+ *
+ * Desde SAVE-FLOW-HARDENING-01 a tela tem a pendência da guarda: o botão de
+ * salvar só acorda com ela, e ela ocupa o lugar da frase. Por isso as provas de
+ * "só com a resposta" desfazem a edição durante a requisição ou depois da
+ * recusa — com a pendência na tela, uma frase adiantada ficaria escondida.
  */
 
 vi.mock("../../lib/billings-api", () => ({
@@ -125,6 +128,8 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+const notas = () => screen.getByLabelText("Notas internas") as HTMLTextAreaElement;
+
 describe("Faturamento — Salvar rascunho responde", () => {
   it("\"Salvando…\" só no botão de salvar e \"Rascunho salvo.\" só com a resposta", async () => {
     const gravacao = pendente<BillingDTO>();
@@ -137,6 +142,9 @@ describe("Faturamento — Salvar rascunho responde", () => {
     expect(await screen.findByRole("button", { name: "Salvando…" })).toBeDisabled();
     // O vizinho recusa o clique, mas não rouba o rótulo.
     expect(botao("Emitir faturamento")).toBeDisabled();
+    /* Desfazer a edição tira a pendência da tela (12,5 é o 12.5000 gravado):
+       uma confirmação adiantada para antes do `await` apareceria aqui. */
+    fireEvent.change(preco(), { target: { value: "12,5" } });
     expect(screen.queryByRole("status")).toBeNull();
 
     gravacao.resolver(faturamento({ lines: [linha({ unitPrice: "13.2500", lineTotal: "1325.00" })] }));
@@ -153,12 +161,14 @@ describe("Faturamento — Salvar rascunho responde", () => {
     vi.mocked(updateBilling).mockReturnValue(gravacao.promessa);
     await abrir();
 
+    fireEvent.change(preco(), { target: { value: "13,25" } });
     fireEvent.click(botao("Salvar rascunho"));
     fireEvent.click(botao("Salvando…"));
 
     expect(updateBilling).toHaveBeenCalledTimes(1);
     gravacao.resolver(faturamento());
     expect(await screen.findByText("Rascunho salvo.")).toBeInTheDocument();
+    expect(updateBilling).toHaveBeenCalledTimes(1);
   });
 
   it("recusa fica em role=alert com a mensagem da API; nada de sucesso, e o digitado fica", async () => {
@@ -172,10 +182,15 @@ describe("Faturamento — Salvar rascunho responde", () => {
     gravacao.recusar(new Error("Faturamento já emitido não aceita alteração."));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Faturamento já emitido não aceita alteração.");
+    // O digitado fica, e a pendência também.
+    expect(preco()).toHaveValue("13,25");
+    expect(screen.getByRole("status")).toHaveTextContent("Alterações não salvas");
+    expect(botao("Salvar rascunho")).toBeEnabled();
+
+    // Sem a pendência na frente, nenhuma confirmação escondida aparece.
+    fireEvent.change(preco(), { target: { value: "12,5" } });
     expect(screen.queryByText("Rascunho salvo.")).toBeNull();
     expect(screen.queryByRole("status")).toBeNull();
-    expect(preco()).toHaveValue("13,25");
-    expect(botao("Salvar rascunho")).toBeEnabled();
   });
 
   it("editar de novo — preço, referência ou notas — tira a frase antiga", async () => {
@@ -187,8 +202,9 @@ describe("Faturamento — Salvar rascunho responde", () => {
       expect(await screen.findByText("Rascunho salvo.")).toBeInTheDocument();
     };
 
-    await salvar();
     fireEvent.change(preco(), { target: { value: "13" } });
+    await salvar();
+    fireEvent.change(preco(), { target: { value: "14" } });
     expect(screen.queryByText("Rascunho salvo.")).toBeNull();
 
     await salvar();
@@ -196,8 +212,11 @@ describe("Faturamento — Salvar rascunho responde", () => {
     expect(screen.queryByText("Rascunho salvo.")).toBeNull();
 
     await salvar();
-    fireEvent.change(screen.getByLabelText("Notas internas"), { target: { value: "Conferido" } });
+    fireEvent.change(notas(), { target: { value: "Conferido" } });
     expect(screen.queryByText("Rascunho salvo.")).toBeNull();
+    // Uma faixa só: a pendência no lugar da frase.
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+    expect(screen.getByRole("status")).toHaveTextContent("Alterações não salvas");
   });
 });
 
@@ -209,6 +228,7 @@ describe("Faturamento — ações de domínio não herdam o salvamento", () => {
     await abrir();
 
     // Uma frase de salvamento anterior não sobrevive à ação seguinte.
+    fireEvent.change(notas(), { target: { value: "Conferido" } });
     fireEvent.click(botao("Salvar rascunho"));
     expect(await screen.findByText("Rascunho salvo.")).toBeInTheDocument();
 
@@ -269,6 +289,7 @@ describe("Faturamento — ações de domínio não herdam o salvamento", () => {
     );
     await abrir(faturamento({ lines: [linha({ agreedUnitPrice: "12.5000" })] }));
 
+    fireEvent.change(notas(), { target: { value: "Conferido" } });
     fireEvent.click(botao("Salvar rascunho"));
     expect(await screen.findByText("Rascunho salvo.")).toBeInTheDocument();
 
