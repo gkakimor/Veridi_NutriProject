@@ -139,7 +139,11 @@ describe("Resumo do Projeto — contato do Cliente", () => {
 
     const links = within(resumo).getAllByRole("link", { name: /G S TEZOTTO/ });
     expect(links).toHaveLength(1);
-    expect(links[0]).toHaveAttribute("href", "/cadastros/clientes?ids=cli-1&open=cli-1");
+    // `voltar` leva o caminho de volta ao Projeto (F-11-1).
+    expect(links[0]).toHaveAttribute(
+      "href",
+      "/cadastros/clientes?ids=cli-1&open=cli-1&voltar=%2Fcomercial%2Fprojetos%2Fprj-1",
+    );
     // Nenhum segundo botão "ver cliente" nasceu ao lado do contato.
     expect(within(resumo).queryByRole("link", { name: /ver cliente/i })).toBeNull();
   });

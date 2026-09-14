@@ -201,9 +201,11 @@ export function useContextualCreateTarget(entityType: string) {
  * saiu do meio de um documento é exatamente isso que ela precisa saber antes
  * de clicar.
  */
-function rotuloDaOrigem(rota: string): string {
+export function rotuloDaOrigem(rota: string): string {
   const caminho = rota.split("?")[0] ?? "";
   const conhecidas: [RegExp, string][] = [
+    // O Roteiro sai para cadastrar recurso (CONTEXT-ORIGIN-LABEL-ROUTE-01).
+    [/^\/planejamento\/perfis-producao/, "Roteiro de produção"],
     [/^\/comercial\/pedidos/, "Pedido"],
     [/^\/comercial\/projetos/, "Projeto"],
     [/^\/comercial\/amostras/, "Amostra"],

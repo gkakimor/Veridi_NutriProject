@@ -52,6 +52,7 @@ export function ControlledDocumentsPage() {
 
   const reload = useCallback(() => {
     setLoading(true);
+    setError(null);
     listControlledDocuments()
       .then((result) => setRevisions(result.revisions))
       .catch((err: unknown) =>
@@ -173,7 +174,8 @@ export function ControlledDocumentsPage() {
               </tr>
             ))}
 
-            {!loading && revisions.length === 0 && (
+            {/* Falha e vazio se excluem (LISTS-ERROR-FALSE-EMPTY-ADMIN-01). */}
+            {!loading && !error && revisions.length === 0 && (
               <tr>
                 <td colSpan={8} className="table__empty">
                   Nenhuma revisão cadastrada.

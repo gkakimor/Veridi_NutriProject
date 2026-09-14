@@ -1,4 +1,5 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
+import { rotaComRetorno } from "../lib/contextual-create";
 
 /**
  * Referência clicável a outro registro.
@@ -117,16 +118,29 @@ interface EntityLinkProps {
   hideCode?: boolean;
 }
 
+/**
+ * Cadastro que mora em lista com modal (F-11-1): o link leva junto a rota de
+ * onde se saiu, e o aviso de lista reduzida (`RecordContextChip`) oferece a
+ * volta. Documento tem página própria, trilha e `FlowContext` — não leva.
+ */
+const CADASTRO_EM_LISTA: ReadonlySet<EntityKind> = new Set(["product", "item", "customer", "supplier"]);
+
 export function EntityLink({ kind, id, code, name, hideCode = false }: EntityLinkProps) {
+  const location = useLocation();
   const label = hideCode ? (name ?? code ?? "") : [code, name].filter(Boolean).join(" ");
 
   if (!label) return <span className="muted">—</span>;
   if (!id) return <>{label}</>;
 
+  const destino = entityHref(kind, id);
   return (
     <Link
       className="entity-link"
-      to={entityHref(kind, id)}
+      to={
+        CADASTRO_EM_LISTA.has(kind)
+          ? rotaComRetorno(destino, `${location.pathname}${location.search}`)
+          : destino
+      }
       title={`Abrir ${KIND_LABEL[kind]}`}
       // Linha de tabela costuma ser clicável inteira. Sem isto o clique no
       // link sobe para a linha e a navegação da linha vence — a pessoa mira

@@ -40,7 +40,9 @@ export function ListStatusRow({
   return (
     <tr>
       <td colSpan={colSpan} className="table__empty">
-        {conteudo}
+        {/* O corpo tem a largura visível da tabela: a célula tem a da tabela
+            inteira, e a frase com o botão passava da borda em 390px. */}
+        <div className="table__empty-body">{conteudo}</div>
       </td>
     </tr>
   );

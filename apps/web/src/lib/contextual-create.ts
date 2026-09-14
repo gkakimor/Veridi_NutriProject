@@ -308,6 +308,31 @@ export function createRouteWithContext(rota: string, token: string): string {
   return `${rota}${separador}${PARAM_ORIGEM}=${encodeURIComponent(token)}`;
 }
 
+/**
+ * Parâmetro que leva a um CADASTRO aberto por referência a rota de onde se
+ * saiu (F-11-1).
+ *
+ * Cadastro simples mora numa lista com modal: o `EntityLink` do Projeto para o
+ * Cliente chega a `/cadastros/clientes?ids=…&open=…`, e dali só o botão do
+ * navegador voltava. Não há rascunho a guardar nem token: é só a rota, na
+ * própria URL — sobrevive a refresh e não cria pilha. Vale a mesma guarda de
+ * rota interna do retorno da criação contextual.
+ */
+export const PARAM_VOLTAR = "voltar";
+
+/** O destino com a rota de volta. Origem que não é rota interna não vai. */
+export function rotaComRetorno(destino: string, origem: string): string {
+  if (!isRotaInterna(origem)) return destino;
+  const separador = destino.includes("?") ? "&" : "?";
+  return `${destino}${separador}${PARAM_VOLTAR}=${encodeURIComponent(origem)}`;
+}
+
+/** A rota de volta que a URL trouxe — `null` sem ela, ou se não for interna. */
+export function rotaDeRetorno(params: URLSearchParams): string | null {
+  const rota = params.get(PARAM_VOLTAR);
+  return isRotaInterna(rota) ? rota : null;
+}
+
 /** A URL de volta para a origem, já com o token. */
 export function originRouteWithReturn(registro: ContextualCreateRequest): string {
   const separador = registro.originRoute.includes("?") ? "&" : "?";

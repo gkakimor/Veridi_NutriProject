@@ -38,6 +38,7 @@ export function UsersPage() {
 
   const reload = useCallback(() => {
     setLoading(true);
+    setError(null);
     listUsers({ pageSize: 100 })
       .then((result) => setUsers(result.users))
       .catch((err: unknown) =>
@@ -165,7 +166,10 @@ export function UsersPage() {
               </tr>
             ))}
 
-            {!loading && users.length === 0 && (
+            {/* Falha e vazio se excluem (LISTS-ERROR-FALSE-EMPTY-ADMIN-01): com
+                o alerta acima, "nenhum usuário" seria uma resposta que o
+                servidor não deu. */}
+            {!loading && !error && users.length === 0 && (
               <tr>
                 <td colSpan={6} className="table__empty">
                   Nenhum usuário cadastrado.
