@@ -3370,6 +3370,46 @@ carregando, falha e vazio; console limpo além da linha do 500 simulado.
 Planejamento ainda têm o padrão antigo. LISTS-FILTER-INPUT-UX-01 segue aberto. Os dois no
 BACKLOG.
 
+## Recurso da Estrutura de Custos pelo id (COST-USAGE-RESOURCE-BYID-01, 2026-09-13)
+
+O campo "Recurso" da Estrutura de Custos tirava as opções dos 50 primeiros recursos
+ativos e do que a busca achava. Só web: sem API nova, sem migration.
+
+**Por que falhava.** O recurso criado no contexto, ou restaurado do rascunho, fora
+dos 50 voltava com o campo vazio e o id escolhido por baixo; sem o tipo, "Quantidade
+de recursos" sumia e "Adicionar recurso" mandava o uso sem ela — o servidor gravava 1
+no lugar do número restaurado. O aviso de energia fora do modo direto procurava o
+criado numa lista que, na volta, ainda estava vazia (a tela remonta e o retorno chega
+antes da estrutura e dos recursos): não disparava nunca, nem dentro dos 50. A busca
+devolvia o achado sem o recorte da tela — energia fora do modo direto e recurso que a
+estrutura já usa —, e no modo direto a energia, última na ordem do servidor, não
+aparecia na abertura.
+
+**Regra.** O campo usa `useRecursosDoSeletor`: `ATIVOS_SEM_ENERGIA` (todo tipo ativo
+menos energia, um pedido de 20 por tipo) e, só no modo direto, a página de
+`ENERGIA_ATIVA` — a mesma da tarifa do kWh derivado, pedida uma vez por tela. A busca
+vai ao servidor com os mesmos recortes; o que a estrutura já usa sai da abertura e da
+busca. Id escolhido que não veio em página nenhuma é perguntado por `GET
+/industrial-resources/:id` uma vez, depois de todas as páginas que a tela pediu (antes
+disso ele podia estar na de energia), e ganha nome no campo. O criado no contexto fica
+escolhido e é conferido com o recurso resolvido e a estrutura lida: energia fora do
+modo direto volta o campo ao recurso do rascunho, com o aviso de sempre, sem aparecer
+nem por um render; trocar de recurso antes da conferência vale. "Adicionar recurso"
+espera o recurso resolvido — sem o tipo, a quantidade de recursos não iria (§87).
+`resourceCount`, guarda de saída, cálculo, tarifa e API intocados.
+
+**Validação.** Reprodução no código de antes: 5 afirmações do defeito passaram. Web:
+`recurso-do-uso-sem-corte` com servidor falso ordenado como o real (108 ativos) — 14
+testes: abertura, busca, modo direto, rascunho restaurado, id pendente travando o
+botão, cadastro no contexto dentro e fora da página, energia recusada sem página de
+energia e fora e dentro dela (com a página de energia respondendo por último), troca
+antes da conferência e energia no modo direto, com contagem exata de pedidos e o
+histórico do atributo `value` do campo. 23 mutações (a página de antes e 22 âncoras),
+todas derrubadas. Gate focado: 39 arquivos, 386 testes (Estrutura, Recursos, Modelos,
+foundation, criação contextual, guardas de saída) e typecheck. Smoke Playwright no Vite
+do worktree, estrutura e recursos interceptados (nada gravado): 45/45 em 7 cenários,
+390px sem transbordo, console limpo.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
