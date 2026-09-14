@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
 import { diaCivilDeFiltroSchema, recusarPeriodoInvertido } from "../../lib/date-schema.js";
 
 /**
@@ -21,8 +22,8 @@ function booleanFlag(defaultValue: boolean) {
  * resultado completo — nunca reconstruindo CSV a partir da página.
  */
 export const paginationFields = {
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(500).default(25),
+  page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
+  pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 500, padrao: 25 }),
   /**
    * Caminho explícito para o resultado FILTRADO COMPLETO — usado pela
    * impressão, que precisa do relatório inteiro e não da página aberta. O

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
 
 /**
  * O `customerId` da rota é o CONTEXTO, não um filtro opcional: ele decide o
@@ -31,6 +32,6 @@ export const productionOrderScopeParamsSchema = customerScopeParamsSchema.extend
 
 /** Mesma paginação das demais listas da Consulta. */
 export const finishedGoodsQuerySchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
+  pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
 });

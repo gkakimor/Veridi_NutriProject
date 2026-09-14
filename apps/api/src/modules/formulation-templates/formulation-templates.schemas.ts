@@ -6,7 +6,7 @@ import {
   mensagemCasasPercentualTecnico,
 } from "../../lib/decimal-schema.js";
 import { optionalPurityPercent } from "../../lib/industrial-schema.js";
-import { inteiroDecimalSchema } from "../../lib/integer-schema.js";
+import { inteiroDeConsultaSchema, inteiroDecimalSchema } from "../../lib/integer-schema.js";
 
 /** Doses por embalagem: inteiro estrito (API-INT-COERCION-01), maior que zero. */
 const dosesPerPackage = inteiroDecimalSchema().pipe(z.number().int().positive()).nullish();
@@ -101,8 +101,8 @@ export const listFormulationTemplatesQuerySchema = z.object({
     .transform((value) =>
       value === undefined ? undefined : value === true || value === "true",
     ),
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
+  pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
 });
 
 export type CreateFormulationTemplateInput = z.infer<typeof createFormulationTemplateSchema>;

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
 import {
   PRICING_ESTIMATED_TAX_MODES,
   PRICING_INDUSTRIAL_COST_MODES,
@@ -19,8 +20,8 @@ export const listTemplatesQuerySchema = z.object({
     .union([z.boolean(), z.string()])
     .optional()
     .transform((value) => (value === undefined ? undefined : value === true || value === "true")),
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
+  pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
 });
 
 export const updateTemplateIdentitySchema = z.object({

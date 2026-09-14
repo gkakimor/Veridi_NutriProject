@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
 
 export const approveCoaSchema = z.object({
   note: z.string().trim().max(1000).optional(),
@@ -25,8 +26,8 @@ export const listQualityQueueQuerySchema = z.object({
     .union([z.string(), z.boolean()])
     .optional()
     .transform((value) => (typeof value === "string" ? value === "true" : (value ?? false))),
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
+  pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
 });
 
 export type ApproveCoaInput = z.infer<typeof approveCoaSchema>;

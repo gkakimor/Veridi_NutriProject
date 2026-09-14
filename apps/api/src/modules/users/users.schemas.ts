@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
 
 /**
  * Senha mínima de 10 caracteres. Sem política de complexidade decorada
@@ -38,8 +39,8 @@ export const listUsersQuerySchema = z.object({
     .union([z.string(), z.boolean()])
     .optional()
     .transform((value) => (value === undefined ? undefined : value === true || value === "true")),
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
+  pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
 });
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;

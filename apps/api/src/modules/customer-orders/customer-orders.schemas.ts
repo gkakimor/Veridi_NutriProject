@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
 import type { CustomerOrderStatus } from "@veridi/shared";
 import { CUSTOMER_ORDER_STATUSES } from "@veridi/shared";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
@@ -51,8 +52,8 @@ export const listCustomerOrdersQuerySchema = z.object({
   status: listaDeStatusSchema(
     z.enum(CUSTOMER_ORDER_STATUSES as unknown as [CustomerOrderStatus, ...CustomerOrderStatus[]]),
   ).optional(),
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
+  pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
 });
 
 /**

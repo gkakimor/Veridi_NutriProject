@@ -3,7 +3,7 @@ import { LIMITES_INTEIROS_DAS_CONDICOES, QUOTE_DUPLICATE_PRICE_STRATEGIES } from
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import { recusarPeriodoInvertido, requiredDateSchema } from "../../lib/date-schema.js";
 import { CASAS_PRECO_COMERCIAL, optionalDecimalStringSchema } from "../../lib/decimal-schema.js";
-import { lerInteiroDecimal } from "../../lib/integer-schema.js";
+import { inteiroDeConsultaSchema, lerInteiroDecimal } from "../../lib/integer-schema.js";
 
 const statusEnum = z.enum(["WAITING", "SAMPLE", "APPROVED", "CANCELLED", "STAND_BY"]);
 const cancelReasonEnum = z.enum(["PRICE", "COMPETITOR", "PROJECT_CHANGED", "NOT_MET", "OTHER"]);
@@ -102,8 +102,8 @@ export const listProjectsQuerySchema = z
     responsibleUserId: z.string().trim().min(1).optional(),
     entryFrom: requiredDateSchema.optional(),
     entryTo: requiredDateSchema.optional(),
-    page: z.coerce.number().int().min(1).default(1),
-    pageSize: z.coerce.number().int().min(1).max(100).default(20),
+    page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
+    pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
   })
   .superRefine(recusarPeriodoInvertido("entryFrom", "entryTo"));
 
