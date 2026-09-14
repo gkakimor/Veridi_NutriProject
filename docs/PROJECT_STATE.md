@@ -3075,7 +3075,7 @@ e Painel (três casos) sem transbordo; PDF real de R-01, R-02, R-08 a R-11 e R-2
 de volta — fornecedor por código e nome, sem UUID, sem enum, nenhuma consulta sem
 filtro — 23/23, console limpo.
 
-**Achados, sem correção.** CSV de R-05 e R-09 escreve "Qualidade do custo" como enum
+**Achados, sem correção** (fechados em REPORTS-PRESENTATION-WAVE-02, menos as datas). CSV de R-05 e R-09 escreve "Qualidade do custo" como enum
 (`REAL`, `ESTIMATED`), e o PDF repete — conteúdo gerado pela API; datas De/Até dos
 filtros do PDF saem `YYYY-MM-DD`; plural fixo fora dos Relatórios (prazo e parcelas do
 Orçamento: `QuotePdf`, `QuoteConditionsForm`, `CommercialOriginSection`); ids que a API
@@ -3454,6 +3454,50 @@ sem transbordo, console limpo — 18/18 em 390px e em 1440px.
 **Achados.** O que se digita no rascunho durante "Salvar rascunho" é trocado pelo gravado,
 sem pendência — ROUTE-DRAFT-SAVE-INFLIGHT-EDIT-01, no BACKLOG. CONTEXT-ORIGIN-LABEL-ROUTE-01
 segue aberto.
+
+## Custo, dias e ids no papel (REPORTS-PRESENTATION-WAVE-02, 2026-09-13)
+
+Fecha os achados de REPORTS-PRESENTATION-WAVE-01, menos as datas `YYYY-MM-DD` dos filtros
+do PDF (aceitas pelo PO). Sem migration, sem rota nem DTO novo, sem cálculo, sem permissão:
+na API mudou só o texto de três colunas de CSV.
+
+**Qualidade do custo.** O CSV de R-05, R-09 e Produto Acabado escrevia `REAL`,
+`ESTIMATED`, `PARTIAL` e `NO_COST`, e o PDF dos relatórios, que lê o CSV, repetia. A coluna
+sai pelo `COST_QUALITY_LABELS`, o mapa da tela: Real, Estimado, Parcial, Sem custo. O JSON
+segue com o enum; o R-09 continua só REAL ou NO_COST, pela regra do serviço.
+
+**Ids no PDF.** `FILTROS_POR_ID` (`ReportPrintPage`) lista todo id que os schemas dos
+relatórios aceitam. Cliente e fornecedor, como antes; item, produto, pedido, OP, OC e
+cliente proprietário, que só a URL manda, saem `código · nome` pelo `porId` do seletor que
+já existe — em paralelo, uma consulta por filtro presente, só depois do CSV aceito (perfil
+recusado ou CSV 403 não consultam ninguém). Lote não tem `porId`: nenhuma consulta
+inventada, sai "—", como o id sem cadastro. `ownerType`, `sourceType` e `active` saem pelo
+rótulo, e `purchaseOrderId`, `ownerType`, `ownerCustomerId`, `location` e `active` ganharam
+nome no papel.
+
+**Dias.** `emDias` saiu de `pages/reports/report-period.ts` para `lib/duration.ts` (e
+`pdf/format.ts`): prazo de entrega e vencimento das parcelas no PDF do Orçamento,
+vencimentos e "a cada N dias" das condições, vencimentos da Origem comercial do Pedido.
+Prazo vazio segue "—"; intervalo vazio segue "por mês".
+
+**Validação.** API: `qualidade-do-custo-no-csv.test.ts` (8 — as quatro qualidades no CSV
+de R-05, R-09 e Produto Acabado, o filtro chegando ao serviço, o JSON com o enum) e o R-05
+real sem custo de `exports.test.ts` com "Sem custo". Web: `report-content.test.tsx` +25 (id
+válido, inexistente, consulta que falha, lote sem consulta, três ids e 40 linhas em três
+consultas, sem filtro, R-19 e R-20 recusados, CSV 403, todo id aceito com rótulo e sem valor
+cru, R-05 e R-09 sem enum no papel, `ownerType`/`sourceType`/`active`) e
+`prazo-e-parcelas-em-dias.test.tsx` (15 — 0, 1 e 2 no helper, no PDF, no formulário e na
+Origem comercial). 11 mutações, todas derrubadas. Focados depois do rebase: API 7 arquivos,
+61 testes, em banco de teste próprio; web 55 arquivos, 729 testes; typecheck. Smoke
+Playwright com API e Vite do worktree contra o `veridi_dev`, só leitura, e a main de antes
+na 3333/5173 (versão do Orçamento e origem comercial sintéticas): CSV × JSON linha a linha
+no R-05 (18 linhas, REAL e NO_COST) e no R-09 (26); PDF real lido de volta sem enum; ids por
+código e nome, sem pedaço do UUID, uma consulta por filtro a cada carga; lote sem consulta;
+"1 dia" no PDF do Orçamento; Origem comercial em 390px sem transbordo — 48/48, console
+limpo.
+
+**Achado.** "Filtros aplicados" lista toda chave da URL, inclusive a que o schema daquele
+relatório não aceita e a API ignora — REPORTS-PRINT-UNACCEPTED-FILTER-01, no BACKLOG.
 
 ## Próxima prioridade
 
