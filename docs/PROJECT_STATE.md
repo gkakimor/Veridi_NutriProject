@@ -3673,7 +3673,8 @@ test, E2E, build global nem fresh (FAST).
 meia-noite (04/11/2018), `limitesDoDiaComercial` abre às 23:00 da véspera e `instanteComercial`
 de 00:00 a 00:59 cai na véspera, contra `diaCivil`; histórico, mantido idêntico de propósito.
 TZ-LOCALE-STRING-REUSE-01 — `toLocaleString`/`toLocaleDateString` com opções criam formatador a
-cada chamada (~54 µs): extensos do shared, CSV e textos da API, `web lib/dates.ts`.
+cada chamada (~54 µs): extensos do shared, CSV e textos da API, `web lib/dates.ts` (fechado,
+seção própria).
 
 ## Campos numéricos pt-BR em todas as telas (PTBR-NUMERIC-INPUT-ROLLOUT-01, 2026-09-13)
 
@@ -3899,6 +3900,37 @@ zod e contagem que obriga consulta nova a entrar na matriz) e `integer-schema` �
 matriz, rota e as duas guardas. `pnpm typecheck`. Sem full test, E2E, build global nem fresh (FAST).
 
 **Achados** (BACKLOG): API-INT-COERCION-REMAINING-01; INVENTORY-EXPORT-ONLY-WITH-STOCK-01.
+
+## Datas por extenso num formatador guardado (TZ-LOCALE-STRING-REUSE-01, 2026-09-14)
+
+Só custo. Texto, fuso, dia civil, cálculo, DTO, rota, banco e migration intocados;
+TZ-DST-MIDNIGHT-GAP-01 fora.
+
+`toLocaleString`/`toLocaleDateString` com `{ timeZone }` criavam um `Intl.DateTimeFormat` por
+chamada (~55 µs; o V8 só guarda o dele sem opções). `business-timezone.ts` ganhou duas formas de
+leitura no mesmo cache de TZ-FORMATTER-REUSE-01 (forma + fuso, até 16 fusos, só o formatador):
+data e hora e dia, `pt-BR`, com as opções que o `toLocale*` preenche sozinho (`numeric`).
+`instanteComercialPorExtenso` e `diaDoInstantePorExtenso` passam por elas, e a nova
+`dataCivilPorExtenso` (dia em UTC) substitui as cópias de `toLocaleDateString("pt-BR", { timeZone:
+"UTC" })`: `csvDate`, `diaComercialPorExtenso`, `diaDaVigencia` (fonte de custo), validade da
+Atenção, vencimento da origem de preço e `formatDate` do Orçamento na web. Data inválida segue
+`"Invalid Date"`. Na web, `formatDate`/`formatDateTime`/`formatEventDate` usam os mesmos; o
+fallback de `formatDate` para valor com hora continua no fuso do navegador, agora sem opções
+(`undefined`, não `{}`), o que deixa o V8 reusar o formatador dele.
+
+**Medida** (200 mil datas de 1900 a 2100, antigo e novo intercalados, Node 24, antes e depois do
+rebase): instante por extenso ~56–60 → ~3 µs, dia do instante ~55–57 → ~1–3 µs, data civil ~56–59 →
+~1,1–1,4 µs, fallback da web ~52–114 → ~0,9–2,4 µs; CSV de 10 mil linhas com três datas ~1,4 s →
+~44 ms, bytes iguais. 0 divergências nas duas rodadas.
+
+**Validação.** `shared extenso-formatador.test.ts` (anterior copiado × novo com UTC, São Paulo,
+Vancouver, Tóquio e Etc/GMT+7 no processo, deslocamento conferido: anos 0001 a 99999, meia-noite
+UTC, ±1 ms das bordas, cada minuto em volta das viradas de verão de São Paulo, viradas de
+Vancouver, hora local média de 1914, `"Invalid Date"`; valores à mão; um formatador por forma e
+fuso) e `web lib/dates-formatador.test.ts` (as três funções, ISO completo/curto/com deslocamento,
+inválido e vazio, nos cinco fusos). 4 mutações derrubadas. Focados: shared 4 arquivos, API 11 +
+serial 3 (fonte de custo, dia comercial, exports, CSV do custo, formação de preço, Painel),
+web; `pnpm typecheck`. Sem full test, E2E, build global nem fresh (FAST).
 
 ## Próxima prioridade
 
