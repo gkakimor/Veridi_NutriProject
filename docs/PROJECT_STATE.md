@@ -4121,6 +4121,32 @@ PATCH, ids e ordem iguais, R$ 480), confirmação necessária no Modelo padrão 
 ignora a conversão (ativação real 200), mensagem 105% na prévia, as duas explicações F-05-1; 390px sem
 rolagem do documento; console limpo — 24 de 24. Sem full test, E2E, build global nem fresh (FAST).
 
+## Envio pergunta pelo custo que formou o preço (QUOTE-SEND-CONFIRM-QUALITY-01, 2026-09-14)
+
+Fecha o achado de COST-PRICING-CLARITY-WAVE-01. Sem mudança de fórmula, qualidade do CMV, regra de ativação,
+auth ou segurança.
+
+**Snapshot (§84).** `PricingTier.pricingCostQualitySnapshot`, anulável — migration aditiva
+`20260925093025_pricing_tier_pricing_cost_quality`, sem backfill. A ativação grava a qualidade que o servidor
+já pesa (`effect.pricingCostQuality`), nunca valor do navegador; `costQualitySnapshot` segue sendo a do
+cálculo — fatos diferentes, os dois congelados. A faixa ativa serve o snapshot em
+`PricingTierDTO.pricingCostQuality`; faixa anterior ao campo fica nula e o DTO não inventa.
+
+**Envio.** `buildLineSnapshots` pede confirmação por `pricingCostQuality ?? costQuality`: Modelo que ignora a
+conversão, com cálculo parcial e base de preço completa, envia sem pergunta; base parcial ou sem custo
+continua pedindo; faixa antiga usa a do cálculo, como antes. A proveniência viva da linha serve
+`pricingCostQuality`; a linha enviada não a congela (o `costQualitySnapshot` da linha segue do cálculo).
+`QuoteVersionsSection` antecipa a confirmação e rotula a linha pela mesma qualidade, sem recalcular.
+
+**Validação.** API `projects/envio-qualidade-do-custo-do-preco` — padrão completa, padrão parcial (409 →
+confirmado 200), Modelo IGNORE sem confirmação, imutabilidade depois de Modelo, compra, tarifa, cálculo e
+formulação novos, e matriz de 7 combinações preço × cálculo pelo banco (faixa antiga nula incluída): 11. Web
+`projects/envio-qualidade-do-custo-do-preco`: 7. Mutação (decidir pela `costQuality` no servidor e na tela):
+derrubou 6 de 11 e 4 de 7 — exatamente os casos em que as qualidades divergem. Gate FAST: API pricing +
+projects + `pricing-model-flex` 19 arquivos/344 testes; web projects + pricing 28/335; `migration-order` e
+`migration-prefix` 19; `pnpm typecheck`. Migration aplicada no banco isolado do worktree. Sem full test,
+E2E, golden path nem `validate:migrations:fresh` (FAST).
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

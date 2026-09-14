@@ -62,10 +62,9 @@ QUOTE-DUPLICATE-ORIGIN-01. Achados de CUSTOMER-COMMERCIAL-STATUS-01, idem:
 CUSTOMER-LIST-DEFAULT-E2E-01 e CUSTOMER-FACTS-LOAD-01. Achado de
 COST-RESOURCE-MULTIPLIER-01: ~~COST-RESOURCE-EDIT-01~~ **fechado em 2026-09-14** por
 COST-PRICING-CLARITY-WAVE-01 — a linha de recurso se edita no lugar (tempo e quantidade, mesma linha).
-Achados de COST-PRICING-CLARITY-WAVE-01, sem posição na fila: **QUOTE-SEND-CONFIRM-QUALITY-01 (P3)** — o
-envio do orçamento pede confirmação de custo incompleto pela `costQuality` congelada da faixa (cálculo),
-não pela qualidade do custo que formou o preço (`quote-pricing.service.ts`, `QuoteVersionsSection.tsx`);
-a faixa ativa não congela essa qualidade, então alinhar pede snapshot novo — decisão de schema. E
+Achados de COST-PRICING-CLARITY-WAVE-01, sem posição na fila: ~~QUOTE-SEND-CONFIRM-QUALITY-01~~ **fechado em
+2026-09-14** — a faixa ativa congela a qualidade do custo que formou o preço (`pricingCostQualitySnapshot`, sem
+backfill) e o envio pede confirmação por `pricingCostQuality ?? costQuality`. E
 **QUOTE-SUGGESTION-390-01 (UX, P3)** — em 390px a frase "Existe uma precificação vigente…" da linha do
 Orçamento fica cortada dentro da tabela rolável (já cortava o preço; a explicação de F-05-1 alonga a frase).
 Achados de FORMULATION-ADJUSTMENTS-UX-01, idem: **FORMULATION-PRINT-ADJUSTMENTS-01
