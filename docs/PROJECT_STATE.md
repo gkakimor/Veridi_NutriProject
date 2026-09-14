@@ -3284,6 +3284,47 @@ volta com o campo vazio — COST-USAGE-RESOURCE-BYID-01. Os dois no BACKLOG, P3.
 
 Próximo recomendado: LISTS-LOADING-STALE-DATA-01.
 
+## A volta do cadastro não perde o roteiro (ROUTE-CONTEXT-RESTORE-01, 2026-09-13)
+
+Só web: sem API, sem domínio, sem migration.
+
+**Causa.** "Cadastrar recurso" guarda o rascunho inteiro e a volta o restaura na
+montagem. A carga do roteiro sai na mesma montagem e responde depois: `setBase`,
+`setUnidade` e `setEtapas` sem condição trocavam o rascunho da pessoa pelo gravado —
+"Etapa Restaurada" virava "Encapsulamento". Nome e descrição passavam pela leitura
+anterior, menos o campo apagado: ela começa vazia, e o vazio restaurado parecia intocado.
+
+**Regra.** Carga inicial é a que sai sem leitura anterior (`lido` nasce `null`). Com
+rascunho restaurado — a trava `rascunhoRestaurado` de Template de Formulação,
+Formulação, Pedido e OC —, ela não escreve nome, descrição, base, unidade nem etapas;
+só registra o gravado (`salvo` e `lido`). A diferença fica pendente: "Alterações não
+salvas", guarda de saída e "Ativar versão" bloqueado; restaurado igual ao gravado não
+pende. A decisão é tomada na saída da carga e a trava não se desarma na primeira
+resposta, porque o StrictMode do dev pede duas. Salvar, ativar e criar versão
+recarregam depois da primeira leitura e trazem o servidor, como antes. A leitura
+anterior por campo do Modelo de Estrutura não serve ao bloco do rascunho: depois de
+salvar, manteria o texto não normalizado (`250,5` × `250.5`) e a pendência não sairia.
+Save, ativação, validação, snapshot, `resourceQuantity` e roteiro ativo intocados.
+
+**Validação.** `roteiro-volta-do-cadastro.test.tsx`, 7 testes: `startContextualCreate` +
+`PARAM_RETOMAR` com a carga adiada até depois da restauração; StrictMode com as duas
+respostas; ida e volta pela própria tela; carga normal sem `retomar`; pendente, salvar
+grava o restaurado e a pendência some; igual ao gravado sem pendência; nome e
+descrição apagados. Antes da correção, 5 dos 7 caíam. 12 mutações (cada `set` de volta,
+trava consumida na primeira resposta, carga inicial decidida na volta, trava para toda
+carga, `salvo` não gravado, nome e descrição fora da trava, trava não armada, trava sem
+restauração), todas derrubadas. Gate focado: 11 arquivos, 189 testes (Roteiro, criação
+contextual, cadastro de recurso, guarda) e typecheck. Smoke Playwright 390px contra a API
+dev, só leitura (catálogo de capacidade vazio e leitura do roteiro atrasada 1,5 s por
+interceptação; cadastro cancelado): main de antes volta com 1000 un, sem etapa e sem
+pendência; a correção volta com 250,5 kg e "Etapa Restaurada" por lote 15/45, pendente,
+duas leituras do StrictMode, guarda perguntando, sem transbordo e console limpo.
+
+**Achados.** "Salvar identificação" com rascunho pendente recarrega e apaga base,
+unidade e etapas digitadas — ROUTE-IDENTIFICATION-SAVE-DRAFT-01. O cadastro de recurso
+aberto pelo Roteiro diz "← Voltar para tela anterior" — CONTEXT-ORIGIN-LABEL-ROUTE-01. Os
+dois no BACKLOG.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
