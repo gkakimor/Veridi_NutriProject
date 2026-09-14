@@ -209,6 +209,14 @@ export interface QuotePricingProvenanceDTO {
   formulationVersionNumber: number | null;
   industrialCostPerUnit: string | null;
   costQuality: IndustrialCostQuality | null;
+  /**
+   * Qualidade do custo que FORMOU o preço da faixa (§84), congelada na ativação
+   * — a que o envio pesa para pedir confirmação de custo incompleto
+   * (QUOTE-SEND-CONFIRM-QUALITY-01); `costQuality` é a do cálculo. `null` em
+   * faixa ativada antes do campo e ausente na linha já enviada (a linha não a
+   * congela): nos dois casos vale `costQuality`.
+   */
+  pricingCostQuality?: IndustrialCostQuality | null;
   commissionPercent: string | null;
   contributionPerUnit: string | null;
   contributionMarginPercent: string | null;

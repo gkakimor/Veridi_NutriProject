@@ -5294,6 +5294,11 @@ continuam exatamente como antes.**
   preço desta versão.
 - **A confirmação de custo incompleto na ativação é uma autoridade só:** a qualidade do custo que forma o
   preço (`pricingCostQuality` da faixa), a mesma que o servidor pesa. A tela não deduz nem recalcula.
+- **A faixa ativa congela as duas qualidades** (QUOTE-SEND-CONFIRM-QUALITY-01, 2026-09-14): a do cálculo
+  (`costQualitySnapshot`) e a do custo que formou o preço (`pricingCostQualitySnapshot`). O envio do Orçamento
+  pede confirmação de custo incompleto por `pricingCostQuality ?? costQuality` — faixa ativada antes do campo
+  fica nula, sem backfill, e segue lida pela do cálculo. Modelo, custo, referência ou materiais novos não
+  mudam a qualidade congelada; a linha enviada continua congelando a do cálculo.
 
 ## §85 — Duplicar como nova versão: a origem é a escolhida, e o preço é decisão explícita
 

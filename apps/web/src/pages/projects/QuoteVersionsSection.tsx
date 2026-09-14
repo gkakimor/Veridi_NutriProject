@@ -585,12 +585,20 @@ export function QuoteVersionsSection({
     await aplicarComExcecao(excecao, excecao.motivo.trim());
   }
 
-  /** Linhas cujo preço veio de uma faixa com custo industrial incompleto. */
+  /**
+   * Qualidade do custo que FORMOU o preço da linha — a que o servidor pesa no
+   * envio (§84): a congelada na faixa; faixa ativada antes do campo, a do cálculo.
+   */
+  function qualidadeDoCustoDoPreco(line: QuoteLineDTO) {
+    return line.pricing ? (line.pricing.pricingCostQuality ?? line.pricing.costQuality) : null;
+  }
+
+  /** Linhas cujo preço veio de uma faixa com custo incompleto, por essa qualidade. */
   function incompleteCostLines(quote: QuoteVersionDTO): QuoteLineDTO[] {
-    return quote.lines.filter(
-      (line) =>
-        line.pricing?.costQuality === "PARTIAL" || line.pricing?.costQuality === "NO_COST",
-    );
+    return quote.lines.filter((line) => {
+      const qualidade = qualidadeDoCustoDoPreco(line);
+      return qualidade === "PARTIAL" || qualidade === "NO_COST";
+    });
   }
 
   /**
@@ -1531,7 +1539,7 @@ export function QuoteVersionsSection({
                 {sendConfirm.lines.map((line) => (
                   <li key={line.id}>
                     <span className="code">{line.productCode}</span> {line.productName} —{" "}
-                    {line.pricing?.costQuality === "NO_COST"
+                    {qualidadeDoCustoDoPreco(line) === "NO_COST"
                       ? "sem custo industrial conhecido"
                       : "custo industrial parcial"}
                     {/* Avisos reais da faixa, quando a precificação registrou algum. */}

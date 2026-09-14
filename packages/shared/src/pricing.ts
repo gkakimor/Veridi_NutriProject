@@ -167,10 +167,11 @@ export interface PricingTierDTO {
   pricingCostPerUnit?: string | null;
   /**
    * Qualidade do custo que FORMA o preço — a que a ativação pesa para pedir
-   * confirmação de custo incompleto (§84, PRICING-ACTIVATE-CONFIRM-01). No
+   * confirmação de custo incompleto (§84, PRICING-ACTIVATE-CONFIRM-01) e a que
+   * o envio do Orçamento pesa depois (QUOTE-SEND-CONFIRM-QUALITY-01). No
    * Modelo padrão é a do cálculo; num Modelo que não usa a conversão do ERP, a
-   * dos materiais. Só a faixa recalculada agora a traz; leitura congelada ou
-   * anterior ao campo não tem — aí vale `costQuality`.
+   * dos materiais. A faixa recalculada traz a de agora; a ativa, a congelada na
+   * ativação. Faixa ativada antes do campo não tem — aí vale `costQuality`.
    */
   pricingCostQuality?: IndustrialCostQuality;
   /** Impostos em % sobre o preço de venda que entraram no divisor; `null` quando o Modelo não os considera. */

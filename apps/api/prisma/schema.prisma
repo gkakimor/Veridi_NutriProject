@@ -1547,6 +1547,12 @@ model PricingTier {
   /// ativada antes do Modelo flexivel: ali o preco se formou sobre
   /// `costPerUnitSnapshot`.
   pricingCostPerUnitSnapshot  Decimal?               @db.Decimal(24, 12)
+  /// Qualidade do custo que FORMOU o preco — a da base que o Modelo usou (§84),
+  /// a mesma que a ativacao pesa. Congelada na ativacao. Nao substitui
+  /// `costQualitySnapshot`, que e a do calculo (CMV): com Modelo que ignora a
+  /// conversao os dois divergem. Nula em faixa ativada antes do campo — ali vale
+  /// `costQualitySnapshot`, sem backfill.
+  pricingCostQualitySnapshot  IndustrialCostQuality?
   /// Impostos em % sobre o preco de venda que entraram no divisor. Nulo: fora.
   estimatedTaxPercentSnapshot Decimal?               @db.Decimal(7, 4)
   warningsSnapshot            Json?

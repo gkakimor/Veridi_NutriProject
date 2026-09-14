@@ -235,6 +235,9 @@ function provenanceFromTier(
     formulationVersionNumber: version.formulationVersionNumberSnapshot,
     industrialCostPerUnit: tier.costPerUnitSnapshot ? resultadoTecnico(tier.costPerUnitSnapshot) : null,
     costQuality: tier.costQualitySnapshot,
+    // A do custo que formou o preço, congelada na ativação — `null` em faixa
+    // ativada antes do campo (QUOTE-SEND-CONFIRM-QUALITY-01).
+    pricingCostQuality: tier.pricingCostQualitySnapshot,
     commissionPercent: (tier.commissionPercentSnapshot ?? tier.commissionPercent).toFixed(4),
     contributionPerUnit: tier.contributionPerUnitSnapshot
       ? resultadoTecnico(tier.contributionPerUnitSnapshot)
@@ -512,7 +515,15 @@ export async function buildLineSnapshots(
       continue;
     }
 
-    const incomplete = provenance.costQuality === "PARTIAL" || provenance.costQuality === "NO_COST";
+    /*
+     * Incompleto é o custo que FORMOU o preço (§84): a qualidade congelada na
+     * ativação da faixa. Num Modelo que ignora a conversão, cálculo parcial com
+     * base de preço completa não pede confirmação. Faixa ativada antes do campo
+     * não tem essa qualidade: vale a do cálculo, como sempre valeu — o histórico
+     * se lê como era, sem backfill.
+     */
+    const qualidadeDoPreco = provenance.pricingCostQuality ?? provenance.costQuality;
+    const incomplete = qualidadeDoPreco === "PARTIAL" || qualidadeDoPreco === "NO_COST";
     if (incomplete && !options.confirmIncompleteCost) throw new IncompleteCostQuoteError();
 
     result.push([line.id, { ...productSnapshot, ...buildProvenanceSnapshot(provenance) }]);
