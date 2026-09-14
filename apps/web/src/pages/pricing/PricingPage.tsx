@@ -20,7 +20,6 @@ import {
   PRICE_MODES,
   PRICING_VERSION_STATUS_LABELS,
   computePrice,
-  isDefaultPricingModel,
   problemaDoDivisorDoPreco,
 } from "@veridi/shared";
 import { CostQualityBadge, formatUnitCost } from "../../components/CostBreakdown";
@@ -44,6 +43,7 @@ import {
 } from "../../lib/pricing-api";
 import { formatDate } from "../../lib/dates";
 import { formatPercent } from "../../lib/percent";
+import { custoQueFormaPreco, usaModeloFlexivel } from "../../lib/pricing-cost";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { textoComparavel } from "../../lib/dirty-fields";
 import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
@@ -65,17 +65,6 @@ function statusBadgeClass(status: string): string {
   if (status === "ACTIVE") return "badge badge--active";
   if (status === "INACTIVE") return "badge badge--neutral";
   return "badge badge--warn";
-}
-
-/**
- * O custo que FORMA o preço — `PRODUCT_RULES.md` §84. Ausente em resposta
- * anterior ao Modelo flexível: ali o preço se formou sobre o custo do cálculo.
- * `null` é base incompleta e nunca cai para o custo do cálculo.
- */
-function custoQueFormaPreco(
-  tier: Pick<PricingTierDTO, "pricingCostPerUnit" | "industrialCostPerUnit">,
-): string | null {
-  return tier.pricingCostPerUnit !== undefined ? tier.pricingCostPerUnit : tier.industrialCostPerUnit;
 }
 
 /**
@@ -312,8 +301,7 @@ export function PricingPage() {
   const editable = canEdit && pricing.status === "DRAFT";
   const incompleteCost = pricing.tiers.some(custoDoPrecoIncompleto);
   // Modelo que não é o padrão: o custo que forma o preço aparece ao lado do custo do cálculo.
-  const modeloFlexivel =
-    pricing.pricingModel !== undefined && !isDefaultPricingModel(pricing.pricingModel);
+  const modeloFlexivel = usaModeloFlexivel(pricing);
 
   return (
     <>
