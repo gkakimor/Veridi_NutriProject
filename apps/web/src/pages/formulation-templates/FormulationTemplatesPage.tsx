@@ -1,9 +1,11 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { FormulationTemplateSummaryDTO } from "@veridi/shared";
 import { FORMULATION_CALCULATION_MODE_LABELS } from "@veridi/shared";
 import { createFormulationTemplate, listFormulationTemplates } from "../../lib/formulation-templates-api";
+import { ListStatusRow } from "../../components/ListStatusRow";
+import { useFilteredPage, useListQuery } from "../../lib/list-query";
 import { formatDate } from "../../lib/dates";
 import { useAuth } from "../../app/AuthProvider";
 import { ContextHelp, InfoHint } from "../../components/help";
@@ -39,53 +41,41 @@ export function FormulationTemplatesPage() {
   const { user } = useAuth();
   const canEdit = user?.role === "ADMIN" || user?.role === "PRODUCTION";
 
-  const [templates, setTemplates] = useState<FormulationTemplateSummaryDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
+  /* A falha de criar é da ação, não da lista: não some quando a lista recarrega. */
+  const [erroAoCriar, setErroAoCriar] = useState<string | null>(null);
 
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput), 300);
     return () => clearTimeout(handle);
   }, [searchInput]);
 
-  useEffect(() => setPage(1), [search, showArchived]);
+  /* Recorte novo é página 1 no mesmo render — uma consulta por troca (LISTS-LOADING-STALE-DATA-02). */
+  const filtrosDaConsulta = { ...(search ? { search } : {}), ...(showArchived ? { archived: true } : {}) };
+  const [page, setPage] = useFilteredPage(filtrosDaConsulta);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    const params: Parameters<typeof listFormulationTemplates>[0] = { page, pageSize: PAGE_SIZE };
-    if (search) params.search = search;
-    if (showArchived) params.archived = true;
-    listFormulationTemplates(params)
-      .then((result) => {
-        setTemplates(result.templates);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Falha ao carregar os templates"),
-      )
-      .finally(() => setLoading(false));
-  }, [page, search, showArchived]);
-
-  useEffect(() => reload(), [reload]);
+  const consulta = useListQuery(
+    listFormulationTemplates,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { fallbackError: "Falha ao carregar os templates" },
+  );
+  const templates: FormulationTemplateSummaryDTO[] = consulta.data?.templates ?? [];
+  const total = consulta.data?.total ?? 0;
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   async function handleCreate() {
     if (!newName.trim()) return;
-    setError(null);
+    setErroAoCriar(null);
     try {
       const template = await createFormulationTemplate({ name: newName.trim() });
       navigate(`/producao/templates-formulacao/${template.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao criar o template");
+      setErroAoCriar(err instanceof Error ? err.message : "Falha ao criar o template");
     }
   }
 
@@ -167,9 +157,10 @@ export function FormulationTemplatesPage() {
         </label>
       </div>
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {erroAoCriar && <p className="form-alert" role="alert">{erroAoCriar}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table">
           <thead>
             <tr>
@@ -232,26 +223,22 @@ export function FormulationTemplatesPage() {
               </tr>
             ))}
 
-            {!loading && templates.length === 0 && (
-              <tr>
-                <td colSpan={8} className="table__empty">
-                  {search
-                    ? "Nenhum template encontrado para esta busca."
-                    : "A biblioteca ainda está vazia. Crie um template ou salve uma formulação existente como template."}
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={8} query={consulta} rowCount={templates.length}>
+              {search
+                ? "Nenhum template encontrado para esta busca."
+                : "A biblioteca ainda está vazia. Crie um template ou salve uma formulação existente como template."}
+            </ListStatusRow>
           </tbody>
         </table>
       </div>
 
-      {totalPages > 1 && (
+      {consulta.data && totalPages > 1 && (
         <div className="pagination">
           <button
             type="button"
             className="btn btn--ghost btn--sm"
             disabled={page <= 1}
-            onClick={() => setPage((current) => current - 1)}
+            onClick={() => setPage(page - 1)}
           >
             Anterior
           </button>
@@ -262,7 +249,7 @@ export function FormulationTemplatesPage() {
             type="button"
             className="btn btn--ghost btn--sm"
             disabled={page >= totalPages}
-            onClick={() => setPage((current) => current + 1)}
+            onClick={() => setPage(page + 1)}
           >
             Próxima
           </button>

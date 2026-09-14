@@ -3,6 +3,7 @@ import { useCallback } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import type { CustomerFinishedGoodsRowDTO } from "@veridi/shared";
 import { listConsultationFinishedGoods } from "../../lib/customer-consultation-api";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { ConsultationTrail, consultationPath, useConsultationContext } from "./ConsultationShell";
 import { ConsultationCount, ConsultationPager } from "./ConsultationPager";
 import { useScopedList } from "./useScopedList";
@@ -82,7 +83,7 @@ export function FinishedGoodsTab() {
 
       {list.error && <p className="form-alert" role="alert">{list.error}</p>}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={list.loading || undefined}>
         <table className="table">
           <thead>
             <tr>
@@ -124,13 +125,9 @@ export function FinishedGoodsTab() {
               </tr>
             ))}
 
-            {!list.loading && list.rows.length === 0 && (
-              <tr>
-                <td colSpan={7} className="table__empty">
-                  Nenhum produto acabado deste cliente em estoque.
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={7} query={list} rowCount={list.rows.length}>
+              Nenhum produto acabado deste cliente em estoque.
+            </ListStatusRow>
           </tbody>
         </table>
         <ConsultationCount list={list} noun="produto" pluralNoun="produtos" />

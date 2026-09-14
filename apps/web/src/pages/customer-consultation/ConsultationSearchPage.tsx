@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { CustomerDTO } from "@veridi/shared";
 import { formatBrPhone, formatCnpj } from "@veridi/shared";
 import { listCustomers } from "../../lib/customers-api";
+import { useFilteredPage, useListQuery } from "../../lib/list-query";
 import { consultationPath } from "./ConsultationShell";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
 
@@ -20,11 +22,6 @@ const PAGE_SIZE = 20;
 
 export function ConsultationSearchPage() {
   const navigate = useNavigate();
-  const [customers, setCustomers] = useState<CustomerDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -34,27 +31,17 @@ export function ConsultationSearchPage() {
     return () => clearTimeout(handle);
   }, [searchInput]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [search]);
+  /* Busca nova é página 1 no mesmo render — uma consulta por troca (LISTS-LOADING-STALE-DATA-02). */
+  const filtrosDaConsulta = search ? { search } : {};
+  const [page, setPage] = useFilteredPage(filtrosDaConsulta);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    listCustomers({ page, pageSize: PAGE_SIZE, ...(search ? { search } : {}) })
-      .then((result) => {
-        setCustomers(result.customers);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Falha ao carregar clientes");
-      })
-      .finally(() => setLoading(false));
-  }, [page, search]);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  const consulta = useListQuery(
+    listCustomers,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { fallbackError: "Falha ao carregar clientes" },
+  );
+  const customers: CustomerDTO[] = consulta.data?.customers ?? [];
+  const total = consulta.data?.total ?? 0;
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -92,9 +79,9 @@ export function ConsultationSearchPage() {
         </div>
       </div>
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table table--clickable-rows">
           <thead>
             <tr>
@@ -138,43 +125,43 @@ export function ConsultationSearchPage() {
               </tr>
             ))}
 
-            {!loading && customers.length === 0 && (
-              <tr>
-                <td colSpan={7} className="table__empty">
-                  Nenhum cliente encontrado para esta busca.
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={7} query={consulta} rowCount={customers.length}>
+              Nenhum cliente encontrado para esta busca.
+            </ListStatusRow>
           </tbody>
         </table>
-        <div className="table-foot">
-          {total} {total === 1 ? "cliente" : "clientes"}
-        </div>
+        {consulta.data && (
+          <div className="table-foot">
+            {total} {total === 1 ? "cliente" : "clientes"}
+          </div>
+        )}
       </div>
 
-      <div className="pagination">
-        <span>
-          Página {page} de {totalPages}
-        </span>
-        <div className="table__actions">
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page <= 1}
-            onClick={() => setPage((current) => current - 1)}
-          >
-            Anterior
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage((current) => current + 1)}
-          >
-            Próxima
-          </button>
+      {consulta.data && (
+        <div className="pagination">
+          <span>
+            Página {page} de {totalPages}
+          </span>
+          <div className="table__actions">
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Próxima
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

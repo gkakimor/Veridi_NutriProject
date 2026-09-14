@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { ProductionProfileSummaryDTO } from "@veridi/shared";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { createProductionProfile, listProductionProfiles } from "../../lib/production-profiles-api";
 import { apiErrorMessage } from "../../lib/api-errors";
+import { useFilteredPage, useListQuery } from "../../lib/list-query";
 import { formatQuantity } from "../../lib/quantity";
 import { formatDate } from "../../lib/dates";
 import { useAuth } from "../../app/AuthProvider";
@@ -27,47 +29,41 @@ export function ProductionProfilesPage() {
   const { user } = useAuth();
   const canEdit = user?.role === "ADMIN" || user?.role === "PRODUCTION";
 
-  const [profiles, setProfiles] = useState<ProductionProfileSummaryDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [saving, setSaving] = useState(false);
+  /* A falha de criar é da ação, não da lista: não some quando a lista recarrega. */
+  const [erroAoCriar, setErroAoCriar] = useState<string | null>(null);
 
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput.trim()), 300);
     return () => clearTimeout(handle);
   }, [searchInput]);
-  useEffect(() => setPage(1), [search]);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    listProductionProfiles({ page, pageSize: PAGE_SIZE, ...(search ? { search } : {}) })
-      .then((result) => {
-        setProfiles(result.profiles);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) => setError(apiErrorMessage(err, "Falha ao carregar os roteiros")))
-      .finally(() => setLoading(false));
-  }, [page, search]);
+  /* Busca nova é página 1 no mesmo render — uma consulta por troca (LISTS-LOADING-STALE-DATA-02). */
+  const filtrosDaConsulta = search ? { search } : {};
+  const [page, setPage] = useFilteredPage(filtrosDaConsulta);
 
-  useEffect(() => reload(), [reload]);
+  const consulta = useListQuery(
+    listProductionProfiles,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { fallbackError: "Falha ao carregar os roteiros" },
+  );
+  const profiles: ProductionProfileSummaryDTO[] = consulta.data?.profiles ?? [];
+  const total = consulta.data?.total ?? 0;
 
   async function handleCreate() {
     const nome = newName.trim();
     if (!nome) return;
     setSaving(true);
-    setError(null);
+    setErroAoCriar(null);
     try {
       const perfil = await createProductionProfile({ name: nome });
       navigate(`/planejamento/perfis-producao/${perfil.id}`);
     } catch (err) {
-      setError(apiErrorMessage(err, "Falha ao criar o roteiro"));
+      setErroAoCriar(apiErrorMessage(err, "Falha ao criar o roteiro"));
     } finally {
       setSaving(false);
     }
@@ -133,13 +129,18 @@ export function ProductionProfilesPage() {
         />
       </div>
 
-      {error && (
+      {erroAoCriar && (
         <p className="form-alert" role="alert">
-          {error}
+          {erroAoCriar}
+        </p>
+      )}
+      {consulta.error && (
+        <p className="form-alert" role="alert">
+          {consulta.error}
         </p>
       )}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table">
           <thead>
             <tr>
@@ -189,24 +190,22 @@ export function ProductionProfilesPage() {
                 </td>
               </tr>
             ))}
-            {!loading && profiles.length === 0 && (
-              <tr>
-                <td colSpan={8} className="table__empty">
-                  {search
-                    ? "Nenhum roteiro encontrado para esta busca."
-                    : "Nenhum Roteiro de Produção ainda. Crie o primeiro."}
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={8} query={consulta} rowCount={profiles.length}>
+              {search
+                ? "Nenhum roteiro encontrado para esta busca."
+                : "Nenhum Roteiro de Produção ainda. Crie o primeiro."}
+            </ListStatusRow>
           </tbody>
         </table>
       </div>
 
-      <LibraryPagination
-        page={page}
-        totalPages={Math.max(1, Math.ceil(total / PAGE_SIZE))}
-        onChange={setPage}
-      />
+      {consulta.data && (
+        <LibraryPagination
+          page={page}
+          totalPages={Math.max(1, Math.ceil(total / PAGE_SIZE))}
+          onChange={setPage}
+        />
+      )}
     </>
   );
 }

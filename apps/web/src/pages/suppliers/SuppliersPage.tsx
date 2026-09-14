@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import type { SupplierDTO } from "@veridi/shared";
 import { formatBrPhone } from "@veridi/shared";
 import { formatCnpj } from "@veridi/shared";
+import { useFilteredPage, useListQuery } from "../../lib/list-query";
+import type { ListSuppliersParams } from "../../lib/suppliers-api";
 import { listSuppliers, setSupplierActive } from "../../lib/suppliers-api";
 import { SupplierFormModal } from "./SupplierFormModal";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -32,12 +35,6 @@ const PAGE_SIZE = 20;
 
 /** Cadastros → Fornecedores. Mesmo padrao de tabela densa + modal de Items. */
 export function SuppliersPage() {
-  const [suppliers, setSuppliers] = useState<SupplierDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
@@ -55,10 +52,6 @@ export function SuppliersPage() {
     return () => clearTimeout(handle);
   }, [searchInput]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [search, activeFilter, contextKey]);
-
   // Filtro antigo somado ao contexto esconderia o próprio registro citado.
   useEffect(() => {
     if (!contextKey) return;
@@ -67,29 +60,25 @@ export function SuppliersPage() {
     setActiveFilter("all");
   }, [contextKey]);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
+  const filtrosDaConsulta = useMemo(() => {
+    const filtros: Omit<ListSuppliersParams, "page" | "pageSize"> = {};
+    if (contextKey) filtros.ids = contextKey.split(",").filter(Boolean);
+    if (search) filtros.search = search;
+    if (activeFilter !== "all") filtros.active = activeFilter === "active";
+    return filtros;
+  }, [contextKey, search, activeFilter]);
 
-    const params: Parameters<typeof listSuppliers>[0] = { page, pageSize: PAGE_SIZE };
-    if (contextIds) params.ids = contextIds;
-    if (search) params.search = search;
-    if (activeFilter !== "all") params.active = activeFilter === "active";
+  /* Filtro novo é página 1 no mesmo render — uma consulta por troca (LISTS-LOADING-STALE-DATA-02). */
+  const [page, setPage] = useFilteredPage(filtrosDaConsulta);
 
-    listSuppliers(params)
-      .then((result) => {
-        setSuppliers(result.suppliers);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Falha ao carregar fornecedores");
-      })
-      .finally(() => setLoading(false));
-  }, [page, search, activeFilter, contextKey]);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  const consulta = useListQuery(
+    listSuppliers,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { fallbackError: "Falha ao carregar fornecedores" },
+  );
+  const suppliers: SupplierDTO[] = consulta.data?.suppliers ?? [];
+  const total = consulta.data?.total ?? 0;
+  const reload = consulta.reload;
 
   useOpenRecord(openId, suppliers, (supplier) => setModalState({ mode: "edit", supplier }));
 
@@ -164,7 +153,7 @@ export function SuppliersPage() {
         </select>
       </div>
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
       {contextIds && (
         <RecordContextChip
@@ -175,7 +164,7 @@ export function SuppliersPage() {
         />
       )}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
@@ -248,43 +237,43 @@ export function SuppliersPage() {
               </tr>
             ))}
 
-            {!loading && suppliers.length === 0 && (
-              <tr>
-                <td colSpan={7} className="table__empty">
-                  Nenhum fornecedor encontrado.
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={7} query={consulta} rowCount={suppliers.length}>
+              Nenhum fornecedor encontrado.
+            </ListStatusRow>
           </tbody>
         </table>
-        <div className="table-foot">
-          {total} {total === 1 ? "fornecedor" : "fornecedores"}
-        </div>
+        {consulta.data && (
+          <div className="table-foot">
+            {total} {total === 1 ? "fornecedor" : "fornecedores"}
+          </div>
+        )}
       </div>
 
-      <div className="pagination">
-        <span>
-          Página {page} de {totalPages}
-        </span>
-        <div className="table__actions">
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page <= 1}
-            onClick={() => setPage((current) => current - 1)}
-          >
-            Anterior
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage((current) => current + 1)}
-          >
-            Próxima
-          </button>
+      {consulta.data && (
+        <div className="pagination">
+          <span>
+            Página {page} de {totalPages}
+          </span>
+          <div className="table__actions">
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Próxima
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {modalState.mode !== "closed" && (
         <SupplierFormModal

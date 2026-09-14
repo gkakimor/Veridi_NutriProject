@@ -3,6 +3,9 @@ import type { ScopedList } from "./useScopedList";
 /**
  * Contagem que fecha a tabela. Fica DENTRO de `.table-container`, como nas
  * listas operacionais — é a borda de baixo do quadro, não uma barra solta.
+ *
+ * Só com a resposta do cliente atual: antes dela, "0 projetos" seria uma
+ * resposta que o servidor ainda não deu (LISTS-LOADING-STALE-DATA-02).
  */
 export function ConsultationCount<T>({
   list,
@@ -13,6 +16,7 @@ export function ConsultationCount<T>({
   noun: string;
   pluralNoun: string;
 }) {
+  if (!list.data) return null;
   return (
     <div className="table-foot">
       {list.total} {list.total === 1 ? noun : pluralNoun}
@@ -22,6 +26,7 @@ export function ConsultationCount<T>({
 
 /** Paginação das listas da Consulta — mesmo desenho das listas operacionais. */
 export function ConsultationPager<T>({ list }: { list: ScopedList<T> }) {
+  if (!list.data) return null;
   return (
     <div className="pagination">
       <span>

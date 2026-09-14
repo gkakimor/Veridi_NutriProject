@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { PricingPolicySummaryDTO } from "@veridi/shared";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { createPricingPolicy, listPricingPolicies } from "../../lib/cost-pricing-templates-api";
+import { useFilteredPage, useListQuery } from "../../lib/list-query";
 import { formatDate } from "../../lib/dates";
 import { useAuth } from "../../app/AuthProvider";
 import { ContextHelp } from "../../components/help";
@@ -23,51 +25,39 @@ export function PricingPoliciesPage() {
   const { user } = useAuth();
   const canEdit = user?.role === "ADMIN" || user?.role === "COMMERCIAL";
 
-  const [policies, setPolicies] = useState<PricingPolicySummaryDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
+  /* A falha de criar é da ação, não da lista: não some quando a lista recarrega. */
+  const [erroAoCriar, setErroAoCriar] = useState<string | null>(null);
 
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput), 300);
     return () => clearTimeout(handle);
   }, [searchInput]);
-  useEffect(() => setPage(1), [search, showArchived]);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    listPricingPolicies({
-      page,
-      pageSize: PAGE_SIZE,
-      ...(search ? { search } : {}),
-      ...(showArchived ? { archived: true } : {}),
-    })
-      .then((result) => {
-        setPolicies(result.policies);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Falha ao carregar as políticas"),
-      )
-      .finally(() => setLoading(false));
-  }, [page, search, showArchived]);
+  /* Recorte novo é página 1 no mesmo render — uma consulta por troca (LISTS-LOADING-STALE-DATA-02). */
+  const filtrosDaConsulta = { ...(search ? { search } : {}), ...(showArchived ? { archived: true } : {}) };
+  const [page, setPage] = useFilteredPage(filtrosDaConsulta);
 
-  useEffect(() => reload(), [reload]);
+  const consulta = useListQuery(
+    listPricingPolicies,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { fallbackError: "Falha ao carregar as políticas" },
+  );
+  const policies: PricingPolicySummaryDTO[] = consulta.data?.policies ?? [];
+  const total = consulta.data?.total ?? 0;
 
   async function handleCreate() {
     if (!newName.trim()) return;
+    setErroAoCriar(null);
     try {
       const policy = await createPricingPolicy({ name: newName.trim() });
       navigate(`/gestao/politicas-precificacao/${policy.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao criar a política");
+      setErroAoCriar(err instanceof Error ? err.message : "Falha ao criar a política");
     }
   }
 
@@ -134,9 +124,10 @@ export function PricingPoliciesPage() {
         onToggleArchived={setShowArchived}
       />
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {erroAoCriar && <p className="form-alert" role="alert">{erroAoCriar}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table">
           <thead>
             <tr>
@@ -185,24 +176,22 @@ export function PricingPoliciesPage() {
                 </td>
               </tr>
             ))}
-            {!loading && policies.length === 0 && (
-              <tr>
-                <td colSpan={7} className="table__empty">
-                  {search
-                    ? "Nenhuma política encontrada para esta busca."
-                    : "A biblioteca ainda está vazia. Crie uma política ou salve uma precificação existente como política."}
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={7} query={consulta} rowCount={policies.length}>
+              {search
+                ? "Nenhuma política encontrada para esta busca."
+                : "A biblioteca ainda está vazia. Crie uma política ou salve uma precificação existente como política."}
+            </ListStatusRow>
           </tbody>
         </table>
       </div>
 
-      <LibraryPagination
-        page={page}
-        totalPages={Math.max(1, Math.ceil(total / PAGE_SIZE))}
-        onChange={setPage}
-      />
+      {consulta.data && (
+        <LibraryPagination
+          page={page}
+          totalPages={Math.max(1, Math.ceil(total / PAGE_SIZE))}
+          onChange={setPage}
+        />
+      )}
     </>
   );
 }

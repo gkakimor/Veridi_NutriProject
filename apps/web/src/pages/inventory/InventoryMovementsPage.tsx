@@ -1,6 +1,7 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { InventoryMovementDTO, InventoryMovementType } from "@veridi/shared";
 import {
@@ -10,6 +11,7 @@ import {
 } from "@veridi/shared";
 import { useInitialFilters } from "../../lib/filter-params";
 import { listInventoryMovements } from "../../lib/inventory-api";
+import { useFilteredPage, useListQuery } from "../../lib/list-query";
 import { EntityLink } from "../../components/EntityLink";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
@@ -32,12 +34,6 @@ export function InventoryMovementsPage() {
   const [searchParams] = useSearchParams();
   const itemId = searchParams.get("itemId") ?? undefined;
 
-  const [movements, setMovements] = useState<InventoryMovementDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const urlFilter = useInitialFilters();
   const [searchInput, setSearchInput] = useState(urlFilter("search"));
   const [search, setSearch] = useState(urlFilter("search"));
@@ -48,46 +44,31 @@ export function InventoryMovementsPage() {
     return () => clearTimeout(handle);
   }, [searchInput]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [search, typeFilter, itemId]);
+  /* Filtro novo é página 1 no mesmo render — uma consulta por troca (LISTS-LOADING-STALE-DATA-02). */
+  const filtrosDaConsulta = {
+    ...(search ? { search } : {}),
+    ...(typeFilter !== "all" ? { type: typeFilter } : {}),
+    ...(itemId ? { itemId } : {}),
+  };
+  const [page, setPage] = useFilteredPage(filtrosDaConsulta);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
-
-    const params: Parameters<typeof listInventoryMovements>[0] = { page, pageSize: PAGE_SIZE };
-    if (search) params.search = search;
-    if (typeFilter !== "all") params.type = typeFilter;
-    if (itemId) params.itemId = itemId;
-
-    listInventoryMovements(params)
-      .then((result) => {
-        setMovements(result.movements);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Falha ao carregar movimentações");
-        /*
-         * Consulta que falhou não deixa o resultado anterior na tela.
-         *
-         * Era exatamente este o sintoma da rodada adversarial: cinco tipos do
-         * filtro devolviam 400, a tabela anterior continuava exibida e o
-         * contador seguia com o número velho, então o operador lia um
-         * resultado que não correspondia ao filtro escolhido. Os 400 sumiram
-         * quando o schema passou a derivar da lista canônica, mas o padrão que
-         * transformava um erro em resultado errado continuava aqui, esperando
-         * a próxima falha para reaparecer.
-         */
-        setMovements([]);
-        setTotal(0);
-      })
-      .finally(() => setLoading(false));
-  }, [page, search, typeFilter, itemId]);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  /*
+   * Consulta que falhou não deixa o resultado anterior na tela.
+   *
+   * Era exatamente este o sintoma da rodada adversarial: cinco tipos do
+   * filtro devolviam 400, a tabela anterior continuava exibida e o
+   * contador seguia com o número velho, então o operador lia um
+   * resultado que não correspondia ao filtro escolhido. A falha já limpava
+   * a tabela; faltava o filtro novo carregando e a resposta fora de ordem,
+   * que `useListQuery` também não deixa virar tela.
+   */
+  const consulta = useListQuery(
+    listInventoryMovements,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { fallbackError: "Falha ao carregar movimentações" },
+  );
+  const movements: InventoryMovementDTO[] = consulta.data?.movements ?? [];
+  const total = consulta.data?.total ?? 0;
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -148,9 +129,9 @@ export function InventoryMovementsPage() {
         )}
       </div>
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table">
           <thead>
             <tr>
@@ -224,43 +205,43 @@ export function InventoryMovementsPage() {
               </tr>
             ))}
 
-            {!loading && movements.length === 0 && (
-              <tr>
-                <td colSpan={9} className="table__empty">
-                  Nenhuma movimentação encontrada.
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={9} query={consulta} rowCount={movements.length}>
+              Nenhuma movimentação encontrada.
+            </ListStatusRow>
           </tbody>
         </table>
-        <div className="table-foot">
-          {total} {total === 1 ? "movimentação" : "movimentações"}
-        </div>
+        {consulta.data && (
+          <div className="table-foot">
+            {total} {total === 1 ? "movimentação" : "movimentações"}
+          </div>
+        )}
       </div>
 
-      <div className="pagination">
-        <span>
-          Página {page} de {totalPages}
-        </span>
-        <div className="table__actions">
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page <= 1}
-            onClick={() => setPage((current) => current - 1)}
-          >
-            Anterior
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage((current) => current + 1)}
-          >
-            Próxima
-          </button>
+      {consulta.data && (
+        <div className="pagination">
+          <span>
+            Página {page} de {totalPages}
+          </span>
+          <div className="table__actions">
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Próxima
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

@@ -1,5 +1,5 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { ItemDTO, SupplierDTO, SupplierItemDTO, SupplierItemQualificationStatus } from "@veridi/shared";
 import {
@@ -11,9 +11,12 @@ import {
   SUPPLIER_OFFER_ELIGIBILITY_HINTS,
 } from "@veridi/shared";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { fornecedoresAtivosDaTela } from "../../lib/filter-sources";
 import { listItems } from "../../lib/items-api";
+import { useFilteredPage, useListQuery } from "../../lib/list-query";
+import type { ListSupplierItemsParams } from "../../lib/supplier-items-api";
 import { listSupplierItems } from "../../lib/supplier-items-api";
 import { useAuth } from "../../app/AuthProvider";
 import { useInitialFilters } from "../../lib/filter-params";
@@ -88,11 +91,6 @@ export function SupplierItemPriceCell({ row }: { row: SupplierItemDTO }) {
 /** Comercial → Compras → Item × Fornecedor. */
 export function SupplierItemsPage() {
   const { user } = useAuth();
-  const [rows, setRows] = useState<SupplierItemDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   /**
    * A relação nova mora na URL enquanto está aberta (`?nova=1`).
@@ -194,10 +192,6 @@ export function SupplierItemsPage() {
   }, [searchInput]);
 
   useEffect(() => {
-    setPage(1);
-  }, [search, qualificationStatus, supplierId, itemFamily, preferredOnly, activeOnly]);
-
-  useEffect(() => {
     fornecedoresAtivos
       .primeiraPagina()
       .then(setSuppliers)
@@ -211,33 +205,29 @@ export function SupplierItemsPage() {
   const navigate = useNavigate();
   const contextParam = urlFilter("itemId");
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
+  const filtrosDaConsulta = useMemo(() => {
+    const filtros: Omit<ListSupplierItemsParams, "page" | "pageSize"> = {};
+    if (contextParam) filtros.itemId = contextParam;
+    if (search) filtros.search = search;
+    if (qualificationStatus !== "all") filtros.qualificationStatus = qualificationStatus;
+    if (supplierId) filtros.supplierId = supplierId;
+    if (itemFamily) filtros.itemFamily = itemFamily;
+    if (preferredOnly) filtros.preferred = true;
+    if (activeOnly) filtros.active = true;
+    return filtros;
+  }, [contextParam, search, qualificationStatus, supplierId, itemFamily, preferredOnly, activeOnly]);
 
-    const params: Parameters<typeof listSupplierItems>[0] = { page, pageSize: PAGE_SIZE };
-    if (contextParam) params.itemId = contextParam;
-    if (search) params.search = search;
-    if (qualificationStatus !== "all") params.qualificationStatus = qualificationStatus;
-    if (supplierId) params.supplierId = supplierId;
-    if (itemFamily) params.itemFamily = itemFamily;
-    if (preferredOnly) params.preferred = true;
-    if (activeOnly) params.active = true;
+  /* Filtro novo é página 1 no mesmo render — uma consulta por troca (LISTS-LOADING-STALE-DATA-02). */
+  const [page, setPage] = useFilteredPage(filtrosDaConsulta);
 
-    listSupplierItems(params)
-      .then((result) => {
-        setRows(result.supplierItems);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Falha ao carregar relações"),
-      )
-      .finally(() => setLoading(false));
-  }, [page, search, qualificationStatus, supplierId, itemFamily, preferredOnly, activeOnly]);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  const consulta = useListQuery(
+    listSupplierItems,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { fallbackError: "Falha ao carregar relações" },
+  );
+  const rows: SupplierItemDTO[] = consulta.data?.supplierItems ?? [];
+  const total = consulta.data?.total ?? 0;
+  const reload = consulta.reload;
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -355,7 +345,7 @@ export function SupplierItemsPage() {
         )}
       </div>
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
       {contextParam && (
         <p className="context-chip">
@@ -370,7 +360,7 @@ export function SupplierItemsPage() {
         </p>
       )}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table table--clickable-rows">
           <thead>
             <tr>
@@ -448,38 +438,36 @@ export function SupplierItemsPage() {
               </tr>
             ))}
 
-            {!loading && rows.length === 0 && (
-              <tr>
-                <td colSpan={9} className="table__empty">
-                  Nenhuma relação item × fornecedor encontrada.
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={9} query={consulta} rowCount={rows.length}>
+              Nenhuma relação item × fornecedor encontrada.
+            </ListStatusRow>
           </tbody>
         </table>
       </div>
 
-      <div className="pagination">
-        <button
-          type="button"
-          className="btn btn--ghost btn--sm"
-          disabled={page <= 1}
-          onClick={() => setPage((current) => Math.max(1, current - 1))}
-        >
-          Anterior
-        </button>
-        <span className="pagination__info">
-          Página {page} de {totalPages} — {total} relação(ões)
-        </span>
-        <button
-          type="button"
-          className="btn btn--ghost btn--sm"
-          disabled={page >= totalPages}
-          onClick={() => setPage((current) => current + 1)}
-        >
-          Próxima
-        </button>
-      </div>
+      {consulta.data && (
+        <div className="pagination">
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            disabled={page <= 1}
+            onClick={() => setPage(Math.max(1, page - 1))}
+          >
+            Anterior
+          </button>
+          <span className="pagination__info">
+            Página {page} de {totalPages} — {total} relação(ões)
+          </span>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            disabled={page >= totalPages}
+            onClick={() => setPage(page + 1)}
+          >
+            Próxima
+          </button>
+        </div>
+      )}
 
       {createOpen && (
         <SupplierItemFormModal

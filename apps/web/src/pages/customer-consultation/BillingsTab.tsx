@@ -6,6 +6,7 @@ import { BILLING_STATUS_LABELS } from "@veridi/shared";
 import { listBillings } from "../../lib/billings-api";
 import { formatDate } from "../../lib/dates";
 import { formatBRL } from "../../lib/currency";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { ConsultationTrail, consultationPath, useConsultationContext } from "./ConsultationShell";
 import { ConsultationCount, ConsultationPager } from "./ConsultationPager";
 import { useScopedList } from "./useScopedList";
@@ -44,7 +45,7 @@ export function BillingsTab() {
 
       {list.error && <p className="form-alert" role="alert">{list.error}</p>}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={list.loading || undefined}>
         <table className="table table--clickable-rows">
           <thead>
             <tr>
@@ -101,13 +102,9 @@ export function BillingsTab() {
               </tr>
             ))}
 
-            {!list.loading && list.rows.length === 0 && (
-              <tr>
-                <td colSpan={6} className="table__empty">
-                  Nenhum faturamento encontrado para este cliente.
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={6} query={list} rowCount={list.rows.length}>
+              Nenhum faturamento encontrado para este cliente.
+            </ListStatusRow>
           </tbody>
         </table>
         <ConsultationCount list={list} noun="faturamento" pluralNoun="faturamentos" />

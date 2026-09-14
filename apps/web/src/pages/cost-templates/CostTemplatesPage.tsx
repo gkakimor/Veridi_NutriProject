@@ -1,8 +1,10 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { CostTemplateSummaryDTO } from "@veridi/shared";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { createCostTemplate, listCostTemplates } from "../../lib/cost-pricing-templates-api";
+import { useFilteredPage, useListQuery } from "../../lib/list-query";
 import { formatDate } from "../../lib/dates";
 import { useAuth } from "../../app/AuthProvider";
 import { ContextHelp } from "../../components/help";
@@ -24,51 +26,39 @@ export function CostTemplatesPage() {
   const { user } = useAuth();
   const canEdit = user?.role === "ADMIN" || user?.role === "PRODUCTION";
 
-  const [templates, setTemplates] = useState<CostTemplateSummaryDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
+  /* A falha de criar é da ação, não da lista: não some quando a lista recarrega. */
+  const [erroAoCriar, setErroAoCriar] = useState<string | null>(null);
 
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput), 300);
     return () => clearTimeout(handle);
   }, [searchInput]);
-  useEffect(() => setPage(1), [search, showArchived]);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    listCostTemplates({
-      page,
-      pageSize: PAGE_SIZE,
-      ...(search ? { search } : {}),
-      ...(showArchived ? { archived: true } : {}),
-    })
-      .then((result) => {
-        setTemplates(result.templates);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Falha ao carregar os templates"),
-      )
-      .finally(() => setLoading(false));
-  }, [page, search, showArchived]);
+  /* Recorte novo é página 1 no mesmo render — uma consulta por troca (LISTS-LOADING-STALE-DATA-02). */
+  const filtrosDaConsulta = { ...(search ? { search } : {}), ...(showArchived ? { archived: true } : {}) };
+  const [page, setPage] = useFilteredPage(filtrosDaConsulta);
 
-  useEffect(() => reload(), [reload]);
+  const consulta = useListQuery(
+    listCostTemplates,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { fallbackError: "Falha ao carregar os templates" },
+  );
+  const templates: CostTemplateSummaryDTO[] = consulta.data?.templates ?? [];
+  const total = consulta.data?.total ?? 0;
 
   async function handleCreate() {
     if (!newName.trim()) return;
+    setErroAoCriar(null);
     try {
       const template = await createCostTemplate({ name: newName.trim() });
       navigate(`/gestao/templates-estrutura/${template.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao criar o template");
+      setErroAoCriar(err instanceof Error ? err.message : "Falha ao criar o template");
     }
   }
 
@@ -135,9 +125,10 @@ export function CostTemplatesPage() {
         onToggleArchived={setShowArchived}
       />
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {erroAoCriar && <p className="form-alert" role="alert">{erroAoCriar}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table">
           <thead>
             <tr>
@@ -198,24 +189,22 @@ export function CostTemplatesPage() {
                 </td>
               </tr>
             ))}
-            {!loading && templates.length === 0 && (
-              <tr>
-                <td colSpan={8} className="table__empty">
-                  {search
-                    ? "Nenhum template encontrado para esta busca."
-                    : "A biblioteca ainda está vazia. Crie um template ou salve uma estrutura existente como template."}
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={8} query={consulta} rowCount={templates.length}>
+              {search
+                ? "Nenhum template encontrado para esta busca."
+                : "A biblioteca ainda está vazia. Crie um template ou salve uma estrutura existente como template."}
+            </ListStatusRow>
           </tbody>
         </table>
       </div>
 
-      <LibraryPagination
-        page={page}
-        totalPages={Math.max(1, Math.ceil(total / PAGE_SIZE))}
-        onChange={setPage}
-      />
+      {consulta.data && (
+        <LibraryPagination
+          page={page}
+          totalPages={Math.max(1, Math.ceil(total / PAGE_SIZE))}
+          onChange={setPage}
+        />
+      )}
     </>
   );
 }
