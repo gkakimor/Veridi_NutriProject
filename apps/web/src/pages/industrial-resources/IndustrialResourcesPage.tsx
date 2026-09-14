@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { EntityLink } from "../../components/EntityLink";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import type { IndustrialResourceDTO, IndustrialResourceType } from "@veridi/shared";
 import {
   INDUSTRIAL_RATE_UOM_LABELS,
@@ -10,6 +11,7 @@ import {
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useAuth } from "../../app/AuthProvider";
 import { listIndustrialResources } from "../../lib/industrial-resources-api";
+import { useFilteredPage, useListQuery } from "../../lib/list-query";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
@@ -36,12 +38,6 @@ export function IndustrialResourcesPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [resources, setResources] = useState<IndustrialResourceDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
@@ -54,33 +50,21 @@ export function IndustrialResourcesPage() {
     return () => clearTimeout(handle);
   }, [searchInput]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [search, typeFilter, activeFilter]);
+  /* Filtro novo é página 1 no mesmo render — uma consulta por troca (LISTS-LOADING-STALE-DATA-02). */
+  const filtrosDaConsulta = {
+    ...(search ? { search } : {}),
+    ...(typeFilter !== "all" ? { type: typeFilter } : {}),
+    ...(activeFilter !== "all" ? { active: activeFilter === "active" } : {}),
+  };
+  const [page, setPage] = useFilteredPage(filtrosDaConsulta);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
-
-    const params: Parameters<typeof listIndustrialResources>[0] = { page, pageSize: PAGE_SIZE };
-    if (search) params.search = search;
-    if (typeFilter !== "all") params.type = typeFilter;
-    if (activeFilter !== "all") params.active = activeFilter === "active";
-
-    listIndustrialResources(params)
-      .then((result) => {
-        setResources(result.resources);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Falha ao carregar recursos industriais"),
-      )
-      .finally(() => setLoading(false));
-  }, [page, search, typeFilter, activeFilter]);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  const consulta = useListQuery(
+    listIndustrialResources,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { fallbackError: "Falha ao carregar recursos industriais" },
+  );
+  const resources: IndustrialResourceDTO[] = consulta.data?.resources ?? [];
+  const total = consulta.data?.total ?? 0;
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -161,9 +145,9 @@ export function IndustrialResourcesPage() {
         </select>
       </div>
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table table--clickable-rows">
           <thead>
             <tr>
@@ -224,43 +208,43 @@ export function IndustrialResourcesPage() {
               </tr>
             ))}
 
-            {!loading && resources.length === 0 && (
-              <tr>
-                <td colSpan={7} className="table__empty">
-                  Nenhum recurso industrial encontrado.
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={7} query={consulta} rowCount={resources.length}>
+              Nenhum recurso industrial encontrado.
+            </ListStatusRow>
           </tbody>
         </table>
-        <div className="table-foot">
-          {total} {total === 1 ? "recurso" : "recursos"}
-        </div>
+        {consulta.data && (
+          <div className="table-foot">
+            {total} {total === 1 ? "recurso" : "recursos"}
+          </div>
+        )}
       </div>
 
-      <div className="pagination">
-        <span>
-          Página {page} de {totalPages}
-        </span>
-        <div className="table__actions">
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page <= 1}
-            onClick={() => setPage((current) => current - 1)}
-          >
-            Anterior
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage((current) => current + 1)}
-          >
-            Próxima
-          </button>
+      {consulta.data && (
+        <div className="pagination">
+          <span>
+            Página {page} de {totalPages}
+          </span>
+          <div className="table__actions">
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Próxima
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
     </>
   );

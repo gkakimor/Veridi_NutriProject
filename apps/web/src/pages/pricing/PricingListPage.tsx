@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { PricingVersionSummaryDTO } from "@veridi/shared";
 import {
@@ -6,7 +6,9 @@ import {
   PRICING_VERSION_STATUS_LABELS,
 } from "@veridi/shared";
 import { listPricingVersions } from "../../lib/pricing-api";
+import { useFilteredPage, useListQuery } from "../../lib/list-query";
 import { EntityLink } from "../../components/EntityLink";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { RecordContextChip } from "../../components/RecordContext";
 import { formatDate } from "../../lib/dates";
 import { ContextHelp } from "../../components/help";
@@ -29,11 +31,6 @@ function statusBadgeClass(status: string): string {
  */
 export function PricingListPage() {
   const navigate = useNavigate();
-  const [rows, setRows] = useState<PricingVersionSummaryDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   // Chegada pelas telas do produto: a lista abre já reduzida a ele. Sem isto
   // o link prometia contexto e entregava a lista inteira.
@@ -50,10 +47,6 @@ export function PricingListPage() {
     return () => clearTimeout(handle);
   }, [searchInput]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [search, status, quality, contextProductId]);
-
   // Filtro antigo somado ao contexto esconderia a própria precificação citada.
   useEffect(() => {
     if (!contextProductId) return;
@@ -63,30 +56,22 @@ export function PricingListPage() {
     setQuality("");
   }, [contextProductId]);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    listPricingVersions({
-      page,
-      pageSize: PAGE_SIZE,
-      ...(contextProductId ? { productId: contextProductId } : {}),
-      ...(search ? { search } : {}),
-      ...(status ? { status } : {}),
-      ...(quality ? { quality } : {}),
-    })
-      .then((result) => {
-        setRows(result.pricingVersions);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Falha ao carregar precificações"),
-      )
-      .finally(() => setLoading(false));
-  }, [page, search, status, quality, contextProductId]);
+  /* Filtro novo é página 1 no mesmo render — uma consulta por troca (LISTS-LOADING-STALE-DATA-02). */
+  const filtrosDaConsulta = {
+    ...(contextProductId ? { productId: contextProductId } : {}),
+    ...(search ? { search } : {}),
+    ...(status ? { status } : {}),
+    ...(quality ? { quality } : {}),
+  };
+  const [page, setPage] = useFilteredPage(filtrosDaConsulta);
 
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  const consulta = useListQuery(
+    listPricingVersions,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { fallbackError: "Falha ao carregar precificações" },
+  );
+  const rows: PricingVersionSummaryDTO[] = consulta.data?.pricingVersions ?? [];
+  const total = consulta.data?.total ?? 0;
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -148,7 +133,7 @@ export function PricingListPage() {
         </select>
       </div>
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
       {contextProductId && (
         <RecordContextChip
@@ -159,7 +144,7 @@ export function PricingListPage() {
         />
       )}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table table--clickable-rows table--sticky-actions">
           <thead>
             <tr>
@@ -207,56 +192,56 @@ export function PricingListPage() {
                 </td>
               </tr>
             ))}
-            {!loading && rows.length === 0 && (
-              <tr>
-                <td colSpan={10} className="table__empty">
-                  {/* Lista vazia sem caminho é beco sem saída: precificação
-                      não nasce aqui, nasce de um cálculo de custo salvo. Quem
-                      chegou por um produto específico recebe o link direto. */}
-                  Nenhuma precificação encontrada. Uma precificação nasce de um{" "}
-                  <strong>cálculo de custo salvo</strong>, na estrutura de custos do produto.
-                  {contextProductId && (
-                    <>
-                      {" "}
-                      <Link to={`/produtos/${contextProductId}/custos`}>
-                        Abrir a estrutura de custos deste produto
-                      </Link>
-                      .
-                    </>
-                  )}
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={10} query={consulta} rowCount={rows.length}>
+              {/* Lista vazia sem caminho é beco sem saída: precificação
+                  não nasce aqui, nasce de um cálculo de custo salvo. Quem
+                  chegou por um produto específico recebe o link direto. */}
+              Nenhuma precificação encontrada. Uma precificação nasce de um{" "}
+              <strong>cálculo de custo salvo</strong>, na estrutura de custos do produto.
+              {contextProductId && (
+                <>
+                  {" "}
+                  <Link to={`/produtos/${contextProductId}/custos`}>
+                    Abrir a estrutura de custos deste produto
+                  </Link>
+                  .
+                </>
+              )}
+            </ListStatusRow>
           </tbody>
         </table>
-        <div className="table-foot">
-          {total} {total === 1 ? "precificação" : "precificações"}
-        </div>
+        {consulta.data && (
+          <div className="table-foot">
+            {total} {total === 1 ? "precificação" : "precificações"}
+          </div>
+        )}
       </div>
 
-      <div className="pagination">
-        <span>
-          Página {page} de {totalPages}
-        </span>
-        <div className="table__actions">
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page <= 1}
-            onClick={() => setPage((current) => current - 1)}
-          >
-            Anterior
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage((current) => current + 1)}
-          >
-            Próxima
-          </button>
+      {consulta.data && (
+        <div className="pagination">
+          <span>
+            Página {page} de {totalPages}
+          </span>
+          <div className="table__actions">
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Próxima
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

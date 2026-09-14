@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import type { ProductDTO } from "@veridi/shared";
 import { PRESENTATION_TYPE_LABELS } from "@veridi/shared";
 import { listProducts } from "../../lib/products-api";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { ConsultationTrail, consultationPath, useConsultationContext } from "./ConsultationShell";
 import { ConsultationCount, ConsultationPager } from "./ConsultationPager";
 import { useScopedList } from "./useScopedList";
@@ -41,7 +42,7 @@ export function ProductsTab() {
 
       {list.error && <p className="form-alert" role="alert">{list.error}</p>}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={list.loading || undefined}>
         <table className="table table--clickable-rows">
           <thead>
             <tr>
@@ -86,13 +87,9 @@ export function ProductsTab() {
               </tr>
             ))}
 
-            {!list.loading && list.rows.length === 0 && (
-              <tr>
-                <td colSpan={5} className="table__empty">
-                  Nenhum produto encontrado para este cliente.
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={5} query={list} rowCount={list.rows.length}>
+              Nenhum produto encontrado para este cliente.
+            </ListStatusRow>
           </tbody>
         </table>
         <ConsultationCount list={list} noun="produto" pluralNoun="produtos" />

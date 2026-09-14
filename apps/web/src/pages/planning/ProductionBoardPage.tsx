@@ -1,10 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import type {
-  ProductionBoardOrderDTO,
-  ProductionBoardResponse,
-  ProductionBoardView,
-} from "@veridi/shared";
+import type { ProductionBoardOrderDTO, ProductionBoardView } from "@veridi/shared";
 import {
   AVISO_DE_AGENDA_LABELS,
   DIAS_DA_SEMANA,
@@ -20,7 +16,7 @@ import { ClearFilters } from "../../components/filters/ClearFilters";
 import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { useAuth } from "../../app/AuthProvider";
 import { useListFilters } from "../../lib/list-filters";
-import { apiErrorMessage } from "../../lib/api-errors";
+import { useListQuery } from "../../lib/list-query";
 import { formatDate, formatDateTime } from "../../lib/dates";
 import { formatMinutes } from "../../lib/duration";
 import { formatQuantity } from "../../lib/quantity";
@@ -101,18 +97,23 @@ export function ProductionBoardPage() {
     [filtros.values.dia, visao],
   );
 
-  const [quadro, setQuadro] = useState<ProductionBoardResponse | null>(null);
-  const [carregando, setCarregando] = useState(true);
-  const [erro, setErro] = useState<string | null>(null);
   const [feito, setFeito] = useState<string | null>(null);
   const [programando, setProgramando] = useState<ProductionBoardOrderDTO | null>(null);
   const [rotuloProduto, setRotuloProduto] = useState<string | null>(null);
   const [rotuloRecurso, setRotuloRecurso] = useState<string | null>(null);
 
-  const recarregar = useCallback(() => {
-    setCarregando(true);
-    setErro(null);
-    getProductionBoard({
+  /*
+   * O quadro é do recorte que o pediu (LISTS-LOADING-STALE-DATA-02). Guardado
+   * em `useState` solto, o quadro do período ou filtro anterior voltava à
+   * vista quando a consulta nova falhava — debaixo do alerta — e a resposta
+   * que chegasse por último virava a tela, mesmo de um recorte já trocado. O
+   * aviso de calendário também era o do quadro anterior enquanto o novo
+   * carregava. Não é lista paginada, mas a pergunta é a mesma: a resposta
+   * pertence à chave da consulta.
+   */
+  const consulta = useListQuery(
+    getProductionBoard,
+    {
       from: periodo.from,
       to: periodo.to,
       view: visao,
@@ -121,20 +122,14 @@ export function ProductionBoardPage() {
       ...(filtros.values.industrialResourceId
         ? { industrialResourceId: filtros.values.industrialResourceId }
         : {}),
-    })
-      .then(setQuadro)
-      .catch((err: unknown) => setErro(apiErrorMessage(err, "Falha ao carregar o planejamento")))
-      .finally(() => setCarregando(false));
-  }, [
-    periodo.from,
-    periodo.to,
-    visao,
-    filtros.values.status,
-    filtros.values.productId,
-    filtros.values.industrialResourceId,
-  ]);
-
-  useEffect(() => recarregar(), [recarregar]);
+    },
+    { fallbackError: "Falha ao carregar o planejamento" },
+  );
+  const quadro = consulta.data;
+  /* Recarga depois de programar: o quadro some até a resposta nova, como antes. */
+  const carregando = consulta.loading;
+  const erro = consulta.error;
+  const recarregar = consulta.reload;
 
   const fonteDeProduto = useMemo(
     () => ({

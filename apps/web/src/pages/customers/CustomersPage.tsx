@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import type { CustomerCommercialStatus, CustomerDTO } from "@veridi/shared";
 import {
   BR_STATE_CODES,
@@ -9,7 +10,9 @@ import {
   formatCnpj,
 } from "@veridi/shared";
 import { commercialStatusBadgeClass } from "./commercial-status-badge";
+import type { ListCustomersParams } from "../../lib/customers-api";
 import { listCustomers, setCustomerActive } from "../../lib/customers-api";
+import { useFilteredPage, useListQuery } from "../../lib/list-query";
 import { CustomerFormModal } from "./CustomerFormModal";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { RowActions } from "../../components/RowActions";
@@ -45,12 +48,6 @@ const PAGE_SIZE = 20;
 
 /** Cadastros → Clientes. Mesmo padrao de tabela densa + modal de Items. */
 export function CustomersPage() {
-  const [customers, setCustomers] = useState<CustomerDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState("");
@@ -87,10 +84,6 @@ export function CustomersPage() {
     return () => clearTimeout(handle);
   }, [searchInput]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [search, stateFilter, activeFilter, commercialFilter, contextKey]);
-
   // Filtro antigo somado ao contexto esconderia o próprio registro citado.
   useEffect(() => {
     if (!contextKey) return;
@@ -101,32 +94,28 @@ export function CustomersPage() {
     setCommercialFilter("ALL");
   }, [contextKey]);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
-
-    const params: Parameters<typeof listCustomers>[0] = { page, pageSize: PAGE_SIZE };
-    if (contextIds) params.ids = contextIds;
-    if (search) params.search = search;
-    if (stateFilter) params.state = stateFilter;
-    if (activeFilter !== "all") params.active = activeFilter === "active";
+  const filtrosDaConsulta = useMemo(() => {
+    const filtros: Omit<ListCustomersParams, "page" | "pageSize"> = {};
+    if (contextKey) filtros.ids = contextKey.split(",").filter(Boolean);
+    if (search) filtros.search = search;
+    if (stateFilter) filtros.state = stateFilter;
+    if (activeFilter !== "all") filtros.active = activeFilter === "active";
     // O contexto mostra o registro citado, seja qual for a situação dele.
-    if (commercialFilter !== "ALL" && !contextIds) params.commercialStatus = commercialFilter;
+    if (commercialFilter !== "ALL" && !contextKey) filtros.commercialStatus = commercialFilter;
+    return filtros;
+  }, [contextKey, search, stateFilter, activeFilter, commercialFilter]);
 
-    listCustomers(params)
-      .then((result) => {
-        setCustomers(result.customers);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Falha ao carregar clientes");
-      })
-      .finally(() => setLoading(false));
-  }, [page, search, stateFilter, activeFilter, commercialFilter, contextKey]);
+  /* Filtro novo é página 1 no mesmo render — uma consulta por troca (LISTS-LOADING-STALE-DATA-02). */
+  const [page, setPage] = useFilteredPage(filtrosDaConsulta);
 
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  const consulta = useListQuery(
+    listCustomers,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { fallbackError: "Falha ao carregar clientes" },
+  );
+  const customers: CustomerDTO[] = consulta.data?.customers ?? [];
+  const total = consulta.data?.total ?? 0;
+  const reload = consulta.reload;
 
   useOpenRecord(openId, customers, (customer) => setModalState({ mode: "edit", customer }));
 
@@ -241,7 +230,7 @@ export function CustomersPage() {
         </select>
       </div>
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
       {contextIds && (
         <RecordContextChip
@@ -252,7 +241,7 @@ export function CustomersPage() {
         />
       )}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
@@ -344,68 +333,68 @@ export function CustomersPage() {
               </tr>
             ))}
 
-            {!loading && customers.length === 0 && (
-              <tr>
-                <td colSpan={9} className="table__empty">
-                  {hasFilters ? (
-                    <>
-                      Nenhum cliente encontrado para os filtros atuais.{" "}
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm"
-                        onClick={clearFilters}
-                      >
-                        Limpar filtros
-                      </button>
-                    </>
-                  ) : commercialFilter !== "ALL" ? (
-                    <>
-                      Nenhum cliente com a situação comercial “
-                      {CUSTOMER_COMMERCIAL_STATUS_LABELS[commercialFilter]}”.{" "}
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm"
-                        onClick={() => setCommercialFilter("ALL")}
-                      >
-                        Ver todos
-                      </button>
-                    </>
-                  ) : (
-                    "Nenhum cliente cadastrado ainda. O cliente é a raiz de projeto, pedido e produto — comece por ele."
-                  )}
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={9} query={consulta} rowCount={customers.length}>
+              {hasFilters ? (
+                <>
+                  Nenhum cliente encontrado para os filtros atuais.{" "}
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={clearFilters}
+                  >
+                    Limpar filtros
+                  </button>
+                </>
+              ) : commercialFilter !== "ALL" ? (
+                <>
+                  Nenhum cliente com a situação comercial “
+                  {CUSTOMER_COMMERCIAL_STATUS_LABELS[commercialFilter]}”.{" "}
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => setCommercialFilter("ALL")}
+                  >
+                    Ver todos
+                  </button>
+                </>
+              ) : (
+                "Nenhum cliente cadastrado ainda. O cliente é a raiz de projeto, pedido e produto — comece por ele."
+              )}
+            </ListStatusRow>
           </tbody>
         </table>
-        <div className="table-foot">
-          {total} {total === 1 ? "cliente" : "clientes"}
-        </div>
+        {consulta.data && (
+          <div className="table-foot">
+            {total} {total === 1 ? "cliente" : "clientes"}
+          </div>
+        )}
       </div>
 
-      <div className="pagination">
-        <span>
-          Página {page} de {totalPages}
-        </span>
-        <div className="table__actions">
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page <= 1}
-            onClick={() => setPage((current) => current - 1)}
-          >
-            Anterior
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage((current) => current + 1)}
-          >
-            Próxima
-          </button>
+      {consulta.data && (
+        <div className="pagination">
+          <span>
+            Página {page} de {totalPages}
+          </span>
+          <div className="table__actions">
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Próxima
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {modalState.mode !== "closed" && (
         <CustomerFormModal

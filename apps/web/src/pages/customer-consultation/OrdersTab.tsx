@@ -4,6 +4,7 @@ import type { CustomerOrderDTO } from "@veridi/shared";
 import { CUSTOMER_ORDER_STATUS_LABELS } from "@veridi/shared";
 import { listCustomerOrders } from "../../lib/customer-orders-api";
 import { formatDate } from "../../lib/dates";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { ConsultationTrail, consultationPath, useConsultationContext } from "./ConsultationShell";
 import { ConsultationCount, ConsultationPager } from "./ConsultationPager";
 import { useScopedList } from "./useScopedList";
@@ -45,7 +46,7 @@ export function OrdersTab() {
 
       {list.error && <p className="form-alert" role="alert">{list.error}</p>}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={list.loading || undefined}>
         <table className="table table--clickable-rows">
           <thead>
             <tr>
@@ -86,13 +87,9 @@ export function OrdersTab() {
               </tr>
             ))}
 
-            {!list.loading && list.rows.length === 0 && (
-              <tr>
-                <td colSpan={5} className="table__empty">
-                  Nenhum pedido encontrado para este cliente.
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={5} query={list} rowCount={list.rows.length}>
+              Nenhum pedido encontrado para este cliente.
+            </ListStatusRow>
           </tbody>
         </table>
         <ConsultationCount list={list} noun="pedido" pluralNoun="pedidos" />

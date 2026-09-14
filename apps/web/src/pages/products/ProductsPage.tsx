@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { useNavigate } from "react-router-dom";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import type { ProductDTO } from "@veridi/shared";
 import { DOSAGE_FORM_LABELS, PRESENTATION_TYPE_LABELS } from "@veridi/shared";
+import { useFilteredPage, useListQuery } from "../../lib/list-query";
+import type { ListProductsParams } from "../../lib/products-api";
 import { listProducts, setProductActive } from "../../lib/products-api";
 import { clienteFilterSource } from "../../lib/filter-sources";
 import { ProductFormModal } from "./ProductFormModal";
@@ -32,11 +35,6 @@ const PAGE_SIZE = 20;
 /** Cadastros → Produtos Acabados. Mesmo padrao de tabela densa + modal de Items. */
 export function ProductsPage() {
   const navigate = useNavigate();
-  const [products, setProducts] = useState<ProductDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   /**
    * Link contextual conhece o produto: vem `productId`, não texto. Busca
@@ -51,7 +49,6 @@ export function ProductsPage() {
   const contextProductId = params.get("productId") ?? "";
   const [searchInput, setSearchInput] = useState(params.get("search") ?? "");
   const [search, setSearch] = useState(params.get("search") ?? "");
-  const [productContext, setProductContext] = useState<ProductDTO | null>(null);
   const [customerFilter, setCustomerFilter] = useState("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
   const [lifecycleFilter, setLifecycleFilter] = useState<LifecycleFilter>("all");
@@ -61,17 +58,39 @@ export function ProductsPage() {
   // Contexto exato substitui filtros incompatíveis: combinar o cliente da
   // visita anterior com o produto pedido agora daria lista vazia.
   useEffect(() => {
-    if (!contextProductId) {
-      setProductContext(null);
-      return;
-    }
+    if (!contextProductId) return;
     setSearchInput("");
     setSearch("");
     setCustomerFilter("");
     setActiveFilter("all");
     setLifecycleFilter("all");
-    setPage(1);
   }, [contextProductId]);
+
+  const filtrosDaConsulta = useMemo(() => {
+    const filtros: Omit<ListProductsParams, "page" | "pageSize"> = {};
+    if (contextProductId) filtros.productId = contextProductId;
+    if (search) filtros.search = search;
+    if (customerFilter) filtros.customerId = customerFilter;
+    if (activeFilter !== "all") filtros.active = activeFilter === "active";
+    if (lifecycleFilter !== "all") filtros.lifecycle = lifecycleFilter;
+    return filtros;
+  }, [contextProductId, search, customerFilter, activeFilter, lifecycleFilter]);
+
+  /* Filtro novo é página 1 no mesmo render — uma consulta por troca (LISTS-LOADING-STALE-DATA-02). */
+  const [page, setPage] = useFilteredPage(filtrosDaConsulta);
+
+  const consulta = useListQuery(
+    listProducts,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { fallbackError: "Falha ao carregar produtos" },
+  );
+  const products: ProductDTO[] = consulta.data?.products ?? [];
+  const total = consulta.data?.total ?? 0;
+  const reload = consulta.reload;
+  /* O produto do link sai da resposta do próprio recorte — nunca da de antes. */
+  const productContext = contextProductId
+    ? (products.find((row) => row.id === contextProductId) ?? null)
+    : null;
 
   // Quem clicou em "Abrir produto" quer o produto, não a lista dele.
   const openId = params.get("open");
@@ -89,10 +108,6 @@ export function ProductsPage() {
     return () => clearTimeout(handle);
   }, [searchInput]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [search, customerFilter, activeFilter, lifecycleFilter, contextProductId]);
-
   const hasFilters =
     searchInput !== "" ||
     search !== "" ||
@@ -107,35 +122,6 @@ export function ProductsPage() {
     setActiveFilter("all");
     setLifecycleFilter("all");
   }
-
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
-
-    const params: Parameters<typeof listProducts>[0] = { page, pageSize: PAGE_SIZE };
-    if (contextProductId) params.productId = contextProductId;
-    if (search) params.search = search;
-    if (customerFilter) params.customerId = customerFilter;
-    if (activeFilter !== "all") params.active = activeFilter === "active";
-    if (lifecycleFilter !== "all") params.lifecycle = lifecycleFilter;
-
-    listProducts(params)
-      .then((result) => {
-        if (contextProductId) {
-          setProductContext(result.products.find((row) => row.id === contextProductId) ?? null);
-        }
-        setProducts(result.products);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Falha ao carregar produtos");
-      })
-      .finally(() => setLoading(false));
-  }, [page, search, customerFilter, activeFilter, lifecycleFilter, contextProductId]);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
 
   function handleToggleActive(product: ProductDTO) {
     if (product.active) {
@@ -232,7 +218,7 @@ export function ProductsPage() {
         </select>
       </div>
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
       {contextProductId && (
         <p className="context-chip">
@@ -249,7 +235,7 @@ export function ProductsPage() {
         </p>
       )}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
@@ -372,56 +358,56 @@ export function ProductsPage() {
               </tr>
             ))}
 
-            {!loading && products.length === 0 && (
-              <tr>
-                <td colSpan={7} className="table__empty">
-                  {hasFilters ? (
-                    <>
-                      Nenhum produto encontrado para os filtros atuais.{" "}
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm"
-                        onClick={clearFilters}
-                      >
-                        Limpar filtros
-                      </button>
-                    </>
-                  ) : (
-                    "Nenhum produto cadastrado."
-                  )}
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={10} query={consulta} rowCount={products.length}>
+              {hasFilters ? (
+                <>
+                  Nenhum produto encontrado para os filtros atuais.{" "}
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={clearFilters}
+                  >
+                    Limpar filtros
+                  </button>
+                </>
+              ) : (
+                "Nenhum produto cadastrado."
+              )}
+            </ListStatusRow>
           </tbody>
         </table>
-        <div className="table-foot">
-          {total} {total === 1 ? "produto" : "produtos"}
-        </div>
+        {consulta.data && (
+          <div className="table-foot">
+            {total} {total === 1 ? "produto" : "produtos"}
+          </div>
+        )}
       </div>
 
-      <div className="pagination">
-        <span>
-          Página {page} de {totalPages}
-        </span>
-        <div className="table__actions">
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page <= 1}
-            onClick={() => setPage((current) => current - 1)}
-          >
-            Anterior
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage((current) => current + 1)}
-          >
-            Próxima
-          </button>
+      {consulta.data && (
+        <div className="pagination">
+          <span>
+            Página {page} de {totalPages}
+          </span>
+          <div className="table__actions">
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Próxima
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {modalState.mode !== "closed" && (
         <ProductFormModal

@@ -5,6 +5,7 @@ import type { CustomerProductionOrderRowDTO, ProductionOrderStatus } from "@veri
 import { PRODUCTION_ORDER_STATUS_LABELS } from "@veridi/shared";
 import { listConsultationProductionOrders } from "../../lib/customer-consultation-api";
 import { formatDate } from "../../lib/dates";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { ConsultationTrail, consultationPath, useConsultationContext } from "./ConsultationShell";
 import { ConsultationCount, ConsultationPager } from "./ConsultationPager";
 import { useScopedList } from "./useScopedList";
@@ -60,7 +61,7 @@ export function ProductionTab() {
 
       {list.error && <p className="form-alert" role="alert">{list.error}</p>}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={list.loading || undefined}>
         <table className="table table--clickable-rows">
           <thead>
             <tr>
@@ -138,17 +139,13 @@ export function ProductionTab() {
               </tr>
             ))}
 
-            {!list.loading && list.rows.length === 0 && (
-              <tr>
-                <td colSpan={7} className="table__empty">
-                  <div>Nenhuma ordem de produção encontrada para este cliente.</div>
-                  <small>
-                    Aqui só entram ordens que apontam para um cliente; o que a Veridi produz
-                    para o próprio estoque não tem cliente e fica de fora.
-                  </small>
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={7} query={list} rowCount={list.rows.length}>
+              <div>Nenhuma ordem de produção encontrada para este cliente.</div>
+              <small>
+                Aqui só entram ordens que apontam para um cliente; o que a Veridi produz
+                para o próprio estoque não tem cliente e fica de fora.
+              </small>
+            </ListStatusRow>
           </tbody>
         </table>
         <ConsultationCount list={list} noun="ordem" pluralNoun="ordens" />

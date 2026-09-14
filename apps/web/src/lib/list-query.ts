@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { apiErrorMessage } from "./api-errors";
 
 /**
  * Consulta de uma listagem paginada — resposta, carregando e erro
@@ -85,12 +86,12 @@ export function useListQuery<P extends object, T>(
       })
       .catch((err: unknown) => {
         if (!ativa) return;
-        setResposta({
-          key,
-          recarga,
-          data: null,
-          error: err instanceof Error ? err.message : fallbackError,
-        });
+        /*
+         * Recusa de validação vira a frase das issues, não "Erro de validação"
+         * (LISTS-LOADING-STALE-DATA-02): Roteiros e o Quadro de Produção já
+         * mostravam assim antes de usar esta consulta.
+         */
+        setResposta({ key, recarga, data: null, error: apiErrorMessage(err, fallbackError) });
       });
     /*
      * A consulta que deixou de ser a atual — outro filtro, outra página, a

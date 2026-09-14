@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { act, renderHook } from "@testing-library/react";
+import { ApiValidationError } from "./api-errors";
 import { useFilteredPage, useListQuery } from "./list-query";
 
 /**
@@ -132,6 +133,12 @@ describe("falha", () => {
     const { result } = montar({ params: { page: 1, pageSize: 20 } });
     await recusar(0, "sem Error");
     expect(result.current.error).toBe("Falha genérica");
+  });
+
+  it("recusa de validação diz as issues, não \"Erro de validação\" (LISTS-LOADING-STALE-DATA-02)", async () => {
+    const { result } = montar({ params: { status: "X", page: 1, pageSize: 20 } });
+    await recusar(0, new ApiValidationError([{ path: "status", message: "Situação inválida." }]));
+    expect(result.current).toMatchObject({ data: null, loading: false, error: "Situação inválida." });
   });
 });
 

@@ -1,11 +1,13 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { useNavigate } from "react-router-dom";
 import type { InventoryItemSummaryDTO, ItemType } from "@veridi/shared";
 import { INVENTORY_UNAVAILABLE_REASON_LABELS, ITEM_TYPES, ITEM_TYPE_LABELS } from "@veridi/shared";
 import { useInitialFilters } from "../../lib/filter-params";
 import { listInventory } from "../../lib/inventory-api";
+import { useFilteredPage, useListQuery } from "../../lib/list-query";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
@@ -35,12 +37,6 @@ const PAGE_SIZE = 20;
 export function InventoryOverviewPage() {
   const navigate = useNavigate();
 
-  const [items, setItems] = useState<InventoryItemSummaryDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const urlFilter = useInitialFilters();
   const [searchInput, setSearchInput] = useState(urlFilter("search"));
   const [search, setSearch] = useState(urlFilter("search"));
@@ -52,33 +48,21 @@ export function InventoryOverviewPage() {
     return () => clearTimeout(handle);
   }, [searchInput]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [search, typeFilter, onlyWithStock]);
+  /* Filtro novo é página 1 no mesmo render — uma consulta por troca (LISTS-LOADING-STALE-DATA-02). */
+  const filtrosDaConsulta = {
+    ...(search ? { search } : {}),
+    ...(typeFilter !== "all" ? { type: typeFilter } : {}),
+    ...(onlyWithStock ? { onlyWithStock: true } : {}),
+  };
+  const [page, setPage] = useFilteredPage(filtrosDaConsulta);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
-
-    const params: Parameters<typeof listInventory>[0] = { page, pageSize: PAGE_SIZE };
-    if (search) params.search = search;
-    if (typeFilter !== "all") params.type = typeFilter;
-    if (onlyWithStock) params.onlyWithStock = true;
-
-    listInventory(params)
-      .then((result) => {
-        setItems(result.items);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Falha ao carregar estoque");
-      })
-      .finally(() => setLoading(false));
-  }, [page, search, typeFilter, onlyWithStock]);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  const consulta = useListQuery(
+    listInventory,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { fallbackError: "Falha ao carregar estoque" },
+  );
+  const items: InventoryItemSummaryDTO[] = consulta.data?.items ?? [];
+  const total = consulta.data?.total ?? 0;
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -148,7 +132,7 @@ export function InventoryOverviewPage() {
         </label>
       </div>
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
       {/* Quem vem de planilha não tem por que adivinhar o que cada coluna
           significa — a definição fica ao lado da tabela, não escondida em
@@ -172,7 +156,7 @@ export function InventoryOverviewPage() {
         </div>
       </dl>
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table table--clickable-rows">
           <thead>
             <tr>
@@ -236,43 +220,43 @@ export function InventoryOverviewPage() {
               </tr>
             ))}
 
-            {!loading && items.length === 0 && (
-              <tr>
-                <td colSpan={8} className="table__empty">
-                  Nenhum item encontrado.
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={8} query={consulta} rowCount={items.length}>
+              Nenhum item encontrado.
+            </ListStatusRow>
           </tbody>
         </table>
-        <div className="table-foot">
-          {total} {total === 1 ? "item" : "itens"}
-        </div>
+        {consulta.data && (
+          <div className="table-foot">
+            {total} {total === 1 ? "item" : "itens"}
+          </div>
+        )}
       </div>
 
-      <div className="pagination">
-        <span>
-          Página {page} de {totalPages}
-        </span>
-        <div className="table__actions">
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page <= 1}
-            onClick={() => setPage((current) => current - 1)}
-          >
-            Anterior
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage((current) => current + 1)}
-          >
-            Próxima
-          </button>
+      {consulta.data && (
+        <div className="pagination">
+          <span>
+            Página {page} de {totalPages}
+          </span>
+          <div className="table__actions">
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Próxima
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import {
   SelectionBar,
   SelectionCell,
@@ -9,7 +10,9 @@ import {
 } from "../../components/TableSelection";
 import type { ItemDTO, ItemType, UnitOfMeasureDTO } from "@veridi/shared";
 import { ITEM_FAMILY_LABELS, ITEM_TYPE_LABELS } from "@veridi/shared";
+import type { ListItemsParams } from "../../lib/items-api";
 import { listItems, setItemActive } from "../../lib/items-api";
+import { useFilteredPage, useListQuery } from "../../lib/list-query";
 import { listUnits } from "../../lib/units-api";
 import { ItemFormModal } from "./ItemFormModal";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -41,12 +44,6 @@ const PAGE_SIZE = 20;
  * tabela densa + modal fullscreen para os proximos cadastros.
  */
 export function ItemsPage() {
-  const [items, setItems] = useState<ItemDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<ItemType | "">("");
@@ -58,20 +55,11 @@ export function ItemsPage() {
   const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
   const [modalState, setModalState] = useState<ModalState>({ mode: "closed" });
 
-  // Seleção existe aqui porque há ação real: exportar exatamente o que foi
-  // marcado. Trocar filtro/página limpa a seleção — ver TableSelection.
-  const selection = useTableSelection(items, `${search}|${typeFilter}|${activeFilter}|${page}`);
-  const [confirmDeactivate, setConfirmDeactivate] = useState<ItemDTO | null>(null);
-
   // Debounce da busca: evita 1 requisicao por tecla digitada.
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput), 300);
     return () => clearTimeout(handle);
   }, [searchInput]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, typeFilter, activeFilter, contextKey]);
 
   // Filtro antigo somado ao contexto esconderia o próprio registro citado.
   useEffect(() => {
@@ -82,35 +70,31 @@ export function ItemsPage() {
     setActiveFilter("all");
   }, [contextKey]);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
+  const filtrosDaConsulta = useMemo(() => {
+    const filtros: Omit<ListItemsParams, "page" | "pageSize"> = {};
+    if (contextKey) filtros.ids = contextKey.split(",").filter(Boolean);
+    if (search) filtros.search = search;
+    if (typeFilter) filtros.type = typeFilter;
+    if (activeFilter !== "all") filtros.active = activeFilter === "active";
+    return filtros;
+  }, [contextKey, search, typeFilter, activeFilter]);
 
-    const params: Parameters<typeof listItems>[0] = {
-      page,
-      pageSize: PAGE_SIZE,
-    };
-    if (contextIds) params.ids = contextIds;
-    if (search) params.search = search;
-    if (typeFilter) params.type = typeFilter;
-    if (activeFilter !== "all") params.active = activeFilter === "active";
+  /* Filtro novo é página 1 no mesmo render — uma consulta por troca (LISTS-LOADING-STALE-DATA-02). */
+  const [page, setPage] = useFilteredPage(filtrosDaConsulta);
 
-    listItems(params)
-      .then((result) => {
-        setItems(result.items);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) => {
-        setError(
-          err instanceof Error ? err.message : "Falha ao carregar itens",
-        );
-      })
-      .finally(() => setLoading(false));
-  }, [page, search, typeFilter, activeFilter, contextKey]);
+  const consulta = useListQuery(
+    listItems,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { fallbackError: "Falha ao carregar itens" },
+  );
+  const items: ItemDTO[] = consulta.data?.items ?? [];
+  const total = consulta.data?.total ?? 0;
+  const reload = consulta.reload;
 
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  // Seleção existe aqui porque há ação real: exportar exatamente o que foi
+  // marcado. Trocar filtro/página limpa a seleção — ver TableSelection.
+  const selection = useTableSelection(items, `${search}|${typeFilter}|${activeFilter}|${page}`);
+  const [confirmDeactivate, setConfirmDeactivate] = useState<ItemDTO | null>(null);
 
   useOpenRecord(openId, items, (item) => setModalState({ mode: "edit", item }));
 
@@ -214,7 +198,7 @@ export function ItemsPage() {
         </select>
       </div>
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
       {contextIds && (
         <RecordContextChip
@@ -233,7 +217,7 @@ export function ItemsPage() {
         />
       </SelectionBar>
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
@@ -336,43 +320,43 @@ export function ItemsPage() {
               </tr>
             ))}
 
-            {!loading && items.length === 0 && (
-              <tr>
-                <td colSpan={8} className="table__empty">
-                  Nenhum item encontrado.
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={11} query={consulta} rowCount={items.length}>
+              Nenhum item encontrado.
+            </ListStatusRow>
           </tbody>
         </table>
-        <div className="table-foot">
-          {total} {total === 1 ? "item" : "itens"}
-        </div>
+        {consulta.data && (
+          <div className="table-foot">
+            {total} {total === 1 ? "item" : "itens"}
+          </div>
+        )}
       </div>
 
-      <div className="pagination">
-        <span>
-          Página {page} de {totalPages}
-        </span>
-        <div className="table__actions">
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page <= 1}
-            onClick={() => setPage((current) => current - 1)}
-          >
-            Anterior
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage((current) => current + 1)}
-          >
-            Próxima
-          </button>
+      {consulta.data && (
+        <div className="pagination">
+          <span>
+            Página {page} de {totalPages}
+          </span>
+          <div className="table__actions">
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Próxima
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {modalState.mode !== "closed" && (
         <ItemFormModal
