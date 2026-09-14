@@ -206,16 +206,21 @@ beforeEach(() => {
   vi.clearAllMocks();
   sessionStorage.clear();
   listProductionProfiles.mockResolvedValue({ profiles: [], page: 1, pageSize: 20, total: 0 });
-  listIndustrialResources.mockResolvedValue({
-    resources: [
-      recursoDoCatalogo("op", "Mão de obra — Produção", "LABOR"),
-      recursoDoCatalogo("enc", "Encapsuladora", "EQUIPMENT"),
-      recursoDoCatalogo("en", "Energia elétrica", "ENERGY"),
-    ],
-    page: 1,
-    pageSize: 100,
-    total: 3,
-  });
+  // Servidor honesto: o filtro de tipo e de ativo é dele, e o Roteiro pergunta por tipo.
+  listIndustrialResources.mockImplementation(
+    async (params: { type?: string; active?: boolean; pageSize?: number } = {}) => {
+      const resources = [
+        recursoDoCatalogo("op", "Mão de obra — Produção", "LABOR"),
+        recursoDoCatalogo("enc", "Encapsuladora", "EQUIPMENT"),
+        recursoDoCatalogo("en", "Energia elétrica", "ENERGY"),
+      ].filter(
+        (recurso) =>
+          (!params.type || recurso.type === params.type) &&
+          (params.active === undefined || recurso.active === params.active),
+      );
+      return { resources, page: 1, pageSize: params.pageSize ?? 20, total: resources.length };
+    },
+  );
   updateProductionProfileVersion.mockResolvedValue(versao());
   updateProductionProfile.mockResolvedValue({});
   activateProductionProfileVersion.mockResolvedValue({});
@@ -328,8 +333,13 @@ describe("Recursos da etapa", () => {
   it("mão de obra e equipamento são escolhíveis; energia não aparece", async () => {
     await abrirDetalhe(perfil({ draftVersion: versao({ steps: [etapaCompleta()] }) }));
 
-    const selects = screen.getAllByLabelText("Recurso");
-    const opcoes = Array.from(selects[0]!.querySelectorAll("option")).map((o) => o.textContent ?? "");
+    const campos = screen.getAllByRole("combobox", { name: "Recurso" });
+    fireEvent.focus(campos[0]!);
+    const lista = await screen.findByRole("listbox");
+    await waitFor(() => expect(within(lista).getAllByRole("option")).toHaveLength(2));
+    const opcoes = within(lista)
+      .getAllByRole("option")
+      .map((opcao) => opcao.textContent ?? "");
     expect(opcoes.some((texto) => texto.includes("Mão de obra — Produção"))).toBe(true);
     expect(opcoes.some((texto) => texto.includes("Encapsuladora"))).toBe(true);
     expect(opcoes.some((texto) => texto.includes("Energia elétrica"))).toBe(false);

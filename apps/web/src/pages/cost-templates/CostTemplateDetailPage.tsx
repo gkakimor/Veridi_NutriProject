@@ -1,11 +1,11 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type {
   CostTemplateDTO,
   CostTemplateResourceUsageInput,
   CostTemplateVersionDTO,
-  IndustrialResourceDTO,
+  IndustrialResourceType,
   TemplateDiffDTO,
 } from "@veridi/shared";
 import {
@@ -26,7 +26,10 @@ import {
   updateCostTemplate,
   updateCostTemplateVersion,
 } from "../../lib/cost-pricing-templates-api";
-import { listIndustrialResources } from "../../lib/industrial-resources-api";
+import { opcaoDeRecurso, useRecursosDoSeletor } from "../../lib/recursos-do-seletor";
+import type { RecorteDeRecursos } from "../../lib/recursos-do-seletor";
+import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { FormSection } from "../../components/FormSection";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
@@ -56,6 +59,23 @@ import { useAuth } from "../../app/AuthProvider";
  * faria parecer que o número pertence à matriz, quando ele pertence ao
  * cadastro do recurso e muda com o tempo.
  */
+
+/*
+ * Universo dos campos de recurso, o mesmo de quando eram os 100 primeiros num
+ * `<select>`: todos os tipos na linha, só energia no recurso de energia, e
+ * inativos incluídos — o Modelo nunca os filtrou, e trocar o campo não muda
+ * quem pode ser escolhido.
+ */
+const TODOS_OS_RECURSOS: RecorteDeRecursos = { somenteAtivos: false };
+const RECURSOS_DE_ENERGIA: RecorteDeRecursos = { tipos: ["ENERGY"], somenteAtivos: false };
+
+/** Recurso de uma linha já gravada — o rascunho traz o tipo, sem perguntar ao servidor. */
+interface RecursoGravado {
+  id: string;
+  code: string;
+  name: string;
+  type: IndustrialResourceType;
+}
 
 interface LinhaRecurso extends CostTemplateResourceUsageInput {
   chave: string;
@@ -120,7 +140,6 @@ export function CostTemplateDetailPage() {
   const canEdit = user?.role === "ADMIN" || user?.role === "PRODUCTION";
 
   const [template, setTemplate] = useState<CostTemplateDTO | null>(null);
-  const [recursos, setRecursos] = useState<IndustrialResourceDTO[]>([]);
   const [error, setError] = useState<string | null>(null);
   /*
    * A ação em curso pelo nome, não um booleano — o mesmo desenho da Política
@@ -203,11 +222,42 @@ export function CostTemplateDetailPage() {
   }, [templateId]);
 
   useEffect(() => load(), [load]);
-  useEffect(() => {
-    listIndustrialResources({ pageSize: 100 })
-      .then((result) => setRecursos(result.resources))
-      .catch(() => setRecursos([]));
-  }, []);
+
+  /*
+   * Recurso da linha e recurso de energia: primeira página curta e busca no
+   * servidor. Eram os 100 primeiros recursos num `<select>`, e o corte fazia
+   * mais que esconder opção: o tipo do recurso saía da mesma lista, então a
+   * linha gravada de mão de obra fora dela perdia "Quantidade de recursos" — e
+   * o próximo "Salvar rascunho" gravava 1 no lugar do número. O tipo das
+   * linhas gravadas agora vem do próprio template.
+   */
+  const recursosDasLinhas = useRecursosDoSeletor(TODOS_OS_RECURSOS, {
+    carregar: canEdit && template?.draftVersion != null,
+    escolhidos: [],
+  });
+  const recursosDeEnergia = useRecursosDoSeletor(RECURSOS_DE_ENERGIA, {
+    carregar: template?.draftVersion != null && modoEnergia === "FROM_EQUIPMENT",
+    escolhidos: modoEnergia === "FROM_EQUIPMENT" ? [recursoEnergia] : [],
+  });
+  const recursosGravados = useMemo(() => {
+    const mapa = new Map<string, RecursoGravado>();
+    const versoes = [
+      ...(template?.versions ?? []),
+      ...(template?.activeVersion ? [template.activeVersion] : []),
+      ...(template?.draftVersion ? [template.draftVersion] : []),
+    ];
+    for (const versao of versoes) {
+      for (const uso of versao.resourceUsages) {
+        mapa.set(uso.industrialResourceId, {
+          id: uso.industrialResourceId,
+          code: uso.resourceCode,
+          name: uso.resourceName,
+          type: uso.resourceType,
+        });
+      }
+    }
+    return mapa;
+  }, [template]);
 
   async function run(
     acao: string,
@@ -296,11 +346,35 @@ export function CostTemplateDetailPage() {
   const rascunho = template.draftVersion;
   const ativa = template.activeVersion;
   const editavel = canEdit && rascunho !== null;
+  const recursoDaLinha = (id: string) => recursosDasLinhas.recurso(id) ?? recursosGravados.get(id);
   // Mão de obra e equipamento se contam; energia não — o kWh já é o total (§87).
   const contaRecursosDaLinha = (industrialResourceId: string) => {
-    const recurso = recursos.find((row) => row.id === industrialResourceId);
+    const recurso = recursoDaLinha(industrialResourceId);
     return recurso ? acceptsResourceCount(recurso.type) : false;
   };
+
+  /** Opções da linha: o catálogo do campo e, se saiu dele, o recurso que a linha já tem. */
+  const opcoesDaLinha = (escolhido: string): EntityOption[] => {
+    const opcoes = recursosDasLinhas.catalogo.map((recurso) => opcaoDeRecurso(recurso, { comTipo: true }));
+    const atual = escolhido ? recursoDaLinha(escolhido) : undefined;
+    if (atual && !opcoes.some((opcao) => opcao.id === atual.id)) {
+      opcoes.push(opcaoDeRecurso(atual, { comTipo: true }));
+    }
+    return opcoes;
+  };
+  const buscarRecursoDaLinha = async (termo: string) =>
+    (await recursosDasLinhas.buscar(termo)).map((recurso) => opcaoDeRecurso(recurso, { comTipo: true }));
+
+  const opcoesDeEnergia = (): EntityOption[] => {
+    const opcoes = recursosDeEnergia.catalogo.map((recurso) => opcaoDeRecurso(recurso, { comTipo: false }));
+    const atual = recursoEnergia ? recursosDeEnergia.recurso(recursoEnergia) : undefined;
+    if (atual && !opcoes.some((opcao) => opcao.id === atual.id)) {
+      opcoes.push(opcaoDeRecurso(atual, { comTipo: false }));
+    }
+    return opcoes;
+  };
+  const buscarRecursoDeEnergia = async (termo: string) =>
+    (await recursosDeEnergia.buscar(termo)).map((recurso) => opcaoDeRecurso(recurso, { comTipo: false }));
 
   const composicao = (version: CostTemplateVersionDTO) => (
     <>
@@ -556,21 +630,15 @@ export function CostTemplateDetailPage() {
               {modoEnergia === "FROM_EQUIPMENT" && (
                 <div className="field field--narrow">
                   <label htmlFor="tec-recurso-energia">Recurso de energia</label>
-                  <select
+                  <SearchableEntitySelect
                     id="tec-recurso-energia"
                     disabled={!editavel}
                     value={recursoEnergia}
-                    onChange={(event) => setRecursoEnergia(event.target.value)}
-                  >
-                    <option value="">Selecione…</option>
-                    {recursos
-                      .filter((recurso) => recurso.type === "ENERGY")
-                      .map((recurso) => (
-                        <option key={recurso.id} value={recurso.id}>
-                          {recurso.code} — {recurso.name}
-                        </option>
-                      ))}
-                  </select>
+                    onChange={setRecursoEnergia}
+                    placeholder="Digite código ou nome da energia…"
+                    options={opcoesDeEnergia()}
+                    onSearch={buscarRecursoDeEnergia}
+                  />
                   <p className="field__hint">
                     Qual tarifa valoriza o consumo derivado — o valor dela vem do cadastro, na data
                     do cálculo.
@@ -594,27 +662,22 @@ export function CostTemplateDetailPage() {
                   {linhas.map((linha, index) => (
                     <tr key={linha.chave}>
                       <td>
-                        <select
-                          aria-label="Recurso industrial"
+                        <label className="sr-only" htmlFor={`tec-recurso-${linha.chave}`}>
+                          Recurso industrial
+                        </label>
+                        <SearchableEntitySelect
+                          id={`tec-recurso-${linha.chave}`}
                           disabled={!editavel}
                           value={linha.industrialResourceId}
-                          onChange={(event) =>
+                          onChange={(industrialResourceId) =>
                             setLinhas((atual) =>
-                              atual.map((l, i) =>
-                                i === index
-                                  ? { ...l, industrialResourceId: event.target.value }
-                                  : l,
-                              ),
+                              atual.map((l, i) => (i === index ? { ...l, industrialResourceId } : l)),
                             )
                           }
-                        >
-                          <option value="">Selecione…</option>
-                          {recursos.map((recurso) => (
-                            <option key={recurso.id} value={recurso.id}>
-                              {recurso.code} — {recurso.name}
-                            </option>
-                          ))}
-                        </select>
+                          placeholder="Digite código ou nome do recurso…"
+                          options={opcoesDaLinha(linha.industrialResourceId)}
+                          onSearch={buscarRecursoDaLinha}
+                        />
                       </td>
                       <td className="is-numeric">
                         {contaRecursosDaLinha(linha.industrialResourceId) ? (
