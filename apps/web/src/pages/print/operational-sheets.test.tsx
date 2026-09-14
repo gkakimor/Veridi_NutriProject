@@ -276,8 +276,8 @@ describe("Folhas operacionais — a rota gera o PDF da folha", () => {
           ...base,
           lotId: "lot-q3",
           lotCode: "LT-20260901-000003",
-          requiresCoa: false,
-          coaStatus: "NOT_REQUIRED",
+          coaStatus: "REJECTED",
+          lotStatus: "BLOCKED",
           ownerType: "CUSTOMER",
           ownerCustomerName: "Alpha Nutrition",
         },
@@ -293,15 +293,17 @@ describe("Folhas operacionais — a rota gera o PDF da folha", () => {
       <QualityPendingSheetPage />,
     );
 
-    expect(listQualityQueue).toHaveBeenCalledWith({ pageSize: 100 });
+    // O recorte é do servidor; a leitura de todas as páginas está em
+    // `fo03-pendencias-sem-corte.test.tsx`.
+    expect(listQualityQueue).toHaveBeenCalledWith({ onlyPending: true, page: 1, pageSize: 100 });
     const linha = (lote: string) => celulas(folha.getByText(lote).closest('[data-pdf-role="row"]')!);
     // Colunas: Lote, Item, Fornecedor / proprietário, CoA, Qualidade, …, Pendência.
     expect(linha("LT-20260901-000001")[7]).toBe("Laudo não recebido");
     expect(linha("LT-20260901-000002")[7]).toBe("Laudo aguardando análise");
-    const semLaudo = linha("LT-20260901-000003");
-    expect(semLaudo[2]).toBe("Cliente — Alpha Nutrition");
-    expect(semLaudo[3]).toBe("Não exigido");
-    expect(semLaudo[7]).toBe("Aguardando liberação");
+    const rejeitado = linha("LT-20260901-000003");
+    expect(rejeitado[2]).toBe("Cliente — Alpha Nutrition");
+    expect(rejeitado[3]).toBe("Rejeitado");
+    expect(rejeitado[4]).toBe("Bloqueado");
     // "Tratado / observação" é papel: uma linha de escrita por lote.
     expect(container.querySelectorAll('[data-pdf-role="write"]')).toHaveLength(3);
     expect(folha.getByText("Qualidade — responsável")).toBeTruthy();

@@ -8,6 +8,7 @@ import type {
 import { useOptionalAuth } from "../../app/AuthProvider";
 import { PdfScreen } from "../../pdf/PdfScreen";
 import { getInventoryPositionReport } from "../../lib/reports-api";
+import { loadAllPages } from "../../lib/all-pages";
 import { listQualityQueue } from "../../lib/attachments-api";
 import { getProductionOrder } from "../../lib/production-orders-api";
 import { getShipment } from "../../lib/shipments-api";
@@ -19,8 +20,8 @@ import { getShipment } from "../../lib/shipments-api";
  * navegador (`PdfScreen`): o arquivo é o papel, sem URL, data ou margem do
  * navegador. Todas seguem as mesmas três regras:
  * 1. rota FORA do AppShell — o papel nunca leva sidebar, filtros ou botão;
- * 2. o documento traz o RESULTADO FILTRADO COMPLETO (`all=true`), nunca só
- *    a página aberta na tela;
+ * 2. o documento traz o RESULTADO FILTRADO COMPLETO (`all=true`, ou todas as
+ *    páginas quando a rota não tem — FO-03), nunca só a página aberta na tela;
  * 3. campos de anotação são de papel: contagem, conferência e assinatura
  *    não viram dado — quem registra é o ERP, depois.
  *
@@ -123,17 +124,32 @@ export function InventoryPositionSheetPage() {
 
 /* ─────────────── FO-03 — Pendências de qualidade ─────────────── */
 
+/** Teto do `pageSize` da fila no servidor: menos voltas, nunca uma por linha. */
+const PAGINA_DA_FILA = 100;
+
 /**
  * Lista de pendências para tratar fisicamente. A coluna "Tratado /
  * observação" é papel: aprovar ou rejeitar CoA continua sendo ato da
  * Qualidade dentro do sistema, com usuário e data.
+ *
+ * Pendência é o recorte "Pendências" de Qualidade → Documentos / CoA, e quem
+ * decide o que entra é o servidor, por `onlyPending` (laudo pendente,
+ * aguardando análise ou rejeitado) — sem ele a folha trazia lote aprovado e
+ * lote que nem exige laudo. A fila não tem `all=true`: a folha lê todas as
+ * páginas até o `total`. Antes lia só a primeira, de 100, e da 101ª pendência
+ * em diante o lote sumia do papel sem aviso.
  */
 export function QualityPendingSheetPage() {
   const geradoPor = useGeradoPor();
 
   return (
     <PdfScreen<QualityQueueRowDTO[]>
-      load={async () => (await listQualityQueue({ pageSize: 100 })).rows}
+      load={() =>
+        loadAllPages((pagina) => listQualityQueue({ onlyPending: true, ...pagina }), {
+          pageSize: PAGINA_DA_FILA,
+          chave: (row) => row.lotId,
+        })
+      }
       build={async (rows) => {
         const { QualityPendingPdf, qualityPendingPdfFileName } = await import(
           "../../pdf/documents/OperationalSheetsPdf"
