@@ -4188,15 +4188,58 @@ material sempre filtrado, `all` ignorando `true`). `pnpm typecheck`. Sem full te
 
 **Achado** (BACKLOG): QUERY-BOOLEAN-PERMISSIVE-REMAINING-01.
 
+## PDF da Precificação conta a história do Modelo (PRICING-MODEL-VIEW-01, 2026-09-14)
+
+Só web, só o PDF de Precificação: sem API, schema, migration, conta de preço, Decimal, arredondamento,
+`pricingCostQuality`, ativação, Orçamento nem relatório. Fecha PRICING-MODEL-VIEW-01 e
+PRICING-PRINT-THOUSANDS-TEST-01.
+
+**Antes.** Com Modelo não padrão o papel imprimia o custo do cálculo por unidade ao lado de preço, markup e
+contribuição formados sobre outro custo, sem dizer o que o Modelo considerou. No texto do PDF real: R$ 0,85/un
+saía "1.000 un R$ 12,87 … R$ 18,73 … 58,73%" (markup sobre R$ 11,80); imposto de 8% sobre a venda formava
+R$ 23,41 sem nenhum 8% no papel; custo industrial fora da conta, com cálculo parcial, imprimia "margem não
+calculável" acima da margem de 32% impressa; gestão externa mostrava R$ 12,87 com preço formado sobre R$ 10,95.
+
+**Depois (§84).** Seção "Modelo de Precificação": o padrão em uma linha ("Modelo aplicado: Padrão — o preço se
+forma sobre o custo do cálculo; impostos estimados não entram na conta."); o flexível em três — custo
+industrial no preço, impostos estimados (% sobre a venda "no divisor do preço"; R$ "somados ao custo p/
+preço") e custos adicionais administrados externamente —, mais "Política de origem" quando houver. Modo
+desligado não imprime valor guardado; gestão externa escreve "Fora da conta". Com Modelo flexível, a tabela de
+faixas usa "Custo p/ preço/un" (o `pricingCostPerUnit` que a API serve, congelado ou vivo), a de custo mostra
+"Custo do cálculo da faixa" e "Custo do cálculo/un", a nota define os dois e diz que não precisam ser iguais, e
+o cabeçalho diz "Qualidade do custo do cálculo". O aviso de custo incompleto segue o custo que formou o preço:
+sem ele, "Custo p/ preço incompleto — margem não calculável"; cálculo parcial com preço formado, "Custo do
+cálculo incompleto" e que o Modelo não usa a parte que falta. Tabelas do padrão sem mudança.
+`web lib/pricing-cost.ts` (`custoQueFormaPreco`, `usaModeloFlexivel`) serve a tela e o PDF.
+
+**Milhar.** `base-calculada-impressos` procura "1.000 un", como `formatQuantity` escreve; a formatação pt-BR
+ficou.
+
+**Orçamento e relatórios (auditoria, sem mudança).** Tela e PDF do Orçamento não mostram CMV nem margem. R-19,
+R-20 e "Precificação vigente" do CMV mostram o custo do cálculo ao lado de margem formada pelo custo p/ preço —
+achado, fora do escopo.
+
+**Validação.** `web pdf/documents/cost-documents` com PDF real lido de volta — padrão (valor guardado de modo
+desligado não sai), R$ por unidade, custo industrial fora sobre cálculo parcial, imposto % com política de
+origem, gestão externa e Modelo que usa o cálculo sem custo p/ preço: 13 testes, fixtures pela mesma conta da
+API (`computePricingModelEffect` + `computePrice`). No código antigo, os quatro cenários de Modelo e as
+asserções novas do padrão caíram. Mutações: 14 de 14 derrubadas. Focados (cost documents, print, `src/print`,
+pricing, cost-templates): 18 arquivos, 208 testes, de novo depois do rebase. `pnpm typecheck`. Smoke Playwright
+(Vite do worktree × web da main, API dev, só GET): precificação real PREC-000001 (padrão) e cinco versões
+sintéticas por `route.fulfill` — 43 de 43 conferências no texto do PDF gerado, 0 escritas, console limpo. Sem
+full test, E2E nem fresh (FAST).
+
+**Achado** (BACKLOG): PRICING-MODEL-VIEW-REPORTS-01.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
 mesma. Os achados da rodada estão no BACKLOG, sem posição na fila.
 
-**PRICING-TEMPLATE-FLEX-01 fechado em 2026-09-11** (§84). Dos três achados,
-PRICING-MODEL-DIFF-01 e PRICING-ACTIVATE-CONFIRM-01 fecharam em COST-PRICING-CLARITY-WAVE-01;
-**PRICING-MODEL-VIEW-01 continua aberto e é a próxima capability** (envolve o PDF de
-Precificação, por isso ficou depois de PRINT-CORRECTNESS-WAVE-01).
+**PRICING-TEMPLATE-FLEX-01 fechado em 2026-09-11** (§84). Os três achados fecharam:
+PRICING-MODEL-DIFF-01 e PRICING-ACTIVATE-CONFIRM-01 em COST-PRICING-CLARITY-WAVE-01, e
+PRICING-MODEL-VIEW-01 em 2026-09-14 (PDF de Precificação). O resto do assunto — R-19, R-20 e o CMV — ficou em
+PRICING-MODEL-VIEW-REPORTS-01, sem posição na fila.
 
 **Nenhum módulo é ocultado** — decisão da Veridi em 2026-09-10: Precificação,
 Orçamento e Faturamento continuam disponíveis. Nenhum item do backlog propunha

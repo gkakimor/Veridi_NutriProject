@@ -321,9 +321,11 @@ describe("Precificação impressa — cada faixa é da sua quantidade", () => {
     // da faixa de 1.000 é R$ 767,00.
     const tabelaDeCusto = faixaDeCabecalho.parentElement as HTMLElement;
     const linhas = Array.from(tabelaDeCusto.querySelectorAll<HTMLElement>('[data-pdf-role="row"]'));
-    // Quantidade não agrupa milhar nesta base: 1000 un, não 1.000 un.
+    // Quantidade agrupa milhar em pt-BR, como na tela: 1.000 un, nunca 1000 un.
     const faixa300 = linhas.find((linha) => linha.textContent?.startsWith("300 un"))!;
-    const faixa1000 = linhas.find((linha) => linha.textContent?.startsWith("1000 un"))!;
+    const faixa1000 = linhas.find((linha) => linha.textContent?.startsWith("1.000 un"))!;
+    expect(faixa1000).toBeDefined();
+    expect(linhas.some((linha) => linha.textContent?.startsWith("1000 un"))).toBe(false);
     expect(faixa300.textContent).toContain("670,00");
     expect(faixa1000.textContent).toContain("767,00");
     // A ressalva vem SOB a tabela de custo, não perdida em outra seção.

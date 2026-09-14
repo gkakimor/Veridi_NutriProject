@@ -55,7 +55,9 @@ quantidade de recursos equivalentes na linha de recurso (§87).
 | depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião. COST-VAR-02 continua esperando as sete decisões do PO e dado real em produção |
 
 Achados de PRICING-TEMPLATE-FLEX-01 (seção A, na entrada do item):
-**PRICING-MODEL-VIEW-01 — aberto, próxima capability** (envolve o PDF de Precificação);
+~~PRICING-MODEL-VIEW-01~~ **fechado em 2026-09-14** — o PDF de Precificação conta o Modelo (custo p/ preço,
+custo do cálculo à parte, regras sem valor de modo desligado); o resto — R-19, R-20 e "Precificação vigente" do
+CMV — virou **PRICING-MODEL-VIEW-REPORTS-01 (P3)**, sem posição na fila;
 ~~PRICING-MODEL-DIFF-01~~ e ~~PRICING-ACTIVATE-CONFIRM-01~~ **fechados em 2026-09-14** por
 COST-PRICING-CLARITY-WAVE-01. Achados de QUOTE-DUPLICATE-01, sem posição na fila: QUOTE-NEW-VERSION-PATHS-01 e
 QUOTE-DUPLICATE-ORIGIN-01. Achados de CUSTOMER-COMMERCIAL-STATUS-01, idem:
@@ -758,12 +760,17 @@ perfis tributários indicados; uma migration aditiva, defaults = comportamento
 anterior. A direção original fica abaixo como registro.
 
 **Achados da entrega (novos, sem posição na fila):**
-- **PRICING-MODEL-VIEW-01 — P2.** Orçamento, impresso da precificação e
-  relatórios mostram o custo do cálculo (CMV) ao lado da contribuição que o
-  Modelo formou. Com Modelo não padrão os dois não fecham na mesma conta na
-  tela; só a tela de Precificação mostra o "custo p/ preço".
-  **Continua aberto — próxima capability** (PDF de Precificação; ficou depois de
-  PRINT-CORRECTNESS-WAVE-01).
+- ~~PRICING-MODEL-VIEW-01~~ — **fechado em 2026-09-14** (PRICING-MODEL-VIEW-01): o PDF de Precificação conta a
+  mesma história da tela — seção do Modelo (padrão em uma linha; flexível com custo industrial, impostos e
+  gestão externa, sem valor de modo desligado), "Custo p/ preço/un" na tabela de faixas, "Custo do cálculo" na
+  de custo e aviso de custo incompleto pelo custo que formou o preço. O Orçamento não mostra CMV nem margem
+  (nada a mudar); relatórios e CMV seguem no item abaixo.
+- **PRICING-MODEL-VIEW-REPORTS-01 — P3.** R-19 (Precificação por produto: "Custo/un" do `costPerUnitSnapshot`
+  ao lado de margem, markup e contribuição), R-20 (Orçamento × Precificação: custo industrial/un e margem da
+  linha) e "Precificação vigente" da tela de CMV (margem da faixa ao lado do CMV simulado) repetem o que o PDF
+  fazia: com Modelo não padrão a margem saiu do custo p/ preço, o número ao lado é o do cálculo e nada diz o
+  Modelo. A faixa ativa tem `pricingCostPerUnitSnapshot`; a linha enviada do Orçamento não congela o custo p/
+  preço — alinhar o R-20 pede snapshot novo (decisão de schema).
 - ~~PRICING-MODEL-DIFF-01~~ — **fechado em 2026-09-14** (COST-PRICING-CLARITY-WAVE-01): o diff compara
   modos, o valor que cada modo lê e a gestão externa. Perfis tributários ficam fora de propósito — só
   sugerem o Modelo, não mudam número (§84).
@@ -980,7 +987,7 @@ mudou.
 | ~~REPORTS-PRINT-UNACCEPTED-FILTER-01~~ | **Fechado em 2026-09-14** por PRINT-CORRECTNESS-WAVE-01 ([`PROJECT_STATE.md`](PROJECT_STATE.md), seção própria): cada definição de `REPORT_PRINT_DEFINITIONS` declara `filterKeys` (as chaves do schema da API) e `filterAppliesWhen` (R-02: `from`/`to` só na janela `CUSTOM`); chave de outro relatório, `foo=bar` e paginação não vão ao papel nem disparam consulta de nome; o CSV segue recebendo a URL como veio | — | — |
 | ~~FO03-ROW-SITUATION-01~~ | **Fechado em 2026-09-14** por PRINT-CORRECTNESS-WAVE-01 ([`PROJECT_STATE.md`](PROJECT_STATE.md), seção própria): coluna Qualidade por `situacaoDoLote` (vencido manda, como FO-01/FO-02 e a tela CoA); Pendência pelo laudo com os rótulos da tela CoA — PENDING "Pendente de documento", RECEIVED "Aguardando análise", REJECTED "Laudo rejeitado"; recorte, paginação, ordem e `loadAllPages` intocados. Texto original: FO-03 descreve mal duas pendências do próprio recorte (`OperationalSheetsPdf.tsx`, `QualityPendingPdf`): a coluna Qualidade é `LOT_STATUS_LABELS[lotStatus]` e ignora `isExpired` — no smoke de FO03-PENDING-CUTOFF-01 a pendência com validade 31/01/2026 saiu "Aguardando liberação", enquanto Documentos / CoA diz "Vencido" e FO-01/FO-02 usam `situacaoDoLote`; e a Pendência do laudo rejeitado sai "Aguardando liberação" (o `else` de `pendenciaDoLote`, escrito quando a folha trazia todos os lotes), com o lote bloqueado. O primeiro é uma linha; o texto do segundo é decisão do PO. Anterior à rodada, que não mudou o documento | UX | XS |
 | **PAGED-DOCUMENT-SNAPSHOT-01** | `loadAllPages` (`web lib/all-pages.ts`) lê por deslocamento: se entre uma requisição e a seguinte uma pendência sai da fila antes do deslocamento E outra entra depois dele, o total fica igual, nenhuma chave repete e um lote fica de fora sem aviso. Total mudando e chave repetida já lançam; a janela é o intervalo entre as páginas (~ms), só acima de 100 pendências. Fechar pede retrato no servidor (`all=true` com `ALL_ROWS` na fila da Qualidade, ou cursor) — contrato de API, fora de FO03-PENDING-CUTOFF-01 | LOW | S |
-| **PRICING-PRINT-THOUSANDS-TEST-01** | `web pages/print/base-calculada-impressos.test.tsx` ("Precificação impressa — cada faixa é da sua quantidade") falha na `main` desde PTBR-NUMERIC-DISPLAY-AUDIT-01 (3459833): procura a linha por `startsWith("1000 un")`, e `formatQuantity` agora escreve `1.000 un`. Visto em PRINT-CORRECTNESS-WAVE-01 no checkout principal limpo, sem nenhuma mudança da rodada; é o teste que ficou para trás, não o PDF | LOW | XS |
+| ~~PRICING-PRINT-THOUSANDS-TEST-01~~ | **Fechado em 2026-09-14** por PRICING-MODEL-VIEW-01 ([`PROJECT_STATE.md`](PROJECT_STATE.md), seção própria): o teste procura `1.000 un`, a quantidade pt-BR que o PDF já escrevia, e recusa `1000 un`; a formatação ficou. Texto original: `web pages/print/base-calculada-impressos.test.tsx` falhava na `main` desde PTBR-NUMERIC-DISPLAY-AUDIT-01 (3459833) procurando `startsWith("1000 un")` | — | — |
 | **REPORTS-PRINT-FILTER-KEYS-DRIFT-01** | `filterKeys` de `REPORT_PRINT_DEFINITIONS` (web) copia à mão as chaves dos schemas de `api modules/reports/reports.schemas.ts`; nenhum teste liga os dois. Filtro novo na API sem a chave na web some do papel (falha segura: o papel omite, nunca inventa). Fechar pede o contrato de chaves no shared ou guarda que leia os dois | LOW | S |
 
 ### Achados do FAST-DEVELOPMENT-RESET-02 (2026-09-11)

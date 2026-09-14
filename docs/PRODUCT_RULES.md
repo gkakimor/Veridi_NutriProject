@@ -5299,6 +5299,11 @@ continuam exatamente como antes.**
   pede confirmação de custo incompleto por `pricingCostQuality ?? costQuality` — faixa ativada antes do campo
   fica nula, sem backfill, e segue lida pela do cálculo. Modelo, custo, referência ou materiais novos não
   mudam a qualidade congelada; a linha enviada continua congelando a do cálculo.
+- **O PDF da precificação conta a mesma história da tela** (PRICING-MODEL-VIEW-01, 2026-09-14): o papel diz o
+  Modelo aplicado — padrão em uma linha; flexível com custo industrial, impostos estimados e gestão externa, com
+  a base dita e sem valor de modo desligado ("Fora da conta" quando a gestão externa está ligada). Com Modelo
+  flexível, "Custo p/ preço" (o que formou preço, markup e contribuição) e "Custo do cálculo" (CMV) aparecem com
+  nome próprio, e o papel diz que não precisam ser iguais. Nada é recalculado: tudo sai da versão como a API serve.
 
 ## §85 — Duplicar como nova versão: a origem é a escolhida, e o preço é decisão explícita
 

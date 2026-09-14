@@ -3,7 +3,13 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ReactElement } from "react";
 import { describe, expect, it } from "vitest";
-import { Decimal } from "@veridi/shared";
+import {
+  DEFAULT_PRICING_MODEL,
+  Decimal,
+  PRICE_MODE_LABELS,
+  computePrice,
+  computePricingModelEffect,
+} from "@veridi/shared";
 import type {
   DecimalInstance,
   IndustrialCostCalculationSnapshotDTO,
@@ -12,12 +18,14 @@ import type {
   IndustrialMaterialCostLineDTO,
   IndustrialMaterialCostSource,
   IndustrialResourceCostLineDTO,
+  PricingModelConfig,
   PricingTierDTO,
   PricingVersionDTO,
   ProductionMaterialCostLineDTO,
   ProductionOrderCostDTO,
 } from "@veridi/shared";
-import { formatBRL, formatPdfDateTime, formatQuantity } from "../format";
+import { formatUnitCost } from "../../components/CostBreakdown";
+import { formatBRL, formatPdfDateTime, formatPercent, formatQuantity, formatUnitPriceBRL } from "../format";
 import { renderPdfBlob } from "../render";
 import { lerPdf, type PdfLido } from "../testing/pdf-text";
 import { CostCalculationPdf, costCalculationPdfFileName } from "./CostCalculationPdf";
@@ -89,6 +97,10 @@ function folhaCom(pdf: PdfLido, trecho: string): number {
   return pdf.paginas.findIndex((pagina) => pagina.includes(trecho));
 }
 
+/** O texto como se lê: a frase que o papel quebrou em duas linhas volta a ser uma. */
+function corrido(pdf: PdfLido): string {
+  return pdf.paginas.join("\n").replace(/\s*\n\s*/g, " ");
+}
 /**
  * Toda folha: A4, "Página X de Y", carimbo sem segundos, natureza interna e
  * identidade do documento (cabeçalho na 1ª, corrido nas seguintes). Nenhum
@@ -658,7 +670,17 @@ function versao(
   extra: Pick<
     PricingVersionDTO,
     "code" | "versionNumber" | "status" | "costQuality" | "tiers" | "warnings" | "activatedAt" | "activatedByName"
-  >,
+  > &
+    Partial<
+      Pick<
+        PricingVersionDTO,
+        | "pricingModel"
+        | "originPricingPolicyVersionId"
+        | "originPricingPolicyCode"
+        | "originPricingPolicyVersionNumber"
+        | "originPricingPolicyName"
+      >
+    >,
 ): PricingVersionDTO {
   return {
     id: `prc-${extra.code}`,
@@ -698,6 +720,9 @@ function precificacaoRascunho(): PricingVersionDTO {
     costQuality: estimativa,
     activatedAt: null,
     activatedByName: null,
+    // Modelo padrão como a API serve — com o valor de um modo já desligado
+    // ainda guardado, que não entra na conta nem no papel.
+    pricingModel: { ...DEFAULT_PRICING_MODEL, industrialCostAmountPerUnit: "0.4321" },
     tiers: [
       faixa("300", "1", "4986.30", "4986.30", estimativa, { modo: "TARGET_MARGIN", margem: "35", comissao: "5" }, [
         aviso("BELOW_REFERENCE_BATCH", "Abaixo do lote de referência (3000 un): o custo fixo por lote não se dilui."),
@@ -738,6 +763,224 @@ function precificacaoParcial(): PricingVersionDTO {
     activatedByName: "Rafael Moura",
     tiers,
     warnings: [aviso("INCOMPLETE_COST", "Ativada com custo incompleto: o aroma MP-000142 não tem referência de custo.")],
+  });
+}
+
+/** Custos de uma faixa do Whey 900 g, totais da quantidade: materiais e cálculo do ERP. */
+type CustoDaFaixa = {
+  quantidade: string;
+  materiais: string;
+  /** `null` = cálculo incompleto: sobra só o subtotal conhecido. */
+  calculado: string | null;
+  conhecido: string;
+};
+
+const WHEY_1000: CustoDaFaixa = { quantidade: "1000", materiais: "10950.00", calculado: "12874.00", conhecido: "12874.00" };
+const WHEY_3000: CustoDaFaixa = { quantidade: "3000", materiais: "32850.00", calculado: "34518.60", conhecido: "34518.60" };
+
+/**
+ * Faixa sob um Modelo de Precificação (§84), pela MESMA conta da API:
+ * `computePricingModelEffect` decide o custo p/ preço e `computePrice` forma o
+ * preço sobre ele. O custo do cálculo continua sendo o do CALC — o PDF só lê.
+ */
+function faixaComModelo(
+  modelo: PricingModelConfig,
+  custo: CustoDaFaixa,
+  preco: Preco,
+): PricingTierDTO {
+  const qualidade = custo.calculado === null ? "PARTIAL" : "COMPLETE_REAL_REFERENCE";
+  const efeito = computePricingModelEffect({
+    quantity: custo.quantidade,
+    materialCostTotal: custo.materiais,
+    materialCostQuality: "COMPLETE_REAL_REFERENCE",
+    calculatedCostTotal: custo.calculado,
+    calculatedCostQuality: qualidade,
+    model: modelo,
+  });
+  const conta = computePrice({
+    priceMode: preco.modo,
+    quantity: custo.quantidade,
+    costPerUnit: efeito.pricingCostPerUnit,
+    targetMarginPercent: preco.modo === "TARGET_MARGIN" ? preco.margem : null,
+    commissionPercent: preco.comissao,
+    manualUnitPrice: preco.modo === "MANUAL_PRICE" ? preco.preco : null,
+    estimatedTaxPercent: efeito.estimatedTaxPercent,
+  });
+  // As escalas da API: preço técnico com 8 casas, resultado técnico 12, percentual 4, dinheiro 2.
+  const casas = (valor: string | null, n: number) =>
+    valor === null ? null : new Decimal(valor).toDecimalPlaces(n).toString();
+  const custoUn = custo.calculado === null ? null : new Decimal(custo.calculado).dividedBy(custo.quantidade);
+  return {
+    id: `faixa-${custo.quantidade}`,
+    quantity: custo.quantidade,
+    uomCode: "un",
+    priceMode: preco.modo,
+    targetContributionMarginPercent: preco.modo === "TARGET_MARGIN" ? preco.margem : null,
+    commissionPercent: preco.comissao,
+    manualUnitPrice: preco.modo === "MANUAL_PRICE" ? preco.preco : null,
+    notes: null,
+    sortOrder: 0,
+    industrialCostTotal: custo.calculado,
+    industrialCostPerUnit: custoUn === null ? null : custoUn.toDecimalPlaces(12).toString(),
+    costPer1000: custoUn === null ? null : dinheiro(custoUn.times(1000)),
+    knownSubtotal: custo.conhecido,
+    costQuality: qualidade,
+    batchCount: "1",
+    suggestedUnitPrice: casas(conta.suggestedUnitPrice, 8),
+    selectedUnitPrice: casas(conta.selectedUnitPrice, 8),
+    commissionPerUnit: casas(conta.commissionPerUnit, 12),
+    commissionTotal: casas(conta.commissionTotal, 2),
+    grossRevenue: casas(conta.grossRevenue, 2),
+    contributionPerUnit: casas(conta.contributionPerUnit, 12),
+    contributionTotal: casas(conta.contributionTotal, 2),
+    contributionMarginPercent: casas(conta.contributionMarginPercent, 4),
+    markupPercent: casas(conta.markupPercent, 4),
+    pricingCostPerUnit: casas(efeito.pricingCostPerUnit, 12),
+    pricingCostQuality: efeito.pricingCostQuality,
+    estimatedTaxPercent: casas(efeito.estimatedTaxPercent, 4),
+    warnings: [],
+  };
+}
+
+/** Custo industrial em R$ por unidade — e valores de modos desligados ainda guardados. */
+function precificacaoPorUnidade(): PricingVersionDTO {
+  const modelo: PricingModelConfig = {
+    ...DEFAULT_PRICING_MODEL,
+    industrialCostMode: "PER_UNIT",
+    industrialCostAmountPerUnit: "0.85",
+    industrialCostPercentOfMaterials: "17.5",
+    estimatedTaxPercentOfSalePrice: "9.25",
+    estimatedTaxAmountPerUnit: "0.0425",
+  };
+  return versao({
+    code: "PREC-000021",
+    versionNumber: 1,
+    status: "ACTIVE",
+    costQuality: "COMPLETE_REAL_REFERENCE",
+    activatedAt: "2026-09-12T14:00:00.000Z",
+    activatedByName: "Rafael Moura",
+    pricingModel: modelo,
+    tiers: [
+      faixaComModelo(modelo, WHEY_1000, { modo: "TARGET_MARGIN", margem: "32", comissao: "5" }),
+      faixaComModelo(modelo, WHEY_3000, { modo: "MANUAL_PRICE", preco: "18.90", comissao: "4" }),
+    ],
+    warnings: [],
+  });
+}
+
+/** Custo industrial fora da conta, rascunho sobre cálculo parcial (energia sem tarifa). */
+function precificacaoSemCustoIndustrial(): PricingVersionDTO {
+  const modelo: PricingModelConfig = {
+    ...DEFAULT_PRICING_MODEL,
+    industrialCostMode: "IGNORE",
+    // O valor do modo anterior continua guardado — e fora da conta.
+    industrialCostAmountPerUnit: "0.4321",
+  };
+  return versao({
+    code: "PREC-000022",
+    versionNumber: 1,
+    status: "DRAFT",
+    costQuality: "PARTIAL",
+    activatedAt: null,
+    activatedByName: null,
+    pricingModel: modelo,
+    tiers: [
+      faixaComModelo(
+        modelo,
+        { ...WHEY_1000, calculado: null, conhecido: "12530.00" },
+        { modo: "TARGET_MARGIN", margem: "32", comissao: "5" },
+      ),
+      faixaComModelo(
+        modelo,
+        { ...WHEY_3000, calculado: null, conhecido: "33487.80" },
+        { modo: "TARGET_MARGIN", margem: "30", comissao: "5" },
+      ),
+    ],
+    warnings: [aviso("ENERGY_RATE_MISSING", "Energia elétrica sem tarifa vigente: o cálculo CALC-000123 ficou parcial.")],
+  });
+}
+
+/** Impostos estimados em % sobre o preço de venda, vindos de uma política. */
+function precificacaoComImposto(): PricingVersionDTO {
+  const modelo: PricingModelConfig = {
+    ...DEFAULT_PRICING_MODEL,
+    estimatedTaxMode: "PERCENT_SALE_PRICE",
+    estimatedTaxPercentOfSalePrice: "8",
+  };
+  return versao({
+    code: "PREC-000023",
+    versionNumber: 1,
+    status: "ACTIVE",
+    costQuality: "COMPLETE_REAL_REFERENCE",
+    activatedAt: "2026-09-12T14:30:00.000Z",
+    activatedByName: "Rafael Moura",
+    pricingModel: modelo,
+    originPricingPolicyVersionId: "tpp-4-v3",
+    originPricingPolicyCode: "TPP-000004",
+    originPricingPolicyVersionNumber: 3,
+    originPricingPolicyName: "Revenda Lucro Presumido",
+    tiers: [
+      faixaComModelo(modelo, WHEY_1000, { modo: "TARGET_MARGIN", margem: "32", comissao: "5" }),
+      faixaComModelo(modelo, WHEY_3000, { modo: "TARGET_MARGIN", margem: "30", comissao: "5" }),
+    ],
+    warnings: [],
+  });
+}
+
+/** Gestão externa ligada sobre R$ por unidade e imposto % — os dois valores guardados. */
+function precificacaoGestaoExterna(): PricingVersionDTO {
+  const modelo: PricingModelConfig = {
+    ...DEFAULT_PRICING_MODEL,
+    industrialCostMode: "PER_UNIT",
+    industrialCostAmountPerUnit: "0.3375",
+    estimatedTaxMode: "PERCENT_SALE_PRICE",
+    estimatedTaxPercentOfSalePrice: "9.25",
+    externalAdditionalCosts: true,
+  };
+  return versao({
+    code: "PREC-000024",
+    versionNumber: 2,
+    status: "ACTIVE",
+    costQuality: "COMPLETE_REAL_REFERENCE",
+    activatedAt: "2026-09-13T10:00:00.000Z",
+    activatedByName: "Rafael Moura",
+    pricingModel: modelo,
+    tiers: [
+      faixaComModelo(modelo, WHEY_1000, { modo: "TARGET_MARGIN", margem: "32", comissao: "5" }),
+      faixaComModelo(modelo, WHEY_3000, { modo: "MANUAL_PRICE", preco: "17.50", comissao: "4" }),
+    ],
+    warnings: [],
+  });
+}
+
+/** Imposto % com o custo industrial do cálculo, sobre cálculo parcial: o custo p/ preço também fica sem base. */
+function precificacaoSemCustoParaPreco(): PricingVersionDTO {
+  const modelo: PricingModelConfig = {
+    ...DEFAULT_PRICING_MODEL,
+    estimatedTaxMode: "PERCENT_SALE_PRICE",
+    estimatedTaxPercentOfSalePrice: "8",
+  };
+  return versao({
+    code: "PREC-000025",
+    versionNumber: 1,
+    status: "DRAFT",
+    costQuality: "PARTIAL",
+    activatedAt: null,
+    activatedByName: null,
+    pricingModel: modelo,
+    tiers: [
+      faixaComModelo(
+        modelo,
+        { ...WHEY_1000, calculado: null, conhecido: "12530.00" },
+        { modo: "TARGET_MARGIN", margem: "32", comissao: "5" },
+      ),
+      faixaComModelo(
+        modelo,
+        { ...WHEY_3000, calculado: null, conhecido: "33487.80" },
+        { modo: "MANUAL_PRICE", preco: "19.90", comissao: "4" },
+      ),
+    ],
+    warnings: [],
   });
 }
 
@@ -952,6 +1195,25 @@ describe("gerador de PDF — Simulação de preço e margem", () => {
       expect(tudo).toContain("Valor normalizado a partir do custo por unidade");
       expect(tudo).toContain("Abaixo do lote de referência");
 
+      // Modelo padrão: uma linha diz qual é — o custo da tabela de preço é o do
+      // cálculo —, e nada do Modelo flexível entra no papel.
+      expect(tudo).toContain("MODELO DE PRECIFICAÇÃO");
+      expect(todasAsLinhas(pdf)).toContain(
+        "Modelo aplicado: Padrão — o preço se forma sobre o custo do cálculo; impostos estimados não entram na conta.",
+      );
+      conferirCabecalho(pdf, (linha) => linha.includes("Calcular pela margem"), "CUSTO/UN");
+      for (const fora of [
+        "PREÇO/UN",
+        "CÁLCULO/UN",
+        "Custo industrial no preço",
+        "Custo p/ preço",
+        "Qualidade do custo do cálculo",
+        "Política de origem",
+        formatUnitPriceBRL("0.4321"),
+      ]) {
+        expect(tudo, fora).not.toContain(fora);
+      }
+
       conferirCabecalho(pdf, (linha) => linha.includes("Calcular pela margem") || linha.includes("Informar preço"), "MARKUP");
       conferirCabecalho(pdf, (linha) => /^[\d.]+ un \d+ R\$/.test(linha), "CUSTO TOTAL DA FAIXA");
       // Seção curta não se parte: título, primeira e última faixa e ressalva na mesma folha.
@@ -1012,6 +1274,223 @@ describe("gerador de PDF — Simulação de preço e margem", () => {
           ),
           inicio,
         ).toBe(true);
+      }
+    },
+    PRAZO,
+  );
+});
+
+describe("gerador de PDF — Simulação de preço e margem com Modelo de Precificação (§84)", () => {
+  /** A linha da tabela de preço que começa pela quantidade, pelo custo p/ preço e pelo modo. */
+  function linhaDePreco(pdf: PdfLido, tier: PricingTierDTO): string | undefined {
+    const inicio = `${formatQuantity(tier.quantity)} un ${formatUnitCost(tier.pricingCostPerUnit ?? null)} ${PRICE_MODE_LABELS[tier.priceMode]}`;
+    return todasAsLinhas(pdf).find((linha) => linha.startsWith(inicio));
+  }
+
+  it(
+    "R$ por unidade: preço sobre o custo p/ preço, custo do cálculo à parte e valor de modo desligado fora do papel",
+    async () => {
+      const precificacao = precificacaoPorUnidade();
+      const pdf = await gerar(
+        <PricingPdf pricing={precificacao} generatedAt={GERADO_EM} generatedBy={GERADO_POR} />,
+        amostra(pricingPdfFileName(precificacao), "modelo-por-unidade"),
+      );
+
+      conferirFolhas(pdf, { orientacao: "paisagem", titulo: "SIMULAÇÃO DE PREÇO E MARGEM", codigo: "PREC-000021 · V1" });
+      const tudo = pdf.paginas.join("\n");
+      const texto = corrido(pdf);
+      expect(tudo).toContain("Qualidade do custo do cálculo: Completo — referências reais de compra");
+
+      // O Modelo aplicado, com a base dita — e o que ele não considera, escrito.
+      expect(tudo).toContain("MODELO DE PRECIFICAÇÃO");
+      const linhas = todasAsLinhas(pdf);
+      expect(linhas).toContain(`Custo industrial no preço: ${formatUnitPriceBRL("0.85")} por unidade`);
+      expect(linhas).toContain("Impostos estimados: Não considerados");
+      expect(linhas).toContain("Custos adicionais administrados externamente: Não");
+      expect(tudo).not.toContain("Política de origem");
+      // Valor guardado de modo desligado não participa da conta — nem do papel.
+      for (const guardado of ["17,5%", "9,25%", formatUnitPriceBRL("0.0425")]) {
+        expect(texto, guardado).not.toContain(guardado);
+      }
+
+      // Tabela de preço: o custo ao lado do modo é o que formou preço, markup e
+      // contribuição. O do cálculo sai na tabela de custo, com o próprio nome.
+      conferirCabecalho(pdf, (linha) => linha.includes("Calcular pela margem") || linha.includes("Informar preço"), "PREÇO/UN");
+      conferirCabecalho(pdf, (linha) => /^[\d.]+ un 1 R\$/.test(linha), "CÁLCULO/UN");
+      expect(tudo).not.toContain("CUSTO/UN");
+      for (const tier of precificacao.tiers) {
+        const inicio = `${formatQuantity(tier.quantity)} un `;
+        const preco = linhaDePreco(pdf, tier);
+        expect(preco, inicio).toBeDefined();
+        expect(preco).toContain(formatUnitCost(tier.selectedUnitPrice));
+        expect(preco).toContain(formatPercent(tier.markupPercent));
+        expect(preco).toContain(formatBRL(tier.contributionTotal));
+        expect(
+          linhas.some((linha) =>
+            linha.startsWith(
+              `${inicio}1 ${formatBRL(tier.industrialCostTotal)} ${formatUnitCost(tier.industrialCostPerUnit)} ${formatBRL(tier.costPer1000)}`,
+            ),
+          ),
+          inicio,
+        ).toBe(true);
+        // Os dois custos diferem de propósito: materiais + R$ 0,85 × o cálculo do ERP.
+        expect(formatUnitCost(tier.pricingCostPerUnit ?? null)).toBe(formatUnitCost("11.80"));
+        expect(formatUnitCost(tier.industrialCostPerUnit)).not.toBe(formatUnitCost("11.80"));
+      }
+      expect(texto).toContain("Custo p/ preço: o custo considerado na formação do preço");
+      expect(texto).toContain("os dois não precisam ser iguais");
+      // Milhar em pt-BR, na quantidade e no dinheiro.
+      expect(tudo).toContain("3.000 un");
+      expect(tudo).toContain(formatBRL("34518.60"));
+    },
+    PRAZO,
+  );
+
+  it(
+    "custo industrial não considerado: cálculo parcial não apaga a margem que o Modelo formou sobre os materiais",
+    async () => {
+      const precificacao = precificacaoSemCustoIndustrial();
+      const pdf = await gerar(
+        <PricingPdf pricing={precificacao} generatedAt={GERADO_EM} generatedBy={GERADO_POR} />,
+        amostra(pricingPdfFileName(precificacao), "modelo-sem-custo-industrial"),
+      );
+
+      conferirFolhas(pdf, { orientacao: "paisagem", titulo: "SIMULAÇÃO DE PREÇO E MARGEM", codigo: "PREC-000022 · V1" });
+      const [primeira = ""] = pdf.paginas;
+      expect(primeira).toContain("RASCUNHO");
+      expect(primeira).toContain("Qualidade do custo do cálculo: Parcial — há custos não informados");
+      const texto = corrido(pdf);
+      expect(todasAsLinhas(pdf)).toContain("Custo industrial no preço: Não considerado");
+      expect(todasAsLinhas(pdf)).toContain("Impostos estimados: Não considerados");
+      expect(texto, "valor guardado do modo desligado").not.toContain(formatUnitPriceBRL("0.4321"));
+
+      // O aviso diz o que está incompleto — o cálculo — e não nega a margem que existe.
+      expect(texto).toContain("Custo do cálculo incompleto");
+      expect(texto).toContain("preço e margem saíram do custo p/ preço");
+      expect(texto).not.toContain("margem não calculável");
+
+      const linhas = todasAsLinhas(pdf);
+      for (const tier of precificacao.tiers) {
+        const inicio = `${formatQuantity(tier.quantity)} un `;
+        expect(tier.contributionMarginPercent, inicio).not.toBeNull();
+        const preco = linhaDePreco(pdf, tier);
+        expect(preco, inicio).toBeDefined();
+        expect(preco).toContain(formatUnitCost(tier.selectedUnitPrice));
+        expect(preco).toContain(formatPercent(tier.contributionMarginPercent));
+        // Materiais: R$ 10,95 por unidade, e nada da conversão.
+        expect(formatUnitCost(tier.pricingCostPerUnit ?? null)).toBe(formatUnitCost("10.95"));
+        // Tabela de custo: subtotal conhecido, custo do cálculo por unidade desconhecido.
+        expect(
+          linhas.some((linha) => linha.startsWith(`${inicio}1 ${formatBRL(tier.knownSubtotal)} (subtotal conhecido) — —`)),
+          inicio,
+        ).toBe(true);
+      }
+    },
+    PRAZO,
+  );
+
+  it(
+    "impostos sobre a venda: o percentual sai escrito como parte do divisor, e a política de origem identifica o Modelo",
+    async () => {
+      const precificacao = precificacaoComImposto();
+      const pdf = await gerar(
+        <PricingPdf pricing={precificacao} generatedAt={GERADO_EM} generatedBy={GERADO_POR} />,
+        amostra(pricingPdfFileName(precificacao), "modelo-imposto-sobre-venda"),
+      );
+
+      conferirFolhas(pdf, { orientacao: "paisagem", titulo: "SIMULAÇÃO DE PREÇO E MARGEM", codigo: "PREC-000023 · V1" });
+      const linhas = todasAsLinhas(pdf);
+      expect(linhas).toContain("Política de origem: TPP-000004 · V3 — Revenda Lucro Presumido");
+      expect(linhas).toContain("Custo industrial no preço: Conforme a Estrutura de Custos (cálculo do ERP)");
+      expect(linhas).toContain(
+        "Impostos estimados: 8% sobre preço de venda — no divisor do preço, com margem e comissão",
+      );
+      expect(linhas).toContain("Custos adicionais administrados externamente: Não");
+
+      for (const tier of precificacao.tiers) {
+        const inicio = `${formatQuantity(tier.quantity)} un `;
+        expect(tier.estimatedTaxPercent).toBe("8");
+        // Mesmo custo nos dois — quem mudou o preço foi o imposto no divisor.
+        expect(formatUnitCost(tier.pricingCostPerUnit ?? null)).toBe(formatUnitCost(tier.industrialCostPerUnit));
+        const semImposto = computePrice({
+          priceMode: tier.priceMode,
+          quantity: tier.quantity,
+          costPerUnit: tier.pricingCostPerUnit ?? null,
+          targetMarginPercent: tier.targetContributionMarginPercent,
+          commissionPercent: tier.commissionPercent,
+          manualUnitPrice: tier.manualUnitPrice,
+        });
+        expect(formatUnitCost(tier.selectedUnitPrice)).not.toBe(formatUnitCost(semImposto.selectedUnitPrice));
+        const preco = linhaDePreco(pdf, tier);
+        expect(preco, inicio).toBeDefined();
+        expect(preco).toContain(
+          `${formatPercent(tier.targetContributionMarginPercent)} ${formatPercent(tier.commissionPercent)} ${formatUnitCost(tier.selectedUnitPrice)}`,
+        );
+      }
+    },
+    PRAZO,
+  );
+
+  it(
+    "gestão externa: custo industrial e impostos saem como fora da conta, sem os valores guardados",
+    async () => {
+      const precificacao = precificacaoGestaoExterna();
+      const pdf = await gerar(
+        <PricingPdf pricing={precificacao} generatedAt={GERADO_EM} generatedBy={GERADO_POR} />,
+        amostra(pricingPdfFileName(precificacao), "modelo-gestao-externa"),
+      );
+
+      conferirFolhas(pdf, { orientacao: "paisagem", titulo: "SIMULAÇÃO DE PREÇO E MARGEM", codigo: "PREC-000024 · V2" });
+      const linhas = todasAsLinhas(pdf);
+      expect(linhas).toContain("Custo industrial no preço: Fora da conta — administrado externamente");
+      expect(linhas).toContain("Impostos estimados: Fora da conta — administrados externamente");
+      expect(linhas).toContain(
+        "Custos adicionais administrados externamente: Sim — custo industrial e impostos do Modelo ficam fora da conta; o custo de materiais continua calculado",
+      );
+      const texto = corrido(pdf);
+      for (const guardado of [formatUnitPriceBRL("0.3375"), "9,25%", "sobre preço de venda"]) {
+        expect(texto, guardado).not.toContain(guardado);
+      }
+
+      for (const tier of precificacao.tiers) {
+        const inicio = `${formatQuantity(tier.quantity)} un `;
+        // Só materiais formam o preço; nenhum imposto no divisor.
+        expect(formatUnitCost(tier.pricingCostPerUnit ?? null)).toBe(formatUnitCost("10.95"));
+        expect(tier.estimatedTaxPercent).toBeNull();
+        const preco = linhaDePreco(pdf, tier);
+        expect(preco, inicio).toBeDefined();
+        expect(preco).toContain(formatUnitCost(tier.selectedUnitPrice));
+      }
+    },
+    PRAZO,
+  );
+
+  it(
+    "Modelo que usa o cálculo, sobre cálculo parcial: sem custo p/ preço não há margem, e o papel diz as duas faltas",
+    async () => {
+      const precificacao = precificacaoSemCustoParaPreco();
+      const pdf = await gerar(
+        <PricingPdf pricing={precificacao} generatedAt={GERADO_EM} generatedBy={GERADO_POR} />,
+        amostra(pricingPdfFileName(precificacao), "modelo-sem-custo-para-preco"),
+      );
+
+      conferirFolhas(pdf, { orientacao: "paisagem", titulo: "SIMULAÇÃO DE PREÇO E MARGEM", codigo: "PREC-000025 · V1" });
+      const texto = corrido(pdf);
+      expect(texto).toContain("Custo p/ preço incompleto — margem não calculável para as faixas afetadas.");
+      expect(texto).toContain(
+        "Custo do cálculo incompleto — a tabela de custo mostra o subtotal conhecido dessas faixas, nunca o custo total.",
+      );
+      // O Modelo usa o cálculo: a parte que falta é dele, e o papel não diz o contrário.
+      expect(texto).not.toContain("não usa a parte que falta");
+
+      for (const tier of precificacao.tiers) {
+        const inicio = `${formatQuantity(tier.quantity)} un `;
+        expect(tier.pricingCostPerUnit, inicio).toBeNull();
+        expect(tier.contributionMarginPercent, inicio).toBeNull();
+        // Custo p/ preço desconhecido sai "—" na tabela de preço, nunca o subtotal do cálculo.
+        const preco = linhaDePreco(pdf, tier);
+        expect(preco, inicio).toBeDefined();
+        expect(preco).not.toContain("(subtotal conhecido)");
       }
     },
     PRAZO,
