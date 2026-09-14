@@ -1,14 +1,22 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
-import { describe, expect, it } from "vitest";
+import { pathToFileURL } from "node:url";
+import { beforeAll, describe, expect, it } from "vitest";
+import { z, type ZodTypeAny } from "zod";
+import { booleanoDeConsultaSchema } from "./boolean-schema.js";
+import { inteiroDeConsultaSchema } from "./integer-schema.js";
 
 /**
- * Guarda de API-STRICT-SCALAR-CONTRACT-WAVE-01.
+ * Guarda de API-STRICT-SCALAR-CONTRACT-WAVE-01 e QUERY-BOOLEAN-STRICTNESS-WAVE-02.
  *
  * - inteiro não volta a ler `z.coerce.number().int()` — `Number()` aceita
  *   `"1e1"`, `"0x10"`, `"+1"` e `true`; a leitura é `inteiroDecimalSchema`;
  * - booleano não volta a ler `z.coerce.boolean()` — `Boolean("false")` é
- *   `true`; a leitura de query é `booleanoDeConsultaSchema`.
+ *   `true`; a leitura de query é `booleanoDeConsultaSchema`;
+ * - booleano de URL aceita `"true"`/`"false"` e nada mais. A guarda não
+ *   procura o jeito de escrever o parser: pergunta a cada campo de cada schema
+ *   exportado o que ele aceita. Fora dos schemas, ninguém compara texto com
+ *   `"true"` à mão.
  *
  * Comentário não conta: vários fontes citam o nome antigo para explicar por
  * que ele saiu.
@@ -48,6 +56,103 @@ function fontesDeProducao(diretorio: string): string[] {
   });
 }
 
+const nomeDe = (arquivo: string) => relative(RAIZ, arquivo).replace(/\\/g, "/");
+
+/* ── Booleano de URL ── */
+
+/** Textos que chegam pela URL. Só os dois primeiros são booleano. */
+const TEXTOS_DE_URL = ["true", "false", "1", "0", "yes", "no", "on", "off", "abc", "", " ", "TRUE", "False", " true", "false "];
+
+type Classe = "STRICT_OK" | "LEGACY_EXPLICIT" | "PERMISSIVE_BUG";
+
+/**
+ * `null` quando nenhum texto de URL vira booleano no campo — `z.boolean()` de
+ * corpo, texto, número. Senão, pelo que o campo aceita: só `"true"`/`"false"`
+ * é STRICT_OK; `"1"`/`"0"` a mais é LEGACY_EXPLICIT; qualquer outro texto
+ * aceito é PERMISSIVE_BUG.
+ */
+function classificar(campo: ZodTypeAny): Classe | null {
+  const lidos = TEXTOS_DE_URL.map((texto) => ({ texto, resultado: campo.safeParse(texto) }));
+  if (!lidos.some(({ resultado }) => resultado.success && typeof resultado.data === "boolean")) return null;
+  const aceitos = lidos.filter(({ resultado }) => resultado.success).map(({ texto }) => texto);
+  if (aceitos.every((texto) => texto === "true" || texto === "false")) return "STRICT_OK";
+  if (aceitos.every((texto) => ["true", "false", "1", "0"].includes(texto))) return "LEGACY_EXPLICIT";
+  return "PERMISSIVE_BUG";
+}
+
+/** Objeto de consulta exportado, com ou sem `superRefine`/`preprocess` por fora. */
+function objetoDe(valor: unknown): z.AnyZodObject | null {
+  let atual = valor;
+  while (atual instanceof z.ZodEffects) atual = atual.innerType();
+  return atual instanceof z.ZodObject ? atual : null;
+}
+
+type Achado = { id: string; classe: Classe };
+
+/** Todo campo booleano de URL dos schemas exportados, com a classe — `arquivo#schema.campo`. */
+async function booleanosDeUrl(arquivos: string[]): Promise<Achado[]> {
+  const achados: Achado[] = [];
+  for (const arquivo of arquivos) {
+    const modulo = (await import(pathToFileURL(arquivo).href)) as Record<string, unknown>;
+    for (const [exportado, valor] of Object.entries(modulo)) {
+      const objeto = objetoDe(valor);
+      if (!objeto) continue;
+      for (const [campo, schema] of Object.entries(objeto.shape as Record<string, ZodTypeAny>)) {
+        const classe = classificar(schema);
+        if (classe) achados.push({ id: `${nomeDe(arquivo)}#${exportado}.${campo}`, classe });
+      }
+    }
+  }
+  return achados;
+}
+
+/** Aceitam `"1"`/`"0"` de propósito, com o contrato escrito no schema. */
+const LEGADO_EXPLICITO = new Map([
+  [
+    "modules/production-orders/production-orders.schemas.ts#listProductionOrdersQuerySchema.semRoteiro",
+    "`?semRoteiro=1` é o link do Dashboard e do Quadro; a lista de OPs manda 1/0",
+  ],
+  [
+    "modules/production-profiles/production-profiles.schemas.ts#listProductionProfilesQuerySchema.activeOnly",
+    "`true`/`1` escritos no schema; a tela manda `true`",
+  ],
+]);
+
+/**
+ * Dívida conhecida — BACKLOG QUERY-BOOLEAN-PERMISSIVE-REMAINING-01: texto fora
+ * de `"true"` vira `false` calado. Corrigida, a entrada sai daqui: a guarda
+ * reprova a que deixar de ser permissiva.
+ */
+const DIVIDA_PERMISSIVA = new Set([
+  "modules/cost-templates/cost-templates.schemas.ts#listTemplatesQuerySchema.archived",
+  // Herda o `archived` acima por `.extend` — a mesma correção fecha os dois.
+  "modules/cost-templates/cost-templates.schemas.ts#listPricingPoliciesQuerySchema.archived",
+  "modules/formulation-templates/formulation-templates.schemas.ts#listFormulationTemplatesQuerySchema.archived",
+  "modules/quality/quality.schemas.ts#listQualityQueueQuerySchema.onlyPending",
+  "modules/quality/quality.schemas.ts#listQualityQueueQuerySchema.onlyWithBalance",
+  "modules/users/users.schemas.ts#listUsersQuerySchema.active",
+]);
+
+/** `x === "true"`, `"false" !== x` — texto de URL comparado à mão. */
+const COMPARACAO_COM_TEXTO_BOOLEANO = /[!=]==?\s*(["'`])(?:true|false)\1|(["'`])(?:true|false)\2\s*[!=]==?/g;
+/** `["false", "0", …].includes(x)` — a lista de falsos do antigo `booleanFlag`. */
+const LISTA_DE_TEXTO_BOOLEANO = /\[[^\]]*(["'`])(?:true|false)\1[^\]]*\]\s*\.\s*includes\s*\(/g;
+
+function leiturasCruasDeBooleano(fonte: string): number {
+  const codigo = semComentarios(fonte);
+  return (
+    (codigo.match(COMPARACAO_COM_TEXTO_BOOLEANO)?.length ?? 0) + (codigo.match(LISTA_DE_TEXTO_BOOLEANO)?.length ?? 0)
+  );
+}
+
+/** Fora dos `*.schemas.ts`, que a varredura interroga campo a campo, só estes comparam texto booleano. */
+const LEITURA_CRUA_PERMITIDA = new Map([
+  // O próprio contrato.
+  ["lib/boolean-schema.ts", 2],
+  // `includeArchived` lido direto de `request.query` — QUERY-BOOLEAN-PERMISSIVE-REMAINING-01.
+  ["modules/attachments/attachments.routes.ts", 1],
+]);
+
 describe("a guarda pega a coerção e só ela", () => {
   it("inteiro por coerção, em uma linha ou em cadeia quebrada", () => {
     expect(inteirosPorCoercao("const a = z.coerce.number().int();")).toBe(1);
@@ -72,11 +177,64 @@ describe("a guarda pega a coerção e só ela", () => {
   });
 });
 
+describe("booleano de URL — a guarda classifica pelo que o campo aceita", () => {
+  const CASOS: [string, ZodTypeAny, Classe][] = [
+    ["booleanoDeConsultaSchema", booleanoDeConsultaSchema(), "STRICT_OK"],
+    ["booleanoDeConsultaSchema com padrão", booleanoDeConsultaSchema().default(true), "STRICT_OK"],
+    [
+      'z.enum(["true", "false"])',
+      z.enum(["true", "false"]).optional().transform((valor) => valor === "true"),
+      "STRICT_OK",
+    ],
+    [
+      "enum com 1/0, como semRoteiro",
+      z.enum(["1", "0", "true", "false"]).optional().transform((valor) => valor === "1" || valor === "true"),
+      "LEGACY_EXPLICIT",
+    ],
+    ["z.coerce.boolean()", z.coerce.boolean(), "PERMISSIVE_BUG"],
+    [
+      "lista de falsos do antigo booleanFlag",
+      z
+        .union([z.boolean(), z.string()])
+        .default(false)
+        .transform((valor) =>
+          typeof valor === "boolean" ? valor : !["false", "0", "no", ""].includes(valor.trim().toLowerCase()),
+        ),
+      "PERMISSIVE_BUG",
+    ],
+    [
+      '=== "true" sem enum',
+      z
+        .union([z.string(), z.boolean()])
+        .optional()
+        .transform((valor) => (typeof valor === "string" ? valor === "true" : (valor ?? false))),
+      "PERMISSIVE_BUG",
+    ],
+  ];
+
+  it.each(CASOS)("%s é %s", (_nome, campo, classe) => {
+    expect(classificar(campo)).toBe(classe);
+  });
+
+  it("não é booleano de URL: z.boolean() de corpo, texto e inteiro de consulta", () => {
+    expect(classificar(z.boolean().optional())).toBeNull();
+    expect(classificar(z.string().trim().min(1).optional())).toBeNull();
+    expect(classificar(inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }))).toBeNull();
+  });
+
+  it("leitura crua de texto booleano, e só ela", () => {
+    expect(leiturasCruasDeBooleano('{ includeArchived: includeArchived === "true" }')).toBe(1);
+    expect(leiturasCruasDeBooleano("if ('false' !== valor) return;")).toBe(1);
+    expect(leiturasCruasDeBooleano('const ligado = !["false", "0", "no", ""].includes(valor);')).toBe(1);
+    expect(leiturasCruasDeBooleano('const rotulo = { label: "true" };')).toBe(0);
+    expect(leiturasCruasDeBooleano("const ligado = valor === true;")).toBe(0);
+    expect(leiturasCruasDeBooleano('// antes: valor === "true"\nconst a = 1;')).toBe(0);
+  });
+});
+
 describe("fontes de produção da API", () => {
-  const fontes = fontesDeProducao(RAIZ).map((arquivo) => ({
-    nome: relative(RAIZ, arquivo).replace(/\\/g, "/"),
-    texto: readFileSync(arquivo, "utf8"),
-  }));
+  const arquivos = fontesDeProducao(RAIZ);
+  const fontes = arquivos.map((arquivo) => ({ nome: nomeDe(arquivo), texto: readFileSync(arquivo, "utf8") }));
 
   it("nenhum inteiro lê z.coerce.number().int() fora da lista de permitidos", () => {
     const achados = fontes
@@ -96,5 +254,53 @@ describe("fontes de produção da API", () => {
   it("nenhum booleano lê z.coerce.boolean()", () => {
     const achados = fontes.filter(({ texto }) => booleanosPorCoercao(texto) > 0).map(({ nome }) => nome);
     expect(achados).toEqual([]);
+  });
+
+  describe("booleano de URL", () => {
+    let achados: Achado[] = [];
+
+    beforeAll(async () => {
+      achados = await booleanosDeUrl(arquivos.filter((arquivo) => arquivo.endsWith(".schemas.ts")));
+    });
+
+    it("a varredura lê os schemas de verdade: os booleanos conhecidos estão nela", () => {
+      expect(achados.map(({ id }) => id)).toEqual(
+        expect.arrayContaining([
+          "modules/inventory/inventory.schemas.ts#listInventoryQuerySchema.onlyWithStock",
+          "modules/inventory/inventory.schemas.ts#listCustomerMaterialsQuerySchema.onlyWithBalance",
+          "modules/reports/reports.schemas.ts#inventoryPositionQuerySchema.onlyWithBalance",
+          "modules/reports/reports.schemas.ts#inventoryPositionQuerySchema.all",
+          "modules/reports/reports.schemas.ts#expiryQuerySchema.onlyWithBalance",
+          "modules/reports/reports.schemas.ts#requirementsQuerySchema.onlyShortage",
+          "modules/reports/reports.schemas.ts#plannedActualQuerySchema.includeCost",
+          "modules/items/items.schemas.ts#listItemsQuerySchema.active",
+        ]),
+      );
+    });
+
+    it('todo booleano de URL é "true"/"false" exato, fora das exceções declaradas', () => {
+      const fora = achados.filter(
+        ({ id, classe }) =>
+          (classe === "LEGACY_EXPLICIT" && !LEGADO_EXPLICITO.has(id)) ||
+          (classe === "PERMISSIVE_BUG" && !DIVIDA_PERMISSIVA.has(id)),
+      );
+      expect(fora).toEqual([]);
+    });
+
+    it("as exceções não envelhecem", () => {
+      const classeDe = new Map(achados.map(({ id, classe }) => [id, classe]));
+      for (const id of LEGADO_EXPLICITO.keys()) expect(classeDe.get(id), id).toBe("LEGACY_EXPLICIT");
+      for (const id of DIVIDA_PERMISSIVA) expect(classeDe.get(id), id).toBe("PERMISSIVE_BUG");
+    });
+  });
+
+  it("fora dos schemas, ninguém compara texto booleano à mão além dos permitidos", () => {
+    const leituras = fontes
+      .filter(({ nome }) => !nome.endsWith(".schemas.ts"))
+      .map(({ nome, texto }) => ({ nome, total: leiturasCruasDeBooleano(texto) }));
+    expect(leituras.filter(({ nome, total }) => total > 0 && total !== LEITURA_CRUA_PERMITIDA.get(nome))).toEqual([]);
+    for (const [nome, total] of LEITURA_CRUA_PERMITIDA) {
+      expect(leituras.find((leitura) => leitura.nome === nome)?.total, nome).toBe(total);
+    }
   });
 });
