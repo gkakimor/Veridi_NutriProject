@@ -585,9 +585,11 @@ describe("Exportação CSV — relatórios", () => {
 
     expect(row[header.indexOf("Planejado")]).toBe("100");
     expect(row[header.indexOf("Produzido")]).toBe("100");
-    // Sem custo conhecido: célula vazia e qualidade explícita — nunca 0.
+    // Sem custo conhecido: célula vazia e qualidade explícita — nunca 0. A
+    // qualidade sai como a tela a escreve, nunca o enum (REPORTS-PRESENTATION-WAVE-02).
     expect(row[header.indexOf("Custo material unitário")]).toBe("");
-    expect(row[header.indexOf("Qualidade do custo")]).toBe("NO_COST");
+    expect(row[header.indexOf("Qualidade do custo")]).toBe("Sem custo");
+    expect(csv.body).not.toContain("NO_COST");
 
     // R-07 do mesmo consumo mantém a origem do custo visível.
     const consumption = await downloadCsv(app, "/reports/production/consumption/export.csv", {

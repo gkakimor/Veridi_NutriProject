@@ -278,7 +278,8 @@ function amostra(codigo: string, coluna: string, indice: number): string {
     case "Qualidade":
       return codigo === "R-18" ? "Parcial — há custos não informados" : "Aguardando liberação";
     case "Qualidade do custo":
-      return codigo === "R-05" || codigo === "R-09" ? "ESTIMATED" : "Completo — referências reais de compra";
+      // R-05/R-09: o rótulo da tela que a API escreve desde REPORTS-PRESENTATION-WAVE-02.
+      return codigo === "R-05" || codigo === "R-09" ? "Sem custo" : "Completo — referências reais de compra";
     case "CoA":
       return "Pendente de documento";
     case "Origem":

@@ -33,6 +33,7 @@ import {
   INVENTORY_MOVEMENT_TYPE_LABELS,
   ITEM_TYPE_LABELS,
   COA_STATUS_LABELS,
+  COST_QUALITY_LABELS,
   PROJECT_CANCEL_REASON_LABELS,
   PROJECT_STATUS_LABELS,
   PROJECT_SAMPLE_STATUS_LABELS,
@@ -547,9 +548,10 @@ const finishedGoodsExport = defineCsvExport({
     { header: "Unidade", value: (row: FinishedGoodRowDTO) => csvText(row.unitCode) },
     { header: "Qualidade", value: (row: FinishedGoodRowDTO) => (row.isExpired ? "Vencido" : LOT_STATUS_LABELS[row.status]) },
     { header: "Validade", value: (row: FinishedGoodRowDTO) => csvDate(row.expiryDate) },
-    // Custo parcial/desconhecido fica vazio; a qualidade explica o porquê.
+    // Custo parcial/desconhecido fica vazio; a qualidade explica o porquê — pelo
+    // rótulo da tela, não pelo enum da API (REPORTS-PRESENTATION-WAVE-02).
     { header: "Custo material unitário", value: (row: FinishedGoodRowDTO) => csvMoney(row.materialUnitCost) },
-    { header: "Qualidade do custo", value: (row: FinishedGoodRowDTO) => row.costQuality },
+    { header: "Qualidade do custo", value: (row: FinishedGoodRowDTO) => COST_QUALITY_LABELS[row.costQuality] },
   ],
 });
 

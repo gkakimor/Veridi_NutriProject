@@ -16,7 +16,8 @@ import {
 import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
 import { useFiltrosDigitados } from "./useFiltrosDigitados";
-import { ariaDoPeriodoRecusado, diaDoRelatorio, emDias, JANELAS_DE_VENCIMENTO } from "./report-period";
+import { ariaDoPeriodoRecusado, diaDoRelatorio, JANELAS_DE_VENCIMENTO } from "./report-period";
+import { emDias } from "../../lib/duration";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate, formatDateTime } from "../../lib/dates";
 

@@ -2,7 +2,9 @@ import { useParams, useSearchParams } from "react-router-dom";
 import type { UserRole } from "@veridi/shared";
 import {
   CUSTOMER_ORDER_STATUS_LABELS,
+  INVENTORY_MOVEMENT_SOURCE_LABELS,
   INVENTORY_MOVEMENT_TYPE_LABELS,
+  INVENTORY_OWNER_TYPE_LABELS,
   ITEM_TYPE_LABELS,
   LOT_STATUS_LABELS,
   PRICING_PROVENANCE_ROLES,
@@ -15,7 +17,15 @@ import {
 import { useOptionalAuth } from "../../app/AuthProvider";
 import { API_URL, apiFetch } from "../../lib/api";
 import { apiErrorMessage, parseJsonOrThrow } from "../../lib/api-errors";
-import { clienteFilterSource, fornecedorFilterSource } from "../../lib/filter-sources";
+import {
+  clienteFilterSource,
+  fornecedorFilterSource,
+  itemFilterSource,
+  ordemDeCompraParaReceberSource,
+  ordemDeProducaoFilterSource,
+  pedidoFilterSource,
+  produtoFilterSource,
+} from "../../lib/filter-sources";
 import type { EntityFilterSource } from "../../components/filters/EntityFilterSelect";
 import { PdfScreen } from "../../pdf/PdfScreen";
 import { JANELAS_DE_VENCIMENTO } from "../reports/report-period";
@@ -90,7 +100,12 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
       "Unidade",
       "Qualidade",
     ],
-    filterValues: { itemType: ITEM_TYPE_LABELS, status: LOT_STATUS_LABELS, onlyWithBalance: SIM_OU_NAO },
+    filterValues: {
+      itemType: ITEM_TYPE_LABELS,
+      status: LOT_STATUS_LABELS,
+      onlyWithBalance: SIM_OU_NAO,
+      ownerType: INVENTORY_OWNER_TYPE_LABELS,
+    },
   },
   "R-02": {
     code: "R-02",
@@ -116,7 +131,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Movimentações",
     csvPath: "/reports/inventory/movements/export.csv",
     screenPath: "/relatorios/estoque/movimentacoes",
-    filterValues: { type: INVENTORY_MOVEMENT_TYPE_LABELS },
+    filterValues: { type: INVENTORY_MOVEMENT_TYPE_LABELS, sourceType: INVENTORY_MOVEMENT_SOURCE_LABELS },
   },
   "R-04": {
     code: "R-04",
@@ -274,6 +289,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
       "Custo/unidade",
       "Custo/1.000",
     ],
+    filterValues: { active: SIM_OU_NAO },
   },
   "R-19": {
     code: "R-19",
@@ -334,6 +350,10 @@ const FILTER_LABELS: Record<string, string> = {
   productId: "Produto",
   productionOrderId: "Ordem de produção",
   customerOrderId: "Pedido",
+  purchaseOrderId: "Ordem de compra",
+  ownerType: "Proprietário",
+  ownerCustomerId: "Cliente proprietário",
+  location: "Localização",
   type: "Tipo",
   sourceType: "Origem",
   onlyWithBalance: "Somente com saldo",
@@ -341,12 +361,37 @@ const FILTER_LABELS: Record<string, string> = {
   window: "Janela de vencimento",
   onlyShortage: "Somente com falta",
   includeCost: "Incluir custo",
+  active: "Produto ativo",
   origin: "Origem",
   priceSource: "Origem do preço",
 };
 
-/** Nome do cliente e do fornecedor filtrados, já resolvidos pela página. */
-export type ReportFilterNames = { customer?: string | null; supplier?: string | null };
+/**
+ * Todo filtro por id técnico que os schemas dos relatórios aceitam, com a
+ * fonte do seletor que o nomeia.
+ *
+ * Nenhum id vai ao papel como veio. Cliente e fornecedor têm seletor na tela;
+ * item, produto, pedido, OP e OC só chegam por URL digitada, mas a aplicação
+ * já tem o `porId` do seletor de cada um — o papel escreve `código · nome`
+ * pela mesma consulta. Lote não tem seletor nem `porId`: não se inventa
+ * consulta para ele, e o valor sai vazio, como o id que não se achou
+ * (REPORTS-PRESENTATION-WAVE-02).
+ */
+const FILTROS_POR_ID: Readonly<Record<string, EntityFilterSource | null>> = {
+  customerId: clienteFilterSource,
+  ownerCustomerId: clienteFilterSource,
+  supplierId: fornecedorFilterSource,
+  itemId: itemFilterSource,
+  productId: produtoFilterSource,
+  customerOrderId: pedidoFilterSource,
+  productionOrderId: ordemDeProducaoFilterSource,
+  // O `porId` do Receber OC pergunta pela OC, em qualquer status.
+  purchaseOrderId: ordemDeCompraParaReceberSource,
+  lotId: null,
+};
+
+/** Nome de cada filtro por id da URL, pela chave dela, já resolvido pela página. */
+export type ReportFilterNames = Readonly<Record<string, string | null | undefined>>;
 
 /**
  * Filtros da URL, rotulados, na ordem em que vieram.
@@ -354,11 +399,11 @@ export type ReportFilterNames = { customer?: string | null; supplier?: string | 
  * Paginação da tela (`page`, `pageSize`) não é filtro: o documento traz o
  * recorte inteiro, e "pageSize 25" no papel sugeriria um corte que não existe.
  *
- * `customerId` e `supplierId` são id técnico e nunca vão ao papel: sai o
- * cliente ou o fornecedor como o seletor da tela o escreve, resolvido pela
- * página. Sem nome — id legado ou consulta que falhou —, o valor fica vazio e
- * o documento o escreve "—", como todo desconhecido (R20-UX-CLEANUP-WAVE-01,
- * REPORTS-PRESENTATION-WAVE-01).
+ * Filtro por id técnico (`FILTROS_POR_ID`) nunca vai ao papel: sai a entidade
+ * como o seletor da tela a escreve, resolvida pela página. Sem nome — id
+ * legado, consulta que falhou, lote —, o valor fica vazio e o documento o
+ * escreve "—", como todo desconhecido (R20-UX-CLEANUP-WAVE-01,
+ * REPORTS-PRESENTATION-WAVE-01 e -02).
  *
  * Filtro de lista fechada sai pelo rótulo da tela (`filterValues`): "SENT" e
  * "RAW_MATERIAL" são a língua da API, não a de quem lê o papel.
@@ -372,12 +417,7 @@ export function reportAppliedFilters(
     .filter(([key, value]) => value !== "" && key !== "all" && key !== "page" && key !== "pageSize")
     .map(([key, value]) => ({
       label: FILTER_LABELS[key] ?? key,
-      value:
-        key === "customerId"
-          ? (names.customer ?? "")
-          : key === "supplierId"
-            ? (names.supplier ?? "")
-            : rotuloDoValor(filterValues[key], value),
+      value: Object.hasOwn(FILTROS_POR_ID, key) ? (names[key] ?? "") : rotuloDoValor(filterValues[key], value),
     }));
 }
 
@@ -387,14 +427,28 @@ function rotuloDoValor(rotulos: Readonly<Record<string, string>> | undefined, va
 }
 
 /**
- * "CLI-000012 · Razão social" do cliente, "FOR-000003 · Nome" do fornecedor —
- * o rótulo do seletor da tela, pela mesma consulta por id. Uma requisição, e
+ * "CLI-000012 · Razão social" do cliente, "OP-000010 · Produto" da OP — o
+ * rótulo do seletor da tela, pela mesma consulta por id. Uma requisição, e
  * só quando há filtro; falhar não impede o documento.
  */
 async function entityFilterLabel(source: EntityFilterSource, id: string | null): Promise<string | null> {
   if (!id) return null;
   const entidade = await source.porId(id).catch(() => null);
-  return entidade ? `${entidade.code} · ${entidade.name}` : null;
+  return entidade ? [entidade.code, entidade.name].filter(Boolean).join(" · ") : null;
+}
+
+/**
+ * Os nomes dos filtros por id que a URL traz — em paralelo, uma consulta por
+ * filtro presente, nunca uma por linha do relatório. Sem filtro, nenhuma.
+ */
+async function nomesDosFiltrosPorId(params: URLSearchParams): Promise<ReportFilterNames> {
+  const nomes = await Promise.all(
+    Object.entries(FILTROS_POR_ID).map(async ([chave, fonte]) => {
+      const nome = fonte ? await entityFilterLabel(fonte, params.get(chave)) : null;
+      return [chave, nome] as const;
+    }),
+  );
+  return Object.fromEntries(nomes);
 }
 
 /**
@@ -488,14 +542,11 @@ export function ReportPrintPage() {
         if (!response.ok) throw new Error(await motivoDaFalha(response));
         const csv = parseReportCsv(await response.text());
         // Nomes só depois do CSV aceito: perfil recusado não consulta ninguém.
-        const [customer, supplier] = await Promise.all([
-          entityFilterLabel(clienteFilterSource, params.get("customerId")),
-          entityFilterLabel(fornecedorFilterSource, params.get("supplierId")),
-        ]);
+        const nomes = await nomesDosFiltrosPorId(params);
         return {
           definition,
           ...csv,
-          filters: reportAppliedFilters(params, { customer, supplier }, definition.filterValues),
+          filters: reportAppliedFilters(params, nomes, definition.filterValues),
         };
       }}
       build={async ({ definition: relatorio, header, rows, filters }) => {

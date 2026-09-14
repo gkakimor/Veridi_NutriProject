@@ -22,7 +22,8 @@ import {
 } from "./ReportPage";
 import { useReport } from "./useReport";
 import { useFiltrosDigitados } from "./useFiltrosDigitados";
-import { ariaDoPeriodoRecusado, diaDoRelatorio, emDias } from "./report-period";
+import { ariaDoPeriodoRecusado, diaDoRelatorio } from "./report-period";
+import { emDias } from "../../lib/duration";
 import { formatBRL } from "../../lib/currency";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";

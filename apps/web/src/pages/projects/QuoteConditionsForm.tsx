@@ -7,6 +7,7 @@ import type {
 } from "@veridi/shared";
 import { LIMITES_INTEIROS_DAS_CONDICOES, QUOTE_PAYMENT_METHOD_LABELS } from "@veridi/shared";
 import { formatBRL } from "../../lib/currency";
+import { emDias } from "../../lib/duration";
 import { formatPercent } from "../../lib/percent";
 import { previewQuotePaymentSchedule } from "../../lib/projects-api";
 import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
@@ -456,8 +457,9 @@ export function QuoteConditionsForm({
                 <dd>
                   {exibido.installments.length}× de{" "}
                   {formatBRL(exibido.installments[0]?.amount ?? null)}
-                  {exibido.installmentIntervalDays !== 30
-                    ? ` a cada ${exibido.installmentIntervalDays} dias`
+                  {/* Intervalo vazio é 30 dias ("por mês"), como o plano calcula. */}
+                  {exibido.installmentIntervalDays !== null && exibido.installmentIntervalDays !== 30
+                    ? ` a cada ${emDias(exibido.installmentIntervalDays)}`
                     : " por mês"}
                 </dd>
                 {exibido.monthlyInterestPercent && (
@@ -493,7 +495,7 @@ export function QuoteConditionsForm({
                   <tr key={parcela.number}>
                     <td>{parcela.number}ª</td>
                     <td className="is-numeric">{formatBRL(parcela.amount)}</td>
-                    <td className="is-numeric">{parcela.dueInDays} dias</td>
+                    <td className="is-numeric">{emDias(parcela.dueInDays)}</td>
                   </tr>
                 ))}
               </tbody>

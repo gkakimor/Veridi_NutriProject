@@ -461,6 +461,252 @@ describe("relatórios R-01…R-20 em PDF", () => {
     });
   });
 
+  describe("filtro por id que só a URL manda: código e nome, nunca o id técnico (REPORTS-PRESENTATION-WAVE-02)", () => {
+    const UUID = {
+      item: "0b6f8a52-1c3d-4e5f-8a9b-0c1d2e3f4a5b",
+      produto: "1c7a9b63-2d4e-4f60-9b0c-1d2e3f4a5b6c",
+      pedido: "2d8bac74-3e5f-4071-8c1d-2e3f4a5b6c7d",
+      ordemDeProducao: "3e9cbd85-4f60-4182-9d2e-3f4a5b6c7d8e",
+      ordemDeCompra: "4fadce96-5071-4293-8e3f-4a5b6c7d8e9f",
+      lote: "5abedfa7-6182-43a4-9f4a-5b6c7d8e9fa0",
+    };
+
+    const CSV_UMA_LINHA = [["Documento", "Descrição"], ["DOC-000001", "Registro do recorte"]];
+
+    const ok = (corpo: unknown) => ({ ok: true, status: 200, json: () => Promise.resolve(corpo) });
+    const lista = (chave: string, entidades: unknown[]) =>
+      ok({ [chave]: entidades, total: entidades.length, page: 1, pageSize: 1 });
+
+    /**
+     * `apiFetch` por destino, como a API responde: o CSV do relatório e a
+     * consulta por id de cada seletor — lista por `ids`/`productId` ou o
+     * documento pelo caminho. `acha: false` é o id sem cadastro; `falha`, a
+     * consulta recusada.
+     */
+    function responderComEntidades(modo: { acha: boolean } | { falha: true }) {
+      apiFetch.mockImplementation(async (url: string) => {
+        const caminho = url.slice(API_URL.length);
+        if (caminho.includes("/export.csv")) return respostaCsv(CSV_UMA_LINHA);
+        if ("falha" in modo) return { ok: false, status: 500, json: () => Promise.resolve({ error: "internal_error" }) };
+        const naoAchou = { ok: false, status: 404, json: () => Promise.resolve({ error: "not_found" }) };
+        const { acha } = modo;
+        if (caminho.startsWith("/items?")) {
+          return lista("items", acha ? [{ id: UUID.item, code: "MP-000007", name: "Maltodextrina", unitCode: "kg" }] : []);
+        }
+        if (caminho.startsWith("/products?")) {
+          return lista(
+            "products",
+            acha ? [{ id: UUID.produto, code: "PROD-000123", name: "Whey Protein Isolado 900 g", customer: null }] : [],
+          );
+        }
+        if (caminho.startsWith("/customers?")) return lista("customers", acha ? [CLIENTE_A] : []);
+        if (caminho.startsWith("/customer-orders/")) {
+          return acha
+            ? ok({ id: UUID.pedido, code: "PED-000045", customerName: "Nutri Distribuidora de Suplementos Ltda" })
+            : naoAchou;
+        }
+        if (caminho.startsWith("/production-orders/")) {
+          return acha
+            ? ok({ id: UUID.ordemDeProducao, code: "OP-000010", productName: "Whey Protein Isolado 900 g" })
+            : naoAchou;
+        }
+        if (caminho.startsWith("/purchase-orders/")) {
+          return acha
+            ? ok({ id: UUID.ordemDeCompra, code: "OC-000031", supplierName: "Insumos Sul", status: "RECEIVED" })
+            : naoAchou;
+        }
+        return { ok: false, status: 599, json: () => Promise.resolve({ error: `consulta inesperada ${caminho}` }) };
+      });
+    }
+
+    /** Toda requisição que não é o CSV do relatório. */
+    function consultas(): string[] {
+      return apiFetch.mock.calls.map(([url]) => String(url)).filter((url) => !url.includes("/export.csv"));
+    }
+
+    const CASOS: [string, string, string, string, string, string][] = [
+      // relatório, chave da URL, id, rótulo no papel, nome resolvido, consulta
+      ["R-09", "itemId", UUID.item, "Item", "MP-000007 · Maltodextrina", `/items?ids=${UUID.item}`],
+      ["R-05", "productId", UUID.produto, "Produto", "PROD-000123 · Whey Protein Isolado 900 g", `/products?productId=${UUID.produto}`],
+      [
+        "R-13",
+        "customerOrderId",
+        UUID.pedido,
+        "Pedido",
+        "PED-000045 · Nutri Distribuidora de Suplementos Ltda",
+        `/customer-orders/${UUID.pedido}`,
+      ],
+      [
+        "R-07",
+        "productionOrderId",
+        UUID.ordemDeProducao,
+        "Ordem de produção",
+        "OP-000010 · Whey Protein Isolado 900 g",
+        `/production-orders/${UUID.ordemDeProducao}`,
+      ],
+      ["R-09", "purchaseOrderId", UUID.ordemDeCompra, "Ordem de compra", "OC-000031 · Insumos Sul", `/purchase-orders/${UUID.ordemDeCompra}`],
+      [
+        "R-01",
+        "ownerCustomerId",
+        CLIENTE_A.id,
+        "Cliente proprietário",
+        "CLI-000012 · Nutri Alfa Suplementos Ltda",
+        `/customers?ids=${CLIENTE_A.id}`,
+      ],
+    ];
+
+    it.each(CASOS)("%s?%s: nome do seletor, uma consulta pelo id, e o id fora do documento", async (codigo, chave, id, rotulo, nome, consulta) => {
+      responderComEntidades({ acha: true });
+      abrir(`/print/relatorios/${codigo}?${chave}=${id}`);
+
+      const documento = await documentoGerado(`${codigo}-2026-09-11.pdf`);
+      expect(campo(documento, rotulo)).toBe(nome);
+      expect(documento.textContent).not.toContain(id);
+      // O CSV recebe o id como sempre: o recorte é o mesmo, só o papel muda.
+      expect(new URL(String(apiFetch.mock.calls[0]?.[0])).searchParams.get(chave)).toBe(id);
+      expect(consultas()).toHaveLength(1);
+      expect(consultas()[0]).toContain(`${API_URL}${consulta}`);
+      expect(campo(documento, "Registros")).toBe("1");
+    });
+
+    it.each(CASOS)("%s?%s inexistente: o campo sai —, sem o id, e o documento é gerado", async (codigo, chave, id, rotulo) => {
+      responderComEntidades({ acha: false });
+      abrir(`/print/relatorios/${codigo}?${chave}=${id}`);
+
+      const documento = await documentoGerado(`${codigo}-2026-09-11.pdf`);
+      expect(campo(documento, rotulo)).toBe("—");
+      expect(documento.textContent).not.toContain(id);
+      expect(campo(documento, "Registros")).toBe("1");
+    });
+
+    it("consultas que falham: cada filtro sai —, sem id, e o documento é gerado mesmo assim", async () => {
+      responderComEntidades({ falha: true });
+      abrir(`/print/relatorios/R-13?customerOrderId=${UUID.pedido}&productId=${UUID.produto}&customerId=${CLIENTE_A.id}`);
+
+      const documento = await documentoGerado("R-13-2026-09-11.pdf");
+      expect(campo(documento, "Pedido")).toBe("—");
+      expect(campo(documento, "Produto")).toBe("—");
+      expect(campo(documento, "Cliente")).toBe("—");
+      for (const id of [UUID.pedido, UUID.produto, CLIENTE_A.id]) expect(documento.textContent).not.toContain(id);
+      expect(campo(documento, "Registros")).toBe("1");
+    });
+
+    it("R-03 com lote: sem seletor de lote na aplicação, não se inventa consulta — Lote sai —", async () => {
+      responderComEntidades({ acha: true });
+      abrir(`/print/relatorios/R-03?lotId=${UUID.lote}&itemId=${UUID.item}`);
+
+      const documento = await documentoGerado("R-03-2026-09-11.pdf");
+      expect(campo(documento, "Lote")).toBe("—");
+      expect(campo(documento, "Item")).toBe("MP-000007 · Maltodextrina");
+      expect(documento.textContent).not.toContain(UUID.lote);
+      expect(documento.textContent).not.toContain(UUID.item);
+      // Só a consulta do item: nenhuma pelo lote.
+      expect(consultas()).toEqual([`${API_URL}/items?ids=${UUID.item}&page=1&pageSize=1`]);
+    });
+
+    it("vários ids juntos e 40 linhas: uma consulta por filtro, nunca uma por linha", async () => {
+      responderComEntidades({ acha: true });
+      apiFetch.mockImplementationOnce(async () =>
+        respostaCsv([CSV_UMA_LINHA[0]!, ...Array.from({ length: 40 }, (_, i) => [`DOC-${i}`, "Registro"])]),
+      );
+      abrir(`/print/relatorios/R-07?itemId=${UUID.item}&productId=${UUID.produto}&productionOrderId=${UUID.ordemDeProducao}`);
+
+      const documento = await documentoGerado("R-07-2026-09-11.pdf");
+      expect(campo(documento, "Registros")).toBe("40");
+      expect(consultas()).toHaveLength(3);
+      expect(campo(documento, "Item")).toBe("MP-000007 · Maltodextrina");
+      expect(campo(documento, "Produto")).toBe("PROD-000123 · Whey Protein Isolado 900 g");
+      expect(campo(documento, "Ordem de produção")).toBe("OP-000010 · Whey Protein Isolado 900 g");
+    });
+
+    it("sem filtro por id: nenhuma consulta além do CSV", async () => {
+      responderComEntidades({ acha: true });
+      abrir("/print/relatorios/R-09?from=2026-09-01&to=2026-09-30");
+
+      await documentoGerado("R-09-2026-09-11.pdf");
+      expect(apiFetch).toHaveBeenCalledTimes(1);
+      expect(consultas()).toHaveLength(0);
+    });
+
+    it.each(["R-19", "R-20"])("%s com perfil recusado e cliente no filtro: nem CSV, nem consulta", async (codigo) => {
+      sessao.role = "VIEWER";
+      responderComEntidades({ acha: true });
+      abrir(`/print/relatorios/${codigo}?customerId=${CLIENTE_A.id}`);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Seu perfil não permite ver este relatório.");
+      expect(apiFetch).not.toHaveBeenCalled();
+      expect(renderPdfBlob).not.toHaveBeenCalled();
+    });
+
+    it("CSV recusado pelo servidor: nenhum id é consultado", async () => {
+      apiFetch.mockResolvedValue({ ok: false, status: 403, json: () => Promise.resolve({ error: "forbidden" }) });
+      abrir(`/print/relatorios/R-07?itemId=${UUID.item}&productId=${UUID.produto}&productionOrderId=${UUID.ordemDeProducao}`);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Falha ao carregar o relatório (403)");
+      expect(apiFetch).toHaveBeenCalledTimes(1);
+      expect(consultas()).toHaveLength(0);
+      expect(renderPdfBlob).not.toHaveBeenCalled();
+    });
+
+    it("todo id que os schemas dos relatórios aceitam tem rótulo e nunca sai como veio", () => {
+      const ids = [
+        "itemId",
+        "lotId",
+        "productId",
+        "productionOrderId",
+        "customerOrderId",
+        "purchaseOrderId",
+        "supplierId",
+        "customerId",
+        "ownerCustomerId",
+      ];
+      const params = new URLSearchParams(ids.map((chave) => [chave, `${chave}-${UUID.lote}`]));
+
+      const filtros = reportAppliedFilters(params);
+      expect(filtros).toHaveLength(ids.length);
+      for (const [indice, filtro] of filtros.entries()) {
+        expect(filtro.label, ids[indice]).not.toBe(ids[indice]);
+        expect(filtro.value, ids[indice]).toBe("");
+      }
+    });
+  });
+
+  it.each<[string, string[], string[]]>([
+    [
+      "R-05",
+      [
+        "OP", "Produto", "Nome do produto", "Formulação", "Planejado", "Produzido", "Variação", "Rendimento (%)",
+        "Unidade", "Início", "Conclusão", "Status", "Custo material unitário", "Qualidade do custo",
+      ],
+      ["Real", "Estimado", "Parcial", "Sem custo"],
+    ],
+    [
+      "R-09",
+      [
+        "Recebimento", "Data", "OC", "Fornecedor", "Item", "Descrição", "Lote interno", "Lote do fornecedor",
+        "Quantidade", "Unidade", "CoA", "Preço previsto (OC)", "Custo efetivo", "Qualidade do custo",
+      ],
+      ["Real", "Sem custo"],
+    ],
+  ])(
+    "%s: a qualidade do custo chega ao papel como a API a escreve — o rótulo, sem enum (REPORTS-PRESENTATION-WAVE-02)",
+    async (codigo, cabecalho, qualidades) => {
+      const registros = qualidades.map((qualidade, indice) =>
+        cabecalho.map((coluna) => (coluna === "Qualidade do custo" ? qualidade : `${coluna}-${indice}`)),
+      );
+      apiFetch.mockResolvedValue(respostaCsv([cabecalho, ...registros]));
+      abrir(`/print/relatorios/${codigo}`);
+
+      const documento = await documentoGerado(`${codigo}-2026-09-11.pdf`);
+      const principais = linhas(documento).filter((_, indice) => indice % 2 === 0);
+      // A qualidade é a última coluna da linha principal: fica ao lado do custo que explica.
+      expect(principais.map((linha) => linha.at(-1))).toEqual(qualidades);
+      for (const enumCru of ["REAL", "ESTIMATED", "PARTIAL", "NO_COST"]) {
+        expect(documento.textContent, enumCru).not.toContain(enumCru);
+      }
+    },
+  );
+
   describe("filtro de lista fechada no papel: o rótulo da tela, nunca o valor da API (REPORTS-PRESENTATION-WAVE-01)", () => {
     it.each<[string, string, Record<string, string>, string[]]>([
       [
@@ -494,6 +740,15 @@ describe("relatórios R-01…R-20 em PDF", () => {
         { Status: "Recebido parcialmente", Origem: "Pedido do Cliente" },
         ["PARTIALLY_RECEIVED", "CUSTOMER_ORDER"],
       ],
+      // Aceitos pela API sem seletor na tela (REPORTS-PRESENTATION-WAVE-02).
+      [
+        "R-01",
+        "ownerType=CUSTOMER&location=A1",
+        { Proprietário: "Cliente", Localização: "A1" },
+        ["CUSTOMER", "ownerType", "location"],
+      ],
+      ["R-03", "sourceType=RECEIPT", { Origem: "Recebimento" }, ["RECEIPT", "sourceType"]],
+      ["R-18", "active=false", { "Produto ativo": "Não" }, ["active", "false"]],
       ["R-12", "status=IN_FULFILLMENT", { Status: "Em atendimento" }, ["IN_FULFILLMENT"]],
       ["R-13", "status=PARTIALLY_SHIPPED", { Status: "Parcialmente expedido" }, ["PARTIALLY_SHIPPED"]],
       ["R-17", "status=CANCELLED", { Status: "Cancelado" }, ["CANCELLED"]],
