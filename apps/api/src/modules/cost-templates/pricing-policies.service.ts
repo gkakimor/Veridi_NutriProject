@@ -18,6 +18,11 @@ import type {
 } from "@veridi/shared";
 import type { CustomerTaxProfile, PricingModelConfig } from "@veridi/shared";
 import {
+  PRICING_ESTIMATED_TAX_MODE_FIELD,
+  PRICING_ESTIMATED_TAX_MODE_LABELS,
+  PRICING_INDUSTRIAL_COST_MODE_FIELD,
+  PRICING_INDUSTRIAL_COST_MODE_LABELS,
+  PRICING_MODEL_VALUE_LABELS,
   PRICING_POLICY_TEMPLATE_CODE_PREFIX,
   normalizarPerfisDoModelo,
   percentualDeImpostoSobreVenda,
@@ -765,6 +770,8 @@ export async function getPricingPolicyUpdateAvailable(
 
 interface ComparavelPolitica {
   label: string;
+  /** O Modelo de Precificação (§84): muda o custo que forma o preço. */
+  model: PricingModelConfig;
   tiers: {
     quantity: string;
     uomCode: string;
@@ -773,17 +780,70 @@ interface ComparavelPolitica {
   }[];
 }
 
+const MODELO_CUSTO_INDUSTRIAL = "Custo industrial";
+const MODELO_IMPOSTOS = "Impostos estimados";
+const MODELO_GESTAO_EXTERNA = "Custos adicionais administrados externamente";
+
+/** A ordem de leitura do diff do Modelo: modo, o valor dele, e assim por diante. */
+const ORDEM_DO_MODELO = [
+  MODELO_CUSTO_INDUSTRIAL,
+  PRICING_MODEL_VALUE_LABELS.industrialCostPercentOfMaterials,
+  PRICING_MODEL_VALUE_LABELS.industrialCostAmountPerUnit,
+  PRICING_MODEL_VALUE_LABELS.industrialCostAmountTotal,
+  MODELO_IMPOSTOS,
+  PRICING_MODEL_VALUE_LABELS.estimatedTaxPercentOfSalePrice,
+  PRICING_MODEL_VALUE_LABELS.estimatedTaxAmountPerUnit,
+  PRICING_MODEL_VALUE_LABELS.estimatedTaxAmountTotal,
+  MODELO_GESTAO_EXTERNA,
+];
+
+/**
+ * O Modelo como "o que → valor", só com o que muda a conta (PRICING-MODEL-DIFF-01):
+ * o modo do custo industrial e o valor que ESSE modo lê, o modo dos impostos e o
+ * valor dele, e a gestão externa.
+ *
+ * Ficam de fora, de propósito:
+ * - valor guardado de modo desligado — não entra em preço nenhum desta versão
+ *   ("desligar não apaga", §84); religar o modo é que o traz, e aí ele aparece;
+ * - perfis tributários — só SUGEREM o Modelo (§83), não mudam número.
+ *
+ * Valor sai normalizado (`12.0000` e `12` são o mesmo percentual).
+ */
+function regrasDoModelo(model: PricingModelConfig): Map<string, string> {
+  const valor = (texto: string | null) => (texto === null ? "—" : new Prisma.Decimal(texto).toString());
+  const regras = new Map<string, string>();
+  regras.set(MODELO_CUSTO_INDUSTRIAL, PRICING_INDUSTRIAL_COST_MODE_LABELS[model.industrialCostMode]);
+  const campoIndustrial = PRICING_INDUSTRIAL_COST_MODE_FIELD[model.industrialCostMode];
+  if (campoIndustrial) regras.set(PRICING_MODEL_VALUE_LABELS[campoIndustrial], valor(model[campoIndustrial]));
+  regras.set(MODELO_IMPOSTOS, PRICING_ESTIMATED_TAX_MODE_LABELS[model.estimatedTaxMode]);
+  const campoImposto = PRICING_ESTIMATED_TAX_MODE_FIELD[model.estimatedTaxMode];
+  if (campoImposto) regras.set(PRICING_MODEL_VALUE_LABELS[campoImposto], valor(model[campoImposto]));
+  regras.set(MODELO_GESTAO_EXTERNA, model.externalAdditionalCosts ? "Sim" : "Não");
+  return regras;
+}
+
 /**
  * Diff entre duas políticas.
  *
  * Compara REGRA, nunca preço resultante: mostrar "R$ 44,90 → R$ 41,20" faria
- * parecer que a política mudou quando só o custo do produto mudou.
+ * parecer que a política mudou quando só o custo do produto mudou. Regra é o
+ * Modelo e as faixas — o rótulo da versão é título do diff, não diferença.
  */
 export function compararPoliticas(
   de: ComparavelPolitica,
   para: ComparavelPolitica,
 ): TemplateDiffDTO {
   const entries: TemplateDiffEntryDTO[] = [];
+
+  const deModelo = regrasDoModelo(de.model);
+  const paraModelo = regrasDoModelo(para.model);
+  for (const campo of ORDEM_DO_MODELO) {
+    const from = deModelo.get(campo) ?? null;
+    const to = paraModelo.get(campo) ?? null;
+    if (from === to) continue;
+    entries.push({ kind: "MODEL_CHANGED", label: "Modelo de Precificação", field: campo, from, to });
+  }
+
   const deFaixas = new Map(de.tiers.map((t) => [t.quantity, t]));
   const paraFaixas = new Map(para.tiers.map((t) => [t.quantity, t]));
 
@@ -839,6 +899,7 @@ export function compararPoliticas(
 function politicaComparavel(version: VersionWithRelations): ComparavelPolitica {
   return {
     label: `${version.pricingPolicyTemplate.code} · V${version.versionNumber}`,
+    model: modeloDasColunas(version),
     tiers: version.tiers.map((tier) => ({
       quantity: tier.quantity.toString(),
       uomCode: tier.uomCode,

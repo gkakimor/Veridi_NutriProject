@@ -557,6 +557,11 @@ describe("Modelo de Precificação flexível — PRICING-TEMPLATE-FLEX-01", () =
     });
     expect(aplicada.statusCode, aplicada.body).toBe(201);
     expect(aplicada.json().pricingModel.industrialCostMode).toBe("IGNORE");
+    // PRICING-ACTIVATE-CONFIRM-01: o rascunho serve a qualidade que a ativação pesa,
+    // ao lado da do cálculo — a tela não precisa deduzir nada.
+    const rascunho = aplicada.json().tiers[0];
+    expect(["PARTIAL", "NO_COST"]).toContain(rascunho.costQuality);
+    expect(["COMPLETE_REAL_REFERENCE", "COMPLETE_WITH_ESTIMATES"]).toContain(rascunho.pricingCostQuality);
 
     const ativada = await app.inject({
       method: "POST",
@@ -570,6 +575,60 @@ describe("Modelo de Precificação flexível — PRICING-TEMPLATE-FLEX-01", () =
     expect(tier.industrialCostPerUnit).toBeNull();
     expect(tier.estimatedTaxPercent).toBeNull();
     perto(tier.selectedUnitPrice, D(previa.costPerUnit!).dividedBy("0.6"));
+  });
+
+  it("Modelo padrão sobre custo incompleto: o rascunho diz que a base do preço é incompleta", async () => {
+    const semEnergia = await produtoComCusto({ energia: false });
+    const padrao = await criarModelo({ faixas: [{ quantity: "1000", margem: "35" }] });
+    const aplicada = await app.inject({
+      method: "POST",
+      url: `/products/${semEnergia.product.id}/pricing/from-policy`,
+      payload: { pricingPolicyVersionId: padrao.versionId, industrialCostCalculationId: semEnergia.calc.id },
+    });
+    expect(aplicada.statusCode, aplicada.body).toBe(201);
+    const rascunho = aplicada.json().tiers[0];
+    expect(rascunho.pricingCostQuality).toBe(rascunho.costQuality);
+    expect(["PARTIAL", "NO_COST"]).toContain(rascunho.pricingCostQuality);
+  });
+
+  it("comparar versões mostra a mudança do Modelo sem mudar faixa (PRICING-MODEL-DIFF-01)", async () => {
+    const { versionId } = await criarModelo();
+    const v2 = (
+      await app.inject({ method: "POST", url: `/pricing-policy-versions/${versionId}/new-version` })
+    ).json();
+    const salvo = await app.inject({
+      method: "PATCH",
+      url: `/pricing-policy-versions/${v2.id}`,
+      payload: {
+        pricingModel: {
+          industrialCostMode: "PER_UNIT",
+          industrialCostAmountPerUnit: "0.5",
+          externalAdditionalCosts: true,
+        },
+      },
+    });
+    expect(salvo.statusCode, salvo.body).toBe(200);
+
+    const diff = (
+      await app.inject({ method: "GET", url: `/pricing-policy-versions/${versionId}/compare?against=${v2.id}` })
+    ).json();
+    expect(
+      diff.entries.map((entry: { kind: string; field: string; from: string | null; to: string | null }) => [
+        entry.kind,
+        entry.field,
+        entry.from,
+        entry.to,
+      ]),
+    ).toEqual([
+      ["MODEL_CHANGED", "Custo industrial", "Conforme a Estrutura de Custos (cálculo do ERP)", "R$ por unidade"],
+      ["MODEL_CHANGED", "Custo industrial (R$ por unidade)", null, "0.5"],
+      ["MODEL_CHANGED", "Custos adicionais administrados externamente", "Não", "Sim"],
+    ]);
+
+    const igual = (
+      await app.inject({ method: "GET", url: `/pricing-policy-versions/${v2.id}/compare?against=${v2.id}` })
+    ).json();
+    expect(igual.entries).toEqual([]);
   });
 
   it("perfil tributário: a lista para um produto diz a compatibilidade e não esconde nenhuma", async () => {

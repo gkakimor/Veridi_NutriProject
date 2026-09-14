@@ -67,6 +67,7 @@ import {
   getProductIndustrialCosts,
   updateEnergyMode,
   updateIndustrialCostVersion,
+  updateResourceUsage,
 } from "../../lib/industrial-costs-api";
 import { opcaoDeRecurso, useRecursosDoSeletor } from "../../lib/recursos-do-seletor";
 import type { RecorteDeRecursos } from "../../lib/recursos-do-seletor";
@@ -193,6 +194,14 @@ export function IndustrialCostPage() {
   const [usageQuantity, setUsageQuantity] = useState("");
   /** Quantidade de recursos equivalentes (§87) — só mão de obra e equipamento. */
   const [usageResourceCount, setUsageResourceCount] = useState("1");
+  /*
+   * Linha de recurso em edição, na própria linha (COST-RESOURCE-EDIT-01): tempo
+   * e quantidade de recursos, em texto de campo. Salvar atualiza a MESMA linha —
+   * trocar a quantidade deixou de ser remover e declarar de novo.
+   */
+  const [edicaoDeUso, setEdicaoDeUso] = useState<
+    { id: string; quantidade: string; recursos: string } | null
+  >(null);
   /*
    * Recurso criado no contexto, à espera do tipo.
    *
@@ -426,8 +435,18 @@ export function IndustrialCostPage() {
     (usageResourceId !== "" ||
       decimalComparavel(usageQuantity) !== null ||
       decimalComparavel(usageResourceCount) !== "1");
+  const usoEditado = edicaoDeUso
+    ? version?.resourceUsages.find((usage) => usage.id === edicaoDeUso.id)
+    : undefined;
+  const edicaoDeUsoAlterada =
+    Boolean(editable) &&
+    usoEditado !== undefined &&
+    edicaoDeUso !== null &&
+    (decimalComparavel(edicaoDeUso.quantidade) !==
+      decimalComparavel(toPtBrEditText(usoEditado.usageQuantity, OPCOES_QUANTIDADE)) ||
+      decimalComparavel(edicaoDeUso.recursos) !== decimalComparavel(String(usoEditado.resourceCount)));
   const { liberarGuarda } = useUnsavedChangesGuard({
-    isDirty: baseAlterada || premissaEmAberto || recursoEmAberto,
+    isDirty: baseAlterada || premissaEmAberto || recursoEmAberto || edicaoDeUsoAlterada,
     substantivo: "estrutura de custos",
     genero: "a",
   });
@@ -1104,12 +1123,85 @@ export function IndustrialCostPage() {
                         </td>
                         <td>{INDUSTRIAL_RESOURCE_TYPE_LABELS[usage.resourceType]}</td>
                         <td>
-                          <ResourceUsageAmount
-                            resourceCount={usage.resourceCount}
-                            usageQuantity={usage.usageQuantity}
-                            totalUsageQuantity={usage.totalUsageQuantity}
-                            usageUom={usage.usageUom}
-                          />
+                          {editable && edicaoDeUso?.id === usage.id ? (
+                            <div>
+                              <ResourceCountField
+                                id={`uso-${usage.id}-recursos`}
+                                label={`Quantidade de recursos de ${usage.resourceCode}`}
+                                resourceType={usage.resourceType}
+                                value={edicaoDeUso.recursos}
+                                onChange={(recursos) =>
+                                  setEdicaoDeUso((atual) => (atual ? { ...atual, recursos } : atual))
+                                }
+                                disabled={saving}
+                              />
+                              <div className="field">
+                                <label htmlFor={`uso-${usage.id}-quantidade`}>
+                                  {acceptsResourceCount(usage.resourceType)
+                                    ? `Tempo por recurso de ${usage.resourceCode}`
+                                    : `Consumo de ${usage.resourceCode}`}{" "}
+                                  ({INDUSTRIAL_RATE_UOM_LABELS[usage.usageUom]})
+                                </label>
+                                <DecimalField
+                                  id={`uso-${usage.id}-quantidade`}
+                                  scale={CASAS_QUANTIDADE}
+                                  value={edicaoDeUso.quantidade}
+                                  disabled={saving}
+                                  onChangeValue={(quantidade) =>
+                                    setEdicaoDeUso((atual) => (atual ? { ...atual, quantidade } : atual))
+                                  }
+                                />
+                              </div>
+                              <div className="line-actions">
+                                <button
+                                  type="button"
+                                  className="btn btn--secondary btn--sm"
+                                  disabled={saving}
+                                  onClick={() => {
+                                    const edicao = edicaoDeUso;
+                                    // Nada mudou: fechar não é gravar.
+                                    if (!edicao || !edicaoDeUsoAlterada) {
+                                      setEdicaoDeUso(null);
+                                      return;
+                                    }
+                                    void run(async () => {
+                                      await updateResourceUsage(usage.id, {
+                                        usageQuantity: exigirDecimal(
+                                          edicao.quantidade,
+                                          acceptsResourceCount(usage.resourceType)
+                                            ? "Tempo por recurso"
+                                            : "Consumo por lote de referência",
+                                          OPCOES_QUANTIDADE,
+                                        ),
+                                        // Energia não envia quantidade: para ela o domínio usa 1 (§87).
+                                        ...(acceptsResourceCount(usage.resourceType)
+                                          ? { resourceCount: exigirQuantidadeDeRecursos(edicao.recursos) }
+                                          : {}),
+                                      });
+                                      setEdicaoDeUso(null);
+                                    });
+                                  }}
+                                >
+                                  Salvar recurso
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn--ghost btn--sm"
+                                  disabled={saving}
+                                  onClick={() => setEdicaoDeUso(null)}
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <ResourceUsageAmount
+                              resourceCount={usage.resourceCount}
+                              usageQuantity={usage.usageQuantity}
+                              totalUsageQuantity={usage.totalUsageQuantity}
+                              usageUom={usage.usageUom}
+                            />
+                          )}
                         </td>
                         <td>{INDUSTRIAL_USAGE_BASIS_LABELS[usage.usageBasis]}</td>
                         <td>{describeRate(usage, version.status)}</td>
@@ -1122,6 +1214,15 @@ export function IndustrialCostPage() {
                             <RowActions
                               label={`Mais ações de ${usage.resourceCode}`}
                               actions={[
+                                {
+                                  label: "Editar recurso",
+                                  onSelect: () =>
+                                    setEdicaoDeUso({
+                                      id: usage.id,
+                                      quantidade: toPtBrEditText(usage.usageQuantity, OPCOES_QUANTIDADE),
+                                      recursos: String(usage.resourceCount),
+                                    }),
+                                },
                                 {
                                   label: "Remover recurso",
                                   destructive: true,

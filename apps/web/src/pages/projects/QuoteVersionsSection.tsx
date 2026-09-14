@@ -1168,7 +1168,11 @@ export function QuoteVersionsSection({
                               Existe uma precificação vigente para {formatQuantity(tier.quantity)}{" "}
                               {tier.uomCode}:{" "}
                               <strong>{formatUnitPriceBRL(tier.selectedUnitPrice)}</strong> /{" "}
-                              {tier.uomCode}.
+                              {tier.uomCode}.{" "}
+                              {/* F-05-1: só texto, na mesma frase — o layout da linha não muda. */}
+                              O preço acordado segue a precisão comercial; por isso o total pode
+                              diferir da receita da Precificação em alguns centavos, pelo
+                              arredondamento.
                             </span>
                             <button
                               type="button"

@@ -322,7 +322,7 @@ describe("Estrutura de custos — quantidade de recursos na conta (§87)", () =>
     });
     expect(linhaDe(await calculate(app, version.id), operador.id).subtotal).toBe("100.00");
 
-    // Sem edição de linha nesta fase: remover e declarar de novo, como com as horas.
+    // Remover e declarar de novo continua valendo; editar no lugar é o caminho da tela (COST-RESOURCE-EDIT-01, abaixo).
     const removido = await app.inject({
       method: "DELETE",
       url: `/industrial-cost-resource-usages/${usoDe(dois.json(), operador.id).id}`,
@@ -460,6 +460,236 @@ describe("Estrutura de custos — quantidade de recursos na conta (§87)", () =>
           where: { industrialCostVersionId: versionId },
         }),
       ).toBe(0);
+    });
+  });
+});
+
+/**
+ * COST-RESOURCE-EDIT-01 — a linha de recurso se edita no lugar.
+ *
+ * `PATCH /industrial-cost-resource-usages/:id` troca tempo e/ou quantidade de
+ * recursos da MESMA linha: id, recurso e posição ficam, e nenhuma linha nasce.
+ * A conta é a de §87, sem mudança — quem prova é o cálculo, com número.
+ */
+describe("editar a linha de recurso no lugar — COST-RESOURCE-EDIT-01", () => {
+  const editUsage = (app: App, usageId: string, payload: unknown) =>
+    app.inject({
+      method: "PATCH",
+      url: `/industrial-cost-resource-usages/${usageId}`,
+      payload: payload as Record<string, unknown>,
+    });
+
+  const linhasDaVersao = (versionId: string) =>
+    getPrisma().industrialCostResourceUsage.findMany({
+      where: { industrialCostVersionId: versionId },
+      orderBy: { sortOrder: "asc" },
+      select: {
+        id: true,
+        industrialResourceId: true,
+        sortOrder: true,
+        usageQuantity: true,
+        resourceCount: true,
+      },
+    });
+
+  it("2 → 3 operadores: a mesma linha, na mesma posição — R$ 100 vira R$ 150", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const { version } = await createStructure(app);
+    const operador = await createResource(app, "LABOR", "25");
+    const encapsuladora = await createResource(app, "EQUIPMENT", "85", { powerKw: "5" });
+    const criado = await addUsage(app, version.id, {
+      resourceId: operador.id,
+      usageQuantity: "2",
+      resourceCount: 2,
+    });
+    await addUsage(app, version.id, { resourceId: encapsuladora.id, usageQuantity: "1" });
+    const antes = await linhasDaVersao(version.id);
+    const usoId = usoDe(criado.json(), operador.id).id;
+    expect(linhaDe(await calculate(app, version.id), operador.id).subtotal).toBe("100.00");
+
+    const editado = await editUsage(app, usoId, { resourceCount: 3 });
+    expect(editado.statusCode, editado.body).toBe(200);
+    const uso = usoDe(editado.json(), operador.id);
+    expect(uso.id).toBe(usoId);
+    expect(uso.resourceCount).toBe(3);
+    expect(uso.usageQuantity).toBe("2");
+    expect(uso.totalUsageQuantity).toBe("6");
+
+    const depois = await linhasDaVersao(version.id);
+    const identidade = (linhas: typeof antes) =>
+      linhas.map(({ id, industrialResourceId, sortOrder }) => ({ id, industrialResourceId, sortOrder }));
+    // Nem linha nova, nem troca de id, nem troca de posição.
+    expect(identidade(depois)).toEqual(identidade(antes));
+    // A outra linha não foi tocada.
+    expect(depois[1]!.resourceCount).toBe(1);
+    expect(depois[1]!.usageQuantity.toString()).toBe("1");
+
+    const linha = linhaDe(await calculate(app, version.id), operador.id);
+    expect(linha.quantity).toBe("6");
+    expect(linha.subtotal).toBe("150.00");
+    await app.close();
+  });
+
+  it("tempo 2 h → 3,5 h com 2 operadores = R$ 175; de volta a 1 operador, R$ 87,50", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const { version } = await createStructure(app);
+    const operador = await createResource(app, "LABOR", "25");
+    const criado = await addUsage(app, version.id, {
+      resourceId: operador.id,
+      usageQuantity: "2",
+      resourceCount: 2,
+    });
+    const usoId = usoDe(criado.json(), operador.id).id;
+
+    const tempo = await editUsage(app, usoId, { usageQuantity: "3.5" });
+    expect(tempo.statusCode, tempo.body).toBe(200);
+    expect(usoDe(tempo.json(), operador.id)).toMatchObject({
+      id: usoId,
+      usageQuantity: "3.5",
+      resourceCount: 2,
+      totalUsageQuantity: "7",
+    });
+    expect(linhaDe(await calculate(app, version.id), operador.id).subtotal).toBe("175.00");
+
+    const um = await editUsage(app, usoId, { resourceCount: 1 });
+    expect(um.statusCode, um.body).toBe(200);
+    expect(usoDe(um.json(), operador.id)).toMatchObject({ id: usoId, resourceCount: 1, totalUsageQuantity: "3.5" });
+    expect(linhaDe(await calculate(app, version.id), operador.id).subtotal).toBe("87.50");
+    await app.close();
+  });
+
+  it("equipamento 3 → 4: a energia derivada acompanha — 40 kWh = R$ 32, nunca os 30 de antes", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const { version } = await createStructure(app);
+    const encapsuladora = await createResource(app, "EQUIPMENT", "85", { powerKw: "5" });
+    const energia = await createResource(app, "ENERGY", "0.80");
+    const criado = await addUsage(app, version.id, {
+      resourceId: encapsuladora.id,
+      usageQuantity: "2",
+      resourceCount: 3,
+    });
+    await app.inject({
+      method: "POST",
+      url: `/industrial-costs/${version.id}/energy-mode`,
+      payload: { energyCalculationMode: "FROM_EQUIPMENT", energyResourceId: energia.id },
+    });
+    expect((await calculate(app, version.id)).energySubtotal).toBe("24.00");
+
+    const editado = await editUsage(app, usoDe(criado.json(), encapsuladora.id).id, { resourceCount: 4 });
+    expect(editado.statusCode, editado.body).toBe(200);
+    expect(usoDe(editado.json(), encapsuladora.id).derivedEnergyKwh).toBe("40");
+
+    const calculo = await calculate(app, version.id);
+    expect(linhaDe(calculo, encapsuladora.id).subtotal).toBe("680.00");
+    expect(calculo.derivedEnergyKwh).toBe("40");
+    expect(calculo.energySubtotal).toBe("32.00");
+    await app.close();
+  });
+
+  it("energia direta: o kWh se edita; quantidade acima de 1 é recusada e nada muda", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const { version } = await createStructure(app);
+    await app.inject({
+      method: "POST",
+      url: `/industrial-costs/${version.id}/energy-mode`,
+      payload: { energyCalculationMode: "DIRECT" },
+    });
+    const energia = await createResource(app, "ENERGY", "0.80");
+    const criado = await addUsage(app, version.id, { resourceId: energia.id, usageQuantity: "50" });
+    const usoId = usoDe(criado.json(), energia.id).id;
+
+    const kwh = await editUsage(app, usoId, { usageQuantity: "60" });
+    expect(kwh.statusCode, kwh.body).toBe(200);
+    expect(usoDe(kwh.json(), energia.id)).toMatchObject({ id: usoId, usageQuantity: "60", resourceCount: 1 });
+    expect((await calculate(app, version.id)).energySubtotal).toBe("48.00");
+
+    const recusado = await editUsage(app, usoId, { resourceCount: 2 });
+    expect(recusado.statusCode, recusado.body).toBe(400);
+    expect(recusado.json().error).toBe("invalid_resource_count");
+    const [linha] = await linhasDaVersao(version.id);
+    expect(linha!.resourceCount).toBe(1);
+    expect(linha!.usageQuantity.toString()).toBe("60");
+    await app.close();
+  });
+
+  it("versão ativa não se edita — 409, e a linha continua a mesma", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const { version } = await createStructure(app);
+    const operador = await createResource(app, "LABOR", "25");
+    const criado = await addUsage(app, version.id, {
+      resourceId: operador.id,
+      usageQuantity: "2",
+      resourceCount: 2,
+    });
+    const ativa = await app.inject({
+      method: "POST",
+      url: `/industrial-costs/${version.id}/activate`,
+      payload: { confirmIncomplete: true },
+    });
+    expect(ativa.statusCode, ativa.body).toBe(200);
+
+    const recusado = await editUsage(app, usoDe(criado.json(), operador.id).id, { resourceCount: 3 });
+    expect(recusado.statusCode, recusado.body).toBe(409);
+    expect(recusado.json().error).toBe("version_locked");
+    const [linha] = await linhasDaVersao(version.id);
+    expect(linha!.resourceCount).toBe(2);
+    await app.close();
+  });
+
+  it("linha inexistente é 404", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const resposta = await editUsage(app, "00000000-0000-0000-0000-000000000000", { resourceCount: 2 });
+    expect(resposta.statusCode, resposta.body).toBe(404);
+    await app.close();
+  });
+
+  describe("edição inválida é 400 antes do domínio, e a linha não muda", () => {
+    const app = buildTestApp("ADMIN");
+    let versionId = "";
+    let usoId = "";
+
+    beforeAll(async () => {
+      await app.ready();
+      const { version } = await createStructure(app);
+      versionId = version.id;
+      const operador = await createResource(app, "LABOR", "25");
+      const criado = await addUsage(app, versionId, {
+        resourceId: operador.id,
+        usageQuantity: "2",
+        resourceCount: 2,
+      });
+      usoId = usoDe(criado.json(), operador.id).id;
+    });
+    afterAll(async () => {
+      await app.close();
+    });
+
+    it.each([
+      ["quantidade zero", { resourceCount: 0 }],
+      ["quantidade negativa", { resourceCount: -1 }],
+      ["quantidade fracionada", { resourceCount: 1.5 }],
+      ["quantidade em texto", { resourceCount: "2" }],
+      ["quantidade nula", { resourceCount: null }],
+      ["tempo zero", { usageQuantity: "0" }],
+      ["tempo negativo", { usageQuantity: "-1" }],
+      ["tempo ilegível", { usageQuantity: "abc" }],
+      ["corpo vazio", {}],
+      ["troca de recurso", { resourceId: "outro", resourceCount: 3 }],
+    ])("%s", async (_nome, payload) => {
+      const recusado = await editUsage(app, usoId, payload);
+      expect(recusado.statusCode, recusado.body).toBe(400);
+      expect(recusado.json().error).toBe("validation_error");
+      const linhas = await linhasDaVersao(versionId);
+      expect(linhas).toHaveLength(1);
+      expect(linhas[0]!.id).toBe(usoId);
+      expect(linhas[0]!.resourceCount).toBe(2);
+      expect(linhas[0]!.usageQuantity.toString()).toBe("2");
     });
   });
 });

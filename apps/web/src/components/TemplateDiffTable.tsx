@@ -34,6 +34,7 @@ const ROTULO: Record<string, string> = {
   TIER_ADDED: "Faixa adicionada",
   TIER_REMOVED: "Faixa removida",
   TIER_CHANGED: "Faixa alterada",
+  MODEL_CHANGED: "Modelo alterado",
 };
 
 export function TemplateDiffTable({

@@ -256,7 +256,8 @@ export function problemaDoDivisorDoPreco(input: {
   const imposto = new Decimal(input.estimatedTaxPercent ?? "0");
   if (margem.plus(comissao).plus(imposto).lessThan(HUNDRED)) return null;
   if (input.estimatedTaxPercent === null) {
-    return "Margem somada à comissão atinge 100% — não existe preço que satisfaça.";
+    // Igual a 100% e acima dele são a mesma recusa (F-04-1): o texto cobre os dois.
+    return "A soma da margem e da comissão deve ser menor que 100% — não existe preço que satisfaça.";
   }
   return `Margem (${pt(margem.toString())}%) + comissão (${pt(comissao.toString())}%) + impostos sobre a venda (${pt(imposto.toString())}%) somam 100% ou mais — não existe preço que satisfaça.`;
 }

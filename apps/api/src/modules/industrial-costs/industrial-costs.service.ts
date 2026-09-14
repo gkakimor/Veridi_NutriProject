@@ -52,6 +52,7 @@ import type {
   CreateIndustrialCostVersionInput,
   UpdateIndustrialCostLineInput,
   UpdateIndustrialCostVersionInput,
+  UpdateResourceUsageInput,
 } from "./industrial-costs.schemas.js";
 
 /**
@@ -941,6 +942,48 @@ export async function createResourceUsage(
   });
 
   return (await getIndustrialCostVersion(versionId))!;
+}
+
+/**
+ * Edita a linha de recurso no lugar (COST-RESOURCE-EDIT-01): tempo e quantidade
+ * de recursos. É UPDATE da mesma linha — id, ordem e recurso ficam; remover e
+ * declarar de novo mudaria o id e mandaria a linha para o fim da lista.
+ *
+ * As regras são as de criar: versão em rascunho, e quantidade acima de 1 só
+ * para quem se conta (§87). A conta não muda — o cálculo lê a linha como lia.
+ */
+export async function updateResourceUsage(
+  usageId: string,
+  input: UpdateResourceUsageInput,
+  _actor: User,
+): Promise<IndustrialCostVersionDTO> {
+  const prisma = getPrisma();
+  const usage = await prisma.industrialCostResourceUsage.findUnique({
+    where: { id: usageId },
+    include: { industrialResource: true },
+  });
+  if (!usage) throw new ResourceUsageNotFoundError(usageId);
+  await requireEditableVersion(usage.industrialCostVersionId);
+
+  if (
+    input.resourceCount !== undefined &&
+    input.resourceCount !== 1 &&
+    !acceptsResourceCount(usage.industrialResource.type)
+  ) {
+    throw new ResourceCountNotAllowedError(usage.industrialResource.name);
+  }
+
+  await prisma.industrialCostResourceUsage.update({
+    where: { id: usageId },
+    data: {
+      ...(input.usageQuantity !== undefined
+        ? { usageQuantity: new Prisma.Decimal(input.usageQuantity) }
+        : {}),
+      ...(input.resourceCount !== undefined ? { resourceCount: input.resourceCount } : {}),
+    },
+  });
+
+  return (await getIndustrialCostVersion(usage.industrialCostVersionId))!;
 }
 
 export async function deleteResourceUsage(
