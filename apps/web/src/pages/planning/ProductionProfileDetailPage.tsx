@@ -568,32 +568,53 @@ export function ProductionProfileDetailPage() {
   const [produtoEscolhido, setProdutoEscolhido] = useState("");
 
   /*
-   * A identificação que o servidor devolveu na última leitura.
+   * A identificação que o servidor devolveu na última leitura — `null` antes
+   * da primeira.
    *
    * Identificação e rascunho gravam separado: salvar o rascunho recarrega o
    * roteiro, e a leitura reescrevia por cima o nome que a pessoa acabara de
    * digitar e ainda não salvou. Com a leitura anterior em mãos dá para
    * separar "ainda está como o servidor deixou" de "a pessoa mexeu".
    */
-  const lido = useRef<{ nome: string; descricao: string }>({ nome: "", descricao: "" });
+  const lido = useRef<{ nome: string; descricao: string } | null>(null);
+
+  /**
+   * O rascunho restaurado ganha do servidor na carga inicial.
+   *
+   * Quem volta do cadastro de recurso chega junto com a carga do roteiro, e ela
+   * traz o rascunho como está gravado: sem esta trava a resposta, que chega
+   * depois, trocaria base, unidade e etapas pelas do servidor. A carga inicial é
+   * a que sai sem leitura anterior — no dev o StrictMode pede duas, e a segunda
+   * não pode escrever por cima só porque a primeira voltou antes. Salvar, ativar
+   * e criar versão recarregam depois da primeira leitura: aí o servidor é a
+   * verdade, e a trava não precisa ser desarmada.
+   */
+  const rascunhoRestaurado = useRef(false);
 
   const load = useCallback(() => {
     if (!profileId) return;
+    const cargaInicial = lido.current === null;
     getProductionProfile(profileId)
       .then((result) => {
         setProfile(result);
-        const anterior = lido.current;
+        const anterior = lido.current ?? { nome: "", descricao: "" };
         lido.current = { nome: result.name, descricao: result.description ?? "" };
-        setNome((atual) => (atual === anterior.nome ? result.name : atual));
-        setDescricao((atual) =>
-          atual === anterior.descricao ? (result.description ?? "") : atual,
-        );
+        // A tela tem o rascunho de quem voltou: a leitura só diz o que está gravado.
+        const manterRestaurado = cargaInicial && rascunhoRestaurado.current;
+        if (!manterRestaurado) {
+          setNome((atual) => (atual === anterior.nome ? result.name : atual));
+          setDescricao((atual) =>
+            atual === anterior.descricao ? (result.description ?? "") : atual,
+          );
+        }
         const rascunho = result.draftVersion;
         if (rascunho) {
           const lidas = etapasDoDTO(rascunho);
-          setBase(rascunho.referenceQuantity);
-          setUnidade(rascunho.referenceUomCode);
-          setEtapas(lidas);
+          if (!manterRestaurado) {
+            setBase(rascunho.referenceQuantity);
+            setUnidade(rascunho.referenceUomCode);
+            setEtapas(lidas);
+          }
           setSalvo(assinatura(rascunho.referenceQuantity, rascunho.referenceUomCode, lidas));
         } else {
           setEtapas([]);
@@ -696,6 +717,8 @@ export function ProductionProfileDetailPage() {
   const { goCreate } = useContextualCreateOrigin<Record<string, unknown>>({
     collectDraft: () => ({ nome, descricao, base, unidade, etapas }),
     restoreDraft: (rascunho) => {
+      // Antes de qualquer `setState`: a carga do roteiro está a caminho.
+      rascunhoRestaurado.current = true;
       const texto = (chave: string) =>
         typeof rascunho[chave] === "string" ? (rascunho[chave] as string) : "";
       setNome(texto("nome"));
