@@ -24,6 +24,7 @@ import {
   INDUSTRIAL_RESOURCE_TYPE_LABELS,
   INDUSTRIAL_USAGE_BASIS_LABELS,
   FORMULATION_COMPONENT_BASIS_LABELS,
+  INDUSTRIAL_RESOURCE_TYPES,
   acceptsResourceCount,
 } from "@veridi/shared";
 import type { IndustrialCostBasis, IndustrialCostCategory } from "@veridi/shared";
@@ -58,7 +59,6 @@ import {
   updateEnergyMode,
   updateIndustrialCostVersion,
 } from "../../lib/industrial-costs-api";
-import { listIndustrialResources } from "../../lib/industrial-resources-api";
 import { opcaoDeRecurso, useRecursosDoSeletor } from "../../lib/recursos-do-seletor";
 import type { RecorteDeRecursos } from "../../lib/recursos-do-seletor";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
@@ -67,8 +67,23 @@ import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { formatDateTime } from "../../lib/dates";
 
-/** Universo da tarifa do kWh derivado: energia ativa, o mesmo de quando saía da lista de ativos. */
+/**
+ * Energia ativa: a tarifa do kWh derivado e, no modo de consumo informado
+ * diretamente, a energia do campo "Recurso" — o universo de quando as duas
+ * saíam da lista de ativos.
+ */
 const ENERGIA_ATIVA: RecorteDeRecursos = { tipos: ["ENERGY"], somenteAtivos: true };
+
+/**
+ * O resto do campo "Recurso": todo tipo ativo que não é energia. A energia
+ * entra por `ENERGIA_ATIVA`, e só no modo de consumo informado diretamente.
+ * Só ativo entra numa estrutura nova; o inativo de uma versão antiga continua
+ * listado pela própria versão.
+ */
+const ATIVOS_SEM_ENERGIA: RecorteDeRecursos = {
+  tipos: INDUSTRIAL_RESOURCE_TYPES.filter((tipo) => tipo !== "ENERGY"),
+  somenteAtivos: true,
+};
 
 /**
  * A base de produção que o servidor tem para esta estrutura.
@@ -160,29 +175,29 @@ export function IndustrialCostPage() {
   const [basis, setBasis] = useState<IndustrialCostBasis>("FIXED_PER_BATCH");
   const [rateValue, setRateValue] = useState("");
 
-  const [resources, setResources] = useState<IndustrialResourceDTO[]>([]);
   const [usageResourceId, setUsageResourceId] = useState("");
   /** Cadastro de recurso aberto a partir do campo de busca. */
   const [usageQuantity, setUsageQuantity] = useState("");
   /** Quantidade de recursos equivalentes (§87) — só mão de obra e equipamento. */
   const [usageResourceCount, setUsageResourceCount] = useState("1");
+  /*
+   * Recurso criado no contexto, à espera do tipo.
+   *
+   * A volta do cadastro monta a tela de novo, e o retorno chega antes da
+   * estrutura e de qualquer página de recursos — a regra da energia precisa
+   * dos dois. Até a conferência o criado fica escolhido, mas não vira opção.
+   * `anterior` é o recurso que o rascunho trazia: é para ele que o campo volta
+   * quando a energia não cabe.
+   */
+  const [criadoAConferir, setCriadoAConferir] = useState<{ id: string; anterior: string } | null>(null);
 
   /*
    * Sair para cadastrar um recurso desmonta esta tela. O rascunho que
    * importa é o da LINHA em edição — categoria, descrição, base, valor e
-   * uso. `data` e `resources` ficam de fora: vêm do servidor e recarregam
-   * sozinhos, e serializá-los faria o retorno restaurar uma versão da
-   * estrutura que pode ter mudado enquanto a pessoa estava fora.
+   * uso. `data` e os recursos oferecidos ficam de fora: vêm do servidor e
+   * recarregam sozinhos, e serializá-los faria o retorno restaurar uma versão
+   * da estrutura que pode ter mudado enquanto a pessoa estava fora.
    */
-  /*
-   * `resources` e `version` só existem mais abaixo, depois da leitura do
-   * servidor; o retorno da criação contextual precisa deles. Refs
-   * atualizadas a cada render resolvem sem reordenar a tela — `onCreated` só
-   * roda em resposta a navegação, nunca durante o render.
-   */
-  const resourcesRef = useRef<IndustrialResourceDTO[]>([]);
-  const versionRef = useRef<IndustrialCostVersionDTO | null>(null);
-
   const { goCreate } = useContextualCreateOrigin<Record<string, unknown>>({
     collectDraft: () => ({
       /*
@@ -219,21 +234,19 @@ export function IndustrialCostPage() {
       setUsageQuantity(texto("usageQuantity"));
       setUsageResourceCount(texto("usageResourceCount") || "1");
     },
-    onCreated: (resultado) => {
+    onCreated: (resultado, registro) => {
       /*
        * Energia fora do modo "consumo informado diretamente" não é
-       * escolhível aqui — é a regra que evita contar energia duas vezes.
-       * Selecionar assim mesmo deixaria o campo em branco com um id
-       * escolhido por baixo; melhor dizer o que aconteceu.
+       * escolhível aqui — é a regra que evita contar energia duas vezes. Quem
+       * decide é a conferência mais abaixo, com o recurso resolvido pelo id e
+       * a estrutura já lida: neste instante nenhum dos dois chegou.
        */
-      const criado = resourcesRef.current.find((row) => row.id === resultado.entityId);
-      if (criado?.type === "ENERGY" && versionRef.current?.energyCalculationMode !== "DIRECT") {
-        setError(
-          `${criado.code} foi criado, mas recursos de energia só entram nesta estrutura no modo de consumo informado diretamente.`,
-        );
-        return;
-      }
+      const anterior = registro.draft["usageResourceId"];
       setUsageResourceId(resultado.entityId);
+      setCriadoAConferir({
+        id: resultado.entityId,
+        anterior: typeof anterior === "string" ? anterior : "",
+      });
     },
   });
 
@@ -281,32 +294,6 @@ export function IndustrialCostPage() {
     load();
   }, [load]);
 
-  useEffect(() => {
-    // Só recursos ativos entram numa estrutura nova; os inativos que já
-    // estão em versões antigas continuam listados pela própria versão.
-    listIndustrialResources({ active: true, pageSize: 50 })
-      .then((result) => setResources(result.resources))
-      .catch(() => setResources([]));
-  }, []);
-
-  /*
-   * Busca no SERVIDOR, com os MESMOS filtros da carga inicial: achar nao e o
-   * mesmo que poder usar, e a busca torna encontravel quem ja era elegivel,
-   * nunca quem nao era. O achado entra no estado de onde as opcoes derivam,
-   * porque a escolha e resolvida por ele. A carga inicial passou a servir so
-   * a abertura do campo — acima do teto o registro existia e nao aparecia,
-   * com "+ Novo" logo acima convidando a duplicar.
-   */
-  async function buscarRecursos(termo: string): Promise<EntityOption[]> {
-    const resultado = await listIndustrialResources({ active: true, search: termo, pageSize: 50 });
-    const novos = resultado.resources;
-    setResources((atual) => {
-      const conhecidos = new Set(atual.map((x) => x.id));
-      return [...atual, ...novos.filter((x) => !conhecidos.has(x.id))];
-    });
-    return novos.map((r) => ({ id: r.id, code: r.code, name: r.name }));
-  }
-
   /*
    * O funil único da tela. A ação pode recusar antes de chamar a API — é o
    * que um valor decimal ilegível faz —, e a recusa chega aqui como
@@ -345,10 +332,58 @@ export function IndustrialCostPage() {
    * escolhida fora da página aparecia como "Selecione…".
    */
   const energiaDerivada = editable && version?.energyCalculationMode === "FROM_EQUIPMENT";
+  // No modo de consumo informado diretamente, quem oferece energia é o campo "Recurso".
+  const energiaDireta = editable && version?.energyCalculationMode === "DIRECT";
   const recursosDeEnergia = useRecursosDoSeletor(ENERGIA_ATIVA, {
-    carregar: energiaDerivada,
+    carregar: energiaDerivada || energiaDireta,
     escolhidos: energiaDerivada && version?.energyResourceId ? [version.energyResourceId] : [],
   });
+
+  /*
+   * Campo "Recurso": primeira página curta de cada tipo e busca no servidor,
+   * com a energia ativa só no modo direto. As opções saíam dos 50 primeiros
+   * ativos e do que a busca achava: o recurso criado no contexto, ou restaurado
+   * do rascunho, fora deles voltava com o campo vazio e o id escolhido por
+   * baixo — e, sem o tipo, "Quantidade de recursos" sumia e o envio ia sem ela.
+   *
+   * O id escolhido que não veio em página nenhuma é perguntado uma vez, depois
+   * de TODAS as páginas que a tela pediu: antes disso ele podia estar na de
+   * energia.
+   */
+  const paginaDeEnergiaPendente = (energiaDerivada || energiaDireta) && !recursosDeEnergia.respondeu;
+  const recursosDoUso = useRecursosDoSeletor(ATIVOS_SEM_ENERGIA, {
+    carregar: editable,
+    escolhidos:
+      !usageResourceId || paginaDeEnergiaPendente || recursosDeEnergia.recurso(usageResourceId)
+        ? []
+        : [usageResourceId],
+  });
+  const recursoDoUso = (id: string) => recursosDoUso.recurso(id) ?? recursosDeEnergia.recurso(id);
+
+  /*
+   * A conferência do recurso criado no contexto: com ele resolvido e a
+   * estrutura lida, a mesma regra da energia de quando ele estava na lista.
+   * Energia fora do modo direto não fica escolhida — o campo volta ao que o
+   * rascunho trazia e a tela diz o que aconteceu, em vez de guardar um id que
+   * nenhuma opção mostra.
+   */
+  const criado = criadoAConferir ? recursoDoUso(criadoAConferir.id) : undefined;
+  useEffect(() => {
+    if (!criadoAConferir) return;
+    // Trocou de recurso antes da conferência: vale a escolha nova.
+    if (usageResourceId !== criadoAConferir.id) {
+      setCriadoAConferir(null);
+      return;
+    }
+    if (!criado || !version || !editable) return;
+    setCriadoAConferir(null);
+    if (criado.type === "ENERGY" && version.energyCalculationMode !== "DIRECT") {
+      setUsageResourceId(criadoAConferir.anterior);
+      setError(
+        `${criado.code} foi criado, mas recursos de energia só entram nesta estrutura no modo de consumo informado diretamente.`,
+      );
+    }
+  }, [criadoAConferir, criado, usageResourceId, version, editable]);
 
   /*
    * Três blocos gravam separado nesta tela — base de produção, premissa nova e
@@ -389,9 +424,6 @@ export function IndustrialCostPage() {
 
   const podeAlternar = Boolean(data.draft && data.current);
 
-  resourcesRef.current = resources;
-  versionRef.current = version;
-
   // Primeira estrutura do produto precisa de base de produção: nunca se
   // assume 1000. Sem base informada nem sugerida, o botão fica bloqueado —
   // e agora diz por quê.
@@ -416,14 +448,36 @@ export function IndustrialCostPage() {
   // Energia direta só existe no modo correspondente; fora dele o recurso de
   // energia nem é oferecido, para não induzir dupla contagem.
   const usedResourceIds = new Set(version?.resourceUsages.map((usage) => usage.resourceId) ?? []);
-  const selectableResources = resources.filter(
-    (resource) =>
-      !usedResourceIds.has(resource.id) &&
-      (resource.type !== "ENERGY" || version?.energyCalculationMode === "DIRECT"),
-  );
-  const selectedResource = resources.find((resource) => resource.id === usageResourceId) ?? null;
+  const cabeNaEstrutura = (resource: IndustrialResourceDTO) => !usedResourceIds.has(resource.id);
+  /* O recurso escolhido, quando a tela já sabe qual é; o criado no contexto, só depois de conferido. */
+  const selectedResource =
+    usageResourceId && usageResourceId !== criadoAConferir?.id
+      ? (recursoDoUso(usageResourceId) ?? null)
+      : null;
   // Mão de obra e equipamento se contam; energia não — o kWh já é o total (§87).
   const contaRecursos = selectedResource ? acceptsResourceCount(selectedResource.type) : false;
+
+  /** O catálogo que ainda cabe na estrutura e, se saiu dele, o recurso já escolhido. */
+  const opcoesDeRecurso = (): EntityOption[] => {
+    const lista = [
+      ...recursosDoUso.catalogo,
+      ...(energiaDireta ? recursosDeEnergia.catalogo : []),
+    ].filter(cabeNaEstrutura);
+    if (selectedResource && !lista.some((resource) => resource.id === selectedResource.id)) {
+      lista.push(selectedResource);
+    }
+    return lista.map((resource) => opcaoDeRecurso(resource, { comTipo: true }));
+  };
+  // Achar não é poder usar: a busca tem o recorte da primeira página e a mesma exclusão.
+  const buscarRecursos = async (termo: string): Promise<EntityOption[]> => {
+    const [semEnergia, energia] = await Promise.all([
+      recursosDoUso.buscar(termo),
+      energiaDireta ? recursosDeEnergia.buscar(termo) : Promise.resolve([]),
+    ]);
+    return [...semEnergia, ...energia]
+      .filter(cabeNaEstrutura)
+      .map((resource) => opcaoDeRecurso(resource, { comTipo: true }));
+  };
 
   /** Energia ativa do catálogo e, se saiu dele, a tarifa que a versão já usa. */
   const opcoesDeEnergia = (escolhida: string | null): EntityOption[] => {
@@ -1071,12 +1125,7 @@ export function IndustrialCostPage() {
                         onChange={(selectedId) => setUsageResourceId(selectedId)}
                         placeholder="Digite código ou nome do recurso…"
                         onSearch={buscarRecursos}
-options={selectableResources.map((resource) => ({
-                          id: resource.id,
-                          code: resource.code,
-                          name: resource.name,
-                          hint: INDUSTRIAL_RESOURCE_TYPE_LABELS[resource.type],
-                        }))}
+                        options={opcoesDeRecurso()}
                         canCreate={canCreateResource}
                         createLabel="Novo recurso"
                         /* Sair para cadastrar o recurso NÃO é descartar: o
@@ -1134,7 +1183,9 @@ options={selectableResources.map((resource) => ({
                     <button
                       type="button"
                       className="btn btn--secondary btn--sm"
-                      disabled={saving || !usageResourceId || !usageQuantity.trim()}
+                      // Recurso ainda sem tipo conhecido: a quantidade de recursos
+                      // ficaria fora do envio e o servidor gravaria 1 (§87).
+                      disabled={saving || !usageResourceId || !usageQuantity.trim() || !selectedResource}
                       onClick={() =>
                         void run(async () => {
                           await createResourceUsage(version.id, {
