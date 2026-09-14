@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { ProjectDTO, ProjectSampleDTO } from "@veridi/shared";
 import {
   formatBrPhone,
@@ -28,7 +28,7 @@ import {
 import { createSample, listSamples } from "../../lib/samples-api";
 import { useAuth } from "../../app/AuthProvider";
 import { ProjectFormModal } from "./ProjectFormModal";
-import { EntityLink } from "../../components/EntityLink";
+import { EntityLink, entityHref } from "../../components/EntityLink";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
@@ -45,18 +45,44 @@ function DicaDaColuna({ id }: { id: HelpHintId }) {
 import { formatDate, formatDateTime } from "../../lib/dates";
 import { NotFoundApiError } from "../../lib/api-errors";
 import { TableEmptyRow } from "../../components/TableEmptyRow";
+import { rotaDoOrcamento } from "../../lib/rota-do-orcamento";
 
 /** Leitura que falhou sem ser 404: rede, 500. O Projeto existe; a resposta é que não veio. */
 const AVISO_DE_LEITURA = "Não foi possível carregar o projeto agora.";
 
 /**
- * Documento do projeto: resumo, pipeline, orçamentos versionados,
- * documentos, histórico e o produto resultante.
- *
- * Só o rascunho de orçamento é editável; enviado congela o snapshot e vira
- * histórico. Aprovar o projeto é o momento em que ele vira Product.
+ * Endereço antigo do Orçamento: `?quoteVersionId=` (e `quoteLineId`) sobre o
+ * Projeto. Desde QUOTE-WORKSPACE-NAVIGATION-01 a versão tem página própria;
+ * link salvo, favorito e chamado antigo chegam a ela — com a linha e com a
+ * volta a este Projeto —, e o endereço antigo sai do histórico.
  */
 export function ProjectDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const versaoLegada = searchParams.get("quoteVersionId");
+  if (id && versaoLegada) {
+    return (
+      <Navigate
+        replace
+        to={rotaDoOrcamento(versaoLegada, {
+          linha: searchParams.get("quoteLineId"),
+          voltar: entityHref("project", id),
+        })}
+      />
+    );
+  }
+  return <ProjectDetail />;
+}
+
+/**
+ * Documento do projeto: resumo, pipeline, a lista de orçamentos versionados,
+ * documentos, histórico e o produto resultante.
+ *
+ * Cada versão de orçamento abre na página dela; só o rascunho é editável, e
+ * enviado congela o snapshot e vira histórico. Aprovar o projeto é o momento
+ * em que ele vira Product.
+ */
+function ProjectDetail() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -414,7 +440,6 @@ export function ProjectDetailPage() {
           project={project}
           canEdit={canEdit}
           projectStatus={project.status}
-          onChanged={load}
         />
 
         <FormSection

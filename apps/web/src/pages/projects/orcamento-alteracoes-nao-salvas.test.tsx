@@ -64,7 +64,7 @@ vi.mock("../../lib/samples-api", () => ({
   createSample: vi.fn(),
 }));
 
-import { QuoteVersionsSection } from "./QuoteVersionsSection";
+import { QuoteWorkspace } from "./QuoteWorkspace";
 import { UnsavedChangesProvider } from "../../app/UnsavedChangesProvider";
 
 function versao(): QuoteVersionDTO {
@@ -179,14 +179,16 @@ function Raiz() {
 }
 
 function abrir() {
+  const proposta = versao();
   const router = createMemoryRouter(
     createRoutesFromElements(
       <Route element={<Raiz />}>
         <Route
-          path="/comercial/projetos/:id"
+          path="/comercial/orcamentos/:id"
           element={
-            <QuoteVersionsSection
-              project={{ ...PROJETO, quoteVersions: [versao()] }}
+            <QuoteWorkspace
+              project={{ ...PROJETO, quoteVersions: [proposta] }}
+              quote={proposta}
               canEdit
               projectStatus="WAITING"
               onChanged={() => {}}
@@ -196,7 +198,7 @@ function abrir() {
         <Route path="/comercial/pedidos" element={<h1>Pedidos</h1>} />
       </Route>,
     ),
-    { initialEntries: ["/comercial/projetos/prj-1"] },
+    { initialEntries: ["/comercial/orcamentos/q1"] },
   );
   render(<RouterProvider router={router} />);
 }

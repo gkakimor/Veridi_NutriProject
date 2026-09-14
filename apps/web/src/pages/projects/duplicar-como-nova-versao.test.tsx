@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import type { ProjectDTO, QuoteLineDTO, QuoteVersionDTO } from "@veridi/shared";
 
 /**
@@ -35,7 +35,7 @@ vi.mock("../../lib/projects-api", () => ({
   useManualQuotePrice: vi.fn(),
 }));
 
-import { QuoteVersionsSection } from "./QuoteVersionsSection";
+import { QuoteWorkspace } from "./QuoteWorkspace";
 
 function linha(overrides: Partial<QuoteLineDTO> = {}): QuoteLineDTO {
   return {
@@ -125,6 +125,15 @@ const V2 = versao({
   lines: [linha({ id: "ql-2", quoteVersionId: "q2" })],
 });
 
+/** A ficha do Projeto de onde a página da versão foi aberta. */
+const VOLTAR = "/comercial/projetos/prj-1";
+
+/** Onde a navegação deixou a pessoa. */
+function Onde() {
+  const location = useLocation();
+  return <output data-testid="rota">{`${location.pathname}${location.search}`}</output>;
+}
+
 function abrir(versions: QuoteVersionDTO[], onChanged: () => void = () => {}) {
   const project = {
     id: "prj-1",
@@ -138,20 +147,16 @@ function abrir(versions: QuoteVersionDTO[], onChanged: () => void = () => {}) {
     quoteVersions: versions,
     statusHistory: [],
   } as unknown as ProjectDTO;
+  // A página da V1, aberta a partir da ficha do Projeto.
   render(
-    <MemoryRouter>
-      <QuoteVersionsSection project={project} canEdit projectStatus="SAMPLE" onChanged={onChanged} />
+    <MemoryRouter initialEntries={[`/comercial/orcamentos/q1?voltar=${encodeURIComponent(VOLTAR)}`]}>
+      <Onde />
+      <QuoteWorkspace project={project} quote={V1} canEdit projectStatus="SAMPLE" onChanged={onChanged} />
     </MemoryRouter>,
   );
 }
 
-/** Abre a V1 na lista — a versão mais recente é a que abre sozinha. */
-function lerAV1() {
-  fireEvent.click(screen.getByText("ORC-000001 · V1"));
-}
-
 function abrirDialogo() {
-  lerAV1();
   fireEvent.click(screen.getByRole("button", { name: "Duplicar como nova versão" }));
   return screen.getByRole("alertdialog", { name: "Duplicar como nova versão" });
 }
@@ -190,7 +195,14 @@ describe("QUOTE-DUPLICATE-01 — Duplicar como nova versão", () => {
     fireEvent.click(within(dialogo).getByRole("button", { name: "Criar nova versão" }));
 
     await waitFor(() => expect(duplicateQuoteVersion).toHaveBeenCalledWith("q1", "KEEP_PRICES"));
-    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+    // A versão nova é outro documento: abre na página DELA, com a mesma volta ao
+    // Projeto — reler a V1 antes seria uma leitura que ninguém vê.
+    await waitFor(() =>
+      expect(screen.getByTestId("rota").textContent).toBe(
+        `/comercial/orcamentos/q3?voltar=${encodeURIComponent(VOLTAR)}`,
+      ),
+    );
+    expect(onChanged).not.toHaveBeenCalled();
     expect(duplicateQuoteVersion).toHaveBeenCalledTimes(1);
   });
 
@@ -226,7 +238,6 @@ describe("QUOTE-DUPLICATE-01 — Duplicar como nova versão", () => {
       sentAt: null,
     });
     abrir([V1, V2, rascunho]);
-    lerAV1();
 
     expect(screen.getByRole("button", { name: "Duplicar como nova versão" })).toBeDisabled();
     expect(screen.getByText(/Já existe a V3 em rascunho/)).toBeInTheDocument();

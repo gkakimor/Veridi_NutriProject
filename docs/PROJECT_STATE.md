@@ -4231,6 +4231,40 @@ full test, E2E nem fresh (FAST).
 
 **Achado** (BACKLOG): PRICING-MODEL-VIEW-REPORTS-01.
 
+## Orçamento com página própria (QUOTE-WORKSPACE-NAVIGATION-01, 2026-09-14)
+
+Só web: sem API, shared, schema, migration, regra comercial, status, pricing, snapshot nem conteúdo de PDF. §92.
+
+**Antes.** A seção Orçamentos do Projeto listava as versões e renderizava a escolhida logo abaixo: clicar em
+"ORC-000444 · V1" trocava um bloco fora da vista, e parecia que nada tinha acontecido.
+
+**Depois.** `/comercial/orcamentos/:id` (`QuoteVersionPage`) carrega `GET /quote-versions/:id` e o Projeto dela
+(APIs de sempre): trilha, fluxo Projeto › Orçamento › Pedido, Resumo (código, versão, situação, data, validade,
+cliente, projeto, produtos, total, envio/aceite/recusa), links para as outras versões e a Proposta
+(`QuoteWorkspace`, o workspace de antes extraído sem mudar regra — linha que grava ao sair do campo, formação de
+preço, condições com pendência, guarda de saída, envio com confirmação por `pricingCostQuality ?? costQuality`,
+aceite, recusa, duplicação, Pedido e PDF). Histórico lê as condições gravadas como texto; rascunho segue editável.
+A ficha do Projeto só lista (`QuoteVersionsSection`: linha clicável + "Abrir", vazio por `TableEmptyRow`), e criar
+ou abrir rascunho navega para a página do que o servidor devolveu. `?voltar=` dá "← Voltar ao Projeto PROJ-…";
+sem ele, a trilha. A URL antiga `?quoteVersionId=&quoteLineId=` redireciona (replace); CMV, origem comercial do
+Pedido e "Voltar" do PDF do Orçamento usam a rota nova (`rotaDoOrcamento`, `entityHref("quoteVersion")`) — a mesma
+de QUOTES-HUB-01.
+
+**Validação.** Web: `projects/orcamento-pagina-propria` (26 — lista sem proposta embaixo, clique e Enter navegam,
+histórico sem campo, rascunho editável, Novo orçamento e Abrir rascunho sem versão a mais, envio pela página nas
+três qualidades, guarda na volta, PDF e o Voltar dele, duplicar, aceite, recusa, Pedido, link direto e recarga,
+404, 500 e rede na primeira leitura e na releitura, URL antiga, CMV ida e volta, versões do projeto), os 13
+arquivos que montavam o workspace pela seção, `product-cmv/cmv`, `quote-to-order`, `rotas-do-app`,
+`help-topic-contract` e `rotulo-da-origem`. Mutações: 16 de 16 derrubadas. Focados depois do rebase (projects,
+product-cmv, app, components, pdf, print, customer-orders, pricing, ajuda): 89 arquivos, 1174 testes.
+`pnpm typecheck`. Smoke Playwright em banco isolado (API e Vite do worktree), 1440 e 390, antes e depois do rebase:
+histórico → PDF → Voltar do PDF → Projeto; Criar nova versão / Abrir rascunho → editar linha → guarda → Projeto;
+Orçamento → CMV → volta na linha; URL antiga, link direto, recarga e 404; sem rolagem horizontal, 0 escrita e V1
+idêntica nos caminhos do histórico, console limpo (fora o 404 real do navegador) — 50 de 50. Sem full test, E2E,
+golden path nem fresh (FAST).
+
+**Achados** (BACKLOG): QUOTES-HUB-01 (próxima), E2E-QUOTE-PAGE-FLOW-01, QUOTE-PAGE-NAV-ACTIVE-01.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
@@ -4240,6 +4274,9 @@ mesma. Os achados da rodada estão no BACKLOG, sem posição na fila.
 PRICING-MODEL-DIFF-01 e PRICING-ACTIVATE-CONFIRM-01 em COST-PRICING-CLARITY-WAVE-01, e
 PRICING-MODEL-VIEW-01 em 2026-09-14 (PDF de Precificação). O resto do assunto — R-19, R-20 e o CMV — ficou em
 PRICING-MODEL-VIEW-REPORTS-01, sem posição na fila.
+
+**QUOTE-WORKSPACE-NAVIGATION-01 fechado em 2026-09-14** (§92): cada versão de orçamento tem página própria.
+**QUOTES-HUB-01 continua próximo** — Comercial → Orçamentos, a lista geral que só navega para a mesma rota.
 
 **Nenhum módulo é ocultado** — decisão da Veridi em 2026-09-10: Precificação,
 Orçamento e Faturamento continuam disponíveis. Nenhum item do backlog propunha

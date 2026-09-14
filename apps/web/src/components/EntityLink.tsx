@@ -28,6 +28,7 @@ export type EntityKind =
   | "customer"
   | "supplier"
   | "project"
+  | "quoteVersion"
   | "sample"
   | "lot"
   | "purchaseOrder"
@@ -58,6 +59,9 @@ export function entityHref(kind: EntityKind, id: string): string {
       return `/cadastros/fornecedores?ids=${id}&open=${id}`;
     case "project":
       return `/comercial/projetos/${id}`;
+    // A VERSÃO é o documento: cada uma tem a própria página (QUOTE-WORKSPACE-NAVIGATION-01).
+    case "quoteVersion":
+      return `/comercial/orcamentos/${id}`;
     case "sample":
       return `/comercial/amostras/${id}`;
     case "lot":
@@ -92,6 +96,7 @@ const KIND_LABEL: Record<EntityKind, string> = {
   customer: "cliente",
   supplier: "fornecedor",
   project: "projeto",
+  quoteVersion: "orçamento",
   sample: "amostra",
   lot: "lote",
   purchaseOrder: "ordem de compra",

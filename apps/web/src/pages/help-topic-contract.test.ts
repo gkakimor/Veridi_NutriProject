@@ -97,6 +97,8 @@ const PARES: [arquivo: string, topico: string][] = [
   ["pages/customer-orders/CustomerOrderPage.tsx", "comercial.pedido"],
   ["pages/projects/ProjectsPage.tsx", "comercial.projetos"],
   ["pages/projects/ProjectDetailPage.tsx", "comercial.projeto"],
+  // A versão de orçamento tem página própria, e a ajuda é a do Orçamento.
+  ["pages/projects/QuoteVersionPage.tsx", "comercial.orcamento"],
   ["pages/samples/SamplesPage.tsx", "comercial.amostras"],
   ["pages/samples/SampleDetailPage.tsx", "comercial.amostra"],
   ["pages/shipments/ShipmentsPage.tsx", "comercial.expedicoes"],

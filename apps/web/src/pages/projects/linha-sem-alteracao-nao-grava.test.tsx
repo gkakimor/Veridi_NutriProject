@@ -40,7 +40,7 @@ vi.mock("../../lib/projects-api", () => ({
 }));
 
 import { updateQuoteLine } from "../../lib/projects-api";
-import { QuoteVersionsSection } from "./QuoteVersionsSection";
+import { QuoteWorkspace } from "./QuoteWorkspace";
 
 const QUANTIDADE = "Quantidade de PROD-000001";
 const UNIDADE = "Unidade de PROD-000001";
@@ -126,10 +126,11 @@ function versao(): QuoteVersionDTO {
 }
 
 function abrirSecao() {
+  const quote = versao();
   render(
     <StrictMode>
       <MemoryRouter>
-        <QuoteVersionsSection
+        <QuoteWorkspace
           project={
             {
               id: "prj-1",
@@ -139,10 +140,11 @@ function abrirSecao() {
               name: "Linha Performance",
               status: "APPROVED",
               products: [],
-              quoteVersions: [versao()],
+              quoteVersions: [quote],
               statusHistory: [],
             } as unknown as ProjectDTO
           }
+          quote={quote}
           canEdit
           projectStatus="APPROVED"
           onChanged={() => {}}

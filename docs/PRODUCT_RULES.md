@@ -5802,3 +5802,40 @@ continua travada.
 dependências, etapas em paralelo, arrastar e soltar, calendário por recurso,
 turnos múltiplos, pessoa ou máquina individual, manutenção e reprogramação em
 massa.
+
+## §92 — Orçamento é documento com endereço próprio
+
+QUOTE-WORKSPACE-NAVIGATION-01, 2026-09-14. Cada VERSÃO de orçamento abre em
+`/comercial/orcamentos/:id` — endereçável, recarregável e linkável. Nenhuma
+regra comercial mudou: preço, envio, aceite, recusa, duplicação e Pedido são os
+de §69 a §85.
+
+**A ficha do Projeto lista; não abre proposta embaixo.** Clicar na versão (ou
+em "Abrir") navega para a página dela, com `?voltar=` para a ficha. "Novo
+orçamento", "Criar nova versão" e "Abrir rascunho" continuam no Projeto: o
+servidor devolve o rascunho aberto ou cria o próximo — nunca dois rascunhos —,
+e a tela abre a página do que voltou.
+
+**Rascunho se edita; histórico se lê.** Versão que não se edita (enviada,
+aceita, recusada, substituída, ou aberta por quem não negocia) mostra as
+condições gravadas como texto — nunca formulário desabilitado. PDF, duplicar,
+aceite, recusa e Pedido ficam na página da versão; duplicar abre a página da
+versão nova, com a mesma volta. Salvar não devolve ao Projeto.
+
+**A volta é explícita; a trilha é hierarquia.** "← Voltar ao Projeto" só existe
+com origem na URL (rota interna, a guarda de sempre); sem ela, a trilha
+Projetos › Projeto › Versão leva ao Projeto. As outras versões do projeto são
+outros endereços — um editor por página.
+
+**Endereço antigo não quebra.** `/comercial/projetos/:id?quoteVersionId=…&quoteLineId=…`
+redireciona, substituindo o histórico, para a página da versão, na linha, com a
+volta ao Projeto. A volta do CMV, a origem comercial do Pedido e o "Voltar" do
+PDF do Orçamento chegam à mesma rota.
+
+**Não encontrado é 404; o resto é leitura que falhou.** Versão inexistente diz
+"Orçamento não encontrado"; rede ou 500 avisa e oferece tentar de novo, e com a
+página já na tela a mantém.
+
+**Um endereço, um construtor.** `entityHref("quoteVersion", id)` e
+`rotaDoOrcamento(id, { linha, voltar })` (`web lib/rota-do-orcamento.ts`) montam
+o endereço; a lista geral de Orçamentos (QUOTES-HUB-01) navega para ele.

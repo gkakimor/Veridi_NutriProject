@@ -16,6 +16,11 @@ describe("rotuloDaOrigem", () => {
     expect(rotuloDaOrigem("/produtos/prod-1/custos")).toBe("Estrutura de custos");
   });
 
+  it("a página própria do Orçamento (QUOTE-WORKSPACE-NAVIGATION-01)", () => {
+    expect(rotuloDaOrigem("/comercial/orcamentos/qv-1")).toBe("Orçamento");
+    expect(rotuloDaOrigem("/comercial/orcamentos/qv-1?quoteLineId=ql-1")).toBe("Orçamento");
+  });
+
   it("rota desconhecida: tela anterior", () => {
     expect(rotuloDaOrigem("/planejamento/quadro")).toBe("tela anterior");
   });

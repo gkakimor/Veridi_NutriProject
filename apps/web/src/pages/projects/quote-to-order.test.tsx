@@ -219,10 +219,11 @@ describe("Origem comercial do pedido", () => {
       </MemoryRouter>,
     );
 
-    // Link por id, nunca busca textual.
+    // Link por id, nunca busca textual. A versão tem página própria, que
+    // oferece a volta a este Pedido (QUOTE-WORKSPACE-NAVIGATION-01).
     expect(screen.getByRole("link", { name: "ORC-000700 · V2" })).toHaveAttribute(
       "href",
-      "/comercial/projetos/prj-1?quoteVersionId=q1",
+      "/comercial/orcamentos/q1?voltar=%2Fcomercial%2Fpedidos%2Ford-9",
     );
     expect(screen.getByRole("link", { name: "PROJ-001414" })).toHaveAttribute(
       "href",
