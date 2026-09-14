@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import { instanteComercialPorExtenso } from "@veridi/shared";
+import { dataCivilPorExtenso, instanteComercialPorExtenso } from "@veridi/shared";
 /**
  * Geração de CSV do Veridi.
  *
@@ -66,9 +66,7 @@ export function csvCode(value: string | null | undefined): string {
 export function csvDate(value: string | Date | null | undefined): string {
   if (!value) return "";
   const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime())
-    ? ""
-    : date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
+  return Number.isNaN(date.getTime()) ? "" : dataCivilPorExtenso(date);
 }
 
 /**

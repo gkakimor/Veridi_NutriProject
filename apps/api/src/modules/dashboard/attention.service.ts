@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import type { AttentionItemDTO, AttentionSeverity } from "@veridi/shared";
+import { dataCivilPorExtenso } from "@veridi/shared";
 import { isLotExpired, getOnHandByLots } from "../../lib/inventory-ledger.js";
 import { marcadorDeHojeComercial } from "../../lib/business-day.js";
 import type { ConjuntosDoRetrato } from "./dashboard.queries.js";
@@ -23,7 +24,7 @@ const SEVERITY_WEIGHT: Record<AttentionSeverity, number> = {
 
 /** Validade é DATA CIVIL: o dia gravado, não o dia do relógio da máquina. */
 function formatDate(date: Date): string {
-  return date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
+  return dataCivilPorExtenso(date);
 }
 
 /**

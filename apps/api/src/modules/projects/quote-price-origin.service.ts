@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import type { QuoteLineAgreementDTO } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
-import { venceuEm } from "../../lib/business-day.js";
+import { diaComercialPorExtenso, venceuEm } from "../../lib/business-day.js";
 import { fecharPrecoUnitarioComercial } from "../../lib/commercial-price.js";
 import { Decimal } from "../../lib/decimal.js";
 import type { UnitOfMeasureDecimalLike } from "../items/uom.js";
@@ -309,7 +309,7 @@ async function assertReason(
 
   if (dto.expired) {
     const dia = fonte.quoteVersion.validUntil
-      ? fonte.quoteVersion.validUntil.toLocaleDateString("pt-BR", { timeZone: "UTC" })
+      ? diaComercialPorExtenso(fonte.quoteVersion.validUntil)
       : "—";
     throw new QuoteAgreementReasonRequiredError(`A condição anterior venceu em ${dia}.`);
   }

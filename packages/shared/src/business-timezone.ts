@@ -65,6 +65,33 @@ const HORA_E_MINUTO: FormaDeLeitura = {
 };
 
 /**
+ * Data e hora por extenso, `08/09/2026, 22:30:00`: `instanteComercialPorExtenso`.
+ *
+ * São as opções que `toLocaleString` preenche quando não recebe nenhuma além do fuso —
+ * ano, mês, dia, hora, minuto e segundo `numeric` —, e o pt-BR decide o resto: zeros à
+ * esquerda, vírgula, 24 horas. `Intl.DateTimeFormat` sem elas formataria só o dia.
+ */
+const DATA_E_HORA_POR_EXTENSO: FormaDeLeitura = {
+  idioma: "pt-BR",
+  opcoes: {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+  },
+  porFuso: new Map(),
+};
+
+/** O dia por extenso, `08/09/2026`: as opções que `toLocaleDateString` preenche sozinho. */
+const DIA_POR_EXTENSO: FormaDeLeitura = {
+  idioma: "pt-BR",
+  opcoes: { year: "numeric", month: "numeric", day: "numeric" },
+  porFuso: new Map(),
+};
+
+/**
  * Quantos fusos cada forma guarda. O produto usa dois (`FUSO_COMERCIAL`, `"UTC"`),
  * mas o `Intl` aceita o mesmo fuso escrito de muitos jeitos (`america/sao_paulo`):
  * sem limite, um nome qualquer faria o mapa crescer. Passou do limite, o formatador
@@ -290,14 +317,28 @@ export function diaComercialCompacto(instante: Date): string {
 }
 
 /**
- * Instante para leitura humana: `08/09/2026 22:30`.
+ * Um instante por extenso, num formatador guardado (TZ-LOCALE-STRING-REUSE-01).
+ *
+ * `toLocaleString`/`toLocaleDateString` com `{ timeZone }` criavam um formatador a
+ * cada chamada, ~54 µs — o V8 só guarda o dele quando não há opções —, e o CSV chama
+ * por célula. O texto é o mesmo: as opções da forma são as que o `toLocale*` preenche.
+ * Data inválida continua saindo `"Invalid Date"`, que o `format` recusaria com
+ * `RangeError`.
+ */
+function porExtenso(forma: FormaDeLeitura, instante: Date, fuso: string): string {
+  if (Number.isNaN(instante.getTime())) return "Invalid Date";
+  return formatador(forma, fuso).format(instante);
+}
+
+/**
+ * Instante para leitura humana: `08/09/2026, 22:30:00`.
  *
  * Carimbo de tempo É instante, e quem o lê está na Veridi. No navegador do
  * operador brasileiro o fuso local dava no mesmo por acaso; no SERVIDOR não —
  * CSV, alertas e textos gerados na API saíam no fuso da máquina.
  */
 export function instanteComercialPorExtenso(instante: Date): string {
-  return instante.toLocaleString("pt-BR", { timeZone: FUSO_COMERCIAL });
+  return porExtenso(DATA_E_HORA_POR_EXTENSO, instante, FUSO_COMERCIAL);
 }
 
 /**
@@ -307,5 +348,16 @@ export function instanteComercialPorExtenso(instante: Date): string {
  * o marcador do dia escolhido, não um momento.
  */
 export function diaDoInstantePorExtenso(instante: Date): string {
-  return instante.toLocaleDateString("pt-BR", { timeZone: FUSO_COMERCIAL });
+  return porExtenso(DIA_POR_EXTENSO, instante, FUSO_COMERCIAL);
+}
+
+/**
+ * DATA CIVIL por extenso, `15/09/2026` — validade, vigência, data de documento.
+ *
+ * O valor é a meia-noite UTC do dia escolhido, e o dia são os componentes UTC dele:
+ * o texto é o de `toLocaleDateString("pt-BR", { timeZone: "UTC" })`, que CSV, textos
+ * da API e telas escreviam cada um à sua maneira.
+ */
+export function dataCivilPorExtenso(dia: Date): string {
+  return porExtenso(DIA_POR_EXTENSO, dia, "UTC");
 }

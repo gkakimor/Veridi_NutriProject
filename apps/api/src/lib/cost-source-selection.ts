@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { PrismaClient, UomDimension } from "@prisma/client";
 import type { IndustrialMaterialCostSource } from "@veridi/shared";
+import { dataCivilPorExtenso } from "@veridi/shared";
 import { getItemCostReference } from "./cost-reference.js";
 import { convertUomDecimal, isUomCompatible } from "../modules/items/uom.js";
 // Precisão canônica do motor decimal — `PRODUCT_RULES.md` §59.
@@ -208,7 +209,7 @@ export async function resolveManualReference(
  * fuso do servidor (UTC-3) recuava um dia: 04/09 virava 03/09 no texto.
  */
 export function diaDaVigencia(date: Date): string {
-  return date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
+  return dataCivilPorExtenso(date);
 }
 
 function manualReferenceDetails(manual: ManualReferenceResolution): string {

@@ -14,6 +14,7 @@ import {
   QUOTE_PRICE_SOURCE_LABELS,
   buildPaymentSchedule,
   calcularTotaisOrcamento,
+  dataCivilPorExtenso,
 } from "@veridi/shared";
 import {
   acceptQuoteVersion,
@@ -69,7 +70,7 @@ import { formatQuantity } from "../../lib/quantity";
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR", { timeZone: "UTC" });
+  return dataCivilPorExtenso(new Date(value));
 }
 
 /**
