@@ -26,36 +26,76 @@
 export const FUSO_COMERCIAL = "America/Sao_Paulo";
 
 /**
- * Um formatador de dia por fuso, criado na primeira pergunta e reaproveitado
- * (PERFORMANCE-CLEANUP-WAVE-01).
- *
- * Criar um `Intl.DateTimeFormat` custava ~55 µs a CADA dia lido — o Painel lê um
- * por movimento da janela e um por consumo no custo das OPs. Formatar num que já
- * existe custa poucos µs. O formatador não guarda nada da data anterior, e o fuso
- * continua indo nele pelo nome IANA: quem decide o deslocamento de cada data,
- * horário de verão incluído, segue sendo a base de fusos do `Intl`. Os chamadores
- * passam constantes (`FUSO_COMERCIAL`, `"UTC"`); nome inválido lança na criação
- * e não entra no mapa.
+ * Uma forma de ler um instante no `Intl`: o idioma e as opções de sempre, menos o
+ * fuso — e os formatadores já criados dela, um por fuso.
  */
-const formatadoresDeDia = new Map<string, Intl.DateTimeFormat>();
+interface FormaDeLeitura {
+  idioma: string;
+  opcoes: Intl.DateTimeFormatOptions;
+  porFuso: Map<string, Intl.DateTimeFormat>;
+}
 
-function formatadorDeDia(fuso: string): Intl.DateTimeFormat {
-  let formatador = formatadoresDeDia.get(fuso);
-  if (!formatador) {
-    formatador = new Intl.DateTimeFormat("pt-BR", {
-      timeZone: fuso,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    });
-    formatadoresDeDia.set(fuso, formatador);
+/** O dia: `diaCivil`. */
+const DIA: FormaDeLeitura = {
+  idioma: "pt-BR",
+  opcoes: { year: "numeric", month: "2-digit", day: "2-digit" },
+  porFuso: new Map(),
+};
+
+/** Data e hora até o segundo: o deslocamento do fuso, que limita dia e hora comerciais. */
+const RELOGIO: FormaDeLeitura = {
+  idioma: "en-US",
+  opcoes: {
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  },
+  porFuso: new Map(),
+};
+
+/** Hora e minuto: `minutoDoDiaComercial`. */
+const HORA_E_MINUTO: FormaDeLeitura = {
+  idioma: "en-US",
+  opcoes: { hour12: false, hour: "2-digit", minute: "2-digit" },
+  porFuso: new Map(),
+};
+
+/**
+ * Quantos fusos cada forma guarda. O produto usa dois (`FUSO_COMERCIAL`, `"UTC"`),
+ * mas o `Intl` aceita o mesmo fuso escrito de muitos jeitos (`america/sao_paulo`):
+ * sem limite, um nome qualquer faria o mapa crescer. Passou do limite, o formatador
+ * sai novo a cada chamada — mais lento, com o mesmo resultado.
+ */
+const LIMITE_DE_FUSOS_POR_FORMA = 16;
+
+/**
+ * O formatador de `forma` em `fuso`, criado na primeira pergunta e reaproveitado
+ * (PERFORMANCE-CLEANUP-WAVE-01 no dia; TZ-FORMATTER-REUSE-01 no relógio e na hora).
+ *
+ * Criar um `Intl.DateTimeFormat` custava ~55 µs a CADA leitura — o Painel lê um dia
+ * por movimento da janela e um por consumo no custo das OPs, e cada limite de dia
+ * comercial criava quatro. Formatar num que já existe custa poucos µs. Fica guardado
+ * só o formatador, que não muda nem lembra a data anterior — nunca a data, o "agora"
+ * ou o resultado. O fuso continua indo nele pelo nome IANA: quem decide o
+ * deslocamento de cada data, horário de verão incluído, segue sendo a base de fusos
+ * do `Intl`. Nome inválido lança na criação e não entra no mapa.
+ */
+function formatador(forma: FormaDeLeitura, fuso: string): Intl.DateTimeFormat {
+  let guardado = forma.porFuso.get(fuso);
+  if (!guardado) {
+    guardado = new Intl.DateTimeFormat(forma.idioma, { ...forma.opcoes, timeZone: fuso });
+    if (forma.porFuso.size < LIMITE_DE_FUSOS_POR_FORMA) forma.porFuso.set(fuso, guardado);
   }
-  return formatador;
+  return guardado;
 }
 
 /** `YYYY-MM-DD` de um instante, lido em `fuso`. */
 export function diaCivil(instante: Date, fuso: string): string {
-  const partes = formatadorDeDia(fuso).formatToParts(instante);
+  const partes = formatador(DIA, fuso).formatToParts(instante);
   const parte = (tipo: string) => partes.find((p) => p.type === tipo)?.value ?? "";
   return `${parte("year")}-${parte("month")}-${parte("day")}`;
 }
@@ -73,16 +113,7 @@ export function hojeComercial(agora: Date = new Date()): string {
  * Brasil tinha horário de verão.
  */
 function deslocamentoDoFuso(instante: Date, fuso: string): number {
-  const partes = new Intl.DateTimeFormat("en-US", {
-    timeZone: fuso,
-    hour12: false,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).formatToParts(instante);
+  const partes = formatador(RELOGIO, fuso).formatToParts(instante);
   const valor = (tipo: string) => Number(partes.find((p) => p.type === tipo)?.value ?? "0");
   const comoSeFosseUTC = Date.UTC(
     valor("year"),
@@ -132,12 +163,7 @@ export function instanteComercial(diaISO: string, minutoDoDia: number): Date {
 
 /** O minuto do dia que um instante marca no relógio da fábrica. */
 export function minutoDoDiaComercial(instante: Date): number {
-  const partes = new Intl.DateTimeFormat("en-US", {
-    timeZone: FUSO_COMERCIAL,
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-  }).formatToParts(instante);
+  const partes = formatador(HORA_E_MINUTO, FUSO_COMERCIAL).formatToParts(instante);
   const valor = (tipo: string) => Number(partes.find((p) => p.type === tipo)?.value ?? "0");
   return (valor("hour") % 24) * 60 + valor("minute");
 }
