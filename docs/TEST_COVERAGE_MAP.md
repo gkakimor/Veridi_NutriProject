@@ -422,6 +422,7 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | O Resumo do roteiro sai do MESMO motor da simulação (`planProductionProfile`) e some quando o rascunho não fecha — nenhuma métrica de capacidade inventada | PRODUCTION-ROUTE-UX-01: resumo com conta própria divergiria da simulação na mesma tela | `web pages/planning/roteiro-de-producao.test.tsx` |
 | A simulação vem DEPOIS das etapas, não grava nada, e sem etapa diz o que falta | PRODUCTION-ROUTE-UX-01 | `web pages/planning/roteiro-de-producao.test.tsx` |
 | Gravar o rascunho não absolve o nome trocado, e a leitura do salvamento não reescreve o que foi digitado | PRODUCTION-ROUTE-UX-01: `load()` fazia `setNome(result.name)` sem condição, e o nome digitado sumia ao salvar o rascunho | `web pages/planning/roteiro-de-producao.test.tsx`, `web pages/planning/perfil-alteracoes-nao-salvas.test.tsx` |
+| Na volta de um cadastro contextual, a carga inicial não escreve por cima do rascunho restaurado — nome, descrição, base, unidade e etapas —, nem a segunda carga do StrictMode; a diferença para o gravado fica pendente (frase, guarda, "Ativar versão") e salvar volta a recarregar do servidor | ROUTE-CONTEXT-RESTORE-01: a leitura chegava depois do `restoreDraft` e trocava base, unidade e etapas pelo gravado ("Etapa Restaurada" virava "Encapsulamento") | `web pages/planning/roteiro-volta-do-cadastro.test.tsx` |
 
 ## Ações e feedback de formulário
 
