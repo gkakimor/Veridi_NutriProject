@@ -4295,6 +4295,41 @@ corrigidos são conferidos na varredura como estritos; fora dos schemas, só o h
 junto das pastas quality, users, cost-templates, formulation-templates, attachments e `paginacao-da-consulta`: 16
 arquivos, 1562 testes. `pnpm typecheck`. Sem full test, E2E nem fresh (FAST).
 
+## Comercial → Orçamentos (QUOTES-HUB-01, 2026-09-14)
+
+API e web; sem migration, status novo, precificação, auth nem E2E. §93. Fecha junto QUOTE-PAGE-NAV-ACTIVE-01.
+
+**Antes.** Achar uma proposta exigia saber o Projeto dela. Na página da versão nenhum item do menu acendia e a aba
+dizia só "Veridi Nutrition".
+
+**Depois.** `GET /quote-versions` (`listQuoteVersionsQuerySchema`): `page`/`pageSize` estritos, `search` (código;
+cliente e projeto no snapshot e no cadastro), `customerId`, `projectId`, `status` um ou vários e `dateFrom`/`dateTo`
+em dia civil sobre `quoteDate`, com a recusa do invertido. DTO leve (`QuoteVersionListItemDTO`); o total é a mesma
+conta do documento (`totaisDaVersao`, extraída de `toQuoteVersionDTO`). Web: `QuotesPage` (`/comercial/orcamentos`)
+sobre `useListFilters`, `useListQuery`, `DateRangeFilter`, `EntityFilterSelect` (cliente e `projetoFilterSource`,
+novo) e `ListStatusRow`. Abre em Em aberto (Rascunho + Enviado), com Todos e os seis status; linha, Enter e "Abrir"
+vão a `rotaDoOrcamento(id, { voltar })` com a URL da lista, e "← Voltar para Orçamentos" devolve recorte e página;
+falha com "Tentar novamente"; fila vazia, base vazia e recorte sem resultado são frases diferentes. Menu: item
+Orçamentos, ativo na lista e em `/comercial/orcamentos/:id`. Aba: `useTituloDaTela` (`app/titulo-da-tela.ts`, pelo
+contexto do AppShell) — "ORC-000444 · V1 · Veridi Nutrition". A página da versão sem origem volta para Orçamentos.
+O período usa `dateFrom`/`dateTo`, o nome das listas e do `DateRangeFilter`, e não o `from`/`to` do handoff.
+
+**Validação.** API: `projects/lista-geral-de-orcamentos` (8 — cliente, total do documento com desconto e sem preço,
+status, projeto, busca, período, paginação, cliente renomeado), mais `paginacao-da-consulta` e `periodo-invertido`
+com a rota nova. Web: `quotes/orcamentos-lista-geral` (22), `app/orcamentos-no-menu` (10), `orcamento-pagina-propria`
+(título e 404), `filtros-390px`, `rotulo-da-origem`, `rotas-do-app`, `help-topic-contract`, `sidebar-navigation`.
+Mutações: 20 de 20 derrubadas. Depois do rebase: web 41 arquivos, 604 testes (projects, quotes, app, list-query,
+list-filters, contextual-create, guardas de lista, período, 390 e ajuda); API 20 arquivos, 1219 testes (projects,
+paginação, período, guarda escalar, status); `pnpm typecheck`. Smoke Playwright em banco isolado (API e Vite do
+worktree), 1440 e 390, antes e depois do rebase: fila, Todos, página 2, linha → versão (título e menu) → Voltar com
+recorte e página, busca numa consulta, Enter, cliente, projeto e período pela URL, sessão, 500 simulado com Tentar
+novamente, vazio de recorte, Abrir por toque em 390, sem rolagem horizontal, 0 escrita, console limpo — 69 de 69. O
+smoke pegou o "Abrir" invisível na coluna fixa em 390 (`.table__actions` na própria `td`): corrigido e guardado no
+teste. Sem full test, E2E, golden path nem fresh (FAST).
+
+**Achados** (BACKLOG): E2E-QUOTE-PAGE-FLOW-01 continua aberto; LISTS-LOADING-DATES-GESTURE-01 (falha que já existia na
+`main`, fora desta capability).
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
@@ -4306,7 +4341,9 @@ PRICING-MODEL-VIEW-01 em 2026-09-14 (PDF de Precificação). O resto do assunto 
 PRICING-MODEL-VIEW-REPORTS-01, sem posição na fila.
 
 **QUOTE-WORKSPACE-NAVIGATION-01 fechado em 2026-09-14** (§92): cada versão de orçamento tem página própria.
-**QUOTES-HUB-01 continua próximo** — Comercial → Orçamentos, a lista geral que só navega para a mesma rota.
+**QUOTES-HUB-01 fechado em 2026-09-14** (§93), com QUOTE-PAGE-NAV-ACTIVE-01: Comercial → Orçamentos, a lista geral
+que só navega para a mesma rota. Do assunto sobra **E2E-QUOTE-PAGE-FLOW-01 (P2)**, a próxima onda, já contra a
+navegação final.
 
 **Nenhum módulo é ocultado** — decisão da Veridi em 2026-09-10: Precificação,
 Orçamento e Faturamento continuam disponíveis. Nenhum item do backlog propunha

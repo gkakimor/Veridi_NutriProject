@@ -69,18 +69,24 @@ Achados de COST-PRICING-CLARITY-WAVE-01, sem posição na fila: ~~QUOTE-SEND-CON
 backfill) e o envio pede confirmação por `pricingCostQuality ?? costQuality`. E
 **QUOTE-SUGGESTION-390-01 (UX, P3)** — em 390px a frase "Existe uma precificação vigente…" da linha do
 Orçamento fica cortada dentro da tabela rolável (já cortava o preço; a explicação de F-05-1 alonga a frase).
-Achados de QUOTE-WORKSPACE-NAVIGATION-01 (2026-09-14, §92): **QUOTES-HUB-01 — próxima capability** — Comercial →
-Orçamentos, a lista geral das versões, que só NAVEGA para `/comercial/orcamentos/:id` (`rotaDoOrcamento`) e ganha
-item de menu próprio. **E2E-QUOTE-PAGE-FLOW-01 (P2)** — as E2E que operavam o Orçamento embutido no Projeto não
+Achados de QUOTE-WORKSPACE-NAVIGATION-01 (2026-09-14, §92): ~~QUOTES-HUB-01~~ **fechado em 2026-09-14** (§93) —
+Comercial → Orçamentos, a lista geral das versões (`GET /quote-versions`), que só NAVEGA para
+`/comercial/orcamentos/:id` (`rotaDoOrcamento`) e tem item de menu próprio. **E2E-QUOTE-PAGE-FLOW-01 (P2, continua
+aberto)** — as E2E que operavam o Orçamento embutido no Projeto não
 rodaram nesta rodada (FAST) e usam o caminho antigo: depois de enviar ou aceitar na página da versão elas clicam em
 botão da ficha como se estivessem nela — "Aprovar projeto" (`projeto-aprovado-vende-de-novo`, e o golden path
 `private-label-golden-path`), "Criar nova versão"/"Novo orçamento" (`preco-herdado-sobrevive-ao-tab`,
 `formacao-de-preco-do-novo-orcamento`, `resumo-comercial-do-projeto`) —, ou procuram o rótulo da versão em
 `.quote-workspace__head` e a validade da enviada em campo desabilitado (`condicoes-do-orcamento-sobrevivem-a-linha`,
 `envio-exige-condicoes-salvas`); `guia-capturas.mjs` recorta a seção antiga. Ajustar para navegar pela lista e pelo
-"← Voltar ao Projeto" e ler a versão enviada como texto. **QUOTE-PAGE-NAV-ACTIVE-01 (P3, UX)** — na página do
-Orçamento nenhum item do menu fica ativo e a aba diz só "Veridi Nutrition" (não há item "Orçamentos"); fecha junto
-com QUOTES-HUB-01.
+"← Voltar ao Projeto" e ler a versão enviada como texto — agora também pela lista geral (Comercial → Orçamentos).
+~~QUOTE-PAGE-NAV-ACTIVE-01~~ **fechado em 2026-09-14** com QUOTES-HUB-01 — Orçamentos fica ativo na lista e na página
+de cada versão, e a aba diz qual versão está aberta ("ORC-000444 · V1 · Veridi Nutrition").
+Achado de QUOTES-HUB-01, sem posição na fila: **LISTS-LOADING-DATES-GESTURE-01 (P3, teste)** —
+`web pages/listas-consulta-em-curso.test.tsx` cai de forma determinística na `main` (a5b9a73, conferido sozinho) em
+Faturamento, Recebimentos, Produto Acabado e Ordens de Compra: o gesto "datas" conta 4 consultas em vez de 5
+("datas: uma consulta"). Provável pausa de 300 ms da data digitada (`DateRangeFilter`) não avançada pelo teste; não
+é regressão da lista de Orçamentos, que não mexe no componente.
 Achados de FORMULATION-ADJUSTMENTS-UX-01, idem: **FORMULATION-PRINT-ADJUSTMENTS-01
 (para a branch de PDF)** — nenhum impresso lê o modo da quantidade, a pureza,
 o overage ou o físico por unidade; a tela passou a mostrar os ajustes resumidos

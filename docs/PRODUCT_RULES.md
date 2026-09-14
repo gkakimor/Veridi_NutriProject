@@ -5838,4 +5838,38 @@ página já na tela a mantém.
 
 **Um endereço, um construtor.** `entityHref("quoteVersion", id)` e
 `rotaDoOrcamento(id, { linha, voltar })` (`web lib/rota-do-orcamento.ts`) montam
-o endereço; a lista geral de Orçamentos (QUOTES-HUB-01) navega para ele.
+o endereço; a lista geral de Orçamentos (QUOTES-HUB-01, §93) navega para ele.
+
+## §93 — Orçamentos: a lista geral encontra, não edita
+
+QUOTES-HUB-01, 2026-09-14. Comercial → Orçamentos lista TODAS as versões de
+orçamento, de todos os projetos (`GET /quote-versions`), e só navega para a
+página da versão (§92). Não edita, não cria — orçamento nasce na ficha do
+Projeto —, não repete o workspace e não cria status: "Histórico" continua sendo
+o rótulo de `ARCHIVED` em `QUOTE_STATUS_LABELS`, nada novo.
+
+**A fila padrão é "Em aberto" = Rascunho + Enviado** — as versões que ainda pedem
+ação comercial, enviada vencida inclusive (o desfecho dela é recusa ou versão
+nova). Aceito, Recusado, Substituído e Histórico ficam em "Todos os status" e no
+filtro de cada um.
+
+**A linha lê como o documento.** Cliente e projeto: rascunho, o cadastro atual;
+enviada em diante, o snapshot do envio — e o cadastro só quando a versão legada
+não tem snapshot, como no Resumo da página. Total: a mesma conta do servidor que
+o documento usa (com desconto; `null` com linha sem preço); enviada não muda
+mais, então é o total congelado. A tela não recalcula. O Pedido originado aparece
+como referência ao lado do status.
+
+**A busca acha pelos dois nomes.** Código do orçamento, e cliente e projeto tanto
+no snapshot quanto no cadastro atual: quem procura um cliente pelo nome novo acha
+a proposta antiga dele.
+
+**Filtros moram na URL** — busca, status, cliente, projeto e período da data do
+orçamento em dia civil (fim exclusivo, invertido é recusa) —, com a lembrança da
+sessão só quando a URL não traz filtro; página e tamanho vão ao servidor. Abrir
+leva `voltar=` com o endereço da lista, e "← Voltar para Orçamentos" devolve o
+mesmo recorte e a mesma página.
+
+**Menu e aba.** O item Orçamentos acende na lista e na página de cada versão (a
+versão aberta pelo Projeto também). A aba da versão diz qual é: "ORC-000444 · V1
+· Veridi Nutrition".
