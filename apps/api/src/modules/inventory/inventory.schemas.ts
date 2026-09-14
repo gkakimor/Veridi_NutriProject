@@ -70,10 +70,13 @@ export const listCustomerMaterialsQuerySchema = z.object({
   customerId: z.string().trim().min(1).optional(),
   itemId: z.string().trim().min(1).optional(),
   status: z.enum(["AWAITING_RELEASE", "AVAILABLE", "BLOCKED", "EXPIRED"]).optional(),
-  onlyWithBalance: z
-    .union([z.string(), z.boolean()])
-    .optional()
-    .transform((value) => (typeof value === "string" ? value === "true" : (value ?? false))),
+  /**
+   * `"true"`/`"false"` exatos; ausente é `false` — todos os lotes, como a
+   * lista e o CSV sempre leram. A leitura antiga tomava todo texto fora de
+   * `"true"` por `false`, calada: `?onlyWithBalance=1` listava o lote zerado
+   * (CUSTOMER-MATERIALS-ONLY-WITH-BALANCE-PERMISSIVE-01).
+   */
+  onlyWithBalance: booleanoDeConsultaSchema().default(false),
   page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
   pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
 });

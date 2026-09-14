@@ -4147,6 +4147,47 @@ projects + `pricing-model-flex` 19 arquivos/344 testes; web projects + pricing 2
 `migration-prefix` 19; `pnpm typecheck`. Migration aplicada no banco isolado do worktree. Sem full test,
 E2E, golden path nem `validate:migrations:fresh` (FAST).
 
+## Booleano de query estrito em Relatórios e Materiais de clientes (QUERY-BOOLEAN-STRICTNESS-WAVE-02, 2026-09-14)
+
+Só API, só validação: sem migration, rota, DTO nem tela. Fecha REPORTS-QUERY-BOOLEAN-PERMISSIVE-01 e
+CUSTOMER-MATERIALS-ONLY-WITH-BALANCE-PERMISSIVE-01 sobre `booleanoDeConsultaSchema` (`lib/boolean-schema.ts`),
+sem parser novo.
+
+**Relatórios.** `booleanFlag` (`onlyWithBalance` de R-01/R-02, `onlyShortage`, `includeCost`) e `all` (os 16
+relatórios paginados) liam todo texto fora de `false`/`0`/`no`/vazio como `true`. Reproduzido pela rota antes da
+correção: `all=1|yes|on|off|abc|TRUE| true` devolvia o relatório inteiro em vez da página, e o mesmo texto em
+`onlyWithBalance` escondia o item sem saldo, no JSON e no CSV; `0`, `no`, vazio e espaço valiam `false`. Agora
+`booleanoDeConsultaSchema().default(<padrão>)`: `"true"`/`"false"` exatos (booleano real no código), ausente com o
+padrão de antes (`onlyWithBalance` true; `onlyShortage`, `includeCost` e `all` false), o resto é 400 no JSON e no
+CSV que o PDF lê. As telas já mandavam `String(boolean)` e a impressão `all=true`: web intocada.
+
+**Materiais de clientes.** `onlyWithBalance` lia todo texto fora de `"true"` como `false`: `?onlyWithBalance=1`
+listava o lote zerado, na lista e no CSV. Agora `booleanoDeConsultaSchema().default(false)`: ausente continua sem
+filtro, `true` só com saldo, `false` todos, o resto 400. A tela manda `true` ou omite.
+
+**semRoteiro.** Intocado — `1`/`0`/`true`/`false` de propósito (link do Dashboard e do Quadro). Exceção declarada
+na guarda, com `activeOnly` dos Roteiros (`true`/`1` escritos no schema).
+
+**Guarda.** `lib/escalar-estrito-guarda.test.ts` interroga cada campo de cada schema exportado (`*.schemas.ts`,
+import dinâmico) pelo que ele aceita, não pelo jeito de escrever o parser: campo onde texto de URL vira booleano
+aceita só `"true"`/`"false"`; `1`/`0` a mais só nas exceções declaradas; outro texto só na lista de dívida; as duas
+listas reprovam entrada velha. Fora dos schemas, comparar texto com `"true"`/`"false"` à mão (ou `.includes` numa
+lista de falsos) só no helper e na rota de anexos. Varredura: 40 schemas, 40 booleanos de URL — 32 estritos, 2
+legado explícito, 6 permissivos em dívida; um deles a busca por texto não achava (`archived` das Políticas de
+preço, herdado por `.extend`).
+
+**Validação.** Antes da correção, os testes novos derrubaram 285 de 540 (matriz de schema, 10 casos de rota e a
+guarda). Depois: `boolean-schema` (20 flags de relatório e o material do cliente: ausente, `true`, `false`,
+booleano real, 18 recusados), `escalar-estrito-guarda`, `reports-booleanos-de-consulta` (efeito do `false` e do
+`all` pela rota; 8 casos × 12 valores, JSON e CSV), `customer-materials-booleanos` (lista e CSV) — 4 arquivos, 540
+testes, de novo depois do rebase. Regressão antes do rebase (a main nova não toca esses módulos): pastas reports,
+inventory, exports e customer-consultation, com paginação, período invertido, material do cliente sem corte e
+documentos da Qualidade — 25 arquivos, 1680 testes. Mutações: 3 de 3 derrubadas (posição ignorando `false`,
+material sempre filtrado, `all` ignorando `true`). `pnpm typecheck`. Sem full test, E2E, build global nem fresh
+(FAST).
+
+**Achado** (BACKLOG): QUERY-BOOLEAN-PERMISSIVE-REMAINING-01.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

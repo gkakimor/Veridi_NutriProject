@@ -1,19 +1,16 @@
 import { z } from "zod";
+import { booleanoDeConsultaSchema } from "../../lib/boolean-schema.js";
 import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
 import { diaCivilDeFiltroSchema, recusarPeriodoInvertido } from "../../lib/date-schema.js";
 
-/**
- * Flag booleana vinda da query string. `z.coerce.boolean()` nao serve aqui:
- * a string "false" seria coagida para `true`.
+/*
+ * Flags booleanas da query string — `onlyWithBalance`, `onlyShortage`,
+ * `includeCost` e `all` — leem `booleanoDeConsultaSchema`: `"true"`/`"false"`
+ * exatos, com o padrão de cada relatório quando ausentes. Outro texto é 400.
+ * A leitura antiga tomava todo texto fora de `false`/`0`/`no`/vazio por
+ * `true`: `?all=abc` ou `?all=off` pedia o relatório inteiro
+ * (REPORTS-QUERY-BOOLEAN-PERMISSIVE-01).
  */
-function booleanFlag(defaultValue: boolean) {
-  return z
-    .union([z.boolean(), z.string()])
-    .default(defaultValue)
-    .transform((value) =>
-      typeof value === "boolean" ? value : !["false", "0", "no", ""].includes(value.trim().toLowerCase()),
-    );
-}
 
 /**
  * Filtros e paginação dos relatórios ficam SEPARADOS de propósito: o filtro
@@ -29,12 +26,7 @@ export const paginationFields = {
    * impressão, que precisa do relatório inteiro e não da página aberta. O
    * teto de `pageSize` continua valendo só para a navegação da tela.
    */
-  all: z
-    .union([z.boolean(), z.string()])
-    .default(false)
-    .transform((value) =>
-      typeof value === "boolean" ? value : !["false", "0", "no", ""].includes(value.trim().toLowerCase()),
-    ),
+  all: booleanoDeConsultaSchema().default(false),
 };
 
 /**
@@ -68,7 +60,7 @@ export const inventoryPositionQuerySchema = z.object({
   ownerType: z.enum(["VERIDI", "CUSTOMER"]).optional(),
   ownerCustomerId: z.string().trim().min(1).optional(),
   /** Padrão do relatório: fotografia do que existe fisicamente hoje. */
-  onlyWithBalance: booleanFlag(true),
+  onlyWithBalance: booleanoDeConsultaSchema().default(true),
   ...paginationFields,
 });
 
@@ -79,7 +71,7 @@ export const expiryQuerySchema = z
     itemType: z.enum(["RAW_MATERIAL", "PACKAGING", "FINISHED_PRODUCT"]).optional(),
     /** Janelas prontas; `CUSTOM` usa `from`/`to`. */
     window: z.enum(["EXPIRED", "D7", "D30", "D60", "CUSTOM"]).default("D30"),
-    onlyWithBalance: booleanFlag(true),
+    onlyWithBalance: booleanoDeConsultaSchema().default(true),
     ...periodFields,
     ...paginationFields,
   })
@@ -107,7 +99,7 @@ export const requirementsQuerySchema = z.object({
   productionOrderId: z.string().trim().min(1).optional(),
   productId: z.string().trim().min(1).optional(),
   status: z.enum(["DRAFT", "PLANNED", "RELEASED", "IN_PRODUCTION"]).optional(),
-  onlyShortage: booleanFlag(false),
+  onlyShortage: booleanoDeConsultaSchema().default(false),
   ...paginationFields,
 });
 
@@ -121,7 +113,7 @@ export const plannedActualQuerySchema = z
      * período passa a usar `createdAt` — nunca misturado em silêncio.
      */
     status: z.enum(["DRAFT", "PLANNED", "RELEASED", "IN_PRODUCTION", "COMPLETED", "CANCELLED"]).optional(),
-    includeCost: booleanFlag(false),
+    includeCost: booleanoDeConsultaSchema().default(false),
     ...periodFields,
     ...paginationFields,
   })
