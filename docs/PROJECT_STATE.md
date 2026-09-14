@@ -3325,6 +3325,51 @@ unidade e etapas digitadas — ROUTE-IDENTIFICATION-SAVE-DRAFT-01. O cadastro de
 aberto pelo Roteiro diz "← Voltar para tela anterior" — CONTEXT-ORIGIN-LABEL-ROUTE-01. Os
 dois no BACKLOG.
 
+## Lista não mostra o recorte anterior enquanto carrega (LISTS-LOADING-STALE-DATA-01, 2026-09-13)
+
+O defeito que SMALL-UX-CLEANUP-WAVE-01 fechou nos Relatórios, visto de novo nas listas em
+PERIOD-RANGE-VALIDATION-WAVE-01. Só web: sem API, sem contrato de filtro, sem migration.
+
+**Causa.** Cada lista guardava linhas, total, `loading` e erro em `useState` soltos e trocava
+tudo quando uma resposta chegava. Filtro novo deixava tabela, total e páginas do anterior à
+vista, sem "Carregando…"; a resposta que CHEGAVA por último virava a tela, mesmo de filtro já
+trocado; a falha aparecia junto das linhas de antes e, na primeira carga, junto do "Nenhum …
+encontrado". Projetos e Amostras voltavam à página 1 por efeito: filtro trocado fora da
+primeira página consultava duas vezes, e a página antiga podia responder por último.
+
+**Regra.** `lib/list-query.ts` — `useListQuery`, o padrão do `useReport`: a resposta guarda a
+chave da consulta que a pediu e a tela deriva no render. Recorte novo: nada do anterior,
+"Carregando…" na tabela (`components/ListStatusRow.tsx`) e `aria-busy`, sem total nem
+páginas. Outra página do mesmo recorte: a aberta fica até a próxima chegar (UX mantida). Só a
+consulta atual escreve estado. Falha: o alerta, junto da tabela, sem vazio falso e sem linhas
+de outro recorte ou página. Primeira carga nunca diz "nenhum" antes da resposta. `enabled:
+false` (período recusado) não consulta nem carrega e esquece a resposta — voltar ao período
+de antes consulta de novo. `reload` refaz recorte e página (Aprovar/Rejeitar da fila CoA).
+`useFilteredPage` dá a Projetos e Amostras a página do recorte: filtro novo é página 1 no
+mesmo render. Doze listas: Faturamento, Recebimentos, OC, Produto Acabado, Projetos,
+Amostras, Pedidos, Expedições, OP, Lotes, Documentos/CoA e Picking. CSV segue lendo
+`filtrosDaConsulta` — o filtro atual, também durante a carga. No Faturamento o alerta da
+consulta desceu para junto da tabela de documentos: no topo, acima de "Aguardando
+faturamento", ficava fora da vista de quem acabou de filtrar, em 390px.
+
+**Validação.** Web: `lib/list-query.test.tsx` (17) e `pages/listas-consulta-em-curso.test.tsx`
+(49: as 12 listas com os filtros de cada uma — busca, status, cliente, fornecedor, pedido,
+produto, item, canal, saldo, datas —, primeira carga, uma consulta por gesto, CSV durante a
+carga, página, fora de ordem C/B/A, falha e posição do alerta, recarga do Aprovar);
+`periodo-invertido-listas` +4 (resposta atrasada depois da recusa, voltar ao período consulta
+uma vez). As 12 telas de antes caem 48/48 no teste novo; 20 mutações, todas derrubadas. Gate
+focado: 91 arquivos, 1174 testes (fundação de listas, filtros, seleção em massa, Faturamento,
+Recebimentos, OC, Produto Acabado, Projetos, período invertido de listas, Relatórios e
+Painel, Pedidos, Expedições, OP e Picking, Lotes, Qualidade, ajuda) e typecheck. Smoke (web
+do worktree contra a API dev, listas interceptadas com atraso e 500, nada gravado):
+Faturamento e Projetos em 1440 e 390, 25/25 — carregando, fora de ordem, falha, período
+invertido com 0 consultas, página, uma consulta por gesto, CSV, sem transbordo em
+carregando, falha e vazio; console limpo além da linha do 500 simulado.
+
+**Achados.** LISTS-LOADING-STALE-DATA-02: as outras 16 listas paginadas e os quadros de
+Planejamento ainda têm o padrão antigo. LISTS-FILTER-INPUT-UX-01 segue aberto. Os dois no
+BACKLOG.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
