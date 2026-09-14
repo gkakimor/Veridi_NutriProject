@@ -4378,6 +4378,24 @@ cabeçalhos novos; PDF do R-19/R-20 com Modelo, os dois custos, "Não congelado 
 proposto, sem migration aqui) e R20-MANUAL-REFERENCE-MARGIN-01 (a conferir). As 4 falhas de
 `listas-consulta-em-curso.test.tsx`, que já existiam na `main` em a5b9a73, são LISTS-LOADING-DATES-GESTURE-01.
 
+## Programação × quantidade reconferida (OP-SCHEDULE-STALE-ON-QUANTITY-01, reaberto em 2026-09-14)
+
+Handoff reemitido na homologação. A correção já estava na `main` desde a35ea76 (2026-09-12) e na tag
+`homologacao-inicial-2026-09-14`: regra, schema, endpoint, permissão, roteiro, lifecycle, conversão e calendário
+intocados. Reconferida sobre a `main` atual, depois das quatro rodadas que mexeram na tela da OP
+(SAVE-FEEDBACK-REMAINING-01, PTBR-NUMERIC-INPUT-ROLLOUT-01, PTBR-NUMERIC-DISPLAY-AUDIT-01, SMALL-MOBILE-UX-WAVE-03).
+
+**O que mudou.** A pergunta e a 409 dizem a frase do handoff: "Alterar a quantidade removerá a programação atual
+desta ordem, pois a duração da produção pode mudar." Testes ganharam `1000.0` na API e, na tela, `1000,000`, `1000.0`
+e `1000.000` digitados com o campo em foco — fora dele o campo mostra "1.000" e conferir o valor seria vazio.
+
+**Validação.** API production-orders 163 e schedules + GMP 45; web OP e planejamento 229; `pnpm typecheck`. Smoke
+Playwright em banco isolado (API e Vite do worktree), 24/24: pergunta antes de qualquer PATCH; Cancelar mantém banco e
+pendência; confirmar envia a flag e remove a programação na mesma gravação (DRAFT, mesmo roteiro); reprogramar pela
+tela dá 120 min para 2.000 un; `2000,0`/`2000.0`/`2000.000` sem pendência nem pergunta; OP sem programação salva
+direto; PATCH direto 409 com a frase nova, 200 com a flag e 5.000 un reprogramadas = 300 min com almoço; 390px com
+botões empilhados, sem transbordo; console limpo. Sem full test, E2E nem fresh (FAST).
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
