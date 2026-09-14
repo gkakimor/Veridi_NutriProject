@@ -440,7 +440,7 @@ try {
         arquivo: "formulacao-rascunho-existente",
         foco: secao("Histórico de versões"),
         oQueFazer:
-          'Abra Produção › Formulações, procure o produto e entre nele. Clique na linha da versão V1 (Rascunho) para editá-la.',
+          'Abra Cadastros e Configurações › Formulações, procure o produto e entre nele. Clique na linha da versão V1 (Rascunho) para editá-la.',
         oQueEsperar:
           'A tela mostra "Nenhuma versão ativa" e uma V1 já em Rascunho — o produto nascido de projeto vem com a formulação criada e vazia.',
         regra:
@@ -465,7 +465,7 @@ try {
         arquivo: "criar-formulacao",
         foco: secao("Formulação ativa"),
         oQueFazer:
-          'Abra Produção › Formulações, entre no produto e clique em "Criar formulação em branco".',
+          'Abra Cadastros e Configurações › Formulações, entre no produto e clique em "Criar formulação em branco".',
         oQueEsperar:
           "A V1 é criada em rascunho e a tela já abre o editor da versão, com base e componentes vazios.",
         regra:
@@ -1212,7 +1212,7 @@ try {
   const nB = () => (contadorB += 1);
   const NOME_PRODUTO_B = `${CARIMBO} Whey Baunilha 900g`;
 
-  // Sem filtro: o que o leitor vê ao entrar em Cadastros › Produtos é a lista
+  // Sem filtro: o que o leitor vê ao entrar em Cadastros e Configurações › Produtos é a lista
   // inteira, e a ação principal ("+ Novo produto") no cabeçalho.
   await abrir("/cadastros/produtos", ".page__title");
   await page.waitForTimeout(1200);
@@ -1223,7 +1223,7 @@ try {
     rota: "/cadastros/produtos",
     arquivo: "lista-produtos",
     foco: page.locator(".page__header").first(),
-    oQueFazer: 'Em Cadastros › Produtos, clique em "+ Novo produto".',
+    oQueFazer: 'Em Cadastros e Configurações › Produtos, clique em "+ Novo produto".',
     oQueEsperar: "A tela de cadastro abre em endereço próprio: /cadastros/produtos/novo.",
     regra:
       "O cadastro de produto tem URL própria — sobrevive a um F5, pode ser aberto por link direto e aparece no histórico do navegador. O modal continua servindo à edição, aberto a partir da linha.",

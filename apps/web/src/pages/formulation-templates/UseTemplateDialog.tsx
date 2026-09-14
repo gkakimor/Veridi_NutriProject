@@ -74,7 +74,7 @@ export function UseTemplateDialog({ onCancel, onApply, saving }: Props) {
     <FullWorkspaceModal
       open
       onClose={onCancel}
-      crumb="Modelos e Parâmetros / Modelos de Formulação"
+      crumb="Cadastros e Configurações / Modelos de Formulação"
       crumbActive="Usar template"
       title="Usar template da biblioteca"
       footer={

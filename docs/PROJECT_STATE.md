@@ -1162,10 +1162,25 @@ saída.
 
 ## Navegação moderna do ERP (NAVIGATION-SIDEBAR-01, 2026-09-11)
 
-Menu em Painel + nove seções na ordem do fluxo (Comercial, Produção, Compras,
-Estoque, Qualidade, Cadastros, Gestão, Modelos e Parâmetros, Administração),
-com id estável por tela e por seção em `app/navigation.ts`. Nenhuma rota mudou
-nem sumiu. Sidebar expandida ou compacta (trilho com um ícone por seção e
+Menu em Painel + nove seções na ordem do fluxo (Comercial, Produção,
+Planejamento, Compras, Estoque, Qualidade, Cadastros e Configurações, Gestão,
+Administração), com id estável por tela e por seção em `app/navigation.ts`.
+Nenhuma rota mudou nem sumiu.
+
+**NAVIGATION-INFORMATION-ARCHITECTURE-01 (2026-09-14):** Produção ficou só com
+Ordens de Produção e Picking / Consumo. Cadastros (id `master-data`) virou
+**Cadastros e Configurações**: Clientes, Fornecedores, Itens de estoque,
+Produtos Acabados, Formulações, Modelos de Formulação, Recursos Industriais,
+Modelos de Estrutura de Custo e Políticas de Precificação — o grupo "Modelos e
+Parâmetros" deixou de existir. Gestão segue com Relatórios e Precificação. Ids
+de tela e URLs intactos (favoritos e deep links valem; grupo aberto com o id
+antigo é ignorado), então `/producao/formulacoes` acende Cadastros e
+Configurações. "modelos e parâmetros" virou apelido de busca das quatro telas
+que moravam lá; trilhas de criação dos cadastros e diálogos "Usar template"
+citam a seção nova. O rótulo do menu seguiu "Modelos de Estrutura de Custo"
+(o título da tela é o nome do menu). Para os rótulos longos caberem, a sidebar
+passou de 236 para 312 px (`--sidebar-w`, ~2 cm, pedido do PO): coluna, espiada
+do trilho, drawer do celular (`min(80vw, …)`) e modais de workspace seguem o token. Sidebar expandida ou compacta (trilho com um ícone por seção e
 dica; o clique abre o menu por cima), seções recolhíveis — a da tela atual
 abre sozinha, sem virar preferência —, ★ Favoritos acima das seções e "Buscar
 telas…" no topo (Ctrl/Cmd+K, só navegação). No celular, drawer sempre
@@ -1177,7 +1192,7 @@ Preferência do usuário (compacto, seções abertas, favoritos) em
 com coalescência de 600 ms; falha de leitura ou gravação não trava o menu.
 
 Decisões: **Produtos × Produto Acabado** são funções distintas — o cadastro
-mestre é Cadastros › Produtos Acabados (`/cadastros/produtos`); a lista dos
+mestre é Cadastros e Configurações › Produtos Acabados (`/cadastros/produtos`); a lista dos
 lotes que saíram de OP (`/producao/produto-acabado`) virou Estoque › Lotes de
 Produto Acabado. **Documentos controlados** (revisão de R.PRO.002 e R.COQ.003,
 elaborado e aprovado por) é controle documental GMP e foi para Qualidade;

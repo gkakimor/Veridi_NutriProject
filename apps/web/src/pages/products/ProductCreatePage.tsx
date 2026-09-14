@@ -33,7 +33,7 @@ import { helpTopics } from "../../help/help-content";
  *   cliente para aninhar no `<form>` de produto, e o rascunho volta inteiro
  *   pelo contexto em vez de depender de a tela continuar montada.
  *
- * A trilha permanece canônica nos dois casos — `Cadastros › Produtos Acabados › Novo
+ * A trilha permanece canônica nos dois casos — `Cadastros e Configurações › Produtos Acabados › Novo
  * produto`. De onde a pessoa veio é caminho de volta, não hierarquia do
  * sistema.
  */
@@ -110,7 +110,7 @@ export function ProductCreatePage() {
     <>
       <PageBreadcrumbs
         items={[
-          { label: "Cadastros" },
+          { label: "Cadastros e Configurações" },
           { label: "Produtos Acabados", href: "/cadastros/produtos" },
           { label: "Novo produto", current: true },
         ]}

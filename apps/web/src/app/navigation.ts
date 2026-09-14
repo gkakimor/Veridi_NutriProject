@@ -6,8 +6,8 @@ import type { NavIconName } from "./nav-icons";
  *
  * A ordem segue o FLUXO DE TRABALHO da fábrica (comercial → produção →
  * compras → estoque → qualidade), não a ordem em que os módulos foram
- * implementados. Cadastros, gestão, modelos e administração ficam no fim: são
- * consulta e configuração, não operação diária.
+ * implementados. Cadastros e Configurações, Gestão e Administração ficam no fim:
+ * são consulta e configuração, não operação diária.
  *
  * O `id` de item e de grupo é o que a preferência do usuário grava (favoritos,
  * grupos abertos). Ele NUNCA acompanha o rótulo: renomear "Consulta de
@@ -119,19 +119,14 @@ export const navGroups: NavGroup[] = [
         implemented: true,
         aliases: ["separação", "consumo"],
       },
-      {
-        id: "formulations",
-        label: "Formulações",
-        path: "/producao/formulacoes",
-        implemented: true,
-        aliases: ["formulação", "fórmula", "receita"],
-      },
+      /* Formulações foi para Cadastros e Configurações; a URL segue em /producao. */
     ],
   },
   /*
    * Planejamento vem depois de Produção porque é o roteiro DELA: como cada
    * produto costuma ser produzido. Não é a Formulação (o que entra) nem a
-   * Estrutura de Custos (quanto custa), e por isso não mora em Modelos.
+   * Estrutura de Custos (quanto custa), e por isso não mora em Cadastros e
+   * Configurações.
    */
   {
     id: "planning",
@@ -230,7 +225,7 @@ export const navGroups: NavGroup[] = [
        * Não é cadastro: é a lista dos lotes que saíram de Ordem de Produção
        * (`origin = PRODUCTION`), com saldo do ledger. Mesma natureza de
        * "Materiais de Clientes" — uma leitura filtrada de lotes —, por isso
-       * mora em Estoque. O cadastro mestre é Cadastros › Produtos Acabados.
+       * mora em Estoque. O cadastro mestre é Cadastros e Configurações › Produtos Acabados.
        * A URL antiga continua a mesma.
        */
       {
@@ -304,8 +299,14 @@ export const navGroups: NavGroup[] = [
   },
   {
     id: "master-data",
-    title: "Cadastros",
+    title: "Cadastros e Configurações",
     icon: "master-data",
+    /*
+     * O cadastro mestre e a configuração que o sustenta moram juntos
+     * (NAVIGATION-INFORMATION-ARCHITECTURE-01): Formulações saiu de Produção e
+     * os itens do antigo grupo "Modelos e Parâmetros" vieram para cá. Ids e
+     * URLs de sempre — favoritos e deep links continuam valendo.
+     */
     items: [
       { id: "customers", label: "Clientes", path: "/cadastros/clientes", implemented: true },
       { id: "suppliers", label: "Fornecedores", path: "/cadastros/fornecedores", implemented: true },
@@ -323,6 +324,42 @@ export const navGroups: NavGroup[] = [
         implemented: true,
         aliases: ["produto", "cadastro de produto"],
       },
+      {
+        id: "formulations",
+        label: "Formulações",
+        path: "/producao/formulacoes",
+        implemented: true,
+        aliases: ["formulação", "fórmula", "receita"],
+      },
+      /* O nome da seção que deixou de existir continua achando as telas que moravam nela. */
+      {
+        id: "formulation-templates",
+        label: "Modelos de Formulação",
+        path: "/producao/templates-formulacao",
+        implemented: true,
+        aliases: ["template de formulação", "modelos e parâmetros"],
+      },
+      {
+        id: "industrial-resources",
+        label: "Recursos Industriais",
+        path: "/gestao/recursos-industriais",
+        implemented: true,
+        aliases: ["máquina", "equipamento", "mão de obra", "modelos e parâmetros"],
+      },
+      {
+        id: "cost-templates",
+        label: "Modelos de Estrutura de Custo",
+        path: "/gestao/templates-estrutura",
+        implemented: true,
+        aliases: ["template de estrutura", "estrutura de custo", "modelos e parâmetros"],
+      },
+      {
+        id: "pricing-policies",
+        label: "Políticas de Precificação",
+        path: "/gestao/politicas-precificacao",
+        implemented: true,
+        aliases: ["política de preço", "margem", "markup", "modelos e parâmetros"],
+      },
     ],
   },
   {
@@ -339,41 +376,6 @@ export const navGroups: NavGroup[] = [
         implemented: true,
         roles: ["COMMERCIAL", "PURCHASING", "ADMIN"],
         aliases: ["preço", "tabela de preço"],
-      },
-    ],
-  },
-  {
-    id: "models-parameters",
-    title: "Modelos e Parâmetros",
-    icon: "models",
-    items: [
-      {
-        id: "formulation-templates",
-        label: "Modelos de Formulação",
-        path: "/producao/templates-formulacao",
-        implemented: true,
-        aliases: ["template de formulação"],
-      },
-      {
-        id: "industrial-resources",
-        label: "Recursos Industriais",
-        path: "/gestao/recursos-industriais",
-        implemented: true,
-        aliases: ["máquina", "equipamento", "mão de obra"],
-      },
-      {
-        id: "cost-templates",
-        label: "Modelos de Estrutura de Custo",
-        path: "/gestao/templates-estrutura",
-        implemented: true,
-        aliases: ["template de estrutura", "estrutura de custo"],
-      },
-      {
-        id: "pricing-policies",
-        label: "Políticas de Precificação",
-        path: "/gestao/politicas-precificacao",
-        implemented: true,
-        aliases: ["política de preço", "margem", "markup"],
       },
     ],
   },

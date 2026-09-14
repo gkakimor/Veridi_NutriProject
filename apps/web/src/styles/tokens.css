@@ -97,7 +97,9 @@
 
   /* ---- Layout do shell ---- */
   --topbar-h: 52px;
-  --sidebar-w: 236px;
+  /* 236 + ~2 cm: "Cadastros e Configurações" e "Modelos de Estrutura de Custo"
+     cabem sem reticências (NAVIGATION-INFORMATION-ARCHITECTURE-01, pedido do PO). */
+  --sidebar-w: 312px;
   /* Menu compacto: só o trilho de ícones, um por grupo. */
   --sidebar-compact-w: 56px;
 
