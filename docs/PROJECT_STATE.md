@@ -4444,6 +4444,34 @@ Recebimentos, Produto Acabado e OC, `periodo-invertido-listas`, `listas-consulta
 **Achado** (BACKLOG): LISTS-CUSTOM-PERIOD-PAGE-RESET-01 — "Personalizado" fora da página 1 volta à página 1 do mesmo
 recorte, com uma consulta (medido nas quatro telas: 0 consultas a partir da página 1, 1 a partir da página 2).
 
+## Backup de PROD restaura sobre a cadeia de migrations (BACKUP-RESTORE-CHECK-01, 2026-09-14)
+
+Só script de manutenção e teste. Sem API, tela, schema ou migration.
+
+**Defeito.** Na carga inicial de PROD o backup oficial (`prod-backup-json.mjs`) saiu certo e a prova
+`restore-json-backup-check.mjs` quebrou com `Unique constraint failed on the fields: (code)`: desde
+`20260925093012_reference_units_of_measure` (FAST-DEVELOPMENT-RESET-02) o banco que as migrations constroem nasce
+com as 6 unidades, o arquivo traz as mesmas 6, e o `createMany` as inseria de novo. Reproduzido com o backup da
+carga (`handoff/backups/railway-prod-carga-inicial-20260914T163209Z.json`, fora do Git) em banco local descartável.
+Na carga, a prova só passou com uma cópia local que ignorava colisão em toda tabela (`skipDuplicates`) — descartada.
+
+**Regra.** `REFERENCIA_DAS_MIGRATIONS` declara por model o dado que a cadeia grava num banco vazio (hoje só
+`UnitOfMeasure`; as outras migrations com `INSERT` são backfill e não gravam nada num banco vazio). Antes da carga,
+cada linha gravada pela migration é comparada com a do arquivo, campo a campo: idêntica conta como restaurada e não
+é inserida de novo; mesma chave com campo diferente, linha da migration ausente do arquivo, chave repetida no
+arquivo ou model fora da lista com linha logo depois das migrations reprovam como drift, sem carregar nada. Model
+comum carrega sem `skipDuplicates`: duplicidade reprova. A conferência final segue contagem, linha a linha e
+sequences, e ficou mais estrita: carregadas + referência = linhas lidas; contagem e linhas do arquivo coerentes;
+sequence do banco ausente do arquivo é divergência. `migrate deploy` pelo `PRISMA_BIN`, sem shell.
+
+**Validação.** `scripts/maintenance/restore-json-backup-check.test.ts`, 11 testes, com backup gerado pelo próprio
+`prod-backup-json.mjs` sobre base migrada com dado de negócio: 9 de 9 mutações derrubadas, inclusive a cópia
+temporária da carga (8 testes caem). **O backup da carga inicial é restaurável** pelo script oficial:
+`RESTAURÁVEL: YES — 76 models, 687 linhas idênticas ao arquivo (681 carregadas + 6 de referência gravadas pelas
+migrations), 25 sequences no mesmo ponto`, banco descartável removido. Focados: `apply-migrations`,
+`migration-order`, `migration-prefix`, `schema-fk-actions` (32) e `faixas-de-teste` (5); `pnpm typecheck`. Sem full
+test, E2E nem fresh (FAST). PROD e `release/prod` intocados.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
