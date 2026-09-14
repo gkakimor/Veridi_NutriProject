@@ -39,6 +39,7 @@ import {
 } from "../../lib/numeric-scales";
 import { DecimalField, MoneyField } from "../../components/NumericField";
 import { formatQuantity } from "../../lib/quantity";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /**
  * Detalhe da relação: dados comerciais, homologação com histórico e as
@@ -487,11 +488,9 @@ export function SupplierItemDetailModal({
               {/* Mesma cortesia que a tabela de ofertas logo abaixo já faz:
                   cabeçalho sobre corpo vazio não diz nada a ninguém. */}
               {supplierItem.qualificationHistory.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="table__empty">
-                    Nenhuma decisão de homologação registrada.
-                  </td>
-                </tr>
+                <TableEmptyRow colSpan={5}>
+                  Nenhuma decisão de homologação registrada.
+                </TableEmptyRow>
               )}
             </tbody>
           </table>
@@ -560,11 +559,9 @@ export function SupplierItemDetailModal({
                 </tr>
               ))}
               {supplierItem.offers.length === 0 && (
-                <tr>
-                  <td colSpan={10} className="table__empty">
-                    Nenhum preço registrado.
-                  </td>
-                </tr>
+                <TableEmptyRow colSpan={10}>
+                  Nenhum preço registrado.
+                </TableEmptyRow>
               )}
             </tbody>
           </table>

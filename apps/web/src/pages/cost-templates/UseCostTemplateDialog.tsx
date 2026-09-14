@@ -12,6 +12,7 @@ import {
 import { getCostTemplate, listCostTemplates } from "../../lib/cost-pricing-templates-api";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { ResourceUsageAmount } from "../../components/ResourceUsageAmount";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /**
  * Escolher um template de estrutura, direto da tela de custos do produto.
@@ -148,13 +149,11 @@ export function UseCostTemplateDialog({ onCancel, onApply, saving }: Props) {
                     </tr>
                   ))}
                   {!carregando && disponiveis.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="table__empty">
-                        {termo
-                          ? "Nenhum template ativo encontrado para esta busca."
-                          : "A biblioteca ainda não tem nenhum template ativo."}
-                      </td>
-                    </tr>
+                    <TableEmptyRow colSpan={6}>
+                      {termo
+                        ? "Nenhum template ativo encontrado para esta busca."
+                        : "A biblioteca ainda não tem nenhum template ativo."}
+                    </TableEmptyRow>
                   )}
                 </tbody>
               </table>

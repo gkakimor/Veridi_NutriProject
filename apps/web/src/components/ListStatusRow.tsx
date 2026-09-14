@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { TABELA_COM_PERIODO_RECUSADO } from "../lib/list-period";
+import { TableEmptyRow } from "./TableEmptyRow";
 
 /** O que a tabela diz antes da primeira resposta do recorte. */
 export const LISTA_CARREGANDO = "Carregando…";
@@ -37,13 +38,5 @@ export function ListStatusRow({
   else if (query.data === null) conteudo = query.loading ? LISTA_CARREGANDO : null;
   else if (rowCount === 0) conteudo = children;
   if (conteudo === null) return null;
-  return (
-    <tr>
-      <td colSpan={colSpan} className="table__empty">
-        {/* O corpo tem a largura visível da tabela: a célula tem a da tabela
-            inteira, e a frase com o botão passava da borda em 390px. */}
-        <div className="table__empty-body">{conteudo}</div>
-      </td>
-    </tr>
-  );
+  return <TableEmptyRow colSpan={colSpan}>{conteudo}</TableEmptyRow>;
 }

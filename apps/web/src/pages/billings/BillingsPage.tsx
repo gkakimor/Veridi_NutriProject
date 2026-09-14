@@ -36,6 +36,7 @@ import { ClearFilters } from "../../components/filters/ClearFilters";
 import { DateRangeFilter } from "../../components/filters/DateRangeFilter";
 import { ListStatusRow } from "../../components/ListStatusRow";
 import { useAuth } from "../../app/AuthProvider";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 type ActiveFilter = BillingStatus | "all";
 
@@ -324,11 +325,9 @@ export function BillingsPage() {
             ))}
 
             {awaiting.length === 0 && (
-              <tr>
-                <td colSpan={7} className="table__empty">
-                  Nenhuma expedição aguardando faturamento.
-                </td>
-              </tr>
+              <TableEmptyRow colSpan={7}>
+                Nenhuma expedição aguardando faturamento.
+              </TableEmptyRow>
             )}
           </tbody>
         </table>

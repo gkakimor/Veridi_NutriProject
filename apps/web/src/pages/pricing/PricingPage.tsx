@@ -59,6 +59,7 @@ import {
 import { DecimalField, MoneyField, PercentField } from "../../components/NumericField";
 import { PricingPolicyOrigin } from "../cost-templates/PricingPolicyOrigin";
 import { PricingModelSummary } from "../cost-templates/PricingModelSummary";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 function statusBadgeClass(status: string): string {
   if (status === "ACTIVE") return "badge badge--active";
@@ -563,14 +564,9 @@ export function PricingPage() {
                   </tr>
                 ))}
                 {pricing.tiers.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={(editable ? 16 : 15) + (modeloFlexivel ? 1 : 0)}
-                      className="table__empty"
-                    >
-                      Nenhuma faixa de quantidade cadastrada.
-                    </td>
-                  </tr>
+                  <TableEmptyRow colSpan={(editable ? 16 : 15) + (modeloFlexivel ? 1 : 0)}>
+                    Nenhuma faixa de quantidade cadastrada.
+                  </TableEmptyRow>
                 )}
               </tbody>
             </table>

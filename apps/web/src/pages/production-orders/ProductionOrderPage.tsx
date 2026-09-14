@@ -82,6 +82,7 @@ import { formatDate, formatDateTime } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 interface FormulationVersionOption {
   id: string;
@@ -1489,11 +1490,9 @@ export function ProductionOrderPage() {
                   ))}
 
                   {productionOrder.requirements.length === 0 && (
-                    <tr>
-                      <td colSpan={reconciliando ? 7 : 8} className="table__empty">
-                        Nenhuma necessidade calculada — selecione uma formulação com componentes.
-                      </td>
-                    </tr>
+                    <TableEmptyRow colSpan={reconciliando ? 7 : 8}>
+                      Nenhuma necessidade calculada — selecione uma formulação com componentes.
+                    </TableEmptyRow>
                   )}
                 </tbody>
               </table>
@@ -1662,11 +1661,9 @@ export function ProductionOrderPage() {
                   ))}
 
                   {activeReservationLines.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="table__empty">
-                        Nenhuma linha de reserva para conferir.
-                      </td>
-                    </tr>
+                    <TableEmptyRow colSpan={7}>
+                      Nenhuma linha de reserva para conferir.
+                    </TableEmptyRow>
                   )}
                 </tbody>
               </table>
@@ -1778,11 +1775,9 @@ export function ProductionOrderPage() {
                   ))}
 
                   {activeReservationLines.length === 0 && (
-                    <tr>
-                      <td colSpan={8} className="table__empty">
-                        Nenhuma linha de reserva para consumir.
-                      </td>
-                    </tr>
+                    <TableEmptyRow colSpan={8}>
+                      Nenhuma linha de reserva para consumir.
+                    </TableEmptyRow>
                   )}
                 </tbody>
               </table>

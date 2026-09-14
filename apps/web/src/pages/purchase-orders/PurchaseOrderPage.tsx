@@ -52,6 +52,7 @@ import { ModalDialog } from "../../components/ModalDialog";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /** ⓘ de um campo, lido do registro central — o texto nunca mora no JSX. */
 function DicaDoCampo({ id }: { id: HelpHintId }) {
@@ -1173,11 +1174,9 @@ options={supplierOptions.map((supplier) => ({
               })}
 
               {lines.length === 0 && (
-                <tr>
-                  <td colSpan={isDraftEditable ? 6 : 5} className="table__empty">
-                    Nenhum item adicionado.
-                  </td>
-                </tr>
+                <TableEmptyRow colSpan={isDraftEditable ? 6 : 5}>
+                  Nenhum item adicionado.
+                </TableEmptyRow>
               )}
             </tbody>
           </table>

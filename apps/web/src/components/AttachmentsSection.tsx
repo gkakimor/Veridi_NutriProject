@@ -11,6 +11,7 @@ import {
   uploadAttachment,
 } from "../lib/attachments-api";
 import { formatDateTime } from "../lib/dates";
+import { TableEmptyRow } from "./TableEmptyRow";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -187,11 +188,9 @@ export function AttachmentsSection({
             ))}
 
             {attachments.length === 0 && (
-              <tr>
-                <td colSpan={7} className="table__empty">
-                  Nenhum documento anexado.
-                </td>
-              </tr>
+              <TableEmptyRow colSpan={7}>
+                Nenhum documento anexado.
+              </TableEmptyRow>
             )}
           </tbody>
         </table>

@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { render } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { ListStatusRow } from "./ListStatusRow";
+import { TableEmptyRow } from "./TableEmptyRow";
 
 /**
  * Linha de vazio com ação em 390px (LISTS-EMPTY-ROW-390-01).
@@ -48,6 +50,44 @@ describe("linha de vazio da listagem", () => {
     const corpo = regra(css, ".table__empty-body");
     expect(corpo).toMatch(/position: sticky;/);
     expect(corpo).toMatch(/width: calc\(100cqi - 2 \* var\(--sp-6\)\);/);
+  });
+
+  it("linha de vazio de seção (TableEmptyRow): frase longa, link e botão no mesmo corpo, alcançáveis por teclado", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <table className="table">
+        <tbody>
+          <TableEmptyRow colSpan={10}>
+            Nenhuma tarifa registrada. O custo deste recurso fica em aberto até que uma seja informada.{" "}
+            <a href="/compras/item-fornecedor">Vincular em Compras → Item × Fornecedor</a>{" "}
+            <button type="button">Limpar filtros</button>
+          </TableEmptyRow>
+        </tbody>
+      </table>,
+    );
+    const celula = container.querySelector("td.table__empty") as HTMLTableCellElement;
+    expect(celula.colSpan).toBe(10);
+    const corpo = celula.querySelector(":scope > .table__empty-body");
+    expect(corpo).not.toBeNull();
+    expect(celula.children).toHaveLength(1);
+    expect(corpo!.textContent).toContain("fica em aberto até que uma seja informada");
+    await user.tab();
+    expect(document.activeElement).toBe(corpo!.querySelector("a"));
+    await user.tab();
+    expect(document.activeElement).toBe(corpo!.querySelector("button"));
+  });
+
+  it("ListStatusRow usa a mesma linha", () => {
+    const { container } = render(
+      <table className="table">
+        <tbody>
+          <ListStatusRow colSpan={3} query={{ data: null, loading: true }} rowCount={0}>
+            nunca
+          </ListStatusRow>
+        </tbody>
+      </table>,
+    );
+    expect(container.querySelector("td.table__empty > .table__empty-body")?.textContent).toBe("Carregando…");
   });
 
   it("células comuns continuam sem quebra", () => {

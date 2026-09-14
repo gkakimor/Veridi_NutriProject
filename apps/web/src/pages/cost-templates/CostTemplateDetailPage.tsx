@@ -53,6 +53,7 @@ import {
   exigirQuantidadeDeRecursos,
 } from "../../components/ResourceUsageAmount";
 import { useAuth } from "../../app/AuthProvider";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /**
  * Detalhe de um template de estrutura.
@@ -423,11 +424,9 @@ export function CostTemplateDetailPage() {
               </tr>
             ))}
             {version.resourceUsages.length === 0 && (
-              <tr>
-                <td colSpan={4} className="table__empty">
-                  Sem recursos.
-                </td>
-              </tr>
+              <TableEmptyRow colSpan={4}>
+                Sem recursos.
+              </TableEmptyRow>
             )}
           </tbody>
         </table>
@@ -751,11 +750,9 @@ export function CostTemplateDetailPage() {
                     </tr>
                   ))}
                   {linhas.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="table__empty">
-                        Nenhum recurso ainda.
-                      </td>
-                    </tr>
+                    <TableEmptyRow colSpan={5}>
+                      Nenhum recurso ainda.
+                    </TableEmptyRow>
                   )}
                 </tbody>
               </table>

@@ -25,6 +25,7 @@ import { EntityLink } from "./EntityLink";
 import { CostWarnings } from "./CostWarnings";
 import { CalcHint } from "./help/CalcHint";
 import { InfoHint } from "./help";
+import { TableEmptyRow } from "./TableEmptyRow";
 
 /**
  * Dinheiro na tela é real brasileiro com dois centavos.
@@ -210,11 +211,9 @@ export function CostBreakdown({
               </tr>
             ))}
             {result.materials.length === 0 && (
-              <tr>
-                <td colSpan={5} className="table__empty">
-                  A formulação vinculada não tem componentes.
-                </td>
-              </tr>
+              <TableEmptyRow colSpan={5}>
+                A formulação vinculada não tem componentes.
+              </TableEmptyRow>
             )}
           </tbody>
         </table>

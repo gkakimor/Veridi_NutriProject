@@ -44,6 +44,7 @@ function DicaDaColuna({ id }: { id: HelpHintId }) {
 }
 import { formatDate, formatDateTime } from "../../lib/dates";
 import { NotFoundApiError } from "../../lib/api-errors";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /** Leitura que falhou sem ser 404: rede, 500. O Projeto existe; a resposta é que não veio. */
 const AVISO_DE_LEITURA = "Não foi possível carregar o projeto agora.";
@@ -453,18 +454,16 @@ export function ProjectDetailPage() {
                   </tr>
                 ))}
                 {samples.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="table__empty">
-                      {/* O botão some em projeto aprovado/cancelado e para quem não
-                          pode criar amostra — o texto não pode prometer uma ação
-                          que não está na tela. */}
-                      {canCreateSample &&
-                      project.status !== "APPROVED" &&
-                      project.status !== "CANCELLED"
-                        ? "Nenhuma amostra registrada neste projeto — use “Nova amostra” para abrir o primeiro teste."
-                        : "Nenhuma amostra registrada neste projeto."}
-                    </td>
-                  </tr>
+                  <TableEmptyRow colSpan={6}>
+                    {/* O botão some em projeto aprovado/cancelado e para quem não
+                        pode criar amostra — o texto não pode prometer uma ação
+                        que não está na tela. */}
+                    {canCreateSample &&
+                    project.status !== "APPROVED" &&
+                    project.status !== "CANCELLED"
+                      ? "Nenhuma amostra registrada neste projeto — use “Nova amostra” para abrir o primeiro teste."
+                      : "Nenhuma amostra registrada neste projeto."}
+                  </TableEmptyRow>
                 )}
               </tbody>
             </table>

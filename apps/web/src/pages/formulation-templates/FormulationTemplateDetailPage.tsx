@@ -61,6 +61,7 @@ import {
   useAjustesEmEdicao,
 } from "../formulations/AjustesDaQuantidade";
 import type { AjustesDaQuantidade } from "../formulations/AjustesDaQuantidade";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /**
  * Detalhe de um template da biblioteca.
@@ -664,11 +665,9 @@ export function FormulationTemplateDetailPage() {
             </tr>
           ))}
           {version.components.length === 0 && (
-            <tr>
-              <td colSpan={5} className="table__empty">
-                Sem componentes.
-              </td>
-            </tr>
+            <TableEmptyRow colSpan={5}>
+              Sem componentes.
+            </TableEmptyRow>
           )}
         </tbody>
       </table>
@@ -1041,11 +1040,9 @@ export function FormulationTemplateDetailPage() {
                     );
                   })}
                   {linhas.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="table__empty">
-                        Nenhum componente ainda.
-                      </td>
-                    </tr>
+                    <TableEmptyRow colSpan={6}>
+                      Nenhum componente ainda.
+                    </TableEmptyRow>
                   )}
                 </tbody>
               </table>

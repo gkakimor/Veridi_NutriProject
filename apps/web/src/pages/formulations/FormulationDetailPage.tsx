@@ -19,6 +19,7 @@ import { helpTopics } from "../../help/help-content";
 import { UseTemplateDialog } from "../formulation-templates/UseTemplateDialog";
 import { applyTemplateToProduct } from "../../lib/formulation-templates-api";
 import { formatDateTime } from "../../lib/dates";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 function statusBadgeClass(status: FormulationVersionDTO["status"]): string {
   switch (status) {
@@ -328,11 +329,9 @@ export function FormulationDetailPage() {
                 ))}
 
                 {versions.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="table__empty">
-                      Nenhuma versão de formulação ainda.
-                    </td>
-                  </tr>
+                  <TableEmptyRow colSpan={6}>
+                    Nenhuma versão de formulação ainda.
+                  </TableEmptyRow>
                 )}
               </tbody>
             </table>

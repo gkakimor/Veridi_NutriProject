@@ -2040,6 +2040,59 @@ body:has(.confirm-dialog) .entity-select__list {
 }
 
 /*
+ * Linha do Pedido em edição, em tela estreita (ORDER-LINE-390-OVERLAP-01).
+ *
+ * Com `table-layout: fixed`, a coluna Produto ficava com ~60px em 390px, e o
+ * seletor, preso ao mínimo de 15rem de `td .entity-select`, saía da própria
+ * célula por cima da Quantidade: seletor em x 50–290, campo em x 82–259, e o
+ * toque na quantidade abria a busca de produto. A linha empilha: Produto na
+ * largura toda; Quantidade, unidade e remover embaixo, cada um na sua trilha.
+ * Os títulos saem da vista, não da leitura — a quantidade tem nome próprio
+ * ("Quantidade de …"). Desktop segue a tabela de sempre.
+ */
+@media (max-width: 640px) {
+  .table--order-lines--editable thead {
+    display: block;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .table--order-lines--editable,
+  .table--order-lines--editable tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .table--order-lines--editable tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .table--order-lines--editable td {
+    padding: 0;
+    border-bottom: 0;
+  }
+
+  .table--order-lines--editable td:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .table--order-lines--editable td .entity-select {
+    min-width: 0;
+  }
+
+  .table--order-lines--editable td input {
+    width: 100%;
+    box-sizing: border-box;
+  }
+}
+
+/*
  * Linhas do Receber material do cliente: seis colunas que cabem em 1440 com a
  * sidebar aberta (contêiner de 1088px).
  *

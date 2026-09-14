@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -366,5 +368,25 @@ describe("Pedido do Cliente — o produto vem do cliente do pedido", () => {
     await waitFor(() =>
       expect(campoProduto().placeholder).toBe(`${PRODUTO_B.code} · ${PRODUTO_B.name}`),
     );
+  });
+
+  it("em edição, Produto e Quantidade têm células próprias e a linha empilha em tela estreita (ORDER-LINE-390-OVERLAP-01)", async () => {
+    renderPedidoExistente();
+    await waitFor(() => expect(campoProduto()).not.toBeNull());
+    const quantidade = screen.getByRole("textbox", { name: `Quantidade de ${PRODUTO_A.code}` });
+    expect(campoProduto().closest("table")!.className).toContain("table--order-lines--editable");
+    expect(quantidade.closest("tr")).toBe(campoProduto().closest("tr"));
+    expect(quantidade.closest("td")).not.toBe(campoProduto().closest("td"));
+
+    // Em 390px o seletor (mínimo 15rem) saía da célula por cima da Quantidade.
+    // jsdom não faz layout: a medida é do smoke; aqui fica a regra.
+    const css = readFileSync(join(process.cwd(), "src", "styles", "components.css"), "utf8").replace(/\r\n/g, "\n");
+    const inicio = css.indexOf("@media (max-width: 640px) {\n  .table--order-lines--editable");
+    expect(inicio).toBeGreaterThanOrEqual(0);
+    const bloco = css.slice(inicio, css.indexOf("\n}\n", inicio));
+    expect(bloco).toMatch(/\.table--order-lines--editable tr \{[^}]*display: grid;/);
+    expect(bloco).toMatch(/\.table--order-lines--editable td:first-child \{[^}]*grid-column: 1 \/ -1;/);
+    expect(bloco).toMatch(/\.table--order-lines--editable td \.entity-select \{[^}]*min-width: 0;/);
+    expect(bloco).not.toMatch(/position: absolute|transform/);
   });
 });

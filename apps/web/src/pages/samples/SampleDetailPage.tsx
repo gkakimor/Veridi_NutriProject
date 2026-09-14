@@ -36,6 +36,7 @@ import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 import { formatDateTime } from "../../lib/dates";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /**
  * ⓘ de rótulo e cabeçalho de coluna. O texto mora em `help-content`: a
@@ -404,11 +405,9 @@ export function SampleDetailPage() {
                   </tr>
                 ))}
                 {sample.consumptions.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="table__empty">
-                      Nenhum consumo registrado.
-                    </td>
-                  </tr>
+                  <TableEmptyRow colSpan={7}>
+                    Nenhum consumo registrado.
+                  </TableEmptyRow>
                 )}
               </tbody>
             </table>

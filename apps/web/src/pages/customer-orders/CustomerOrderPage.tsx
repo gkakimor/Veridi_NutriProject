@@ -83,6 +83,7 @@ import { ModalDialog } from "../../components/ModalDialog";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /**
  * Ícone de ajuda de uma coluna do Plano, lido do registro central.
@@ -1668,8 +1669,11 @@ options={customerOptions.map((customer) => ({
 
           <div className="table-container">
             {/* Produto é a coluna de decisão: fica com o espaço, e a busca
-                dentro dela precisa de largura para nomes longos. */}
-            <table className="table table--order-lines">
+                dentro dela precisa de largura para nomes longos. Em edição,
+                a tela estreita empilha a linha (ORDER-LINE-390-OVERLAP-01). */}
+            <table
+              className={`table table--order-lines${linhasEditaveis ? " table--order-lines--editable" : ""}`}
+            >
               <thead>
                 <tr>
                   <th>Produto</th>
@@ -1781,11 +1785,9 @@ options={customerOptions.map((customer) => ({
                 ))}
 
                 {lines.length === 0 && (
-                  <tr>
-                    <td colSpan={(isDraft ? 4 : 5) + (temPrecoAcordado ? 1 : 0)} className="table__empty">
-                      Nenhum produto adicionado.
-                    </td>
-                  </tr>
+                  <TableEmptyRow colSpan={(isDraft ? 4 : 5) + (temPrecoAcordado ? 1 : 0)}>
+                    Nenhum produto adicionado.
+                  </TableEmptyRow>
                 )}
               </tbody>
             </table>
@@ -2762,11 +2764,9 @@ options={customerOptions.map((customer) => ({
                         );
                       })}
                       {customerOrder.reservation.lines.length === 0 && (
-                        <tr>
-                          <td colSpan={7} className="table__empty">
-                            Nenhuma reserva de produto acabado.
-                          </td>
-                        </tr>
+                        <TableEmptyRow colSpan={7}>
+                          Nenhuma reserva de produto acabado.
+                        </TableEmptyRow>
                       )}
                     </tbody>
                   </table>

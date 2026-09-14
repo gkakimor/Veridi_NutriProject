@@ -18,6 +18,7 @@ import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { CalcHint } from "../../components/help/CalcHint";
 import { formatPercent } from "../../lib/percent";
 import { formatDate } from "../../lib/dates";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /**
  * Escolher uma política de precificação para um cálculo de custo salvo.
@@ -213,13 +214,11 @@ export function UsePricingPolicyDialog({
                     </tr>
                   ))}
                   {!carregando && disponiveis.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="table__empty">
-                        {termo
-                          ? "Nenhuma política ativa encontrada para esta busca."
-                          : "A biblioteca ainda não tem nenhuma política ativa."}
-                      </td>
-                    </tr>
+                    <TableEmptyRow colSpan={6}>
+                      {termo
+                        ? "Nenhuma política ativa encontrada para esta busca."
+                        : "A biblioteca ainda não tem nenhuma política ativa."}
+                    </TableEmptyRow>
                   )}
                 </tbody>
               </table>
