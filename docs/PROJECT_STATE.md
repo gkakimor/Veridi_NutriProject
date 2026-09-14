@@ -3137,7 +3137,8 @@ invertido 400; R-15 pela rota com o resumo de antes e CSV de 2.000; console limp
 **Achados.** Custo incompleto ainda resolve OP a OP (~2.600 das 2.651 SQL), e dentro
 do retrato os `findUnique` não se compactam — DASHBOARD-COST-BATCH-01 (fechado, seção
 abaixo). `instanteComercial`, `minutoDoDiaComercial` e `limitesDoDiaComercial` ainda
-criam formatador por chamada — TZ-FORMATTER-REUSE-01. Os dois no BACKLOG, P3.
+criam formatador por chamada — TZ-FORMATTER-REUSE-01 (fechado, seção própria). Os dois no
+BACKLOG, P3.
 
 ## Custo incompleto do Painel em lote (DASHBOARD-COST-BATCH-01, 2026-09-13)
 
@@ -3185,7 +3186,7 @@ serial 3/13 (Painel, retrato, conjuntos); typecheck.
 **Achados.** Consumos com `createdAt` empatado saem em ordem não fixa no DTO de custo —
 na função unitária também. Quantidade abaixo de `1e-7` sai como `"1e-12"` no DTO de custo
 (Watchlist 15, já registrado). Janela de custo por consumo pesa na função unitária —
-anotado em TZ-FORMATTER-REUSE-01.
+anotado em TZ-FORMATTER-REUSE-01 (fechado, seção própria).
 
 ## Busca e data digitadas nos Relatórios (REPORTS-SEARCH-UX-01, 2026-09-13)
 
@@ -3632,6 +3633,47 @@ acima de 100, 1 até 100 (o dev dobra pelo StrictMode); console limpo fora a lin
 (pendência vencida sai "Aguardando liberação"; a tela diz "Vencido") e a Pendência do laudo
 rejeitado sai "Aguardando liberação"; PAGED-DOCUMENT-SNAPSHOT-01 — leitura por deslocamento não
 pega uma saída e uma entrada simultâneas entre as requisições (total igual, sem repetição).
+
+## Formatador do fuso reaproveitado no relógio e na hora (TZ-FORMATTER-REUSE-01, 2026-09-13)
+
+`instanteComercial`, `minutoDoDiaComercial` e `limitesDoDiaComercial` criavam um
+`Intl.DateTimeFormat` por chamada — quatro por limite de dia, oito por janela de custo —, o
+padrão que PERFORMANCE-CLEANUP-WAVE-01 tirou de `diaCivil`. Só `packages/shared`: sem API,
+contrato, banco nem migration; fuso, dia civil, regra de custo e as duas passadas intocados.
+
+**Cache.** `business-timezone.ts` tem uma forma de leitura por conjunto de opções — dia
+(`diaCivil`), relógio até o segundo (o deslocamento das duas passadas) e hora e minuto —, com o
+idioma e as opções de antes. Fica guardado por forma + fuso só o formatador, nunca data, "agora"
+ou resultado. Fuso inválido lança na criação e não entra. Cada forma guarda até 16 fusos: o
+`Intl` aceita o mesmo fuso escrito de muitos jeitos (`america/sao_paulo`), e passado o limite o
+formatador sai novo a cada chamada, com o mesmo resultado. O cache por dia do custo em lote
+(DASHBOARD-COST-BATCH-01) continua; quem ganha é a função unitária — Estoque acabado,
+Relatórios, lote de documentos e detalhe da OP pagam até duas janelas por consumo sem custo de
+lote —, a agenda e os filtros por período.
+
+**Medida** (100 mil chamadas; antigo e novo intercalados no mesmo processo, Node 24, máquina com
+outras sessões): `instanteComercial` ~137 → ~13 µs, `minutoDoDiaComercial` ~65 → ~5 µs,
+`limitesDoDiaComercial` ~268 → ~24 µs; `limitesDaJanelaDeCusto` pela API, antes e depois do
+build, ~615 → ~50–60 µs; `diaCivil` igual (~2,6 µs). Antigo × novo: 3.785.690 casos com UTC,
+São Paulo, UTC-07 e Vancouver como fuso do processo — amostra de 1900 a 2100, 00:00/23:59/24:00
+e ±1 ms das bordas, as 91 viradas de deslocamento de São Paulo no período ao milissegundo, cada
+minuto dos dias de virada, anos de 1700 a 2500, entrada inválida com o mesmo erro —, 0
+divergências; 100 mil janelas de custo, 0.
+
+**Validação.** Shared: `fuso-comercial-formatadores.test.ts` (anterior copiado × novo nos quatro
+fusos do processo com o deslocamento conferido, valores escritos à mão, um formatador por forma
+num módulo novo, limite de 16 com fuso inválido fora). 11 mutações, todas derrubadas. Focados:
+shared 4 arquivos/71 (com `dia-civil-formatador`, `business-timezone` e `production-schedule`),
+API paralela 16/198 (custos, dia comercial do custo, fonte de custo, estoque acabado, relatórios,
+lote de documentos, Painel no dia comercial), serial 2/28 (agenda, conjuntos do Painel), web 3/30
+(período das listas, instante do recebimento); `pnpm typecheck`. Sem smoke (nada visual), full
+test, E2E, build global nem fresh (FAST).
+
+**Achados** (BACKLOG, P3): TZ-DST-MIDNIGHT-GAP-01 — no dia em que o horário de verão começava à
+meia-noite (04/11/2018), `limitesDoDiaComercial` abre às 23:00 da véspera e `instanteComercial`
+de 00:00 a 00:59 cai na véspera, contra `diaCivil`; histórico, mantido idêntico de propósito.
+TZ-LOCALE-STRING-REUSE-01 — `toLocaleString`/`toLocaleDateString` com opções criam formatador a
+cada chamada (~54 µs): extensos do shared, CSV e textos da API, `web lib/dates.ts`.
 
 ## Próxima prioridade
 
