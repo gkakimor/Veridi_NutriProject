@@ -3499,6 +3499,60 @@ limpo.
 **Achado.** "Filtros aplicados" lista toda chave da URL, inclusive a que o schema daquele
 relatório não aceita e a API ignora — REPORTS-PRINT-UNACCEPTED-FILTER-01, no BACKLOG.
 
+## Recorte novo sem o anterior nas listas restantes, abas e Quadro (LISTS-LOADING-STALE-DATA-02, 2026-09-13)
+
+O que LISTS-LOADING-STALE-DATA-01 deixou no BACKLOG. Só web: sem API, sem contrato de
+filtro, sem migration, sem debounce novo.
+
+**Discovery.** As 16 listas — Clientes, Fornecedores, Itens de estoque, Produtos Acabados,
+Item × Fornecedor, Formulações, Modelos de Formulação, Recursos industriais, Modelos de
+Estrutura de Custo, Políticas de Precificação, Precificação, Roteiros de Produção, Estoque,
+Movimentações, Materiais de Clientes e a busca da Visão do Cliente — eram paginadas com o
+defeito da onda 01: recorte anterior à vista sem "Carregando…", a última resposta a chegar
+virava a tela, a falha vinha com as linhas de antes (na primeira carga, com o vazio) e a
+página voltava à 1 por efeito, numa consulta a mais. `useScopedList` (as 7 abas da Visão do
+Cliente) tinha guarda de ordem, mas mostrava as linhas do cliente anterior durante a carga,
+voltava à página por efeito e, na falha, deixava o vazio do cliente e "0 projetos" junto do
+alerta. Quadro de Produção, quadro com o defeito: as seções já sumiam durante a carga, mas a
+resposta atrasada virava quadro, a primeira a terminar tirava o "Carregando…", a falha
+mostrava o quadro anterior e o aviso de calendário ficava do recorte anterior. Calendário de
+Produção sem o defeito: chave fixa (a janela do ano), uma carga por montagem — mantido.
+
+**Regra.** As 16 listas usam `useListQuery` + `useFilteredPage` + `ListStatusRow` da onda
+01, sem segunda foundation: total e paginação só com a resposta do recorte, `aria-busy`, e
+as ações da lista (inativar, salvar, fechar o detalhe) recarregam o mesmo recorte. Contexto
+de link (`ids`, `productId`, `itemId`) é parte da chave: Clientes com `?ids=` consulta uma
+vez — eram duas, porque a limpeza dos filtros por efeito trocava a situação comercial, que
+não vai com o contexto —, e o produto do aviso de Produtos sai da resposta do próprio
+recorte. A falha de criar template, política ou roteiro é estado da ação, fora do erro da
+lista. `useScopedList` é `useListQuery` com a página do cliente; contagem e paginação da
+Consulta só com resposta; as abas usam `ListStatusRow`. O Quadro usa `useListQuery` com a
+tela de antes: seções só com a resposta, e a recarga depois de programar esconde o quadro até
+a nova. A falha de `useListQuery` passa por `apiErrorMessage` — recusa de validação diz as
+issues, como Roteiros e o Quadro já faziam. Guarda estrutural: nenhum fonte guarda o total da
+consulta em `useState` (`setTotal`) nem volta a página à 1 por efeito.
+
+**Validação.** Web: `listas-consulta-em-curso-restantes` (82 — as 16 listas com os filtros
+de cada uma: primeira carga, filtro novo com uma consulta por gesto, página, fora de ordem
+C/B/A, falha e posição do alerta, vazio real; chegada por link em Clientes e Produtos),
+`customer-consultation/abas-consulta-em-curso` (8), `planning/quadro-consulta-em-curso` (7:
+primeira carga, situação, período, fora de ordem, falha e issues de validação, vazio,
+recarga depois de programar), `list-query` +1 e `listas-sem-consulta-solta` (3). O código de
+antes derruba 92 dos 101 testes novos (os outros 9 protegem o que já valia); 18 mutações,
+todas derrubadas. Gate focado depois do rebase: 94 arquivos, 1098 testes (foundation, as 28
+listas, período invertido de listas, Relatórios e Painel, Visão do Cliente, Planejamento,
+cadastros, modelos, custos, precificação, estoque, navegação e ajuda) e typecheck. Smoke
+Playwright em 390px, Vite do worktree contra a API dev, listas interceptadas (atraso, 500,
+fora de ordem, vazio; nada gravado): Clientes, Movimentações, busca e aba Projetos da Visão
+do Cliente e Quadro — 35/35, sem transbordo, uma consulta por gesto, console limpo além do
+500 simulado; a main de antes, no mesmo roteiro de Clientes, cai em 5.
+
+**Achados.** No BACKLOG: LISTS-ERROR-FALSE-EMPTY-ADMIN-01 (Usuários e Documentos
+controlados: falha da carga com o vazio junto do alerta), LISTS-EMPTY-ROW-390-01 (frase de
+vazio com ação passa da borda do contêiner em 390px, igual antes) e
+CONSULTATION-CUSTOMER-SWITCH-QUERY-01 (trocar de cliente pela mesma rota pede a aba duas
+vezes, igual antes). LISTS-FILTER-INPUT-UX-01 segue aberto.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
