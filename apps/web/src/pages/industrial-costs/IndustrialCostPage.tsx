@@ -59,11 +59,16 @@ import {
   updateIndustrialCostVersion,
 } from "../../lib/industrial-costs-api";
 import { listIndustrialResources } from "../../lib/industrial-resources-api";
+import { opcaoDeRecurso, useRecursosDoSeletor } from "../../lib/recursos-do-seletor";
+import type { RecorteDeRecursos } from "../../lib/recursos-do-seletor";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import { EntityLink } from "../../components/EntityLink";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { formatDateTime } from "../../lib/dates";
+
+/** Universo da tarifa do kWh derivado: energia ativa, o mesmo de quando saía da lista de ativos. */
+const ENERGIA_ATIVA: RecorteDeRecursos = { tipos: ["ENERGY"], somenteAtivos: true };
 
 /**
  * A base de produção que o servidor tem para esta estrutura.
@@ -333,6 +338,19 @@ export function IndustrialCostPage() {
   const editable = canEdit && version?.status === "DRAFT";
 
   /*
+   * Tarifa do kWh derivado: primeira página curta de energia ativa e busca no
+   * servidor. As opções saíam dos 50 primeiros recursos ativos, que o servidor
+   * ordena por tipo com energia por último — a partir de 50 recursos de mão de
+   * obra e equipamento o campo não oferecia energia nenhuma, e a tarifa já
+   * escolhida fora da página aparecia como "Selecione…".
+   */
+  const energiaDerivada = editable && version?.energyCalculationMode === "FROM_EQUIPMENT";
+  const recursosDeEnergia = useRecursosDoSeletor(ENERGIA_ATIVA, {
+    carregar: energiaDerivada,
+    escolhidos: energiaDerivada && version?.energyResourceId ? [version.energyResourceId] : [],
+  });
+
+  /*
    * Três blocos gravam separado nesta tela — base de produção, premissa nova e
    * recurso novo —, cada um com o seu botão. A guarda de saída é a SOMA do que
    * continua pendente: salvar a base não apaga a premissa meio digitada, e
@@ -406,6 +424,18 @@ export function IndustrialCostPage() {
   const selectedResource = resources.find((resource) => resource.id === usageResourceId) ?? null;
   // Mão de obra e equipamento se contam; energia não — o kWh já é o total (§87).
   const contaRecursos = selectedResource ? acceptsResourceCount(selectedResource.type) : false;
+
+  /** Energia ativa do catálogo e, se saiu dele, a tarifa que a versão já usa. */
+  const opcoesDeEnergia = (escolhida: string | null): EntityOption[] => {
+    const opcoes = recursosDeEnergia.catalogo.map((recurso) => opcaoDeRecurso(recurso, { comTipo: false }));
+    const atual = escolhida ? recursosDeEnergia.recurso(escolhida) : undefined;
+    if (atual && !opcoes.some((opcao) => opcao.id === atual.id)) {
+      opcoes.push(opcaoDeRecurso(atual, { comTipo: false }));
+    }
+    return opcoes;
+  };
+  const buscarEnergia = async (termo: string) =>
+    (await recursosDeEnergia.buscar(termo)).map((recurso) => opcaoDeRecurso(recurso, { comTipo: false }));
 
   return (
     <>
@@ -1185,28 +1215,24 @@ options={selectableResources.map((resource) => ({
                   {version.energyCalculationMode === "FROM_EQUIPMENT" && (
                     <div className="field">
                       <label htmlFor="energy-resource">Tarifa que valoriza o kWh derivado</label>
-                      <select
+                      <SearchableEntitySelect
                         id="energy-resource"
                         value={version.energyResourceId ?? ""}
                         disabled={saving}
-                        onChange={(event) =>
+                        onChange={(energyResourceId) => {
+                          // Reescolher a tarifa que já vale não é alteração: nada a gravar.
+                          if (energyResourceId === (version.energyResourceId ?? "")) return;
                           void run(() =>
                             updateEnergyMode(version.id, {
                               energyCalculationMode: version.energyCalculationMode,
-                              energyResourceId: event.target.value || null,
+                              energyResourceId: energyResourceId || null,
                             }),
-                          )
-                        }
-                      >
-                        <option value="">Selecione…</option>
-                        {resources
-                          .filter((resource) => resource.type === "ENERGY")
-                          .map((resource) => (
-                            <option key={resource.id} value={resource.id}>
-                              {resource.code} — {resource.name}
-                            </option>
-                          ))}
-                      </select>
+                          );
+                        }}
+                        placeholder="Digite código ou nome da energia…"
+                        options={opcoesDeEnergia(version.energyResourceId)}
+                        onSearch={buscarEnergia}
+                      />
                       <span className="field__hint">
                         Sem escolha explícita o kWh derivado não vira dinheiro: o sistema não elege
                         um recurso de energia sozinho.

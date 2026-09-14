@@ -26,7 +26,7 @@ import { formatMinutes } from "../../lib/duration";
 import { formatQuantity } from "../../lib/quantity";
 import { getProductionBoard } from "../../lib/production-schedules-api";
 import { listProducts } from "../../lib/products-api";
-import { listIndustrialResources } from "../../lib/industrial-resources-api";
+import { getIndustrialResource, listIndustrialResources } from "../../lib/industrial-resources-api";
 import { ScheduleOrderDialog } from "./ScheduleOrderDialog";
 import "./planning.css";
 
@@ -177,11 +177,19 @@ export function ProductionBoardPage() {
           code: r.code,
           name: r.name,
         })),
+      /*
+       * Pelo próprio recurso no servidor. Procurava o `?industrialResourceId=`
+       * dentro dos 100 primeiros: do 101º recurso em diante o quadro ficava
+       * filtrado e o campo, vazio.
+       */
       porId: async (id: string) => {
-        const achado = (await listIndustrialResources({ pageSize: 100 })).resources.find(
-          (r) => r.id === id,
-        );
-        return achado ? { id: achado.id, code: achado.code, name: achado.name } : null;
+        try {
+          const achado = await getIndustrialResource(id);
+          return { id: achado.id, code: achado.code, name: achado.name };
+        } catch {
+          // Recurso que não existe mais: o filtro vale, só o rótulo fica ausente.
+          return null;
+        }
       },
     }),
     [],

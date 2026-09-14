@@ -14,6 +14,11 @@ import type { ListProductsParams } from "../../lib/products-api";
  * dentro dos 20 primeiros produtos: do 21º em diante o quadro vinha filtrado
  * por um produto e o campo, vazio. Agora o nome vem de `productId` no
  * servidor, esteja o produto na primeira página ou na milésima.
+ *
+ * O mesmo para o `?industrialResourceId=` (SELECTOR-CUTOFF-WAVE-02): o
+ * `porId` do Recurso procurava o id nos 100 primeiros recursos, e do 101º em
+ * diante o quadro ficava filtrado com o campo vazio. Agora pergunta pelo
+ * próprio recurso.
  */
 
 vi.mock("../../lib/production-schedules-api", () => ({
@@ -25,12 +30,14 @@ vi.mock("../../lib/production-schedules-api", () => ({
 }));
 vi.mock("../../lib/products-api", () => ({ listProducts: vi.fn() }));
 vi.mock("../../lib/industrial-resources-api", () => ({
-  listIndustrialResources: () => Promise.resolve({ resources: [], page: 1, pageSize: 50, total: 0 }),
+  listIndustrialResources: vi.fn(async () => ({ resources: [], page: 1, pageSize: 50, total: 0 })),
+  getIndustrialResource: vi.fn(),
 }));
 vi.mock("../../app/AuthProvider", () => ({ useAuth: () => ({ user: { id: "u1", name: "Usuário", role: "ADMIN" } }) }));
 
 import { getProductionBoard } from "../../lib/production-schedules-api";
 import { listProducts } from "../../lib/products-api";
+import { getIndustrialResource, listIndustrialResources } from "../../lib/industrial-resources-api";
 import { ProductionBoardPage } from "./ProductionBoardPage";
 
 const RUIDO = 1000;
@@ -99,5 +106,64 @@ describe("Planejamento — produto do link resolvido pelo id", () => {
     const fonte = readFileSync(join(process.cwd(), "src", "pages", "planning", "ProductionBoardPage.tsx"), "utf8");
     expect(fonte).not.toMatch(/listProducts\(\{ pageSize: 20 \}\)\)\.products\.find/);
     expect(fonte).toMatch(/listProducts\(\{ productId: id, pageSize: 1 \}\)/);
+  });
+});
+
+describe("Planejamento — recurso do link resolvido pelo id", () => {
+  const RECURSO_ALVO = {
+    id: "rin-101",
+    code: "RIN-000101",
+    name: "Encapsuladora Zeta Alvo",
+    type: "EQUIPMENT",
+    active: true,
+    rates: [],
+  };
+
+  it("o recurso #101 do `?industrialResourceId=` aparece com nome, pelo próprio recurso e uma vez", async () => {
+    vi.mocked(getIndustrialResource).mockResolvedValue(RECURSO_ALVO as never);
+    render(
+      <MemoryRouter initialEntries={[`/planejamento/quadro?industrialResourceId=${RECURSO_ALVO.id}`]}>
+        <ProductionBoardPage />
+      </MemoryRouter>,
+    );
+
+    const campo = await screen.findByRole("combobox", { name: "Recurso" });
+    await waitFor(() => expect(campo).toHaveValue(`${RECURSO_ALVO.code} · ${RECURSO_ALVO.name}`));
+    expect(getIndustrialResource).toHaveBeenCalledTimes(1);
+    expect(getIndustrialResource).toHaveBeenCalledWith(RECURSO_ALVO.id);
+    for (const [params] of vi.mocked(listIndustrialResources).mock.calls) {
+      expect(params?.search).toBeUndefined();
+      expect(params?.pageSize ?? 20).toBeLessThanOrEqual(50);
+    }
+    await waitFor(() =>
+      expect(
+        vi.mocked(getProductionBoard).mock.calls.some(([consulta]) => consulta?.industrialResourceId === RECURSO_ALVO.id),
+      ).toBe(true),
+    );
+  });
+
+  it("recurso que não existe mais: o quadro segue filtrado, sem rótulo e sem perguntar de novo", async () => {
+    vi.mocked(getIndustrialResource).mockRejectedValue(new Error("Recurso não encontrado"));
+    render(
+      <MemoryRouter initialEntries={["/planejamento/quadro?industrialResourceId=rin-sumiu"]}>
+        <ProductionBoardPage />
+      </MemoryRouter>,
+    );
+
+    const campo = await screen.findByRole("combobox", { name: "Recurso" });
+    await waitFor(() => expect(getIndustrialResource).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(
+        vi.mocked(getProductionBoard).mock.calls.some(([consulta]) => consulta?.industrialResourceId === "rin-sumiu"),
+      ).toBe(true),
+    );
+    expect(campo).toHaveValue("");
+    expect(getIndustrialResource).toHaveBeenCalledTimes(1);
+  });
+
+  it("guarda estrutural: o `porId` do recurso não procura o id numa página carregada", () => {
+    const fonte = readFileSync(join(process.cwd(), "src", "pages", "planning", "ProductionBoardPage.tsx"), "utf8");
+    expect(fonte).not.toMatch(/listIndustrialResources\(\{ pageSize: 100 \}\)\)\.resources\.find/);
+    expect(fonte).toMatch(/await getIndustrialResource\(id\)/);
   });
 });

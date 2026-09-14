@@ -14,12 +14,11 @@ import type {
   UnitOfMeasureDTO,
 } from "@veridi/shared";
 import {
-  INDUSTRIAL_RESOURCE_TYPE_LABELS,
+  CAPACITY_RESOURCE_TYPES,
   PRODUCTION_STEP_LIMITS,
   PRODUCTION_STEP_SCALING_MODE_LABELS,
   ProductionPlanInputError,
   TEMPLATE_VERSION_STATUS_LABELS,
-  isCapacityResourceType,
   planProductionProfile,
 } from "@veridi/shared";
 import {
@@ -30,7 +29,8 @@ import {
   updateProductionProfile,
   updateProductionProfileVersion,
 } from "../../lib/production-profiles-api";
-import { listIndustrialResources } from "../../lib/industrial-resources-api";
+import { opcaoDeRecurso, useRecursosDoSeletor } from "../../lib/recursos-do-seletor";
+import type { RecorteDeRecursos } from "../../lib/recursos-do-seletor";
 import { listUnits } from "../../lib/units-api";
 import { listProducts } from "../../lib/products-api";
 import { apiErrorMessage } from "../../lib/api-errors";
@@ -63,6 +63,12 @@ import "./planning.css";
  * TEMPO. A simulação usa o mesmo motor do servidor (`planProductionProfile`)
  * e não grava nada.
  */
+
+/** Só mão de obra e equipamento ativos entram numa etapa: energia não é capacidade (§89). */
+const RECURSOS_DE_CAPACIDADE: RecorteDeRecursos = {
+  tipos: CAPACITY_RESOURCE_TYPES,
+  somenteAtivos: true,
+};
 
 /** Recurso que a tela conhece — do catálogo ou de uma etapa já gravada. */
 interface RecursoConhecido {
@@ -557,7 +563,6 @@ export function ProductionProfileDetailPage() {
   const [unidade, setUnidade] = useState("un");
   const [etapas, setEtapas] = useState<EtapaRascunho[]>([]);
   const [salvo, setSalvo] = useState("");
-  const [catalogo, setCatalogo] = useState<RecursoConhecido[]>([]);
   const [unidades, setUnidades] = useState<UnitOfMeasureDTO[]>([]);
   const [opcoesProduto, setOpcoesProduto] = useState<EntityOption[]>([]);
   const [produtoEscolhido, setProdutoEscolhido] = useState("");
@@ -600,33 +605,11 @@ export function ProductionProfileDetailPage() {
 
   useEffect(() => load(), [load]);
 
-  /** Só mão de obra e equipamento ativos: energia não é capacidade (§89). */
-  const carregarCatalogo = useCallback(
-    () =>
-      listIndustrialResources({ pageSize: 100, active: true })
-        .then((result) =>
-          setCatalogo(
-            result.resources
-              .filter((recurso) => isCapacityResourceType(recurso.type))
-              .map((recurso) => ({
-                id: recurso.id,
-                code: recurso.code,
-                name: recurso.name,
-                type: recurso.type,
-                active: recurso.active,
-              })),
-          ),
-        )
-        .catch(() => setCatalogo([])),
-    [],
-  );
-
   useEffect(() => {
-    void carregarCatalogo();
     listUnits()
       .then(setUnidades)
       .catch(() => setUnidades([]));
-  }, [carregarCatalogo]);
+  }, []);
 
   useEffect(() => {
     if (!canEdit) return;
@@ -635,8 +618,8 @@ export function ProductionProfileDetailPage() {
       .catch(() => setOpcoesProduto([]));
   }, [canEdit]);
 
-  /** Catálogo + recursos já gravados nas etapas (um inativo continua com nome). */
-  const conhecidos = useMemo(() => {
+  /** Recursos já gravados nas etapas (um inativo continua com nome). */
+  const gravados = useMemo(() => {
     const mapa = new Map<string, RecursoConhecido>();
     for (const version of profile?.versions ?? []) {
       for (const step of version.steps) {
@@ -651,9 +634,22 @@ export function ProductionProfileDetailPage() {
         }
       }
     }
-    for (const recurso of catalogo) mapa.set(recurso.id, recurso);
     return mapa;
-  }, [profile, catalogo]);
+  }, [profile]);
+
+  /*
+   * Recurso da etapa: primeira página curta e busca no servidor, só entre mão
+   * de obra e equipamento ativos. Eram os 100 primeiros recursos ativos num
+   * `<select>`: do 101º em diante o recurso existia e a etapa não o aceitava.
+   * O que o rascunho já tem e a tela não conhece — restaurado da volta de um
+   * cadastro, ou o recurso recém-criado — é resolvido pelo id.
+   */
+  const recursosDaEtapa = useRecursosDoSeletor(RECURSOS_DE_CAPACIDADE, {
+    carregar: canEdit && profile?.draftVersion != null,
+    escolhidos: etapas
+      .flatMap((etapa) => etapa.recursos.map((linha) => linha.industrialResourceId))
+      .filter((id) => !gravados.has(id)),
+  });
 
   const buscarProdutos = useCallback(async (termo: string) => {
     const resultado = await listProducts({ search: termo, pageSize: 20 });
@@ -709,8 +705,8 @@ export function ProductionProfileDetailPage() {
       if (Array.isArray(rascunho["etapas"])) setEtapas(rascunho["etapas"] as EtapaRascunho[]);
     },
     onCreated: (resultado, registro) => {
-      // O catálogo ainda não conhece o recurso recém-criado.
-      void carregarCatalogo();
+      // A volta monta a tela de novo e a primeira página já sai depois do
+      // cadastro; fora dela, o recurso posto na linha é resolvido pelo id.
       const contexto = registro.context ?? {};
       const etapa = contexto["etapa"];
       const linha = contexto["recurso"];
@@ -759,7 +755,9 @@ export function ProductionProfileDetailPage() {
   const ativa = profile.activeVersion;
   const editavel = canEdit && rascunho !== null;
   const alterado = alteradoNaTela;
-  const recurso = (id: string) => conhecidos.get(id);
+  // O catálogo vem antes: traz o `active` de agora, e o gravado, o da leitura.
+  const recurso = (id: string): RecursoConhecido | undefined =>
+    recursosDaEtapa.recurso(id) ?? gravados.get(id);
   const nomeDoRecurso = (id: string) => recurso(id)?.name ?? "recurso";
   const baseLida = parseDecimalInput(base);
   const baseTexto = `${baseLida ? formatQuantity(baseLida) : "—"} ${unidade}`;
@@ -774,13 +772,15 @@ export function ProductionProfileDetailPage() {
     }
   }
 
-  /** Opções do select: capacidade ativa do catálogo + o já escolhido, se saiu dele. */
-  const opcoesDeRecurso = (escolhido: string) => {
-    const lista = [...catalogo];
+  /** Opções do campo: capacidade ativa do catálogo + o já escolhido, se saiu dele. */
+  const opcoesDeRecurso = (escolhido: string): EntityOption[] => {
+    const lista: RecursoConhecido[] = [...recursosDaEtapa.catalogo];
     const atual = escolhido ? recurso(escolhido) : undefined;
     if (atual && !lista.some((item) => item.id === atual.id)) lista.push(atual);
-    return lista;
+    return lista.map((item) => opcaoDeRecurso(item, { comTipo: true }));
   };
+  const buscarRecursoDaEtapa = async (termo: string) =>
+    (await recursosDaEtapa.buscar(termo)).map((item) => opcaoDeRecurso(item, { comTipo: true }));
 
   async function run(
     acao: string,
@@ -1084,7 +1084,7 @@ export function ProductionProfileDetailPage() {
             {/* Catálogo vazio não é "escolha alguma coisa": é cadastro que
                 ainda não existe, e a tela diz onde fazê-lo sem perder o
                 rascunho. Vale para a tela, não para cada cartão. */}
-            {editavel && catalogo.length === 0 ? (
+            {editavel && recursosDaEtapa.respondeu && recursosDaEtapa.catalogo.length === 0 ? (
               <div className="profile-empty">
                 <p className="profile-empty__title">Nenhum recurso de produção cadastrado.</p>
                 <p className="field__hint">
@@ -1263,22 +1263,17 @@ export function ProductionProfileDetailPage() {
                           <div key={linha.chave} className="profile-step__resource">
                             <div className="field">
                               <label htmlFor={`${prefixo}-recurso-${linha.chave}`}>Recurso</label>
-                              <select
+                              <SearchableEntitySelect
                                 id={`${prefixo}-recurso-${linha.chave}`}
                                 disabled={!editavel}
                                 value={linha.industrialResourceId}
-                                onChange={(event) =>
-                                  alterarRecurso(indice, j, { industrialResourceId: event.target.value })
+                                onChange={(industrialResourceId) =>
+                                  alterarRecurso(indice, j, { industrialResourceId })
                                 }
-                              >
-                                <option value="">Selecione…</option>
-                                {opcoesDeRecurso(linha.industrialResourceId).map((item) => (
-                                  <option key={item.id} value={item.id}>
-                                    {item.code} — {item.name} ({INDUSTRIAL_RESOURCE_TYPE_LABELS[item.type]}
-                                    {item.active ? "" : ", inativo"})
-                                  </option>
-                                ))}
-                              </select>
+                                placeholder="Digite código ou nome do recurso…"
+                                options={opcoesDeRecurso(linha.industrialResourceId)}
+                                onSearch={buscarRecursoDaEtapa}
+                              />
                             </div>
                             <div className="field field--narrow">
                               <label htmlFor={`${prefixo}-quantidade-${linha.chave}`}>
@@ -1308,7 +1303,7 @@ export function ProductionProfileDetailPage() {
                           </div>
                         ))}
                         {editavel &&
-                          catalogo.length > 0 &&
+                          recursosDaEtapa.catalogo.length > 0 &&
                           etapa.recursos.length < PRODUCTION_STEP_LIMITS.maxResourcesPerStep && (
                             <div>
                               <button

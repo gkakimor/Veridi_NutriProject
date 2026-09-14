@@ -188,16 +188,21 @@ const escritas = () => [
 
 beforeEach(() => {
   vi.clearAllMocks();
-  listIndustrialResources.mockResolvedValue({
-    resources: [
-      recursoDoCatalogo("op", "Mão de obra — Produção", "LABOR"),
-      recursoDoCatalogo("enc", "Encapsuladora", "EQUIPMENT"),
-      recursoDoCatalogo("en", "Energia elétrica", "ENERGY"),
-    ],
-    page: 1,
-    pageSize: 100,
-    total: 3,
-  });
+  // Servidor honesto: o filtro de tipo e de ativo é dele, e o Roteiro pergunta por tipo.
+  listIndustrialResources.mockImplementation(
+    async (params: { type?: string; active?: boolean; pageSize?: number } = {}) => {
+      const resources = [
+        recursoDoCatalogo("op", "Mão de obra — Produção", "LABOR"),
+        recursoDoCatalogo("enc", "Encapsuladora", "EQUIPMENT"),
+        recursoDoCatalogo("en", "Energia elétrica", "ENERGY"),
+      ].filter(
+        (recurso) =>
+          (!params.type || recurso.type === params.type) &&
+          (params.active === undefined || recurso.active === params.active),
+      );
+      return { resources, page: 1, pageSize: params.pageSize ?? 20, total: resources.length };
+    },
+  );
   updateProductionProfileVersion.mockResolvedValue(versao());
   createProductionProfileVersionFrom.mockResolvedValue(versao({ id: "ppv-2", versionNumber: 2 }));
   setProductProductionProfile.mockResolvedValue({});
@@ -330,12 +335,15 @@ describe("Roteiro de Produção — rascunho", () => {
   it("recursos: o catálogo não oferece energia, e 2 operadores por 2 h são 4 horas-recurso", async () => {
     await abrirDetalhe(perfil({ draftVersion: versao({ steps: [passo()] }) }));
 
-    fireEvent.click(screen.getByRole("button", { name: "+ Adicionar recurso" }));
-    const recurso = screen.getByLabelText("Recurso") as HTMLSelectElement;
-    await waitFor(() => expect(within(recurso).getAllByRole("option")).toHaveLength(3));
-    expect(within(recurso).queryByRole("option", { name: /Energia/ })).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "+ Adicionar recurso" }));
+    const recurso = screen.getByRole("combobox", { name: "Recurso" });
+    fireEvent.focus(recurso);
+    const lista = await screen.findByRole("listbox");
+    await waitFor(() => expect(within(lista).getAllByRole("option")).toHaveLength(2));
+    expect(within(lista).queryByRole("option", { name: /Energia/ })).toBeNull();
 
-    fireEvent.change(recurso, { target: { value: "op" } });
+    fireEvent.mouseDown(within(lista).getByRole("option", { name: /^RIN-op/ }));
+    await waitFor(() => expect(recurso).toHaveValue("RIN-op · Mão de obra — Produção"));
     fireEvent.change(screen.getByLabelText("Quantidade necessária"), { target: { value: "2" } });
 
     const simulacao = screen.getByRole("region", { name: "Simulação do roteiro" });
