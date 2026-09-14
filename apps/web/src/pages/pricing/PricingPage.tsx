@@ -78,6 +78,17 @@ function custoQueFormaPreco(
   return tier.pricingCostPerUnit !== undefined ? tier.pricingCostPerUnit : tier.industrialCostPerUnit;
 }
 
+/**
+ * A faixa pede confirmação de custo incompleto na ativação? Pela qualidade que
+ * o SERVIDOR pesa — a do custo que forma o preço (§84) —, e não pela do cálculo:
+ * energia sem tarifa não torna incompleto um preço que não depende dela
+ * (PRICING-ACTIVATE-CONFIRM-01). Leitura sem o campo: a do cálculo, como antes.
+ */
+function custoDoPrecoIncompleto(tier: Pick<PricingTierDTO, "pricingCostQuality" | "costQuality">): boolean {
+  const qualidade = tier.pricingCostQuality ?? tier.costQuality;
+  return qualidade === "PARTIAL" || qualidade === "NO_COST";
+}
+
 /** O divisor que a conta usou — com os impostos sobre a venda quando o Modelo os considera. */
 function divisorDoPreco(margem: string | null, comissao: string, imposto: string | null | undefined) {
   return {
@@ -299,9 +310,7 @@ export function PricingPage() {
   if (!pricing) return <p>Carregando…</p>;
 
   const editable = canEdit && pricing.status === "DRAFT";
-  const incompleteCost = pricing.tiers.some(
-    (tier) => tier.costQuality === "PARTIAL" || tier.costQuality === "NO_COST",
-  );
+  const incompleteCost = pricing.tiers.some(custoDoPrecoIncompleto);
   // Modelo que não é o padrão: o custo que forma o preço aparece ao lado do custo do cálculo.
   const modeloFlexivel =
     pricing.pricingModel !== undefined && !isDefaultPricingModel(pricing.pricingModel);
@@ -571,6 +580,16 @@ export function PricingPage() {
               </tbody>
             </table>
           </div>
+
+          {/* F-05-1: os dois números estão certos, e a tela diz por que podem diferir. */}
+          {pricing.tiers.length > 0 && (
+            <p className="field__hint">
+              Os preços desta tela são técnicos: guardam mais casas decimais do que as exibidas, e a
+              receita sai deles. No orçamento, o preço unitário acordado segue a precisão comercial
+              (quatro casas decimais) e o total da linha sai desse preço — por isso a receita daqui e
+              o total do orçamento podem diferir em alguns centavos, pelo arredondamento.
+            </p>
+          )}
 
           {pricing.tiers.some((tier) => tier.warnings.length > 0) && (
             <ul className="candidate-list">
@@ -940,11 +959,7 @@ export function PricingPage() {
               <li>
                 Faixas: {pricing.tiers.length}{" "}
                 {pricing.tiers.length === 1 ? "faixa" : "faixas"} — sem custo completo:{" "}
-                {
-                  pricing.tiers.filter(
-                    (tier) => tier.costQuality === "PARTIAL" || tier.costQuality === "NO_COST",
-                  ).length
-                }
+                {pricing.tiers.filter(custoDoPrecoIncompleto).length}
               </li>
             </ul>
             {pricing.warnings.map((warning, index) => (

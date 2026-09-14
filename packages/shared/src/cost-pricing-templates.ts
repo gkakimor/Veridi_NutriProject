@@ -353,7 +353,9 @@ export type TemplateDiffKind =
   | "COST_CHANGED"
   | "TIER_ADDED"
   | "TIER_REMOVED"
-  | "TIER_CHANGED";
+  | "TIER_CHANGED"
+  /** Configuração econômica do Modelo de Precificação (§84) — PRICING-MODEL-DIFF-01. */
+  | "MODEL_CHANGED";
 
 export interface TemplateDiffEntryDTO {
   kind: TemplateDiffKind;

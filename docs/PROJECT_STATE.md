@@ -1001,8 +1001,8 @@ Energia direta recusa quantidade acima de 1 (400); Modelo, aplicar Modelo,
 nova versão e salvar como Modelo copiam o valor. Na tela, "Quantidade de
 recursos" aparece ao lado de "Tempo por recurso" só para mão de obra e
 equipamento, e o uso se lê "2 × 2 hora · Total: 4 hora" na estrutura, no
-impresso, na composição do cálculo, no CMV e no Modelo. Trocar a quantidade é
-refazer a linha: a linha de recurso continua sem edição (COST-RESOURCE-EDIT-01).
+impresso, na composição do cálculo, no CMV e no Modelo. Desde
+COST-PRICING-CLARITY-WAVE-01 a linha se edita no lugar (tempo e quantidade).
 
 ## Ajustes da quantidade no Modelo e na Formulação (FORMULATION-ADJUSTMENTS-UX-01, 2026-09-11)
 
@@ -4080,14 +4080,56 @@ Playwright 390 (toque real) e 1440 contra a main e o worktree: Pedido novo com l
 exceções do Calendário (frases longas dentro do contêiner); `scrollWidth` = viewport, 0 escritas, console
 limpo. Sem full test, E2E, build global nem fresh (FAST).
 
+## Custo e precificação sem pergunta a mais (COST-PRICING-CLARITY-WAVE-01, 2026-09-14)
+
+Fecha COST-RESOURCE-EDIT-01, PRICING-MODEL-DIFF-01, PRICING-ACTIVATE-CONFIRM-01, F-04-1 e F-05-1. Sem
+migration, sem mudança de fórmula, Decimal, arredondamento, legado `P = C ÷ (1 − m − c)`, Modelo flexível,
+impostos ou qualidade de custo. Nenhum arquivo de PDF, impressão ou relatório tocado.
+
+**Linha de recurso editável (§87).** `PATCH /industrial-cost-resource-usages/:id` troca tempo e/ou
+quantidade de recursos da MESMA linha — id, recurso e ordem ficam; corpo estrito (recurso não se troca: a
+linha é o recurso na estrutura), mesmas regras de criar (rascunho; >1 só mão de obra e equipamento; inteiro
+≥ 1). Na tela, "Editar recurso" no menu da linha abre os dois campos ali mesmo (energia só o consumo), com
+Salvar/Cancelar; salvar sem mudança fecha sem gravar; edição alterada entra na guarda de saída.
+
+**Diff do Modelo (§84).** "Comparar versões" da política compara, além das faixas, o modo do custo
+industrial e o valor que ESSE modo lê, o modo dos impostos e o valor dele, e a gestão externa (entrada
+`MODEL_CHANGED`, "Modelo alterado"). Fora, de propósito: valor de modo desligado (não entra em preço) e
+perfis tributários (só sugerem). Valor normalizado (`12.0000` = `12`); rótulo da versão é título, não
+diferença.
+
+**Confirmação de ativação (§84).** A faixa recalculada serve `pricingCostQuality` — a qualidade que
+`activatePricingVersion` pesa. A tela pede "custo incompleto" por ela (sem o campo, vale `costQuality`, como
+antes): Modelo que ignora a conversão ativa sem pergunta mesmo com cálculo parcial.
+
+**Textos.** F-04-1: "A soma da margem e da comissão deve ser menor que 100%" (e a variante com impostos)
+na API, no motor do shared e na prévia — 100% e 105% têm a mesma recusa. F-05-1: Precificação diz que preço
+e receita são técnicos e que o orçamento fecha o preço na precisão comercial (quatro casas), então a
+diferença de centavos é arredondamento; o Orçamento diz o mesmo na frase da faixa vigente, sem mexer no
+layout.
+
+**Validação.** Web: `industrial-costs/editar-linha-de-recurso` (duração, 2 → 3 → 1, zero/vazio, cancelar,
+sem mudança, energia, guarda), `pricing/precificacao-clareza` (sem/com confirmação, leitura antiga, F-05-1),
+`faixa-previa` (100% e 105%), `quote-cmv` (frase) — pastas industrial-costs, cost-templates, pricing e
+components: 42 arquivos, 431 testes. API: `quantidade-de-recursos` (mesma linha e ordem, R$ 100 → 150,
+3,5 h, energia derivada 30 → 40 kWh, energia direta, versão ativa 409, 404, dez corpos inválidos),
+`pricing-policy-diff` (idêntico, só rótulo, faixa, modo+valor, impostos e gestão externa, escala, modo
+desligado, os dois), `pricing-model-flex` (DTO e compare pela rota) + precificação, CMV e formação de preço
+do orçamento: 17 arquivos, 287 testes; shared 29. Mutações: 11 de 11 derrubadas. `pnpm typecheck`. Smoke
+Playwright em banco isolado (API e Vite do worktree), antes e depois do rebase: edição real da linha (só
+PATCH, ids e ordem iguais, R$ 480), confirmação necessária no Modelo padrão parcial e ausente no Modelo que
+ignora a conversão (ativação real 200), mensagem 105% na prévia, as duas explicações F-05-1; 390px sem
+rolagem do documento; console limpo — 24 de 24. Sem full test, E2E, build global nem fresh (FAST).
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
 mesma. Os achados da rodada estão no BACKLOG, sem posição na fila.
 
-**PRICING-TEMPLATE-FLEX-01 fechado em 2026-09-11** (§84). Três achados novos no
-BACKLOG, sem posição na fila: PRICING-MODEL-VIEW-01, PRICING-MODEL-DIFF-01 e
-PRICING-ACTIVATE-CONFIRM-01.
+**PRICING-TEMPLATE-FLEX-01 fechado em 2026-09-11** (§84). Dos três achados,
+PRICING-MODEL-DIFF-01 e PRICING-ACTIVATE-CONFIRM-01 fecharam em COST-PRICING-CLARITY-WAVE-01;
+**PRICING-MODEL-VIEW-01 continua aberto e é a próxima capability** (envolve o PDF de
+Precificação, por isso ficou depois de PRINT-CORRECTNESS-WAVE-01).
 
 **Nenhum módulo é ocultado** — decisão da Veridi em 2026-09-10: Precificação,
 Orçamento e Faturamento continuam disponíveis. Nenhum item do backlog propunha

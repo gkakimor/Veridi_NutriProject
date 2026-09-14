@@ -89,8 +89,8 @@ export function computePrice(input: PriceComputationInput): PriceComputationResu
           code: "TARGET_PRICE_IMPOSSIBLE",
           message:
             taxFraction === null
-              ? "Margem somada à comissão atinge 100% — não existe preço que satisfaça."
-              : "Margem somada à comissão e aos impostos sobre a venda atinge 100% — não existe preço que satisfaça.",
+              ? "A soma da margem e da comissão deve ser menor que 100% — não existe preço que satisfaça."
+              : "A soma da margem, da comissão e dos impostos sobre a venda deve ser menor que 100% — não existe preço que satisfaça.",
         });
       } else {
         suggestedUnitPrice = costPerUnit.dividedBy(denominator);

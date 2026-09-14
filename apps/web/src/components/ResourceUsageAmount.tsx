@@ -80,6 +80,8 @@ export function ResourceCountField(props: {
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  /** Rótulo próprio quando há mais de um campo na tela — a edição da linha. */
+  label?: string;
 }) {
   if (!props.resourceType || !acceptsResourceCount(props.resourceType)) return null;
   const dica =
@@ -88,7 +90,7 @@ export function ResourceCountField(props: {
       : "Equipamentos iguais funcionando ao mesmo tempo. O tempo ao lado é o de cada um, e a energia derivada conta todos.";
   return (
     <div className="field">
-      <label htmlFor={props.id}>{RESOURCE_COUNT_LABEL}</label>
+      <label htmlFor={props.id}>{props.label ?? RESOURCE_COUNT_LABEL}</label>
       <IntegerField
         id={props.id}
         aria-describedby={`${props.id}-dica`}

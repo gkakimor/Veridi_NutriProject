@@ -93,6 +93,22 @@ export const createResourceUsageSchema = z.object({
   notes: optionalNullableText(1000),
 });
 
+/**
+ * Editar a linha de recurso na própria linha (COST-RESOURCE-EDIT-01): tempo e
+ * quantidade de recursos. O recurso não se troca — a linha É o recurso na
+ * estrutura (uma por recurso), e a unidade vem do tipo dele. Trocar de recurso
+ * continua sendo remover e declarar o outro.
+ */
+export const updateResourceUsageSchema = z
+  .object({
+    usageQuantity: decimalStringSchema().optional(),
+    resourceCount: resourceCountSchema.optional(),
+  })
+  .strict()
+  .refine((input) => input.usageQuantity !== undefined || input.resourceCount !== undefined, {
+    message: "Informe o tempo ou a quantidade de recursos a alterar.",
+  });
+
 export const updateEnergyModeSchema = z.object({
   energyCalculationMode: z.enum(["NONE", "DIRECT", "FROM_EQUIPMENT"]),
   /** Só faz sentido no modo derivado; ausente mantém o que já está lá. */
@@ -100,4 +116,5 @@ export const updateEnergyModeSchema = z.object({
 });
 
 export type CreateResourceUsageInput = z.infer<typeof createResourceUsageSchema>;
+export type UpdateResourceUsageInput = z.infer<typeof updateResourceUsageSchema>;
 export type UpdateEnergyModeInput = z.infer<typeof updateEnergyModeSchema>;

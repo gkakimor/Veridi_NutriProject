@@ -207,9 +207,20 @@ describe("Prévia da faixa de precificação", () => {
     fireEvent.change(campo("Margem de contribuição desejada (%)"), { target: { value: "70" } });
     fireEvent.change(campo("Comissão (%)"), { target: { value: "30" } });
 
-    expect(previa()).toContain("Margem somada à comissão atinge 100%");
+    expect(previa()).toContain("A soma da margem e da comissão deve ser menor que 100%");
     expect(previa()).not.toContain("Preço sugerido R$");
     expect(previa()).not.toMatch(/Infinity|NaN|R\$ 0,00/);
+  });
+
+  it("G2. margem + comissão ACIMA de 100% diz a regra real, não \"atinge 100%\" (F-04-1)", async () => {
+    await abrir();
+    await digitarQuantidade("500");
+    fireEvent.change(campo("Margem de contribuição desejada (%)"), { target: { value: "70" } });
+    fireEvent.change(campo("Comissão (%)"), { target: { value: "35" } });
+
+    expect(previa()).toContain("A soma da margem e da comissão deve ser menor que 100%");
+    expect(previa()).not.toContain("atinge");
+    expect(previa()).not.toContain("Preço sugerido R$");
   });
 
   it("custo incompleto para a quantidade: preço pela margem indisponível, dito", async () => {

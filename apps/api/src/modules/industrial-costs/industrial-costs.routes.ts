@@ -32,6 +32,7 @@ import {
   updateEnergyModeSchema,
   updateIndustrialCostLineSchema,
   updateIndustrialCostVersionSchema,
+  updateResourceUsageSchema,
 } from "./industrial-costs.schemas.js";
 import {
   activateIndustrialCostVersion,
@@ -45,6 +46,7 @@ import {
   getProductIndustrialCosts,
   updateIndustrialCostLine,
   updateIndustrialCostVersion,
+  updateResourceUsage,
 } from "./industrial-costs.service.js";
 
 function formatZodError(error: ZodError) {
@@ -244,6 +246,24 @@ export const industrialCostsRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: "validation_error", issues: formatZodError(parsed.error) });
       }
       return reply.status(201).send(await createResourceUsage(id, parsed.data, actor));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  app.patch("/industrial-cost-resource-usages/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const actor = requireRole(request, "COMMERCIAL", "ADMIN");
+      const parsed = updateResourceUsageSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+      return reply.send(await updateResourceUsage(id, parsed.data, actor));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);

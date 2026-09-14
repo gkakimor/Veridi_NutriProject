@@ -5288,6 +5288,12 @@ continuam exatamente como antes.**
 - **Uma conta só:** `computePricingModelEffect` e `computePrice`, em
   `@veridi/shared`, servem a API, a prévia da política e a prévia da faixa; a
   validação (`validarModeloDePrecificacao`) também — a tela avisa, a API decide.
+- **Comparar versões compara a regra econômica inteira** (COST-PRICING-CLARITY-WAVE-01, 2026-09-14):
+  faixas e, do Modelo, o modo do custo industrial e o valor que esse modo lê, o modo dos impostos e o
+  valor dele, e a gestão externa. Valor de modo desligado e perfis tributários não entram — não mudam
+  preço desta versão.
+- **A confirmação de custo incompleto na ativação é uma autoridade só:** a qualidade do custo que forma o
+  preço (`pricingCostQuality` da faixa), a mesma que o servidor pesa. A tela não deduz nem recalcula.
 
 ## §85 — Duplicar como nova versão: a origem é a escolhida, e o preço é decisão explícita
 
@@ -5411,6 +5417,9 @@ máquina e não conversa com calendário.
 - **Viaja com o plano:** o Modelo guarda, aplicar o Modelo copia, nova versão
   copia, salvar a estrutura como Modelo leva junto. Não é snapshot econômico:
   é premissa de como se produz.
+- **A linha se edita no lugar** (COST-RESOURCE-EDIT-01, 2026-09-14): tempo e quantidade de recursos
+  mudam na MESMA linha — id, recurso e ordem ficam, nenhuma linha nasce. O recurso não se troca: trocar é
+  remover e declarar o outro. Mesmas regras de criar, só em rascunho.
 - **Uma linha por recurso continua.** Arranjo misto no mesmo lote — 2 × 2 h na
   mistura e 1 × 1 h no envase — entra consolidado, com quantidade 1 e 5 h.
   Roteiro, etapa e várias linhas do mesmo recurso ficam fora desta fase.

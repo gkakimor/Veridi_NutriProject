@@ -6,6 +6,7 @@ import type {
   IndustrialCostVersionDTO,
   ProductIndustrialCostResponse,
   UpdateEnergyModeInput,
+  UpdateIndustrialCostResourceUsageInput,
   UpdateIndustrialCostVersionInput,
 } from "@veridi/shared";
 import { API_URL, apiFetch } from "./api";
@@ -67,6 +68,14 @@ export async function createResourceUsage(
   input: CreateIndustrialCostResourceUsageInput,
 ): Promise<IndustrialCostVersionDTO> {
   return send(`/industrial-costs/${versionId}/resource-usages`, "POST", input);
+}
+
+/** Edita a linha no lugar — a mesma linha, com o mesmo id e a mesma posição. */
+export async function updateResourceUsage(
+  usageId: string,
+  input: UpdateIndustrialCostResourceUsageInput,
+): Promise<IndustrialCostVersionDTO> {
+  return send(`/industrial-cost-resource-usages/${usageId}`, "PATCH", input);
 }
 
 export async function deleteResourceUsage(usageId: string): Promise<IndustrialCostVersionDTO> {

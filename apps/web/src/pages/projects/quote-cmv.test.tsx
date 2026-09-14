@@ -206,6 +206,8 @@ describe("Sugestão de faixa na linha do orçamento", () => {
 
     await screen.findByText(/Existe uma precificação vigente para 1\.000 un/);
     expect(screen.getByText("R$ 38,90")).toBeInTheDocument();
+    // F-05-1: a mesma frase diz por que o total pode diferir da Precificação em centavos.
+    expect(screen.getByText(/precisão comercial/).textContent).toMatch(/alguns centavos, pelo\s+arredondamento/);
     expect(
       screen.getByRole("button", { name: "Aplicar preço calculado" }),
     ).toBeInTheDocument();

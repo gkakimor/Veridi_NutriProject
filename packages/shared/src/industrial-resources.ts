@@ -244,6 +244,13 @@ export interface CreateIndustrialCostResourceUsageInput {
   notes?: string | null;
 }
 
+/** Editar a linha no lugar: tempo e/ou quantidade de recursos. O recurso não se troca. */
+export interface UpdateIndustrialCostResourceUsageInput {
+  usageQuantity?: string;
+  /** Inteiro ≥ 1. Só mão de obra e equipamento passam de 1 (§87). */
+  resourceCount?: number;
+}
+
 export interface UpdateEnergyModeInput {
   energyCalculationMode: EnergyCalculationMode;
   /** Recurso cuja tarifa valoriza o kWh derivado dos equipamentos. */

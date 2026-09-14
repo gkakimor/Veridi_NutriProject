@@ -54,14 +54,20 @@ quantidade de recursos equivalentes na linha de recurso (§87).
 | ~~P2-1~~ | ~~OPS-CALENDAR-01~~ | B · #9 | **ABSORVIDO** por PLANNING-CALENDAR-01, entregue em 2026-09-12. Saiu da fila |
 | depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião. COST-VAR-02 continua esperando as sete decisões do PO e dado real em produção |
 
-Achados de PRICING-TEMPLATE-FLEX-01, sem posição na fila: PRICING-MODEL-VIEW-01,
-PRICING-MODEL-DIFF-01 e PRICING-ACTIVATE-CONFIRM-01 (seção A, na entrada do
-item). Achados de QUOTE-DUPLICATE-01, idem: QUOTE-NEW-VERSION-PATHS-01 e
+Achados de PRICING-TEMPLATE-FLEX-01 (seção A, na entrada do item):
+**PRICING-MODEL-VIEW-01 — aberto, próxima capability** (envolve o PDF de Precificação);
+~~PRICING-MODEL-DIFF-01~~ e ~~PRICING-ACTIVATE-CONFIRM-01~~ **fechados em 2026-09-14** por
+COST-PRICING-CLARITY-WAVE-01. Achados de QUOTE-DUPLICATE-01, sem posição na fila: QUOTE-NEW-VERSION-PATHS-01 e
 QUOTE-DUPLICATE-ORIGIN-01. Achados de CUSTOMER-COMMERCIAL-STATUS-01, idem:
 CUSTOMER-LIST-DEFAULT-E2E-01 e CUSTOMER-FACTS-LOAD-01. Achado de
-COST-RESOURCE-MULTIPLIER-01, idem: **COST-RESOURCE-EDIT-01 (P3, UX)** — a
-linha de recurso da Estrutura de Custos não se edita; trocar a quantidade de
-recursos ou o tempo é remover e declarar de novo, como já era com as horas.
+COST-RESOURCE-MULTIPLIER-01: ~~COST-RESOURCE-EDIT-01~~ **fechado em 2026-09-14** por
+COST-PRICING-CLARITY-WAVE-01 — a linha de recurso se edita no lugar (tempo e quantidade, mesma linha).
+Achados de COST-PRICING-CLARITY-WAVE-01, sem posição na fila: **QUOTE-SEND-CONFIRM-QUALITY-01 (P3)** — o
+envio do orçamento pede confirmação de custo incompleto pela `costQuality` congelada da faixa (cálculo),
+não pela qualidade do custo que formou o preço (`quote-pricing.service.ts`, `QuoteVersionsSection.tsx`);
+a faixa ativa não congela essa qualidade, então alinhar pede snapshot novo — decisão de schema. E
+**QUOTE-SUGGESTION-390-01 (UX, P3)** — em 390px a frase "Existe uma precificação vigente…" da linha do
+Orçamento fica cortada dentro da tabela rolável (já cortava o preço; a explicação de F-05-1 alonga a frase).
 Achados de FORMULATION-ADJUSTMENTS-UX-01, idem: **FORMULATION-PRINT-ADJUSTMENTS-01
 (para a branch de PDF)** — nenhum impresso lê o modo da quantidade, a pureza,
 o overage ou o físico por unidade; a tela passou a mostrar os ajustes resumidos
@@ -757,12 +763,13 @@ anterior. A direção original fica abaixo como registro.
   relatórios mostram o custo do cálculo (CMV) ao lado da contribuição que o
   Modelo formou. Com Modelo não padrão os dois não fecham na mesma conta na
   tela; só a tela de Precificação mostra o "custo p/ preço".
-- **PRICING-MODEL-DIFF-01 — P3.** "Comparar versões" da política compara só as
-  faixas: mudar modo, valor, gestão externa ou perfis não aparece no diff.
-- **PRICING-ACTIVATE-CONFIRM-01 — P3.** A tela de Precificação ainda pede a
-  confirmação de "custo incompleto" pela qualidade do cálculo do ERP; o
-  servidor já decide pela qualidade da base que forma o preço (§84). Pergunta a
-  mais, nunca bloqueio.
+  **Continua aberto — próxima capability** (PDF de Precificação; ficou depois de
+  PRINT-CORRECTNESS-WAVE-01).
+- ~~PRICING-MODEL-DIFF-01~~ — **fechado em 2026-09-14** (COST-PRICING-CLARITY-WAVE-01): o diff compara
+  modos, o valor que cada modo lê e a gestão externa. Perfis tributários ficam fora de propósito — só
+  sugerem o Modelo, não mudam número (§84).
+- ~~PRICING-ACTIVATE-CONFIRM-01~~ — **fechado em 2026-09-14** (COST-PRICING-CLARITY-WAVE-01): a faixa
+  serve `pricingCostQuality` e a tela pergunta por ela, a mesma que o servidor pesa.
 
 O Modelo de Precificação
 passava a aceitar parâmetros opcionais, sem obrigar a Veridi a controlar no ERP
@@ -930,8 +937,8 @@ mudou.
 
 | ID | Título | Sev. | Tam. |
 |---|---|---|---|
-| **F-04-1** | "atinge 100%" exibido quando margem + comissão passa de 100 % | LOW | M |
-| **F-05-1** | R$ 0,04 entre Precificação e Orçamento (fronteira §60) sem explicação em nenhuma das telas | UX | XS |
+| ~~F-04-1~~ | **Fechado em 2026-09-14** por COST-PRICING-CLARITY-WAVE-01: "A soma da margem e da comissão deve ser menor que 100%" (e a variante com impostos) na API, no motor do shared e na prévia — cálculo intacto | — | — |
+| ~~F-05-1~~ | **Fechado em 2026-09-14** por COST-PRICING-CLARITY-WAVE-01: Precificação e Orçamento explicam que o preço técnico tem mais casas e o acordado segue a precisão comercial, e que os centavos de diferença são arredondamento — números intactos | — | — |
 | **F-01-3** | "Consulta completa" só é alcançável de dentro do modal de edição | UX | S |
 | ~~F-11-1~~ | **Fechado em 2026-09-13** por LISTS-NAVIGATION-UX-WAVE-01 ([`PROJECT_STATE.md`](PROJECT_STATE.md), seção própria): o `EntityLink` de cadastro em lista com modal leva `voltar`, e o aviso de lista reduzida oferece "← Voltar para …"; link de menu e de documento sem mudança | — | — |
 | **QUOTE-VERSION-SWITCH-DIRTY-01** | Abrir outra versão com condições pendentes descarta o rascunho sem aviso — mantido de propósito em QUOTE-DRAFT-STATE-01. Só existe um rascunho por projeto e as outras versões são somente leitura; avisar, salvar ou descartar é decisão do PO | UX | S |

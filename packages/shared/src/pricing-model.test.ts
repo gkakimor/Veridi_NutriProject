@@ -266,7 +266,15 @@ describe("denominador inválido", () => {
     ).toMatch(/somam 100% ou mais/);
     expect(
       problemaDoDivisorDoPreco({ targetMarginPercent: "70", commissionPercent: "30", estimatedTaxPercent: null }),
-    ).toBe("Margem somada à comissão atinge 100% — não existe preço que satisfaça.");
+    ).toBe("A soma da margem e da comissão deve ser menor que 100% — não existe preço que satisfaça.");
+    // F-04-1: acima de 100% é a mesma recusa, com o mesmo texto — nada de "atinge".
+    expect(
+      problemaDoDivisorDoPreco({ targetMarginPercent: "70", commissionPercent: "35", estimatedTaxPercent: null }),
+    ).toBe("A soma da margem e da comissão deve ser menor que 100% — não existe preço que satisfaça.");
+    // 99,9999% ainda tem preço: a fronteira do cálculo não mudou.
+    expect(
+      problemaDoDivisorDoPreco({ targetMarginPercent: "69.9999", commissionPercent: "30", estimatedTaxPercent: null }),
+    ).toBeNull();
     expect(
       problemaDoDivisorDoPreco({ targetMarginPercent: "30", commissionPercent: "5", estimatedTaxPercent: "10" }),
     ).toBeNull();

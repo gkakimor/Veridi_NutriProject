@@ -381,6 +381,8 @@ function liveTierDTO(
           fecharResultadoTecnicoPersistido(new Prisma.Decimal(effect.pricingCostPerUnit)),
         )
       : null,
+    // A mesma qualidade que `activatePricingVersion` pesa — a tela não recalcula.
+    pricingCostQuality: effect.pricingCostQuality,
     estimatedTaxPercent: effect.estimatedTaxPercent
       ? percent(new Prisma.Decimal(effect.estimatedTaxPercent))
       : null,
@@ -883,7 +885,7 @@ function assertPercents(
   if (targetMargin.plus(commission).greaterThanOrEqualTo(HUNDRED)) {
     // Denominador zero ou negativo: nenhum preço satisfaz a conta.
     throw new InvalidPricingPercentError(
-      "Margem somada à comissão atinge 100% — não existe preço que satisfaça.",
+      "A soma da margem e da comissão deve ser menor que 100% — não existe preço que satisfaça.",
     );
   }
   // O divisor inteiro: com impostos sobre a venda no Modelo, eles entram na soma.
