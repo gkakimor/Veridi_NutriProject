@@ -1047,9 +1047,9 @@ Findings de dado registrados, sem correção nesta capability:
   custo unitário da OP, com 2.
 - Pedido fala em "reservado", mas o dado é `shippedQuantity`.
 - Folha de Receita não marca rascunho em OP DRAFT/PLANNED.
-- FO-03 lista todos os lotes (sem `onlyPending`), corta em 100 e ignora
-  vencimento; FO-04 imprime reserva substituída e "Qtd. separar" é
-  `quantity`, não o saldo.
+- FO-03 ignora vencimento na coluna Qualidade (recorte `onlyPending` e corte
+  em 100 fechados em FO03-PENDING-CUTOFF-01); FO-04 imprime reserva
+  substituída e "Qtd. separar" é `quantity`, não o saldo.
 - Enum cru (FO-01; qualidade em R-05/R-09) e filtros crus nos relatórios;
   R-18 "Custo/1.000" diverge do CSV; R-14 não imprime reservas; CSV sem
   milhar nem R$.
@@ -2145,7 +2145,7 @@ rascunho abre o formulário e só o servidor recusa ao confirmar (anterior); sem
 aberta, a lista diz "Nada disponível para escolher." no lugar da frase própria.
 
 **Próximo:** a definir pelo PO — da auditoria de filtros sobra FO-03
-(`OperationalSheets.tsx`).
+(`OperationalSheets.tsx`; fechado depois em FO03-PENDING-CUTOFF-01).
 
 ## Relatórios no dia da Veridi (REPORTS-BUSINESS-DATE-01, 2026-09-12)
 
@@ -3260,7 +3260,8 @@ do fornecedor ela some, mas fornecedor e item seguem com busca e a OC não depen
 dela; Pedido/OC intocados. `SupplierItemsSection`: tabela só leitura, a lista completa
 com filtro é Item × Fornecedor. Ficha do Projeto: as 100 amostras mais recentes; Amostras
 não tinha outro teto. Usuários: listagem, fora da fase (Auth). FO-03: PDF de pendências,
-lista operacional. Detalhe e medida do dev no BACKLOG W8.
+lista operacional (fechado depois em FO03-PENDING-CUTOFF-01). Detalhe e medida do dev no
+BACKLOG W8.
 
 **Validação.** Web: 4 arquivos novos com servidor falso ordenado como o real (#112 fora
 dos 100, nenhuma energia nos 100 nem nos 50 ativos, tarifa #25 fora da página de
@@ -3598,6 +3599,39 @@ fresh (FAST).
 `parseDecimalInput` pelo parser novo muda o `1.234` digitado de 1,234 para recusado;
 `formatQuantity` não agrupa milhar e o campo agrupa fora do foco; o campo não limita os dígitos
 da parte inteira — quem limita é a coluna. Próxima capability: PTBR-NUMERIC-INPUT-ROLLOUT-01.
+
+## FO-03 com todas as pendências (FO03-PENDING-CUTOFF-01, 2026-09-13)
+
+A folha "Pendências de qualidade / CoA" pedia `listQualityQueue({ pageSize: 100 })`, sem
+`onlyPending`. A primeira página era de todos os lotes, na ordem do servidor (`coaStatus` pela
+ordem do enum — sem exigência e aprovado antes das pendências — e depois código): lote que não é
+pendência entrava, e da 101ª linha em diante nada entrava. "Lotes pendentes: N" contava o que
+sobrou. Só web: sem API, sem contrato novo, sem migration.
+
+**Regra.** FO-03 é o recorte "Pendências" de Documentos / CoA — o que a ajuda já dizia —, decidido
+pelo servidor: `onlyPending`, laudo pendente, aguardando análise ou rejeitado. Vencimento não entra
+no recorte (`onlyPending` é só documental). A rota não tem `all=true` e o `pageSize` vai até 100:
+`loadAllPages` (`web lib/all-pages.ts`) lê página a página até o `total`, na ordem do servidor, uma
+requisição por página. O `total` da primeira resposta é guarda: total diferente entre páginas,
+página que não fecha com o que falta, chave repetida ou total inválido lançam, e falha de qualquer
+página também — o `PdfScreen` diz "Não foi possível gerar o documento" e nenhum PDF sai parcial.
+Documento sem `all=true` que precise do conjunto inteiro usa o mesmo helper.
+
+**Validação.** Web: `all-pages` (23), `fo03-pendencias-sem-corte` (7, servidor falso que filtra,
+ordena e pagina como `quality.service`, lendo o PDF: 0, 1, 100, 101 e 125 pendências entre 40 fora
+do recorte; página 2 falhando; total mudando) e `operational-sheets` ajustado. Mutação 9/9. Gate
+focado: 19 arquivos, 312 testes (folhas, qualidade, `src/pdf`, `src/print`, listas da fila) — a
+primeira execução, fria, perdeu 2 do FO-02 por `waitFor` de 1 s (W9); isolado e em duas
+reexecuções, verde. API `quality-documents` 18/18 em banco de teste isolado. `pnpm typecheck`.
+Smoke Playwright com API, Vite e banco isolados (190 lotes, 130 pendências): PDF real lido com
+130/130 na ordem do banco e nenhum dos 60 de fora; tela Documentos / CoA com 130; 101, 100, 1 e 0
+no servidor real; 500 na página 2 e total mudando sem PDF, com alerta; 2 requisições por geração
+acima de 100, 1 até 100 (o dev dobra pelo StrictMode); console limpo fora a linha do 500 simulado.
+
+**Achados** (BACKLOG, P3): FO03-ROW-SITUATION-01 — a coluna Qualidade ignora `isExpired`
+(pendência vencida sai "Aguardando liberação"; a tela diz "Vencido") e a Pendência do laudo
+rejeitado sai "Aguardando liberação"; PAGED-DOCUMENT-SNAPSHOT-01 — leitura por deslocamento não
+pega uma saída e uma entrada simultâneas entre as requisições (total igual, sem repetição).
 
 ## Próxima prioridade
 
