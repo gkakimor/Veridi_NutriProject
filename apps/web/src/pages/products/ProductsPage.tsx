@@ -13,6 +13,7 @@ import { clienteFilterSource } from "../../lib/filter-sources";
 import { ProductFormModal } from "./ProductFormModal";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
+import { RetornoDoContexto } from "../../components/RecordContext";
 import { RowActions } from "../../components/RowActions";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
@@ -224,7 +225,7 @@ export function ProductsPage() {
         <p className="context-chip">
           Mostrando apenas o produto{" "}
           <span className="code">{productContext?.code ?? "selecionado"}</span>
-          {productContext ? ` · ${productContext.name}` : ""}{" "}
+          {productContext ? ` · ${productContext.name}` : ""} <RetornoDoContexto />{" "}
           <button
             type="button"
             className="btn btn--ghost btn--sm"

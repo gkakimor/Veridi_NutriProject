@@ -536,6 +536,31 @@
   max-width: 100vw;
 }
 
+/*
+ * A célula de vazio não encolhe (LISTS-EMPTY-ROW-390-01): com `colspan` ela tem
+ * a largura da tabela inteira — 1037px em Clientes, em 390px —, e célula de
+ * tabela ignora `max-width`. A frase "Nenhum cliente encontrado para os filtros
+ * atuais. Limpar filtros" terminava em x=437 com a borda do contêiner em 378, e
+ * o botão ficava sob a rolagem. `.table td` também vencia o `white-space` acima.
+ *
+ * O corpo da célula (`ListStatusRow`) tem a largura VISÍVEL do contêiner
+ * (`cqi`) e fica preso à esquerda da rolagem. O contêiner só vira container de
+ * consulta quando tem a linha de vazio: tabela com linhas não muda nada.
+ */
+.table-container:has(td.table__empty) {
+  container-type: inline-size;
+}
+
+.table td.table__empty {
+  white-space: normal;
+}
+
+.table__empty-body {
+  position: sticky;
+  left: var(--sp-6);
+  width: calc(100cqi - 2 * var(--sp-6));
+}
+
 .table-foot {
   padding: var(--sp-3) var(--sp-4);
   font-size: 12.5px;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useOutletContext, useParams } from "react-router-dom";
 import type { CustomerConsultationSummaryDTO } from "@veridi/shared";
 import { formatBrPhone, formatCnpj } from "@veridi/shared";
@@ -98,39 +98,63 @@ const TABS: { label: string; segment: string }[] = [
   { label: "Faturamentos", segment: "faturamentos" },
 ];
 
+/** O resumo, o 404 e a falha pertencem ao cliente que os pediu. */
+interface CargaDoCliente {
+  customerId: string;
+  summary: CustomerConsultationSummaryDTO | null;
+  notFound: boolean;
+  error: string | null;
+}
+
 export function ConsultationShell() {
   const { customerId } = useParams<{ customerId: string }>();
-  const [summary, setSummary] = useState<CustomerConsultationSummaryDTO | null>(null);
-  const [notFound, setNotFound] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [carga, setCarga] = useState<CargaDoCliente | null>(null);
+  const clienteDaRota = useRef(customerId);
+  clienteDaRota.current = customerId;
 
   const reload = useCallback(() => {
     if (!customerId) return;
-    setError(null);
+    setCarga((atual) => (atual?.customerId === customerId ? { ...atual, error: null } : atual));
     getConsultationSummary(customerId)
       .then((result) => {
-        setSummary(result);
-        setNotFound(false);
+        // Resposta de um cliente que já saiu da rota não vira cabeçalho.
+        if (clienteDaRota.current !== customerId) return;
+        setCarga({ customerId, summary: result, notFound: false, error: null });
       })
       .catch((err: unknown) => {
+        if (clienteDaRota.current !== customerId) return;
         // 404 é um estado da tela, não uma falha: o endereço aponta para um
         // cliente que não existe. Erro de verdade continua sendo erro.
         if (err instanceof NotFoundApiError) {
-          setNotFound(true);
-          setSummary(null);
+          setCarga({ customerId, summary: null, notFound: true, error: null });
           return;
         }
-        setError(err instanceof Error ? err.message : "Falha ao carregar o cliente");
+        const error = err instanceof Error ? err.message : "Falha ao carregar o cliente";
+        setCarga((atual) => ({
+          customerId,
+          summary: atual?.customerId === customerId ? atual.summary : null,
+          notFound: false,
+          error,
+        }));
       });
   }, [customerId]);
 
   useEffect(() => {
-    // Some o cliente anterior ANTES de buscar o novo: sem isso, trocar de
-    // cliente mostraria o cabeçalho antigo sobre os dados que estão chegando.
-    setSummary(null);
-    setNotFound(false);
     reload();
   }, [reload]);
+
+  /*
+   * O cliente anterior some NO RENDER em que a rota muda
+   * (CONSULTATION-CUSTOMER-SWITCH-QUERY-01). Apagado por efeito, a aba ainda
+   * montava com o resumo antigo e consultava o cliente novo; o shell a tirava
+   * para carregar e ela consultava de novo ao voltar — duas consultas por troca,
+   * a primeira descartada. Derivado aqui, a aba só monta com o resumo do
+   * cliente da rota, e consulta uma vez.
+   */
+  const atual = carga?.customerId === customerId ? carga : null;
+  const summary = atual?.summary ?? null;
+  const notFound = atual?.notFound ?? false;
+  const error = atual?.error ?? null;
 
   if (!customerId) return null;
 

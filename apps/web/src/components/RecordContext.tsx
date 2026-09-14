@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { rotaDeRetorno } from "../lib/contextual-create";
+import { rotuloDaOrigem } from "../lib/use-contextual-create";
 
 /**
  * Chegada por link contextual numa lista de cadastro.
@@ -53,6 +55,24 @@ export function useOpenRecord<T extends { id: string }>(
 }
 
 /**
+ * A volta para a tela de onde o link do cadastro saiu (F-11-1).
+ *
+ * Só aparece quando a URL trouxe `voltar` — o `EntityLink` põe, o menu não:
+ * quem abriu o cadastro pela navegação não tem de onde voltar. O rótulo é o da
+ * criação contextual ("← Voltar para Projeto").
+ */
+export function RetornoDoContexto() {
+  const [params] = useSearchParams();
+  const rota = rotaDeRetorno(params);
+  if (!rota) return null;
+  return (
+    <Link className="btn btn--ghost btn--sm" to={rota}>
+      ← Voltar para {rotuloDaOrigem(rota)}
+    </Link>
+  );
+}
+
+/**
  * Aviso de que a lista está reduzida — com a saída ao lado.
  *
  * Sem isso a tela mente: mostra uma linha e parece que o cadastro tem uma
@@ -72,7 +92,7 @@ export function RecordContextChip({
   return (
     <p className="context-chip">
       Mostrando apenas {noun} <span className="code">{code ?? "selecionado"}</span>
-      {name ? ` · ${name}` : ""}{" "}
+      {name ? ` · ${name}` : ""} <RetornoDoContexto />{" "}
       <button type="button" className="btn btn--ghost btn--sm" onClick={onClear}>
         Limpar filtros
       </button>
