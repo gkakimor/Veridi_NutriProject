@@ -4330,6 +4330,54 @@ teste. Sem full test, E2E, golden path nem fresh (FAST).
 **Achados** (BACKLOG): E2E-QUOTE-PAGE-FLOW-01 continua aberto; LISTS-LOADING-DATES-GESTURE-01 (falha que já existia na
 `main`, fora desta capability).
 
+## Relatórios robustos: retrato da FO-03, contrato de filtros e Modelo nos relatórios (REPORT-ROBUSTNESS-WAVE-01, 2026-09-14)
+
+Fecha PAGED-DOCUMENT-SNAPSHOT-01, REPORTS-PRINT-FILTER-KEYS-DRIFT-01 e PRICING-MODEL-VIEW-REPORTS-01. Sem migration,
+sem conta de preço, Orçamento, regra econômica ou permissão mudadas.
+
+**FO-03 num retrato só.** `GET /quality/coa-queue` aceita `all=true` (booleano estrito): o recorte inteiro sai de UMA
+leitura de `Lot` dentro de transação `RepeatableRead`, e o saldo dos lotes e o "somente com saldo" enxergam o mesmo
+instante. Teto `QUALITY_QUEUE_ALL_ROWS_LIMIT` = 1.000 (lê 1.001): acima, 400 `quality_queue_too_large` com "A fila tem
+mais de 1.000 lotes neste recorte — acima do limite de um documento…", nunca os primeiros N. `page`/`pageSize` não cortam
+o `all`; sem ele, a paginação é a de antes. A folha faz `listQualityQueue({ onlyPending: true, all: true })` e recusa
+resposta cujas linhas não fecham com o `total`; `loadAllPages` (páginas por deslocamento) ficou sem uso e saiu com o
+teste. Recorte `onlyPending`, ordem, situações, rótulos PENDING/RECEIVED/REJECTED e colunas intocados.
+
+**Contrato de filtros.** `REPORT_FILTER_CONTRACTS` (`shared report-filter-contracts.ts`) guarda `csvPath` e
+`filterKeys` dos 18 relatórios impressos; `REPORT_PRINT_DEFINITIONS` os espalha, sem cópia. Metadado, não schema: a web
+não depende do zod. `api modules/exports/report-filter-contracts.test.ts` compara cada contrato com as chaves do schema
+da rota CSV (sem `page`/`pageSize`/`all`) e prova que pega chave acrescentada e removida; o teste web confere que as
+definições apontam para os arrays do shared. `filterAppliesWhen` (R-02) e rótulos seguem na web.
+
+**Modelo nos relatórios.** As palavras do Modelo moram no shared (`textoDoCustoIndustrialNoPreco`,
+`textoDosImpostosNoPreco`, `resumoDoModeloDePrecificacao`) e servem o PDF de Precificação (mesmo texto de antes), o CSV
+e as telas. R-19: linha com `pricingModel`, `pricingCostPerUnit` e `pricingCostQuality` da faixa e da versão ativas
+(congeladas); CSV/PDF com "Modelo de Precificação", "Qualidade do custo do cálculo", "Custo do cálculo/un", "Qualidade
+do custo p/ preço" e "Custo p/ preço/un" (sai "Custo/unidade"); faixa sem o custo p/ preço congelado lê o do cálculo no
+Modelo padrão e fica vazia no flexível. R-20: Modelo e custo p/ preço só na linha viva (rascunho, faixa ativa
+vinculada); a enviada congelou custo do cálculo e margem, não o Modelo — `pricingModelNotFrozen` e "Não congelado no
+envio", sem deduzir do vínculo ("Custo industrial/un" vira "Custo do cálculo/un"). CMV, "Precificação vigente" da tela:
+Modelo da precificação ativa e, fora do padrão, "Custo p/ preço/un" ao lado da margem, com a nota dos dois custos. O
+PDF do CMV não mostra margem e não mudou.
+
+**Validação.** API: `fila-inteira-retrato` (0/1/100/101/500, `page` ignorado, `all=abc` 400, teto+1 recusa e teto exato
+passa, fila mudando no meio por portão de consulta com escrita de outra conexão), `report-filter-contracts`,
+`pricing.test.ts` (R-19 padrão/IGNORE/PER_UNIT/sem retrato; R-20 viva × enviada), `quality-documents`,
+`quality-booleanos-de-consulta`, `escalar-estrito-guarda`, `boolean-schema`, `paginacao-da-consulta`,
+`qualidade-do-custo-no-csv`, `r20-*`, `periodo-invertido` — 13 arquivos, 1703 testes depois do rebase. Mutações
+derrubadas: sem `RepeatableRead`, sem teto, `all` ignorado, filtro novo no schema do R-19, `filterKeys` reescrito na web,
+R-20 enviada deduzindo o Modelo, flexível sem retrato caindo no custo do cálculo. Web: FO-03, folhas operacionais,
+definições e conteúdo/arquivo dos relatórios, `relatorios-modelo-de-precificacao`, R-19/R-20, CMV, PDF de Precificação
+(`cost-documents`, `base-calculada-impressos`) e documentos — 17 arquivos, 332 testes. `pnpm typecheck`. Smoke
+Playwright em banco isolado (API e Vite do worktree), PDF real lido do navegador: FO-03 com 150 pendências inteiras e
+uma leitura `all=true` por carga; 1.001 pendências dão 400 e a frase na tela, sem PDF; CSV real do R-19/R-20 com os
+cabeçalhos novos; PDF do R-19/R-20 com Modelo, os dois custos, "Não congelado no envio" e só filtros do contrato —
+18 de 18, console limpo fora o 400 esperado do Chromium. Sem full test, E2E nem fresh (FAST).
+
+**Achados** (BACKLOG): R20-SENT-PRICING-BASIS-SNAPSHOT-01 (snapshot do custo p/ preço e do Modelo no envio — schema
+proposto, sem migration aqui) e R20-MANUAL-REFERENCE-MARGIN-01 (a conferir). As 4 falhas de
+`listas-consulta-em-curso.test.tsx`, que já existiam na `main` em a5b9a73, são LISTS-LOADING-DATES-GESTURE-01.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
@@ -4337,8 +4385,9 @@ mesma. Os achados da rodada estão no BACKLOG, sem posição na fila.
 
 **PRICING-TEMPLATE-FLEX-01 fechado em 2026-09-11** (§84). Os três achados fecharam:
 PRICING-MODEL-DIFF-01 e PRICING-ACTIVATE-CONFIRM-01 em COST-PRICING-CLARITY-WAVE-01, e
-PRICING-MODEL-VIEW-01 em 2026-09-14 (PDF de Precificação). O resto do assunto — R-19, R-20 e o CMV — ficou em
-PRICING-MODEL-VIEW-REPORTS-01, sem posição na fila.
+PRICING-MODEL-VIEW-01 em 2026-09-14 (PDF de Precificação). O resto do assunto — R-19, R-20 e o CMV — fechou em
+PRICING-MODEL-VIEW-REPORTS-01 (REPORT-ROBUSTNESS-WAVE-01, 2026-09-14); sobra R20-SENT-PRICING-BASIS-SNAPSHOT-01, que
+pede decisão de schema, sem posição na fila.
 
 **QUOTE-WORKSPACE-NAVIGATION-01 fechado em 2026-09-14** (§92): cada versão de orçamento tem página própria.
 **QUOTES-HUB-01 fechado em 2026-09-14** (§93), com QUOTE-PAGE-NAV-ACTIVE-01: Comercial → Orçamentos, a lista geral

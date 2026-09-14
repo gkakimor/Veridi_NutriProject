@@ -5304,6 +5304,12 @@ continuam exatamente como antes.**
   a base dita e sem valor de modo desligado ("Fora da conta" quando a gestão externa está ligada). Com Modelo
   flexível, "Custo p/ preço" (o que formou preço, markup e contribuição) e "Custo do cálculo" (CMV) aparecem com
   nome próprio, e o papel diz que não precisam ser iguais. Nada é recalculado: tudo sai da versão como a API serve.
+- **Relatórios e CMV contam o Modelo com as mesmas palavras** (REPORT-ROBUSTNESS-WAVE-01, 2026-09-14): R-19, R-20 e a
+  "Precificação vigente" do CMV dizem o Modelo — "Padrão", ou custo industrial e impostos com a base — e mostram
+  "Custo do cálculo" e "Custo p/ preço" com nome próprio; o texto mora no shared e serve CSV, PDF e tela. Faixa sem o
+  custo p/ preço congelado lê o do cálculo só no Modelo padrão; no flexível fica vazio. A linha ENVIADA do Orçamento
+  congela custo do cálculo e margem, não o Modelo nem o custo p/ preço: o R-20 escreve "Não congelado no envio" e
+  nunca os deduz do vínculo com a faixa (snapshot novo é decisão de schema, R20-SENT-PRICING-BASIS-SNAPSHOT-01).
 
 ## §85 — Duplicar como nova versão: a origem é a escolhida, e o preço é decisão explícita
 
