@@ -98,6 +98,15 @@ interface EtapaRascunho {
 let sequenciaDeChave = 0;
 const novaChave = (prefixo: string) => `${prefixo}-${++sequenciaDeChave}`;
 
+/**
+ * As ações que gravam o rascunho no servidor. Depois delas a releitura traz
+ * base, unidade e etapas como o servidor as deixou — normalizadas: `250,5` vira
+ * `250.5`, `030` vira `30` —, e é isso que passa a valer na tela. As outras
+ * (identificação, padrão dos produtos) não tocam no rascunho, e a releitura que
+ * vem depois delas não o traz por cima de uma pendência.
+ */
+const ACOES_QUE_GRAVAM_O_RASCUNHO = new Set(["rascunho", "ativar", "nova-versao"]);
+
 function etapasDoDTO(version: ProductionProfileVersionDTO): EtapaRascunho[] {
   return version.steps.map((step) => ({
     chave: novaChave("etapa"),
@@ -591,7 +600,19 @@ export function ProductionProfileDetailPage() {
    */
   const rascunhoRestaurado = useRef(false);
 
-  const load = useCallback(() => {
+  /**
+   * O `alteradoNaTela` do último render, para a releitura que volta depois de
+   * uma ação.
+   *
+   * "Salvar identificação" recarregava o roteiro, e a leitura trocava base,
+   * unidade e etapas digitadas pelas do servidor: a pendência sumia e a guarda
+   * deixava sair calada. A pendência é lida quando a resposta chega, não no
+   * clique — o que se digitou enquanto a identificação gravava também é da
+   * pessoa.
+   */
+  const rascunhoPendente = useRef(false);
+
+  const load = useCallback((recarga: { manterRascunhoPendente?: boolean } = {}) => {
     if (!profileId) return;
     const cargaInicial = lido.current === null;
     getProductionProfile(profileId)
@@ -610,7 +631,9 @@ export function ProductionProfileDetailPage() {
         const rascunho = result.draftVersion;
         if (rascunho) {
           const lidas = etapasDoDTO(rascunho);
-          if (!manterRestaurado) {
+          // `salvo` continua sendo o servidor: o que ficou na tela segue pendente.
+          const manterPendente = recarga.manterRascunhoPendente === true && rascunhoPendente.current;
+          if (!manterRestaurado && !manterPendente) {
             setBase(rascunho.referenceQuantity);
             setUnidade(rascunho.referenceUomCode);
             setEtapas(lidas);
@@ -694,6 +717,7 @@ export function ProductionProfileDetailPage() {
    */
   const alteradoNaTela =
     profile?.draftVersion != null && assinatura(base, unidade, etapas) !== salvo;
+  rascunhoPendente.current = alteradoNaTela;
   /*
    * Identificação grava separado do rascunho, e por isso tem pendência
    * própria. É a MESMA guarda — nenhum `dirty` paralelo —, só somando o
@@ -815,7 +839,7 @@ export function ProductionProfileDetailPage() {
     setFeito(null);
     try {
       await action();
-      load();
+      load({ manterRascunhoPendente: !ACOES_QUE_GRAVAM_O_RASCUNHO.has(acao) });
       // Só depois de a ação passar: erro que caísse aqui deixaria a tela
       // dizendo "salvo" sobre o que não foi gravado.
       if (sucesso) setFeito(sucesso);
