@@ -12,8 +12,11 @@ import { createItemCostReference, getItemCostReferences } from "../lib/items-api
 import { listUnits } from "../lib/units-api";
 import { formatBRL, formatUnitPriceBRL } from "../lib/currency";
 import { formatDate, formatDateTime } from "../lib/dates";
-import { mensagemDecimalInvalido, parseDecimalInput } from "../lib/decimal-input";
+import { mensagemNumeroVazio } from "../lib/decimal-field";
+import { numericInvalidMessage, parsePtBrNumber } from "../lib/numeric-ptbr";
+import { CASAS_CUSTO_UNITARIO, OPCOES_CUSTO_UNITARIO } from "../lib/numeric-scales";
 import { FormSection } from "./FormSection";
+import { MoneyField } from "./NumericField";
 
 /** Hoje como dia de calendário, para o campo de data. */
 function hojeISO(): string {
@@ -106,11 +109,16 @@ export function ItemCostReferenceSection({ itemId }: { itemId: string }) {
   async function salvar(event: FormEvent) {
     event.preventDefault();
     if (!data) return;
-    const normalizado = unitCost.trim() === "" ? null : parseDecimalInput(unitCost);
-    if (normalizado === null) {
-      setFieldError(mensagemDecimalInvalido("Custo de referência"));
+    const leitura = parsePtBrNumber(unitCost, OPCOES_CUSTO_UNITARIO);
+    if (leitura.tipo !== "valido") {
+      setFieldError(
+        leitura.tipo === "vazio"
+          ? mensagemNumeroVazio("Custo de referência")
+          : numericInvalidMessage("Custo de referência", leitura.motivo, OPCOES_CUSTO_UNITARIO),
+      );
       return;
     }
+    const normalizado = leitura.valor;
     setFieldError(null);
     setSaving(true);
     setError(null);
@@ -249,13 +257,12 @@ export function ItemCostReferenceSection({ itemId }: { itemId: string }) {
                 <label htmlFor="cost-reference-value">
                   Custo de referência <span className="req">*</span>
                 </label>
-                <input
+                <MoneyField
                   id="cost-reference-value"
-                  type="text"
-                  inputMode="decimal"
+                  scale={CASAS_CUSTO_UNITARIO}
                   placeholder="Ex.: 1200,00"
                   value={unitCost}
-                  onChange={(event) => setUnitCost(event.target.value)}
+                  onChangeValue={setUnitCost}
                   {...(fieldError ? { "aria-invalid": true as const } : {})}
                 />
                 {fieldError && <p className="field__error">{fieldError}</p>}

@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import type { ProjectDTO } from "@veridi/shared";
 
@@ -13,6 +14,10 @@ import type { ProjectDTO } from "@veridi/shared";
  * limpar o campo. É o defeito que QUOTE-INT-FIELDS-01 fechou no Orçamento, e a
  * mesma leitura estrita resolve: vazio é "não informado", inteiro é inteiro, e
  * o resto fica na tela como foi digitado, com o erro ao lado e o salvar preso.
+ *
+ * Desde PTBR-NUMERIC-INPUT-ROLLOUT-01 os dois são `IntegerField`: letra,
+ * vírgula, ponto, expoente e sinal nem entram — o gravado fica. O que entra e é
+ * inválido é o zero, que a API recusa; e colar ` 90 ` ou `1.234` dá o inteiro.
  */
 
 vi.mock("../../lib/projects-api", () => ({
@@ -104,15 +109,36 @@ const CAMPOS = [
   },
 ] as const;
 
-/** Não é inteiro simples, ou é inteiro que a API recusa (zero e negativo). */
-const INVALIDOS = ["abc", "30abc", "60abc", "60,5", "60.5", "1e2", "-1", "0"] as const;
+/** Não é inteiro simples: o `IntegerField` não deixa entrar. */
+const RECUSADOS_NA_TECLA = ["abc", "30abc", "60abc", "60,5", "60.5", "1e2", "-1"] as const;
 
-const casos = CAMPOS.flatMap((c) => INVALIDOS.map((texto) => [c.rotulo, texto, c] as const));
+const recusados = CAMPOS.flatMap((c) =>
+  RECUSADOS_NA_TECLA.map((texto) => [c.rotulo, texto, c] as const),
+);
+
+/** Inteiro que entra no campo e que a API recusa. */
+const casos = CAMPOS.map((c) => [c.rotulo, "0", c] as const);
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(createProject).mockResolvedValue(GRAVADO);
   vi.mocked(updateProject).mockResolvedValue(GRAVADO);
+});
+
+describe("PROJECT-INT-FIELDS-01 — o que não é inteiro nem entra no campo", () => {
+  it.each(recusados)("%s = %j: recusado, o gravado fica, nada enviado", (_rotulo, texto, c) => {
+    abrir(GRAVADO);
+    const gravado = campo(c.rotulo).value;
+
+    digitar(c.rotulo, texto);
+
+    expect(campo(c.rotulo).value).toBe(gravado);
+    expect(document.getElementById(c.erro)).toBeNull();
+    fireEvent.click(botao("Salvar alterações"));
+    const enviados = vi.mocked(updateProject).mock.calls.map(([, payload]) => noFio(payload));
+    // Sem alteração o salvar nem sai — e nada nunca chega como null.
+    expect(enviados.every((payload) => payload[c.chave] !== null)).toBe(true);
+  });
 });
 
 describe("PROJECT-INT-FIELDS-01 — inteiro inválido fica inválido na tela", () => {
@@ -132,10 +158,10 @@ describe("PROJECT-INT-FIELDS-01 — inteiro inválido fica inválido na tela", (
     expect(updateProject).not.toHaveBeenCalled();
   });
 
-  it("abc sobre doses 60 nunca chega ao servidor como null", () => {
+  it("0 sobre doses 60 nunca chega ao servidor como null", () => {
     abrir(GRAVADO);
 
-    digitar("Doses por embalagem", "abc");
+    digitar("Doses por embalagem", "0");
     fireEvent.click(botao("Salvar alterações"));
 
     // No código antigo, este é o pedido que apagava as doses gravadas.
@@ -143,10 +169,10 @@ describe("PROJECT-INT-FIELDS-01 — inteiro inválido fica inválido na tela", (
     expect(enviados).toEqual([]);
   });
 
-  it("30abc sobre vida útil 24 nunca chega ao servidor como null", () => {
+  it("0 sobre vida útil 24 nunca chega ao servidor como null", () => {
     abrir(GRAVADO);
 
-    digitar("Vida útil (meses)", "30abc");
+    digitar("Vida útil (meses)", "0");
     fireEvent.click(botao("Salvar alterações"));
 
     const enviados = vi.mocked(updateProject).mock.calls.map(([, payload]) => noFio(payload));
@@ -158,8 +184,8 @@ describe("PROJECT-INT-FIELDS-01 — edição: corrigir, limpar e escrever do mes
   it("gravado 60 e 24, digitado inválido: nada vai; corrigido para 90 e 36, o pedido leva os inteiros", async () => {
     abrir(GRAVADO);
 
-    digitar("Doses por embalagem", "abc");
-    digitar("Vida útil (meses)", "24,5");
+    digitar("Doses por embalagem", "0");
+    digitar("Vida útil (meses)", "0");
     fireEvent.click(botao("Salvar alterações"));
     expect(updateProject).not.toHaveBeenCalled();
 
@@ -182,7 +208,7 @@ describe("PROJECT-INT-FIELDS-01 — edição: corrigir, limpar e escrever do mes
   it.each(CAMPOS)("apagar $rotulo é limpar de propósito: salva null", async (c) => {
     abrir(GRAVADO);
 
-    digitar(c.rotulo, "   ");
+    digitar(c.rotulo, "");
 
     expect(document.getElementById(c.erro)).toBeNull();
     fireEvent.click(botao("Salvar alterações"));
@@ -194,13 +220,27 @@ describe("PROJECT-INT-FIELDS-01 — edição: corrigir, limpar e escrever do mes
     CAMPOS.flatMap((c) =>
       [
         [" 90 ", 90],
-        ["090", 90],
+        ["1.234", 1234],
       ].map(([texto, valor]) => [c.rotulo, texto, valor, c] as const),
     ),
-  )("%s: %j é o inteiro %i", async (_rotulo, texto, valor, c) => {
+  )("%s: colar %j dá o inteiro %i", async (_rotulo, texto, valor, c) => {
+    const user = userEvent.setup();
+    abrir(GRAVADO);
+    digitar(c.rotulo, "");
+
+    await user.click(campo(c.rotulo));
+    await user.paste(texto as string);
+
+    expect(document.getElementById(c.erro)).toBeNull();
+    fireEvent.click(botao("Salvar alterações"));
+    await waitFor(() => expect(updateProject).toHaveBeenCalledTimes(1));
+    expect(updateProject).toHaveBeenCalledWith("prj-1", expect.objectContaining({ [c.chave]: valor }));
+  });
+
+  it.each(CAMPOS.map((c) => [c.rotulo, "090", 90, c] as const))("%s: %j é o inteiro %i", async (_rotulo, texto, valor, c) => {
     abrir(GRAVADO);
 
-    digitar(c.rotulo, texto as string);
+    digitar(c.rotulo, texto);
 
     expect(document.getElementById(c.erro)).toBeNull();
     fireEvent.click(botao("Salvar alterações"));
@@ -213,7 +253,7 @@ describe("PROJECT-INT-FIELDS-01 — criação", () => {
   it("doses inválidas não criam; corrigidas, createProject é chamado uma vez com os inteiros", async () => {
     await preencherNovo();
 
-    digitar("Doses por embalagem", "60abc");
+    digitar("Doses por embalagem", "0");
     digitar("Vida útil (meses)", "24");
     expect(botao("Criar projeto").disabled).toBe(true);
     fireEvent.click(botao("Criar projeto"));

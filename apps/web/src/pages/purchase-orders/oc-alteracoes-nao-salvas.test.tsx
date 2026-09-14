@@ -133,7 +133,7 @@ async function abrirGravada(dto = ordem()) {
   montar(["/compras/ordens/oc-1"]);
   await screen.findByRole("heading", { name: "OC-000001" });
   await waitFor(() =>
-    expect(screen.getByRole("textbox", { name: "Quantidade de MP-000001" })).toHaveValue("10.000000"),
+    expect(screen.getByRole("textbox", { name: "Quantidade de MP-000001" })).toHaveValue("10"),
   );
 }
 

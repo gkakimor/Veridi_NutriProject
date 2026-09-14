@@ -15,7 +15,11 @@ import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimalOpcional } from "../../lib/decimal-field";
+import { decimalComparavel, inteiroComparavel } from "../../lib/dirty-fields";
 import { erroDeInteiro, lerInteiroOpcional } from "../../lib/integer-input";
+import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
+import { DecimalField, IntegerField } from "../../components/NumericField";
 import { listCustomers } from "../../lib/customers-api";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { createProject, getProjectVocabulary, updateProject } from "../../lib/projects-api";
@@ -51,7 +55,7 @@ function initialState(project: ProjectDTO | null): FormState {
     doseAmount: project?.doseAmount ?? "",
     dosesPerPackage: project?.dosesPerPackage ? String(project.dosesPerPackage) : "",
     targetAgeGroup: project?.targetAgeGroup ?? "",
-    minimumBatchQuantity: project?.minimumBatchQuantity ?? "",
+    minimumBatchQuantity: toPtBrEditText(project?.minimumBatchQuantity, OPCOES_QUANTIDADE),
     shelfLifeMonths: project?.shelfLifeMonths ? String(project.shelfLifeMonths) : "",
   };
 }
@@ -62,9 +66,17 @@ function initialState(project: ProjectDTO | null): FormState {
  * Todo campo do `FormState` é texto, então comparar valor a valor responde
  * "há alteração?" sem serializar nada e sem instrumentar cada `onChange` —
  * que é o jeito que esquece o campo acrescentado na semana seguinte.
+ *
+ * Os números comparam pelo valor: `1000,5` e `1000,50` são o mesmo lote mínimo.
  */
 function mesmoFormulario(a: FormState, b: FormState): boolean {
-  return (Object.keys(a) as (keyof FormState)[]).every((chave) => a[chave] === b[chave]);
+  return (Object.keys(a) as (keyof FormState)[]).every((chave) => {
+    if (chave === "minimumBatchQuantity") return decimalComparavel(a[chave]) === decimalComparavel(b[chave]);
+    if (chave === "dosesPerPackage" || chave === "shelfLifeMonths") {
+      return inteiroComparavel(a[chave]) === inteiroComparavel(b[chave]);
+    }
+    return a[chave] === b[chave];
+  });
 }
 
 type ChaveInteira = "dosesPerPackage" | "shelfLifeMonths";
@@ -240,7 +252,11 @@ export function ProjectFormModal({
         targetAgeGroup: (form.targetAgeGroup || null) as never,
         // Único decimal do formulário. `dosesPerPackage` e `shelfLifeMonths`
         // são contagens inteiras e passam pela leitura estrita de inteiro.
-        minimumBatchQuantity: exigirDecimalOpcional(form.minimumBatchQuantity, "Lote mínimo"),
+        minimumBatchQuantity: exigirDecimalOpcional(
+          form.minimumBatchQuantity,
+          "Lote mínimo",
+          OPCOES_QUANTIDADE,
+        ),
         shelfLifeMonths: inteiroParaEnvio(form.shelfLifeMonths),
       };
 
@@ -446,14 +462,10 @@ options={customers.map((customer) => ({
 
         <div className="field field--narrow">
           <label htmlFor="project-doses">Doses por embalagem</label>
-          <input
+          <IntegerField
             id="project-doses"
-            type="text"
-            inputMode="numeric"
             value={form.dosesPerPackage}
-            onChange={(event) =>
-              setForm((prev) => ({ ...prev, dosesPerPackage: event.target.value }))
-            }
+            onChangeValue={(dosesPerPackage) => setForm((prev) => ({ ...prev, dosesPerPackage }))}
             {...ariaDoInteiro("dosesPerPackage")}
           />
           {avisoDoInteiro("dosesPerPackage")}
@@ -479,27 +491,22 @@ options={customers.map((customer) => ({
 
         <div className="field field--narrow">
           <label htmlFor="project-minimum-batch">Lote mínimo</label>
-          <input
+          <DecimalField
             id="project-minimum-batch"
-            type="text"
-            inputMode="decimal"
+            scale={CASAS_QUANTIDADE}
             value={form.minimumBatchQuantity}
-            onChange={(event) =>
-              setForm((prev) => ({ ...prev, minimumBatchQuantity: event.target.value }))
+            onChangeValue={(minimumBatchQuantity) =>
+              setForm((prev) => ({ ...prev, minimumBatchQuantity }))
             }
           />
         </div>
 
         <div className="field field--narrow">
           <label htmlFor="project-shelf-life">Vida útil (meses)</label>
-          <input
+          <IntegerField
             id="project-shelf-life"
-            type="text"
-            inputMode="numeric"
             value={form.shelfLifeMonths}
-            onChange={(event) =>
-              setForm((prev) => ({ ...prev, shelfLifeMonths: event.target.value }))
-            }
+            onChangeValue={(shelfLifeMonths) => setForm((prev) => ({ ...prev, shelfLifeMonths }))}
             {...ariaDoInteiro("shelfLifeMonths")}
           />
           {avisoDoInteiro("shelfLifeMonths")}

@@ -357,7 +357,7 @@ describe("Roteiro — volta do cadastro contextual", () => {
     await cabecalho();
 
     await waitFor(() => expect(unidade()).toHaveValue("un"));
-    expect(base()).toHaveValue("1000");
+    expect(base()).toHaveValue("1.000");
     expect(nomeDaEtapa()).toHaveValue("Encapsulamento");
     expect(screen.getByLabelText("Preparação (min)")).toHaveValue("30");
     expect(screen.getByLabelText("Execução da base (min)")).toHaveValue("60");
@@ -424,7 +424,7 @@ describe("Roteiro restaurado — alterações não salvas", () => {
     });
     expect(await screen.findByText("Rascunho salvo.")).toBeInTheDocument();
     expect(screen.queryByText("Alterações não salvas")).toBeNull();
-    expect(base()).toHaveValue("250.5");
+    expect(base()).toHaveValue("250,5");
     expect(botao("Ativar versão")).toBeEnabled();
 
     await user.click(screen.getByRole("link", { name: "Pedidos" }));

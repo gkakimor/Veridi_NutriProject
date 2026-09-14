@@ -22,10 +22,10 @@ import { formatDecimalInput } from "./decimal-input";
  *
  * ## Milhar e decimal
  *
- * `decimal-input.ts` recusa separador de milhar, e as telas que ainda o usam
- * continuam assim até migrarem (PTBR-NUMERIC-INPUT-ROLLOUT-01). Aqui o
- * separador de milhar é aceito, porque é o que vem colado de planilha
- * (`1.234,56`) — mas a regra continua sendo não adivinhar:
+ * O parser antigo (`parseDecimalInput`) recusava separador de milhar; desde
+ * PTBR-NUMERIC-INPUT-ROLLOUT-01 toda tela lê por aqui, e ele saiu. O separador
+ * de milhar é aceito, porque é o que vem colado de planilha (`1.234,56`) — mas
+ * a regra continua sendo não adivinhar:
  *
  * - vírgula é sempre a casa decimal, e pontos antes dela são milhar, em grupos
  *   de três (`1.234.567,89`);

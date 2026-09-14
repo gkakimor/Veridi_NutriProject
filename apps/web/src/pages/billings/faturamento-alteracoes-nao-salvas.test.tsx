@@ -368,8 +368,8 @@ describe("Faturamento — emitir grava, e a emissão é recusada", () => {
     expect(gravacoes()).toEqual(["PATCH /billings/fat-1", "POST /billings/fat-1/issue"]);
 
     // A tela mostra o que o servidor guardou — nem a leitura de antes, nem o digitado cru.
-    expect(preco()).toHaveValue("13.2500");
-    expect(preco()).not.toHaveValue("12.5000");
+    expect(preco()).toHaveValue("13,25");
+    expect(preco()).not.toHaveValue("12,50");
     expect(notas()).toHaveValue("Conferido");
     expect(rodape()).toContain("Subtotal bruto (prévia): R$ 1.325,00");
     expect(rodape()).not.toContain("Subtotal gravado");

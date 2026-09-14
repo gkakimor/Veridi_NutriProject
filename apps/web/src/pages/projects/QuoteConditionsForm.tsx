@@ -10,8 +10,10 @@ import { formatBRL } from "../../lib/currency";
 import { emDias } from "../../lib/duration";
 import { formatPercent } from "../../lib/percent";
 import { previewQuotePaymentSchedule } from "../../lib/projects-api";
-import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
+import { erroDoDecimal } from "../../lib/decimal-field";
 import { erroDeInteiro } from "../../lib/integer-input";
+import { CASAS_PERCENTUAL, OPCOES_PERCENTUAL } from "../../lib/numeric-scales";
+import { IntegerField, PercentField } from "../../components/NumericField";
 import {
   type CamposDasCondicoes,
   type ChaveInteiraDaCondicao,
@@ -42,12 +44,28 @@ import {
  * ninguém pediu ainda.
  */
 
-/** Os três percentuais desta tela — o que a leitura da vírgula alcança. */
-const PERCENTUAIS: { chave: keyof CamposDasCondicoes; rotulo: string }[] = [
-  { chave: "discountPercent", rotulo: "Desconto (%)" },
-  { chave: "downPaymentPercent", rotulo: "Entrada (%)" },
-  { chave: "monthlyInterestPercent", rotulo: "Juros ao mês (%)" },
-];
+/**
+ * Os três percentuais desta tela, com o mesmo tratamento dos inteiros
+ * (QUOTE-PERCENT-FIELDS-01): erro ligado ao campo por `id`, e entrada e juros
+ * só existem no parcelado — à vista não aparecem, não valem e não travam.
+ */
+type ChavePercentualDaCondicao = "discountPercent" | "downPaymentPercent" | "monthlyInterestPercent";
+const PERCENTUAIS: Record<
+  ChavePercentualDaCondicao,
+  { rotulo: string; erroId: string; soParcelado: boolean }
+> = {
+  discountPercent: { rotulo: "Desconto (%)", erroId: "quote-discount-error", soParcelado: false },
+  downPaymentPercent: {
+    rotulo: "Entrada (%)",
+    erroId: "quote-down-payment-error",
+    soParcelado: true,
+  },
+  monthlyInterestPercent: {
+    rotulo: "Juros ao mês (%)",
+    erroId: "quote-interest-error",
+    soParcelado: true,
+  },
+};
 
 /**
  * Os três inteiros desta tela. O limite de cada um vem da API
@@ -150,17 +168,30 @@ export function QuoteConditionsForm({
   const parcelado = campos.paymentMethod === "INSTALLMENTS";
   /*
    * Percentual que a tela não consegue ler trava simular e salvar. Antes,
-   * `0,85` seguia como texto e voltava "Erro de validação" sem dizer onde.
+   * `0,85` seguia como texto e voltava "Erro de validação" sem dizer onde. O
+   * campo já não aceita letra; o que sobra é o `1.234` ambíguo. À vista,
+   * entrada e juros não aparecem nem valem: o escondido não trava.
    */
-  const erroDoPercentual = (chave: keyof CamposDasCondicoes): string | null => {
-    const rotulo = PERCENTUAIS.find((campo) => campo.chave === chave)?.rotulo;
-    const valor = campos[chave];
-    if (!rotulo || valor.trim() === "" || parseDecimalInput(valor) !== null) return null;
-    return mensagemDecimalInvalido(rotulo);
+  const erroDoPercentual = (chave: ChavePercentualDaCondicao): string | null => {
+    const { rotulo, soParcelado } = PERCENTUAIS[chave];
+    if (soParcelado && !parcelado) return null;
+    return erroDoDecimal(rotulo, campos[chave], OPCOES_PERCENTUAL);
   };
-  const temPercentualIlegivel = PERCENTUAIS.some(
-    ({ chave }) => erroDoPercentual(chave) !== null,
+  const temPercentualIlegivel = (Object.keys(PERCENTUAIS) as ChavePercentualDaCondicao[]).some(
+    (chave) => erroDoPercentual(chave) !== null,
   );
+  const ariaDoPercentual = (chave: ChavePercentualDaCondicao) =>
+    erroDoPercentual(chave) === null
+      ? {}
+      : { "aria-invalid": true, "aria-describedby": PERCENTUAIS[chave].erroId };
+  const avisoDoPercentual = (chave: ChavePercentualDaCondicao) => {
+    const erro = erroDoPercentual(chave);
+    return erro === null ? null : (
+      <p className="field__error" id={PERCENTUAIS[chave].erroId}>
+        {erro}
+      </p>
+    );
+  };
   /*
    * Inteiro ilegível trava do mesmo jeito — e fica na tela como foi digitado.
    * Antes, `abc` no prazo virava `NaN`, o JSON escrevia `null`, e salvar
@@ -253,31 +284,26 @@ export function QuoteConditionsForm({
         </div>
         <div className="field field--narrow">
           <label htmlFor="quote-lead-time">Prazo de entrega (dias)</label>
-          <input
+          <IntegerField
             id="quote-lead-time"
-            type="text"
-            inputMode="numeric"
             disabled={!editable}
             value={campos.leadTimeDays}
-            onChange={(event) => set("leadTimeDays", event.target.value)}
+            onChangeValue={(valor) => set("leadTimeDays", valor)}
             {...ariaDoInteiro("leadTimeDays")}
           />
           {avisoDoInteiro("leadTimeDays")}
         </div>
         <div className="field field--narrow">
           <label htmlFor="quote-discount">Desconto (%)</label>
-          <input
+          <PercentField
             id="quote-discount"
-            type="text"
-            inputMode="decimal"
+            scale={CASAS_PERCENTUAL}
             disabled={!editable}
             value={campos.discountPercent}
-            onChange={(event) => set("discountPercent", event.target.value)}
-            aria-invalid={erroDoPercentual("discountPercent") !== null || undefined}
+            onChangeValue={(valor) => set("discountPercent", valor)}
+            {...ariaDoPercentual("discountPercent")}
           />
-          {erroDoPercentual("discountPercent") && (
-            <p className="field__error">{erroDoPercentual("discountPercent")}</p>
-          )}
+          {avisoDoPercentual("discountPercent")}
           <p className="field__hint">Sobre o subtotal das linhas.</p>
         </div>
         <div className="field field--narrow">
@@ -300,42 +326,35 @@ export function QuoteConditionsForm({
           <>
             <div className="field field--narrow">
               <label htmlFor="quote-down-payment">Entrada (%)</label>
-              <input
+              <PercentField
                 id="quote-down-payment"
-                type="text"
-                inputMode="decimal"
+                scale={CASAS_PERCENTUAL}
                 disabled={!editable}
                 value={campos.downPaymentPercent}
-                onChange={(event) => set("downPaymentPercent", event.target.value)}
-                aria-invalid={erroDoPercentual("downPaymentPercent") !== null || undefined}
+                onChangeValue={(valor) => set("downPaymentPercent", valor)}
+                {...ariaDoPercentual("downPaymentPercent")}
               />
-              {erroDoPercentual("downPaymentPercent") && (
-                <p className="field__error">{erroDoPercentual("downPaymentPercent")}</p>
-              )}
+              {avisoDoPercentual("downPaymentPercent")}
               <p className="field__hint">Vazio = sem entrada.</p>
             </div>
             <div className="field field--narrow">
               <label htmlFor="quote-installments">Parcelas</label>
-              <input
+              <IntegerField
                 id="quote-installments"
-                type="text"
-                inputMode="numeric"
                 disabled={!editable}
                 value={campos.installmentCount}
-                onChange={(event) => set("installmentCount", event.target.value)}
+                onChangeValue={(valor) => set("installmentCount", valor)}
                 {...ariaDoInteiro("installmentCount")}
               />
               {avisoDoInteiro("installmentCount")}
             </div>
             <div className="field field--narrow">
               <label htmlFor="quote-interval">Intervalo (dias)</label>
-              <input
+              <IntegerField
                 id="quote-interval"
-                type="text"
-                inputMode="numeric"
                 disabled={!editable}
                 value={campos.installmentIntervalDays}
-                onChange={(event) => set("installmentIntervalDays", event.target.value)}
+                onChangeValue={(valor) => set("installmentIntervalDays", valor)}
                 {...ariaDoInteiro("installmentIntervalDays")}
               />
               {avisoDoInteiro("installmentIntervalDays")}
@@ -343,18 +362,15 @@ export function QuoteConditionsForm({
             </div>
             <div className="field field--narrow">
               <label htmlFor="quote-interest">Juros ao mês (%)</label>
-              <input
+              <PercentField
                 id="quote-interest"
-                type="text"
-                inputMode="decimal"
+                scale={CASAS_PERCENTUAL}
                 disabled={!editable}
                 value={campos.monthlyInterestPercent}
-                onChange={(event) => set("monthlyInterestPercent", event.target.value)}
-                aria-invalid={erroDoPercentual("monthlyInterestPercent") !== null || undefined}
+                onChangeValue={(valor) => set("monthlyInterestPercent", valor)}
+                {...ariaDoPercentual("monthlyInterestPercent")}
               />
-              {erroDoPercentual("monthlyInterestPercent") && (
-                <p className="field__error">{erroDoPercentual("monthlyInterestPercent")}</p>
-              )}
+              {avisoDoPercentual("monthlyInterestPercent")}
               <p className="field__hint">Vazio ou 0 = sem juros.</p>
             </div>
           </>

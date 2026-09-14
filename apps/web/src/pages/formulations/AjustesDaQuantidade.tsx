@@ -5,7 +5,11 @@ import {
   FORMULATION_QUANTITY_MODE_DESCRIPTIONS,
   FORMULATION_QUANTITY_MODE_LABELS,
 } from "@veridi/shared";
-import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
+import { Decimal } from "@veridi/shared";
+import { PercentField } from "../../components/NumericField";
+import { decimalComparavel } from "../../lib/dirty-fields";
+import { numericInvalidMessage, parsePtBrNumber } from "../../lib/numeric-ptbr";
+import { CASAS_PERCENTUAL_TECNICO, OPCOES_PERCENTUAL_TECNICO } from "../../lib/numeric-scales";
 import { formatQuantity } from "../../lib/quantity";
 
 /**
@@ -24,7 +28,10 @@ import { formatQuantity } from "../../lib/quantity";
 
 export interface AjustesDaQuantidade {
   quantityMode: FormulationComponentQuantityMode;
-  /** Texto do campo; vazio = não informado — nunca 0% nem 100% implícito. */
+  /**
+   * Texto do campo, em português (`98,5`); vazio = não informado — nunca 0%
+   * nem 100% implícito. Valor da API entra por `toPtBrEditText`.
+   */
   purityPercentApplied: string;
   overagePercent: string;
   applyPurityAdjustment: boolean;
@@ -49,14 +56,18 @@ export function normalizarAjustes(ajustes: AjustesDaQuantidade): AjustesDaQuanti
     : { ...ajustes, applyPurityAdjustment: false, applyOverageAdjustment: false };
 }
 
-/** Mesma configuração? Compara o que a linha GRAVARIA, não o texto cru. */
+/**
+ * Mesma configuração? Compara o que a linha GRAVARIA, não o texto cru: `98,5`
+ * e `98,50` são a mesma pureza, e sair do campo — que normaliza o texto — não
+ * vira ajuste por aplicar.
+ */
 export function ajustesIguais(a: AjustesDaQuantidade, b: AjustesDaQuantidade): boolean {
   const x = normalizarAjustes(a);
   const y = normalizarAjustes(b);
   return (
     x.quantityMode === y.quantityMode &&
-    x.purityPercentApplied.trim() === y.purityPercentApplied.trim() &&
-    x.overagePercent.trim() === y.overagePercent.trim() &&
+    decimalComparavel(x.purityPercentApplied) === decimalComparavel(y.purityPercentApplied) &&
+    decimalComparavel(x.overagePercent) === decimalComparavel(y.overagePercent) &&
     x.applyPurityAdjustment === y.applyPurityAdjustment &&
     x.applyOverageAdjustment === y.applyOverageAdjustment
   );
@@ -72,24 +83,25 @@ export function errosDosAjustes(
   nome: string,
 ): Partial<Record<CampoDeAjuste, string>> {
   const erros: Partial<Record<CampoDeAjuste, string>> = {};
-  if (ajustes.purityPercentApplied.trim() !== "") {
-    const pureza = parseDecimalInput(ajustes.purityPercentApplied);
-    if (pureza === null) erros.purityPercentApplied = `${nome} — ${mensagemDecimalInvalido("Pureza %")}`;
-    else if (Number(pureza) <= 0 || Number(pureza) > 100) {
+  const pureza = parsePtBrNumber(ajustes.purityPercentApplied, OPCOES_PERCENTUAL_TECNICO);
+  if (pureza.tipo === "invalido") {
+    erros.purityPercentApplied = `${nome} — ${numericInvalidMessage("Pureza %", pureza.motivo, OPCOES_PERCENTUAL_TECNICO)}`;
+  } else if (pureza.tipo === "valido") {
+    const valor = new Decimal(pureza.valor);
+    if (valor.lte(0) || valor.gt(100)) {
       erros.purityPercentApplied = `${nome} — Pureza % deve ser maior que zero e no máximo 100.`;
     }
   }
-  if (ajustes.overagePercent.trim() !== "") {
-    const overage = parseDecimalInput(ajustes.overagePercent);
-    if (overage === null) erros.overagePercent = `${nome} — ${mensagemDecimalInvalido("Overage %")}`;
-    else if (Number(overage) < 0) erros.overagePercent = `${nome} — Overage % não pode ser negativo.`;
+  const overage = parsePtBrNumber(ajustes.overagePercent, OPCOES_PERCENTUAL_TECNICO);
+  if (overage.tipo === "invalido") {
+    erros.overagePercent = `${nome} — ${numericInvalidMessage("Overage %", overage.motivo, OPCOES_PERCENTUAL_TECNICO)}`;
   }
   return erros;
 }
 
 function percentual(texto: string): string {
-  const valor = parseDecimalInput(texto);
-  return valor === null ? texto.trim() : formatQuantity(valor);
+  const leitura = parsePtBrNumber(texto, OPCOES_PERCENTUAL_TECNICO);
+  return leitura.tipo === "valido" ? formatQuantity(leitura.valor) : texto.trim();
 }
 
 /**
@@ -315,14 +327,13 @@ export function PainelDeAjustes(props: PainelDeAjustesProps) {
             />
           )}
           <span>Pureza %</span>
-          <input
+          <PercentField
             id={props.idDoCampo("purityPercentApplied")}
-            type="text"
-            inputMode="decimal"
+            scale={CASAS_PERCENTUAL_TECNICO}
             aria-label="Pureza aplicada"
             placeholder="—"
             value={rascunho.purityPercentApplied}
-            onChange={(event) => mudar("purityPercentApplied", event.target.value)}
+            onChangeValue={(valor) => mudar("purityPercentApplied", valor)}
             {...marcaDeErro("purityPercentApplied")}
           />
         </label>
@@ -342,14 +353,13 @@ export function PainelDeAjustes(props: PainelDeAjustesProps) {
             />
           )}
           <span>Overage %</span>
-          <input
+          <PercentField
             id={props.idDoCampo("overagePercent")}
-            type="text"
-            inputMode="decimal"
+            scale={CASAS_PERCENTUAL_TECNICO}
             aria-label="Overage do componente"
             placeholder="—"
             value={rascunho.overagePercent}
-            onChange={(event) => mudar("overagePercent", event.target.value)}
+            onChangeValue={(valor) => mudar("overagePercent", valor)}
             {...marcaDeErro("overagePercent")}
           />
         </label>

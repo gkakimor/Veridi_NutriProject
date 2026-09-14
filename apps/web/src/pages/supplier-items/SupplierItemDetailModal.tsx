@@ -29,6 +29,13 @@ import { EntityLink } from "../../components/EntityLink";
 import { formatDate, formatDateTime } from "../../lib/dates";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal } from "../../lib/decimal-field";
+import {
+  CASAS_PRECO_UNITARIO,
+  CASAS_QUANTIDADE,
+  OPCOES_PRECO_UNITARIO,
+  OPCOES_QUANTIDADE,
+} from "../../lib/numeric-scales";
+import { DecimalField, MoneyField } from "../../components/NumericField";
 import { formatQuantity } from "../../lib/quantity";
 
 /**
@@ -566,12 +573,11 @@ export function SupplierItemDetailModal({
             <div className="field-grid-2">
               <div className="field">
                 <label htmlFor="offer-price">Preço</label>
-                <input
+                <MoneyField
                   id="offer-price"
-                  type="text"
-                  inputMode="decimal"
+                  scale={CASAS_PRECO_UNITARIO}
                   value={price}
-                  onChange={(event) => setPrice(event.target.value)}
+                  onChangeValue={setPrice}
                 />
               </div>
               <div className="field">
@@ -603,12 +609,11 @@ export function SupplierItemDetailModal({
               </div>
               <div className="field">
                 <label htmlFor="offer-moq">Pedido mínimo</label>
-                <input
+                <DecimalField
                   id="offer-moq"
-                  type="text"
-                  inputMode="decimal"
+                  scale={CASAS_QUANTIDADE}
                   value={moq}
-                  onChange={(event) => setMoq(event.target.value)}
+                  onChangeValue={setMoq}
                   placeholder="Opcional"
                 />
               </div>
@@ -668,12 +673,16 @@ export function SupplierItemDetailModal({
                   void run(
                     () =>
                       createSupplierItemOffer(supplierItem.id, {
-                        unitPrice: exigirDecimal(price, "Preço"),
+                        unitPrice: exigirDecimal(price, "Preço", OPCOES_PRECO_UNITARIO),
                         currencyCode: currencyCode.trim() || DEFAULT_OFFER_CURRENCY,
                         priceUomCode,
                         ...(moq.trim()
                           ? {
-                              minimumOrderQuantity: exigirDecimal(moq, "Pedido mínimo"),
+                              minimumOrderQuantity: exigirDecimal(
+                                moq,
+                                "Pedido mínimo",
+                                OPCOES_QUANTIDADE,
+                              ),
                               minimumOrderUomCode: moqUomCode,
                             }
                           : {}),

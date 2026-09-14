@@ -202,7 +202,7 @@ describe("Expedição — prévia por produto", () => {
 
   it("valor ilegível fica fora da prévia e é contado", async () => {
     await abrir();
-    fireEvent.change(campoDoLote("LT-000010"), { target: { value: "abc" } });
+    fireEvent.change(campoDoLote("LT-000010"), { target: { value: "1.234" } });
     expect(resumo()).toContain("Expedindo agora (prévia): 0 kg");
     expect(resumo()).toContain("1 linha ilegível fora da prévia.");
     expect(botaoConfirmar()).toBeDisabled();

@@ -57,10 +57,17 @@ import {
   reserveAvailable,
 } from "../../lib/shipments-api";
 import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
-import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
 import { complementoDeQuantidade } from "../../lib/quantity-complement";
 import { excedeLimiteExibido, resolverQuantidadeContraLimite } from "../../lib/quantity-limit";
-import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
+import {
+  decimalLegivel,
+  erroDoDecimal,
+  exigirDecimal,
+  exigirDecimalOpcional,
+} from "../../lib/decimal-field";
+import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
+import { DecimalField } from "../../components/NumericField";
 import { FormSection } from "../../components/FormSection";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { DeliveryScheduleSection } from "./DeliveryScheduleSection";
@@ -216,7 +223,8 @@ function lineFromDTO(line: CustomerOrderDTO["lines"][number]): LineRow {
     productCode: line.productCode,
     productName: line.productName,
     unitCode: line.unitCode,
-    orderedQuantity: line.orderedQuantity,
+    // Texto do campo, em português: é o que a linha edita.
+    orderedQuantity: toPtBrEditText(line.orderedQuantity, OPCOES_QUANTIDADE),
   };
 }
 
@@ -232,7 +240,7 @@ function lineFromDTO(line: CustomerOrderDTO["lines"][number]): LineRow {
 function temValorParaEnviar(texto: string | undefined): boolean {
   const limpo = (texto ?? "").trim();
   if (limpo === "") return false;
-  const valor = parseDecimalInput(limpo);
+  const valor = decimalLegivel(limpo, OPCOES_QUANTIDADE);
   return valor === null || new Decimal(valor).greaterThan(0);
 }
 
@@ -290,9 +298,10 @@ function explicarRetencao(line: ReservationStatusLineDTO): string {
  * pedido na décima segunda casa — §66. Zero é zero, nunca `-0`.
  */
 function complementoDaLinha(pedido: string, digitado: string): string {
-  const valor = digitado.trim() === "" ? "0" : parseDecimalInput(digitado);
+  const valor = digitado.trim() === "" ? "0" : decimalLegivel(digitado, OPCOES_QUANTIDADE);
   if (valor === null) return "";
-  return complementoDeQuantidade(pedido, valor);
+  // O complemento vai para o OUTRO campo: no texto do campo, em português.
+  return toPtBrEditText(complementoDeQuantidade(pedido, valor), OPCOES_QUANTIDADE);
 }
 
 function situationLabel(situation: string): string {
@@ -717,8 +726,8 @@ export function CustomerOrderPage() {
         const initial: Record<string, { reserve: string; produce: string }> = {};
         for (const line of result.lines) {
           initial[line.customerOrderLineId] = {
-            reserve: line.suggestedReserveQuantity,
-            produce: line.suggestedProductionQuantity,
+            reserve: toPtBrEditText(line.suggestedReserveQuantity, OPCOES_QUANTIDADE),
+            produce: toPtBrEditText(line.suggestedProductionQuantity, OPCOES_QUANTIDADE),
           };
         }
         setPlanAdjustments(initial);
@@ -754,7 +763,10 @@ export function CustomerOrderPage() {
               (candidate) => candidate.supplierItemId === row.recommendedSupplierItemId,
             );
             next[row.itemId] = prev[row.itemId] ?? {
-              quantity: recommended?.recommendedPurchaseQuantity ?? row.newSuggestedPurchase,
+              quantity: toPtBrEditText(
+                recommended?.recommendedPurchaseQuantity ?? row.newSuggestedPurchase,
+                OPCOES_QUANTIDADE,
+              ),
               supplierId: recommended?.supplierId ?? "",
             };
           }
@@ -825,7 +837,8 @@ export function CustomerOrderPage() {
           const next: Record<string, string> = {};
           for (const line of result.lines) {
             next[line.customerOrderLineId] =
-              prev[line.customerOrderLineId] ?? line.suggestedAdditionalReserve;
+              prev[line.customerOrderLineId] ??
+              toPtBrEditText(line.suggestedAdditionalReserve, OPCOES_QUANTIDADE);
           }
           return next;
         });
@@ -1023,6 +1036,7 @@ export function CustomerOrderPage() {
         orderedQuantity: exigirDecimal(
           line.orderedQuantity,
           `Quantidade de ${line.productCode || "produto"}`,
+          OPCOES_QUANTIDADE,
         ),
       }));
 
@@ -1192,8 +1206,8 @@ export function CustomerOrderPage() {
       if (!adjustment) return false;
       // Vazio é zero; ilegível não vira conta — sem isto a soma dava `NaN`
       // e a comparação recusava um plano que fecha, dizendo que não fecha.
-      const reservado = parseDecimalInput(adjustment.reserve.trim() || "0");
-      const produzido = parseDecimalInput(adjustment.produce.trim() || "0");
+      const reservado = decimalLegivel(adjustment.reserve.trim() || "0", OPCOES_QUANTIDADE);
+      const produzido = decimalLegivel(adjustment.produce.trim() || "0", OPCOES_QUANTIDADE);
       if (reservado === null || produzido === null) return false;
       /* A soma fecha ou não fecha: sem folga de `1e-6`. A tolerância existia
          porque a conta passava por `Number`, e em `Decimal` ela não é
@@ -1232,18 +1246,20 @@ export function CustomerOrderPage() {
   /*
    * Um ajuste que nem o parser lê. O aviso de "precisa somar" está certo
    * para quem digitou 3 onde cabia 5, e completamente errado para quem
-   * digitou `1.234,56` — nesse caso a soma nem existe.
+   * digitou o `1.234` ambíguo — nesse caso a soma nem existe. A frase é a do
+   * campo, com o motivo (PTBR-NUMERIC-INPUT-ROLLOUT-01).
    */
-  const ajustePlanoIlegivel = useMemo(() => {
-    if (!plan) return false;
-    return plan.lines.some((line) => {
+  const ajustePlanoIlegivel = useMemo((): string | null => {
+    if (!plan) return null;
+    for (const line of plan.lines) {
       const adjustment = planAdjustments[line.customerOrderLineId];
-      if (!adjustment) return false;
-      return (
-        (adjustment.reserve.trim() !== "" && parseDecimalInput(adjustment.reserve) === null) ||
-        (adjustment.produce.trim() !== "" && parseDecimalInput(adjustment.produce) === null)
-      );
-    });
+      if (!adjustment) continue;
+      const erro =
+        erroDoDecimal(`Reservar de ${line.productCode}`, adjustment.reserve, OPCOES_QUANTIDADE) ??
+        erroDoDecimal(`Produzir de ${line.productCode}`, adjustment.produce, OPCOES_QUANTIDADE);
+      if (erro) return erro;
+    }
+    return null;
   }, [plan, planAdjustments]);
 
   async function handleApplyPlan() {
@@ -1267,10 +1283,17 @@ export function CustomerOrderPage() {
             reserveQuantity:
               reserva.status === "ok"
                 ? reserva.valorCanonico
-                : (exigirDecimalOpcional(adjustment.reserve, `Reservar de ${line.productCode}`) ??
-                  "0"),
+                : (exigirDecimalOpcional(
+                    adjustment.reserve,
+                    `Reservar de ${line.productCode}`,
+                    OPCOES_QUANTIDADE,
+                  ) ?? "0"),
             produceQuantity:
-              exigirDecimalOpcional(adjustment.produce, `Produzir de ${line.productCode}`) ?? "0",
+              exigirDecimalOpcional(
+                adjustment.produce,
+                `Produzir de ${line.productCode}`,
+                OPCOES_QUANTIDADE,
+              ) ?? "0",
           };
         }),
       });
@@ -1308,7 +1331,10 @@ export function CustomerOrderPage() {
     setDraftInputs((prev) => ({
       ...prev,
       [itemId]: {
-        quantity: candidate?.recommendedPurchaseQuantity ?? prev[itemId]?.quantity ?? "0",
+        quantity:
+          candidate?.recommendedPurchaseQuantity !== undefined && candidate.recommendedPurchaseQuantity !== null
+            ? toPtBrEditText(candidate.recommendedPurchaseQuantity, OPCOES_QUANTIDADE)
+            : (prev[itemId]?.quantity ?? "0"),
         supplierId,
       },
     }));
@@ -1326,7 +1352,7 @@ export function CustomerOrderPage() {
             suggestion?.rows.find((row) => row.itemId === line.itemId)?.itemCode ?? "material";
           return {
             ...line,
-            quantity: exigirDecimal(line.quantity, `Comprar de ${codigo}`),
+            quantity: exigirDecimal(line.quantity, `Comprar de ${codigo}`, OPCOES_QUANTIDADE),
           };
         }),
       });
@@ -1356,6 +1382,7 @@ export function CustomerOrderPage() {
             exigirDecimalOpcional(
               reserveInputs[line.customerOrderLineId] ?? "",
               `Reservar de ${line.productCode}`,
+              OPCOES_QUANTIDADE,
             ) ?? "0",
         }))
         .filter((line) => new Decimal(line.quantity).greaterThan(0));
@@ -1676,16 +1703,15 @@ options={customerOptions.map((customer) => ({
                     </td>
                     <td className="is-numeric">
                       {linhasEditaveis ? (
-                        <input
-                          type="text"
-                          inputMode="decimal"
+                        <DecimalField
+                          scale={CASAS_QUANTIDADE}
                           placeholder="Quantidade"
                           // Placeholder some ao digitar e nenhum leitor de tela
                           // o usa como nome: sem isto, o campo que decide a
                           // quantidade do pedido era só "editar texto".
                           aria-label={`Quantidade de ${line.productCode || "produto"}`}
                           value={line.orderedQuantity}
-                          onChange={(event) => handleLineQuantityChange(line.key, event.target.value)}
+                          onChangeValue={(valor) => handleLineQuantityChange(line.key, valor)}
                         />
                       ) : (
                         line.orderedQuantity
@@ -1799,24 +1825,22 @@ options={customerOptions.map((customer) => ({
                               {/* Sem nome acessível, um leitor de tela anuncia
                                   só "editar texto" no campo que decide reserva
                                   de um pedido confirmado. */}
-                              <input
-                                type="text"
-                                inputMode="decimal"
+                              <DecimalField
+                                scale={CASAS_QUANTIDADE}
                                 aria-label={`Reservar de ${line.productCode}`}
                                 value={adjustment.reserve}
-                                onChange={(event) =>
-                                  handleAdjustReserve(line.customerOrderLineId, line.orderedQuantity, event.target.value)
+                                onChangeValue={(valor) =>
+                                  handleAdjustReserve(line.customerOrderLineId, line.orderedQuantity, valor)
                                 }
                               />
                             </td>
                             <td>
-                              <input
-                                type="text"
-                                inputMode="decimal"
+                              <DecimalField
+                                scale={CASAS_QUANTIDADE}
                                 aria-label={`Produzir de ${line.productCode}`}
                                 value={adjustment.produce}
-                                onChange={(event) =>
-                                  handleAdjustProduce(line.customerOrderLineId, line.orderedQuantity, event.target.value)
+                                onChangeValue={(valor) =>
+                                  handleAdjustProduce(line.customerOrderLineId, line.orderedQuantity, valor)
                                 }
                               />
                             </td>
@@ -1836,7 +1860,7 @@ options={customerOptions.map((customer) => ({
                   </table>
                 </div>
                 {ajustePlanoIlegivel ? (
-                  <p className="field__hint">{mensagemDecimalInvalido("Reservar/Produzir")}</p>
+                  <p className="field__hint">{ajustePlanoIlegivel}</p>
                 ) : linhasComReservaAcimaDoDisponivel.length > 0 ? (
                   <p className="form-alert" role="alert">
                     {linhasComReservaAcimaDoDisponivel
@@ -2151,12 +2175,11 @@ options={customerOptions.map((customer) => ({
                             <td>{formatQuantity(row.draftPurchaseQuantity)}</td>
                             <td>{formatQuantity(row.newSuggestedPurchase)}</td>
                             <td>
-                              <input
-                                type="text"
-                                inputMode="decimal"
+                              <DecimalField
+                                scale={CASAS_QUANTIDADE}
                                 aria-label={`Comprar de ${row.itemCode}`}
                                 value={input.quantity}
-                                onChange={(event) => handleDraftQuantityChange(row.itemId, event.target.value)}
+                                onChangeValue={(valor) => handleDraftQuantityChange(row.itemId, valor)}
                               />
                             </td>
                             <td>
@@ -2360,16 +2383,15 @@ options={customerOptions.map((customer) => ({
                         )}
                       </td>
                       <td>
-                        <input
-                          type="text"
-                          inputMode="decimal"
+                        <DecimalField
+                          scale={CASAS_QUANTIDADE}
                           aria-label={`Reservar de ${line.productCode}`}
                           disabled={Number(line.stillToReserve) <= 0}
                           value={reserveInputs[line.customerOrderLineId] ?? ""}
-                          onChange={(event) =>
+                          onChangeValue={(valor) =>
                             setReserveInputs((prev) => ({
                               ...prev,
-                              [line.customerOrderLineId]: event.target.value,
+                              [line.customerOrderLineId]: valor,
                             }))
                           }
                         />

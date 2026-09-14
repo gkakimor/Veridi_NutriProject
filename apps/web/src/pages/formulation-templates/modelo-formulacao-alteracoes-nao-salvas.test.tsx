@@ -278,7 +278,7 @@ describe("Modelo de Formulação — guarda de alterações não salvas", () => 
     await user.click(screen.getByRole("button", { name: "Salvar identificação" }));
     await waitFor(() => expect(updateFormulationTemplate).toHaveBeenCalled());
     await waitFor(() => expect(nome()).toHaveValue("Biotina — Cápsulas Revisada"));
-    expect(base()).toHaveValue("1000");
+    expect(base()).toHaveValue("1.000");
 
     await user.click(menuPedidos());
 

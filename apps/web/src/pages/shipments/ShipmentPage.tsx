@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
-import { assinaturaDoDocumento, decimalComparavel, textoComparavel } from "../../lib/dirty-fields";
+import {
+  assinaturaDoDocumento,
+  decimalComparavel,
+  decimalDaApiComparavel,
+  textoComparavel,
+} from "../../lib/dirty-fields";
 import type {
   ShipmentDTO,
   ShipmentLineDTO,
@@ -33,8 +38,10 @@ import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { formatDate, formatDateTime } from "../../lib/dates";
-import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
-import { exigirDecimalOpcional } from "../../lib/decimal-field";
+import { decimalLegivel, erroDoDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
+import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
+import { DecimalField } from "../../components/NumericField";
 import { ModalDialog } from "../../components/ModalDialog";
 import { formatQuantity } from "../../lib/quantity";
 import { excedeLimiteExibido, resolverQuantidadeContraLimite } from "../../lib/quantity-limit";
@@ -167,7 +174,7 @@ function previaDoProduto(
   let ilegiveis = 0;
   for (const line of lotes) {
     const digitado = (quantities[line.reservationLineId] ?? "").trim();
-    const legivel = digitado === "" ? "0" : parseDecimalInput(digitado);
+    const legivel = digitado === "" ? "0" : decimalLegivel(digitado, OPCOES_QUANTIDADE);
     if (legivel === null) {
       ilegiveis += 1;
       continue;
@@ -193,8 +200,9 @@ function previaDoProduto(
  */
 function quantidadeComparavel(digitado: string | undefined, reservedRemaining: string): string | null {
   const resolvido = resolverQuantidadeContraLimite(digitado ?? "", reservedRemaining);
-  if (resolvido.status === "ok") return decimalComparavel(resolvido.valorCanonico);
-  if (resolvido.status === "vazio") return decimalComparavel("0");
+  // O resolvido já é canônico; o que sobra é o texto do campo, em português.
+  if (resolvido.status === "ok") return decimalDaApiComparavel(resolvido.valorCanonico);
+  if (resolvido.status === "vazio") return decimalDaApiComparavel("0");
   return decimalComparavel(digitado);
 }
 
@@ -362,28 +370,23 @@ function ProductGroup({
                         const digitado = (
                           quantities[line.reservationLineId] ?? ""
                         ).trim();
-                        const legivel = parseDecimalInput(digitado);
-                        const ilegivel = digitado !== "" && legivel === null;
+                        const erroDeLeitura = erroDoDecimal("Quantidade", digitado, OPCOES_QUANTIDADE);
+                        const ilegivel = erroDeLeitura !== null;
                         /* O teto exibido é resumido e o real tem doze casas:
                            digitar o número que a tela mostra é pedir tudo o
                            que está reservado, não passar dele. */
                         const excede = excedeLimiteExibido(digitado, line.reservedRemaining);
                         return (
                           <>
-                            <input
-                              type="text"
-                              inputMode="decimal"
+                            <DecimalField
+                              scale={CASAS_QUANTIDADE}
                               aria-label={`Quantidade do lote ${line.lotCode ?? ""}`}
                               aria-invalid={excede || ilegivel || undefined}
                               className={excede || ilegivel ? "is-invalid" : undefined}
                               value={quantities[line.reservationLineId] ?? ""}
-                              onChange={(event) =>
-                                onQuantityChange(line.reservationLineId, event.target.value)
-                              }
+                              onChangeValue={(valor) => onQuantityChange(line.reservationLineId, valor)}
                             />
-                            {ilegivel && (
-                              <p className="field__error">{mensagemDecimalInvalido("Quantidade")}</p>
-                            )}
+                            {erroDeLeitura && <p className="field__error">{erroDeLeitura}</p>}
                             {excede && (
                               <p className="field__error">
                                 Máximo {formatQuantity(line.reservedRemaining)} {line.unitCode} — é o
@@ -535,6 +538,10 @@ export function ShipmentPage() {
         ? new Decimal(atual).plus(line.quantity).toString()
         : line.quantity;
     }
+    // A soma é canônica; o campo recebe o texto em português.
+    for (const [reserva, total] of Object.entries(nextQuantities)) {
+      nextQuantities[reserva] = toPtBrEditText(total, OPCOES_QUANTIDADE);
+    }
     setQuantities(nextQuantities);
   }, []);
 
@@ -589,7 +596,7 @@ export function ShipmentPage() {
         quantity:
           resolvido.status === "ok"
             ? resolvido.valorCanonico
-            : (exigirDecimalOpcional(digitado, "Quantidade") ?? "0"),
+            : (exigirDecimalOpcional(digitado, "Quantidade", OPCOES_QUANTIDADE) ?? "0"),
       };
     });
   }
@@ -786,10 +793,10 @@ export function ShipmentPage() {
   const produtosAcimaDoQueFalta = previasPorProduto.filter((previa) => previa.acimaDoQueFalta);
 
   /* Quantidade que a tela não consegue ler não vira zero em silêncio. */
-  const linhasIlegiveis = agruparPorReserva(shipment.lines).filter((line) => {
-    const digitado = (quantities[line.reservationLineId] ?? "").trim();
-    return digitado !== "" && parseDecimalInput(digitado) === null;
-  });
+  const errosDeLeitura = agruparPorReserva(shipment.lines)
+    .map((line) => erroDoDecimal("Quantidade", quantities[line.reservationLineId] ?? "", OPCOES_QUANTIDADE))
+    .filter((erro): erro is string => erro !== null);
+  const linhasIlegiveis = errosDeLeitura;
 
   /* Confirmar não corrige silenciosamente para o teto: enquanto houver
      linha acima do reservado, a ação fica bloqueada e a linha diz por quê. */
@@ -1109,7 +1116,7 @@ export function ShipmentPage() {
                 onClick={() => setConfirmDialogOpen(true)}
                 title={
                   linhasIlegiveis.length > 0
-                    ? mensagemDecimalInvalido("Quantidade")
+                    ? errosDeLeitura[0]
                     : linhasAcimaDoReservado.length > 0
                       ? "Há quantidade acima do reservado — corrija antes de confirmar."
                       : produtosAcimaDoQueFalta.length > 0

@@ -243,7 +243,7 @@ describe("Alterar preço de faturamento", () => {
 
   it("nasce com o preço atual preenchido, não vazio", () => {
     abrirOverride();
-    expect((screen.getByLabelText(/Preço faturado/) as HTMLInputElement).value).toBe("9.48");
+    expect((screen.getByLabelText(/Preço faturado/) as HTMLInputElement).value).toBe("9,48");
   });
 
   it("sem motivo não altera", () => {

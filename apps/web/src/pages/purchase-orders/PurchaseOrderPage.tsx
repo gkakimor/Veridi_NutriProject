@@ -35,8 +35,15 @@ import { getItem, listItems } from "../../lib/items-api";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
-import { parseDecimalInput } from "../../lib/decimal-input";
-import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
+import { decimalLegivel, exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
+import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import {
+  CASAS_PRECO_UNITARIO,
+  CASAS_QUANTIDADE,
+  OPCOES_PRECO_UNITARIO,
+  OPCOES_QUANTIDADE,
+} from "../../lib/numeric-scales";
+import { DecimalField, MoneyField } from "../../components/NumericField";
 import { EntityLink } from "../../components/EntityLink";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -194,8 +201,9 @@ function lineFromDTO(line: PurchaseOrderDTO["lines"][number]): LineRow {
     itemCode: line.itemCode,
     itemName: line.itemName,
     unitCode: line.unitCode,
-    orderedQuantity: line.orderedQuantity,
-    unitPrice: line.unitPrice ?? "",
+    // Texto dos campos, em português: é o que a linha edita e o que a leitura lê.
+    orderedQuantity: toPtBrEditText(line.orderedQuantity, OPCOES_QUANTIDADE),
+    unitPrice: toPtBrEditText(line.unitPrice, OPCOES_PRECO_UNITARIO),
     receivedQuantity: line.receivedQuantity,
     openQuantity: line.openQuantity,
   };
@@ -445,7 +453,7 @@ export function PurchaseOrderPage() {
                   itemCode: item.code,
                   itemName: item.name,
                   unitCode: item.unitCode,
-                  orderedQuantity: shortageQuantity,
+                  orderedQuantity: toPtBrEditText(shortageQuantity, OPCOES_QUANTIDADE),
                   unitPrice: "",
                   receivedQuantity: "0",
                   openQuantity: "0",
@@ -592,8 +600,8 @@ export function PurchaseOrderPage() {
    */
   const previa = useMemo(() => {
     const legiveis = lines.map((line) => ({
-      orderedQuantity: parseDecimalInput(line.orderedQuantity),
-      unitPrice: parseDecimalInput(line.unitPrice),
+      orderedQuantity: decimalLegivel(line.orderedQuantity, OPCOES_QUANTIDADE),
+      unitPrice: decimalLegivel(line.unitPrice, OPCOES_PRECO_UNITARIO),
     }));
     const totais = calcularTotaisOrdemCompra(legiveis);
     const ilegiveis = lines.filter(
@@ -658,12 +666,14 @@ export function PurchaseOrderPage() {
         const preco = exigirDecimalOpcional(
           line.unitPrice,
           `Preço unitário de ${line.itemCode || "item"}`,
+          OPCOES_PRECO_UNITARIO,
         );
         return {
           itemId: line.itemId,
           orderedQuantity: exigirDecimal(
             line.orderedQuantity,
             `Quantidade de ${line.itemCode || "item"}`,
+            OPCOES_QUANTIDADE,
           ),
           ...(preco ? { unitPrice: preco } : {}),
         };
@@ -1081,22 +1091,21 @@ options={supplierOptions.map((supplier) => ({
                     </td>
                     <td className="is-numeric">
                       {isDraftEditable ? (
-                        <input
-                          type="text"
-                          inputMode="decimal"
+                        <DecimalField
+                          scale={CASAS_QUANTIDADE}
                           placeholder="0"
                           // "0" e "Opcional" não nomeiam campo nenhum: sem
                           // isto, quantidade e preço da mesma linha soavam
                           // idênticos para um leitor de tela.
                           aria-label={`Quantidade de ${line.itemCode || "item"}`}
                           value={line.orderedQuantity}
-                          onChange={(event) =>
-                            handleLineFieldChange(line.key, "orderedQuantity", event.target.value)
+                          onChangeValue={(valor) =>
+                            handleLineFieldChange(line.key, "orderedQuantity", valor)
                           }
                         />
                       ) : (
                         <>
-                          {formatQuantity(line.orderedQuantity)}
+                          {formatQuantity(decimalLegivel(line.orderedQuantity, OPCOES_QUANTIDADE))}
                           {status !== "CANCELLED" && (
                             <>
                               <br />
@@ -1112,18 +1121,15 @@ options={supplierOptions.map((supplier) => ({
                     <td>{line.unitCode || "—"}</td>
                     <td className="is-numeric">
                       {isDraftEditable ? (
-                        <input
-                          type="text"
-                          inputMode="decimal"
+                        <MoneyField
+                          scale={CASAS_PRECO_UNITARIO}
                           placeholder="Opcional"
                           aria-label={`Preço unitário de ${line.itemCode || "item"}`}
                           value={line.unitPrice}
-                          onChange={(event) =>
-                            handleLineFieldChange(line.key, "unitPrice", event.target.value)
-                          }
+                          onChangeValue={(valor) => handleLineFieldChange(line.key, "unitPrice", valor)}
                         />
                       ) : (
-                        formatUnitPriceBRL(line.unitPrice || null)
+                        formatUnitPriceBRL(decimalLegivel(line.unitPrice, OPCOES_PRECO_UNITARIO))
                       )}
                     </td>
                     <td className="is-numeric">{formatBRL(lineTotal)}</td>

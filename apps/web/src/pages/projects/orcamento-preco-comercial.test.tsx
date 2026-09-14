@@ -169,7 +169,8 @@ beforeEach(() => {
 describe("preço comercial da linha do Orçamento na tela", () => {
   it("o campo abre com as 4 casas do documento, não com a máscara de moeda", () => {
     abrir([versao()]);
-    expect(precoDe("PROD-000001").value).toBe(PRECO_COMERCIAL);
+    // Em português, com as quatro casas do documento, e sem o símbolo da leitura.
+    expect(precoDe("PROD-000001").value).toBe("4,0531");
     expect(precoDe("PROD-000001").value).not.toBe("R$ 4,0531");
   });
 
@@ -182,7 +183,7 @@ describe("preço comercial da linha do Orçamento na tela", () => {
     // Sem mudança não sai pedido: a máscara de leitura não tem como virar o
     // valor gravado, e o campo continua com as quatro casas.
     expect(updateQuoteLine).not.toHaveBeenCalled();
-    expect(precoDe("PROD-000001").value).toBe(PRECO_COMERCIAL);
+    expect(precoDe("PROD-000001").value).toBe("4,0531");
   });
 
   it("digitar em pt-BR chega ao servidor normalizado, sem arredondar na tela", async () => {
@@ -196,20 +197,21 @@ describe("preço comercial da linha do Orçamento na tela", () => {
     expect(enviado().unitPrice).toBe("4.0532");
   });
 
-  it("acima de 4 casas a tela NÃO corrige em silêncio — o valor sobe e a API recusa", async () => {
+  it("acima de 4 casas a quinta casa nem entra — nada é cortado nem arredondado em silêncio", () => {
     abrir([versao()]);
     const campo = precoDe("PROD-000001");
 
     fireEvent.change(campo, { target: { value: "4,05318" } });
-    fireEvent.blur(campo, { target: { value: "4,05318" } });
+    fireEvent.blur(campo);
 
-    await waitFor(() => expect(updateQuoteLine).toHaveBeenCalled());
     /*
      * Cortar aqui esconderia a decisão: a pessoa veria `4,0532` gravado sem
-     * ter escrito isso. Quem recusa é a fronteira da API, com mensagem —
-     * `PRODUCT_RULES.md` §58.
+     * ter escrito isso. O campo tem as quatro casas do documento
+     * (`PRODUCT_RULES.md` §58, PTBR-NUMERIC-INPUT-ROLLOUT-01): a quinta não
+     * entra, o gravado fica, e nada vai ao servidor.
      */
-    expect(enviado().unitPrice).toBe("4.05318");
+    expect(campo.value).toBe("4,0531");
+    expect(updateQuoteLine).not.toHaveBeenCalled();
   });
 
   it("linha vinda de faixa: preço técnico e comercial convivem sem se confundir", () => {

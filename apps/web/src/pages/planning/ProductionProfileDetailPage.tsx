@@ -34,10 +34,12 @@ import type { RecorteDeRecursos } from "../../lib/recursos-do-seletor";
 import { listUnits } from "../../lib/units-api";
 import { listProducts } from "../../lib/products-api";
 import { apiErrorMessage } from "../../lib/api-errors";
-import { textoComparavel } from "../../lib/dirty-fields";
-import { AJUDA_DECIMAL, parseDecimalInput } from "../../lib/decimal-input";
-import { exigirDecimal } from "../../lib/decimal-field";
+import { decimalComparavel, inteiroComparavel, textoComparavel } from "../../lib/dirty-fields";
+import { decimalLegivel, exigirDecimal } from "../../lib/decimal-field";
 import { lerInteiroOpcional } from "../../lib/integer-input";
+import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
+import { DecimalField, IntegerField } from "../../components/NumericField";
 import { formatQuantity } from "../../lib/quantity";
 import { formatDateTime } from "../../lib/dates";
 import { formatMinutes, formatMinutesPlain } from "../../lib/duration";
@@ -133,14 +135,23 @@ const etapaNova = (): EtapaRascunho => ({
   recursos: [],
 });
 
-/** Só o que o servidor grava — a chave de lista não é alteração. */
+/**
+ * Só o que o servidor grava — a chave de lista não é alteração. Os números
+ * comparam pelo valor (PTBR-NUMERIC-INPUT-ROLLOUT-01): `250,5` e `250,50` são a
+ * mesma base, `030` e `30` o mesmo tempo, e sair do campo não é pendência.
+ */
 function assinatura(base: string, unidade: string, etapas: EtapaRascunho[]): string {
   return JSON.stringify({
-    base: base.trim(),
+    base: decimalComparavel(base),
     unidade,
     etapas: etapas.map(({ chave: _chave, recursos, ...resto }) => ({
       ...resto,
-      recursos: recursos.map(({ chave: _chaveRecurso, ...recurso }) => recurso),
+      preparacao: inteiroComparavel(resto.preparacao),
+      execucao: inteiroComparavel(resto.execucao),
+      recursos: recursos.map(({ chave: _chaveRecurso, ...recurso }) => ({
+        ...recurso,
+        quantidade: inteiroComparavel(recurso.quantidade),
+      })),
     })),
   });
 }
@@ -265,12 +276,15 @@ function ProfilePreview({
   steps: ProductionPlanStepInput[] | null;
   motivo: string | null;
 }) {
-  const [quantidade, setQuantidade] = useState(referenceQuantity ?? "");
+  // A base chega canônica (da API ou já lida): no campo, em português.
+  const [quantidade, setQuantidade] = useState(() =>
+    toPtBrEditText(referenceQuantity, OPCOES_QUANTIDADE),
+  );
 
   let plano: ProductionPlan | null = null;
   let aviso = motivo;
   if (!aviso) {
-    const alvo = parseDecimalInput(quantidade);
+    const alvo = decimalLegivel(quantidade, OPCOES_QUANTIDADE);
     if (!alvo) aviso = "Informe a quantidade para simular.";
     else if (!referenceQuantity) aviso = "Informe a quantidade de referência do roteiro.";
     else if (!steps || steps.length === 0) aviso = "Adicione etapas para simular o roteiro.";
@@ -294,14 +308,13 @@ function ProfilePreview({
       </p>
       <div className="field field--narrow">
         <label htmlFor={`${idPrefix}-quantidade`}>Quantidade para simular ({referenceUomCode})</label>
-        <input
+        <DecimalField
           id={`${idPrefix}-quantidade`}
-          type="text"
-          inputMode="decimal"
+          scale={CASAS_QUANTIDADE}
           value={quantidade}
-          onChange={(event) => setQuantidade(event.target.value)}
+          onChangeValue={setQuantidade}
         />
-        <p className="field__hint">Só simula: nada é gravado. {AJUDA_DECIMAL}</p>
+        <p className="field__hint">Só simula: nada é gravado. Use vírgula para as casas decimais.</p>
       </div>
 
       {aviso && (
@@ -634,11 +647,17 @@ export function ProductionProfileDetailPage() {
           // `salvo` continua sendo o servidor: o que ficou na tela segue pendente.
           const manterPendente = recarga.manterRascunhoPendente === true && rascunhoPendente.current;
           if (!manterRestaurado && !manterPendente) {
-            setBase(rascunho.referenceQuantity);
+            setBase(toPtBrEditText(rascunho.referenceQuantity, OPCOES_QUANTIDADE));
             setUnidade(rascunho.referenceUomCode);
             setEtapas(lidas);
           }
-          setSalvo(assinatura(rascunho.referenceQuantity, rascunho.referenceUomCode, lidas));
+          setSalvo(
+            assinatura(
+              toPtBrEditText(rascunho.referenceQuantity, OPCOES_QUANTIDADE),
+              rascunho.referenceUomCode,
+              lidas,
+            ),
+          );
         } else {
           setEtapas([]);
           setSalvo("");
@@ -806,7 +825,7 @@ export function ProductionProfileDetailPage() {
   const recurso = (id: string): RecursoConhecido | undefined =>
     recursosDaEtapa.recurso(id) ?? gravados.get(id);
   const nomeDoRecurso = (id: string) => recurso(id)?.name ?? "recurso";
-  const baseLida = parseDecimalInput(base);
+  const baseLida = decimalLegivel(base, OPCOES_QUANTIDADE);
   const baseTexto = `${baseLida ? formatQuantity(baseLida) : "—"} ${unidade}`;
 
   let passosSimulados: ProductionPlanStepInput[] | null = null;
@@ -929,7 +948,7 @@ export function ProductionProfileDetailPage() {
       "rascunho",
       () =>
         updateProductionProfileVersion(rascunho.id, {
-          referenceQuantity: exigirDecimal(base, "Quantidade de referência"),
+          referenceQuantity: exigirDecimal(base, "Quantidade de referência", OPCOES_QUANTIDADE),
           referenceUomCode: unidade,
           steps: lerEtapas(etapas, nomeDoRecurso),
         }),
@@ -1091,13 +1110,12 @@ export function ProductionProfileDetailPage() {
             <div className="field-grid-2">
               <div className="field field--narrow">
                 <label htmlFor="ppr-base">Quantidade de referência</label>
-                <input
+                <DecimalField
                   id="ppr-base"
-                  type="text"
-                  inputMode="decimal"
+                  scale={CASAS_QUANTIDADE}
                   disabled={!editavel}
                   value={base}
-                  onChange={(event) => setBase(event.target.value)}
+                  onChangeValue={setBase}
                 />
                 <p className="field__hint">
                   Quantidade usada como referência para os tempos de execução abaixo. Ex.: se
@@ -1247,15 +1265,11 @@ export function ProductionProfileDetailPage() {
                         </div>
                         <div className="field">
                           <label htmlFor={`${prefixo}-preparacao`}>Preparação (min)</label>
-                          <input
+                          <IntegerField
                             id={`${prefixo}-preparacao`}
-                            type="text"
-                            inputMode="numeric"
                             disabled={!editavel}
                             value={etapa.preparacao}
-                            onChange={(event) =>
-                              alterarEtapa(indice, { preparacao: event.target.value })
-                            }
+                            onChangeValue={(preparacao) => alterarEtapa(indice, { preparacao })}
                           />
                           <p className="field__hint">
                             Tempo fixo da etapa. Não aumenta com a quantidade.
@@ -1267,15 +1281,11 @@ export function ProductionProfileDetailPage() {
                               ? "Execução por lote (min)"
                               : "Execução da base (min)"}
                           </label>
-                          <input
+                          <IntegerField
                             id={`${prefixo}-execucao`}
-                            type="text"
-                            inputMode="numeric"
                             disabled={!editavel}
                             value={etapa.execucao}
-                            onChange={(event) =>
-                              alterarEtapa(indice, { execucao: event.target.value })
-                            }
+                            onChangeValue={(execucao) => alterarEtapa(indice, { execucao })}
                           />
                           <p className="field__hint">
                             {etapa.scalingMode === "BY_BATCH"
@@ -1326,14 +1336,12 @@ export function ProductionProfileDetailPage() {
                               <label htmlFor={`${prefixo}-quantidade-${linha.chave}`}>
                                 Quantidade necessária
                               </label>
-                              <input
+                              <IntegerField
                                 id={`${prefixo}-quantidade-${linha.chave}`}
-                                type="text"
-                                inputMode="numeric"
                                 disabled={!editavel}
                                 value={linha.quantidade}
-                                onChange={(event) =>
-                                  alterarRecurso(indice, j, { quantidade: event.target.value })
+                                onChangeValue={(quantidade) =>
+                                  alterarRecurso(indice, j, { quantidade })
                                 }
                               />
                             </div>

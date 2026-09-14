@@ -3,7 +3,9 @@ import type { FormEvent } from "react";
 import type { InventoryLotBreakdownDTO } from "@veridi/shared";
 import { createInventoryAdjustment } from "../lib/inventory-api";
 import { exigirDecimal } from "../lib/decimal-field";
+import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../lib/numeric-scales";
 import { ModalDialog } from "./ModalDialog";
+import { DecimalField } from "./NumericField";
 import { formatQuantity } from "../lib/quantity";
 
 interface AdjustStockDialogProps {
@@ -53,7 +55,7 @@ export function AdjustStockDialog({
         type,
         // `0,85` é o que a pessoa digita; a recusa acontece aqui, com o nome
         // do campo, e nenhum movimento é criado.
-        quantity: exigirDecimal(quantity, `Quantidade (${unitCode})`),
+        quantity: exigirDecimal(quantity, `Quantidade (${unitCode})`, OPCOES_QUANTIDADE),
         reason: reason.trim(),
       });
       onAdjusted();
@@ -111,13 +113,12 @@ export function AdjustStockDialog({
             <label htmlFor="adjust-quantity">
               Quantidade ({unitCode}) <span className="req">*</span>
             </label>
-            <input
+            <DecimalField
               id="adjust-quantity"
-              type="text"
-              inputMode="decimal"
+              scale={CASAS_QUANTIDADE}
               placeholder="0"
               value={quantity}
-              onChange={(event) => setQuantity(event.target.value)}
+              onChangeValue={setQuantity}
             />
           </div>
 

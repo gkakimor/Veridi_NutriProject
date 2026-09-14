@@ -148,11 +148,12 @@ describe("Validação inline por componente", () => {
     const campo = quantidadeDe("MP-000003");
     expect(campo).not.toHaveAttribute("aria-invalid");
 
-    fireEvent.change(campo, { target: { value: "abc" } });
+    // Letra nem entra no campo; o ambíguo `1.234` entra e não vira número.
+    fireEvent.change(campo, { target: { value: "1.234" } });
     await salvar(user);
 
     await waitFor(() => expect(campo).toHaveAttribute("aria-invalid", "true"));
-    expect(mensagemDo(campo)).toMatch(/^MP-000003 — Quantidade: informe um valor numérico válido/);
+    expect(mensagemDo(campo)).toMatch(/^MP-000003 — Quantidade: ponto seguido de três dígitos/);
     expect(screen.getByText("Corrija os campos destacados.")).toBeInTheDocument();
     // Salvar bloqueado: nada foi ao servidor.
     expect(vi.mocked(updateFormulationVersion)).not.toHaveBeenCalled();
@@ -172,7 +173,7 @@ describe("Validação inline por componente", () => {
   it("tentar salvar leva foco e rolagem ao primeiro erro", async () => {
     const user = userEvent.setup();
     await abrir();
-    fireEvent.change(quantidadeDe("MP-000003"), { target: { value: "x" } });
+    fireEvent.change(quantidadeDe("MP-000003"), { target: { value: "1.234" } });
     expect(rolagem).not.toHaveBeenCalled();
 
     await salvar(user);
@@ -192,7 +193,7 @@ describe("Validação inline por componente", () => {
     await waitFor(() => expect(document.querySelector("tr.ajuste-quantidade__linha")).not.toBeNull());
     const pureza = screen.getByRole("textbox", { name: "Pureza aplicada" });
     expect(pureza).toHaveAttribute("aria-invalid", "true");
-    expect(mensagemDo(pureza)).toMatch(/^MP-000003 — Pureza %: informe um valor numérico válido/);
+    expect(mensagemDo(pureza)).toMatch(/^MP-000003 — Pureza %: use só números/);
     await waitFor(() => expect(document.activeElement).toBe(pureza));
     // A linha avisa que há o que corrigir mesmo com o painel fechado de novo.
     expect(screen.getByRole("button", { name: /corrigir/ })).toBeInTheDocument();
@@ -227,7 +228,7 @@ describe("Validação inline por componente", () => {
     const campo = quantidadeDe("MP-000003");
     await user.click(campo);
     await user.type(campo, "5");
-    fireEvent.change(campo, { target: { value: "abc" } });
+    fireEvent.change(campo, { target: { value: "1.234" } });
 
     expect(rolagem).not.toHaveBeenCalled();
     expect(campo).not.toHaveAttribute("aria-invalid");
@@ -236,7 +237,7 @@ describe("Validação inline por componente", () => {
   it("Ativar versão é bloqueado enquanto houver erro de validação", async () => {
     const user = userEvent.setup();
     await abrir();
-    fireEvent.change(quantidadeDe("MP-000003"), { target: { value: "abc" } });
+    fireEvent.change(quantidadeDe("MP-000003"), { target: { value: "1.234" } });
 
     await user.click(screen.getByRole("button", { name: /Ativar versão/ }));
     await user.click(await screen.findByRole("button", { name: /^Ativar$/ }));

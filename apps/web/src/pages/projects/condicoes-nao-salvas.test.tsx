@@ -436,7 +436,7 @@ describe("QUOTE-DRAFT-STATE-01 — salvar troca a base", () => {
     expect(situacao()).toBe("Tudo salvo");
     expect(botaoSalvar().disabled).toBe(true);
     // A tela passa a mostrar o que ficou gravado.
-    expect(campo("Desconto (%)").value).toBe("7.5");
+    expect(campo("Desconto (%)").value).toBe("7,5");
   });
 });
 
@@ -797,7 +797,7 @@ describe("QUOTE-DRAFT-STATE-01 — a ficha do Projeto, com a mutação de linha 
     );
     expect(noServidor.validUntil).toBe("2026-09-20T00:00:00.000Z");
     expect(campo("Validade da proposta").value).toBe("2026-09-20");
-    expect(campo("Desconto (%)").value).toBe("7.5");
+    expect(campo("Desconto (%)").value).toBe("7,5");
     expect(botaoSalvar().disabled).toBe(true);
   });
 

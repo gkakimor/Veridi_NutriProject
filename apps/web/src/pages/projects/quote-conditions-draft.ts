@@ -4,8 +4,11 @@ import type {
   QuoteVersionDTO,
   UpdateQuoteVersionInput,
 } from "@veridi/shared";
-import { parseDecimalInput } from "../../lib/decimal-input";
+import { Decimal } from "@veridi/shared";
+import { decimalComparavel } from "../../lib/dirty-fields";
 import { lerInteiroOpcional } from "../../lib/integer-input";
+import { parsePtBrNumber, toPtBrEditText } from "../../lib/numeric-ptbr";
+import { OPCOES_PERCENTUAL } from "../../lib/numeric-scales";
 
 /**
  * O rascunho das condições comerciais da proposta — QUOTE-DRAFT-STATE-01.
@@ -77,8 +80,14 @@ export interface RascunhoDasCondicoes {
 }
 
 export function camposDe(quote: QuoteVersionDTO): CamposDasCondicoes {
-  /** Percentual guardado com 4 casas vira "10" na tela, não "10.0000". */
-  const percent = (value: string | null) => (value === null ? "" : String(Number(value)));
+  /**
+   * Percentual guardado com 4 casas vira "10" na tela, não "10,0000" — e em
+   * português: "7,5", no texto que o `PercentField` edita.
+   */
+  const percent = (value: string | null | undefined) =>
+    value === null || value === undefined || value.trim() === ""
+      ? ""
+      : toPtBrEditText(new Decimal(value).toString(), OPCOES_PERCENTUAL);
   return {
     validUntil: quote.validUntil ? quote.validUntil.slice(0, 10) : "",
     leadTimeDays: quote.leadTimeDays ? String(quote.leadTimeDays) : "",
@@ -113,23 +122,28 @@ export function paraEnvio(campos: CamposDasCondicoes): UpdateQuoteVersionInput {
     throw new Error("Inteiro ilegível não vai ao servidor.");
   };
   /*
-   * Percentual passa pelo parser central. O `?? value.trim()` só existe para
-   * o caso impossível: os botões ficam desabilitados enquanto algum
-   * percentual for ilegível, e mandar `null` no lugar apagaria o desconto
-   * em silêncio — pior do que deixar o servidor recusar.
+   * Percentual passa pelo parser dos campos numéricos, com as casas da coluna.
+   * Ilegível em vigor falha alto, como o inteiro: os botões ficam
+   * desabilitados enquanto algum percentual for ilegível, e mandar `null` no
+   * lugar apagaria o desconto em silêncio. À vista, entrada e juros não
+   * aparecem nem valem (o servidor os limpa): o escondido não vai e não trava.
    */
-  const percentual = (value: string) =>
-    value.trim() === "" ? null : (parseDecimalInput(value) ?? value.trim());
+  const percentual = (value: string, emVigor = true) => {
+    const leitura = parsePtBrNumber(value, OPCOES_PERCENTUAL);
+    if (leitura.tipo === "valido") return leitura.valor;
+    if (leitura.tipo === "vazio" || !emVigor) return null;
+    throw new Error("Percentual ilegível não vai ao servidor.");
+  };
   return {
     validUntil: texto(campos.validUntil),
     leadTimeDays: inteiro(campos.leadTimeDays),
     commercialNotes: texto(campos.commercialNotes),
     discountPercent: percentual(campos.discountPercent),
     paymentMethod: campos.paymentMethod,
-    downPaymentPercent: percentual(campos.downPaymentPercent),
+    downPaymentPercent: percentual(campos.downPaymentPercent, parcelado),
     installmentCount: inteiro(campos.installmentCount, parcelado),
     installmentIntervalDays: inteiro(campos.installmentIntervalDays, parcelado),
-    monthlyInterestPercent: percentual(campos.monthlyInterestPercent),
+    monthlyInterestPercent: percentual(campos.monthlyInterestPercent, parcelado),
   };
 }
 
@@ -154,10 +168,7 @@ function valorComparavel(tipo: TipoDaCondicao, texto: string): unknown {
     return leitura.tipo === "valido" ? leitura.valor : `ilegível:${limpo}`;
   }
   if (limpo === "") return null;
-  if (tipo === "percentual") {
-    const lido = parseDecimalInput(limpo);
-    return lido === null ? `ilegível:${limpo}` : Number(lido);
-  }
+  if (tipo === "percentual") return decimalComparavel(limpo);
   return limpo;
 }
 

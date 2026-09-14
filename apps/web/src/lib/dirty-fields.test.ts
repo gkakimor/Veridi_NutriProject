@@ -3,6 +3,7 @@ import {
   assinaturaDoDocumento,
   assinaturaDoFormulario,
   decimalComparavel,
+  decimalDaApiComparavel,
   inteiroComparavel,
   textoComparavel,
 } from "./dirty-fields";
@@ -50,9 +51,37 @@ describe("decimal comparável", () => {
     expect(decimalComparavel("abc")).toBe(ilegivel);
   });
 
-  it("separador de milhar continua recusado — 1.234 não vira mil duzentos e trinta e quatro", () => {
-    expect(decimalComparavel("1.234")).toBe(decimalComparavel("1,234"));
-    expect(decimalComparavel("1.234")).not.toBe(decimalComparavel("1234"));
+  it("a leitura é a do campo: milhar com vírgula é mil, 1.234 sozinho é ambíguo e pendência", () => {
+    // PTBR-NUMERIC-INPUT-ROLLOUT-01: o texto do campo se lê como o campo lê.
+    expect(decimalComparavel("1.234,5")).toBe(decimalComparavel("1234,5"));
+    expect(decimalComparavel("1234.5")).toBe(decimalComparavel("1234,5"));
+    const ambiguo = decimalComparavel("1.234");
+    expect(ambiguo).not.toBe(decimalComparavel("1,234"));
+    expect(ambiguo).not.toBe(decimalComparavel("1234"));
+    expect(ambiguo).toMatch(/^ilegível:/);
+  });
+
+  it("vírgula e casas zeradas não são alteração: 250,50 é 250,5", () => {
+    expect(decimalComparavel("250,50")).toBe(decimalComparavel("250,5"));
+    expect(decimalComparavel("0,00")).toBe(decimalComparavel("0"));
+  });
+});
+
+describe("decimal vindo da API", () => {
+  it("o valor canônico da API e o texto do campo dão o mesmo — servidor 250.5, campo 250,5", () => {
+    expect(decimalDaApiComparavel("250.5")).toBe(decimalComparavel("250,5"));
+    expect(decimalDaApiComparavel("1000.000000000000")).toBe(decimalComparavel("1.000,0"));
+  });
+
+  it("ponto da API é sempre casa decimal: 1.234 da API é um vírgula duzentos e trinta e quatro", () => {
+    expect(decimalDaApiComparavel("1.234")).toBe(decimalComparavel("1,234"));
+    expect(decimalDaApiComparavel("1.234")).not.toMatch(/^ilegível:/);
+  });
+
+  it("ausência é null; notação científica da API é o mesmo número", () => {
+    expect(decimalDaApiComparavel(null)).toBeNull();
+    expect(decimalDaApiComparavel("")).toBeNull();
+    expect(decimalDaApiComparavel("9.79592e-7")).toBe(decimalComparavel("0,000000979592"));
   });
 });
 
@@ -73,6 +102,10 @@ describe("inteiro comparável", () => {
   it("o número do servidor e o texto do campo dão o mesmo", () => {
     expect(inteiroComparavel(3)).toBe(inteiroComparavel("3"));
     expect(inteiroComparavel(1)).not.toBe(inteiroComparavel("2"));
+    // Zero à esquerda e milhar não são alteração; vazio é ausência.
+    expect(inteiroComparavel("030")).toBe(inteiroComparavel(30));
+    expect(inteiroComparavel("1.234")).toBe(inteiroComparavel(1234));
+    expect(inteiroComparavel("")).toBeNull();
   });
 });
 

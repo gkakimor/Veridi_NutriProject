@@ -1,5 +1,7 @@
+import { parsePtBrNumber } from "./numeric-ptbr";
+
 /**
- * Entrada de número INTEIRO — o par de `decimal-input.ts` para contagens: prazo
+ * Entrada de número INTEIRO — o par de `decimal-field.ts` para contagens: prazo
  * em dias, número de parcelas.
  *
  * `Number(texto)` não serve. `Number("abc")` é `NaN`, e o JSON escreve `NaN`
@@ -8,8 +10,11 @@
  * é 30 e `Number("")` é 0 — o que a pessoa não escreveu virava número. Aqui a
  * leitura é estrita, e o resultado diz qual dos três casos é: nunca `NaN`.
  *
- * Aceito: só dígitos, com espaços nas pontas e zeros à esquerda (`" 030 "` é
- * 30). Recusado: sinal, vírgula, ponto, expoente, texto — nada é truncado nem
+ * A leitura é a do parser canônico com `scale: 0` (PTBR-NUMERIC-INPUT-
+ * ROLLOUT-01), a mesma do `IntegerField`: dígitos, com espaços nas pontas e
+ * zeros à esquerda (`" 030 "` é 30), e o ponto de milhar em grupos de três
+ * (`1.234` é 1234 — num inteiro não há leitura decimal para confundir).
+ * Recusado: sinal, casa decimal, expoente, texto — nada é truncado nem
  * arredondado.
  */
 
@@ -19,10 +24,11 @@ export type LeituraDeInteiro =
   | { tipo: "invalido" };
 
 export function lerInteiroOpcional(texto: string): LeituraDeInteiro {
-  const limpo = texto.trim();
-  if (limpo === "") return { tipo: "vazio" };
-  if (!/^\d+$/.test(limpo)) return { tipo: "invalido" };
-  const valor = Number(limpo);
+  const leitura = parsePtBrNumber(texto, { scale: 0 });
+  if (leitura.tipo === "vazio") return { tipo: "vazio" };
+  if (leitura.tipo === "invalido") return { tipo: "invalido" };
+  // Só dígitos a esta altura: a conversão não adivinha nada, e o teto seguro barra o resto.
+  const valor = Number(leitura.valor);
   return Number.isSafeInteger(valor) ? { tipo: "valido", valor } : { tipo: "invalido" };
 }
 
@@ -59,4 +65,16 @@ export function erroDeInteiro(
     leitura.valor >= limites.minimo &&
     (limites.maximo === null || leitura.valor <= limites.maximo);
   return dentro ? null : mensagemInteiroInvalido(rotulo, limites);
+}
+
+/**
+ * O inteiro de um campo que pode ficar em branco, sem faixa própria — a faixa
+ * é da API, que responde no campo. Vazio é `null`; ilegível interrompe a ação
+ * com a mensagem, antes da requisição, e nunca vira zero.
+ */
+export function exigirInteiroOpcional(texto: string, rotulo: string): number | null {
+  const leitura = lerInteiroOpcional(texto);
+  if (leitura.tipo === "vazio") return null;
+  if (leitura.tipo === "valido") return leitura.valor;
+  throw new Error(`${rotulo}: informe um número inteiro.`);
 }

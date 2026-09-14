@@ -74,8 +74,11 @@ import { getReservationStatus } from "../lib/shipments-api";
 import { CustomerOrderPage } from "./customer-orders/CustomerOrderPage";
 import { PurchaseOrderPage } from "./purchase-orders/PurchaseOrderPage";
 
-/** O que a mensagem de recusa precisa ensinar. */
-const CITA_O_SEPARADOR = /vírgula ou ponto para a casa decimal, sem separador de milhar/i;
+/**
+ * O que a mensagem de recusa precisa ensinar — o `1.234` ambíguo, único texto
+ * que entra no campo e não vira número (PTBR-NUMERIC-INPUT-ROLLOUT-01).
+ */
+const CITA_O_SEPARADOR = /ponto seguido de três dígitos pode ser milhar ou decimal/i;
 
 /** O que a pessoa via antes e que não explicava nada. */
 const FRASE_MUDA = "Erro de validação";
@@ -245,10 +248,10 @@ describe("Pedido do Cliente — vírgula decimal", () => {
     vi.mocked(getCustomerOrder).mockResolvedValue(pedido());
     renderPedido();
 
-    // Separador de milhar é ambíguo de propósito: mil duzentos e trinta e
-    // quatro ou um vírgula duzentos e trinta e quatro, e errar por mil em
-    // silêncio seria pior do que recusar.
-    fireEvent.change(await campoDeQuantidade(), { target: { value: "1.234,56" } });
+    // `1.234` sozinho é ambíguo de propósito: mil duzentos e trinta e quatro
+    // ou um vírgula duzentos e trinta e quatro, e errar por mil em silêncio
+    // seria pior do que recusar. (`1.234,56`, com a vírgula, é milhar.)
+    fireEvent.change(await campoDeQuantidade(), { target: { value: "1.234" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar rascunho" }));
 
     const alerta = await screen.findByText(CITA_O_SEPARADOR);
@@ -292,7 +295,7 @@ describe("Pedido do Cliente — vírgula decimal", () => {
     });
 
     const produzir = screen.getByLabelText("Produzir de PROD-000001") as HTMLInputElement;
-    expect(produzir.value).toBe("7.5");
+    expect(produzir.value).toBe("7,5");
 
     const aplicar = screen.getByRole("button", { name: "Aplicar Plano de Atendimento" });
     expect(aplicar).toBeEnabled();
@@ -402,7 +405,7 @@ describe("Ordem de Compra — vírgula decimal", () => {
 
     const { quantidade, preco } = await campos();
     fireEvent.change(quantidade, { target: { value: "4" } });
-    fireEvent.change(preco, { target: { value: "1.234,56" } });
+    fireEvent.change(preco, { target: { value: "1.234" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar rascunho" }));
 
     const alerta = await screen.findByText(CITA_O_SEPARADOR);

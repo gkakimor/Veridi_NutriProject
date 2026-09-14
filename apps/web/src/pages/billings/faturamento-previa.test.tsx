@@ -246,10 +246,11 @@ describe("#8D — preço de faturamento em edição mostra o total resultante", 
 
   it("K. preço inválido não vira total falso e trava a confirmação", async () => {
     await abrirOverride(faturamento());
-    fireEvent.change(screen.getByLabelText(/Preço faturado/), { target: { value: "1.2.3" } });
+    // `1.2.3` nem entra no campo; `1.234` entra e é ambíguo.
+    fireEvent.change(screen.getByLabelText(/Preço faturado/), { target: { value: "1.234" } });
     fireEvent.change(screen.getByLabelText(/^Motivo/), { target: { value: "Desconto acordado" } });
 
-    expect(screen.getByText(/Preço faturado: informe um valor numérico/)).toBeTruthy();
+    expect(screen.getByText(/Preço faturado: ponto seguido de três dígitos/)).toBeTruthy();
     expect(valorDe("Total da linha (prévia)")).not.toContain("R$");
     expect(valorDe("Total do documento (prévia)")).not.toContain("R$");
     expect(
@@ -257,13 +258,16 @@ describe("#8D — preço de faturamento em edição mostra o total resultante", 
     ).toBe(true);
   });
 
-  it("L. preço negativo é recusado como ilegível, sem produzir total", async () => {
+  it("L. preço negativo nem entra no campo: o preço e a prévia seguem os de antes", async () => {
     await abrirOverride(faturamento());
-    fireEvent.change(screen.getByLabelText(/Preço faturado/), { target: { value: "-5" } });
-    expect(valorDe("Total da linha (prévia)")).not.toContain("R$");
-    expect(
-      (screen.getByRole("button", { name: "Alterar preço" }) as HTMLButtonElement).disabled,
-    ).toBe(true);
+    const campo = screen.getByLabelText(/Preço faturado/) as HTMLInputElement;
+    const antes = campo.value;
+    const totalAntes = valorDe("Total da linha (prévia)");
+
+    fireEvent.change(campo, { target: { value: "-5" } });
+
+    expect(campo.value).toBe(antes);
+    expect(valorDe("Total da linha (prévia)")).toBe(totalAntes);
   });
 });
 
@@ -301,7 +305,7 @@ describe("#8D — rodapé do faturamento diz prévia ou gravado", () => {
       }),
     );
     fireEvent.change(screen.getByLabelText(/Preço faturado de PROD-000001/), {
-      target: { value: "1.2.3" },
+      target: { value: "1.234" },
     });
     expect(rodape()).toContain("Total faturado (prévia): Valores incompletos");
     expect(

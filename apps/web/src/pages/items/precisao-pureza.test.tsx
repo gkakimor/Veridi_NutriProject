@@ -93,7 +93,7 @@ describe("PREC-MIG-C: pureza no formulário de item", () => {
     abrirEdicao("99.9995");
 
     // O campo mostra o que o servidor guardou, sem completar nem cortar casas.
-    expect(campoPureza().value).toBe("99.9995");
+    expect(campoPureza().value).toBe("99,9995");
 
     fireEvent.click(screen.getByRole("button", { name: "Salvar alterações" }));
 
@@ -105,7 +105,7 @@ describe("PREC-MIG-C: pureza no formulário de item", () => {
 
   it("seis casas atravessam a tela sem virar cinco", async () => {
     abrirEdicao("98.123456");
-    expect(campoPureza().value).toBe("98.123456");
+    expect(campoPureza().value).toBe("98,123456");
 
     fireEvent.click(screen.getByRole("button", { name: "Salvar alterações" }));
 

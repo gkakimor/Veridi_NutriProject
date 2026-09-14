@@ -78,10 +78,25 @@ describe("resolverQuantidadeContraLimite — round-trip do valor exibido", () =>
     expect(resolverQuantidadeContraLimite("   ", RESERVA)).toEqual({ status: "vazio" });
   });
 
-  it("ilegível não vira palpite", () => {
-    expect(resolverQuantidadeContraLimite("abc", RESERVA)).toEqual({ status: "ilegivel" });
-    // Separador de milhar continua recusado, como manda `parseDecimalInput`.
-    expect(resolverQuantidadeContraLimite("1.234,5", RESERVA)).toEqual({ status: "ilegivel" });
+  it("ilegível não vira palpite — e diz o motivo", () => {
+    expect(resolverQuantidadeContraLimite("abc", RESERVA)).toEqual({
+      status: "ilegivel",
+      motivo: "caractere",
+    });
+    // `1.234` sozinho é ambíguo no campo decimal: nem mil, nem um vírgula duzentos.
+    expect(resolverQuantidadeContraLimite("1.234", RESERVA)).toEqual({
+      status: "ilegivel",
+      motivo: "ambiguo",
+    });
+  });
+
+  it("a leitura é a do campo (PTBR-NUMERIC-INPUT-ROLLOUT-01): milhar com vírgula é milhar", () => {
+    expect(resolverQuantidadeContraLimite("1.234,5", "2000")).toEqual({
+      status: "ok",
+      valorCanonico: "1234.5",
+      usouTodoOLimite: false,
+    });
+    expect(resolverQuantidadeContraLimite("1.234,5", RESERVA)).toEqual({ status: "acima" });
   });
 
   it("zero é quantidade válida — quem decide se serve é a tela", () => {

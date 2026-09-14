@@ -22,6 +22,13 @@ import { createSupplierItem } from "../../lib/supplier-items-api";
 import { listSuppliers } from "../../lib/suppliers-api";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal } from "../../lib/decimal-field";
+import {
+  CASAS_PRECO_UNITARIO,
+  CASAS_QUANTIDADE,
+  OPCOES_PRECO_UNITARIO,
+  OPCOES_QUANTIDADE,
+} from "../../lib/numeric-scales";
+import { DecimalField, MoneyField } from "../../components/NumericField";
 import { listUnits } from "../../lib/units-api";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 
@@ -358,13 +365,14 @@ export function SupplierItemFormModal({
         ...(preencheuOferta
           ? {
               initialOffer: {
-                unitPrice: exigirDecimal(unitPrice, "Preço"),
+                unitPrice: exigirDecimal(unitPrice, "Preço", OPCOES_PRECO_UNITARIO),
                 priceUomCode: priceUomCode || selectedItem?.unitCode || "",
                 ...(minimumOrderQuantity.trim()
                   ? {
                       minimumOrderQuantity: exigirDecimal(
                         minimumOrderQuantity,
                         "Pedido mínimo",
+                        OPCOES_QUANTIDADE,
                       ),
                       minimumOrderUomCode: minimumOrderUomCode || selectedItem?.unitCode || "",
                     }
@@ -573,12 +581,11 @@ export function SupplierItemFormModal({
           <div className="field-grid-2">
             <div className="field">
               <label htmlFor="supplier-item-price">Preço</label>
-              <input
+              <MoneyField
                 id="supplier-item-price"
-                type="text"
-                inputMode="decimal"
+                scale={CASAS_PRECO_UNITARIO}
                 value={unitPrice}
-                onChange={(event) => setUnitPrice(event.target.value)}
+                onChangeValue={setUnitPrice}
                 placeholder="Deixe vazio para criar sem oferta"
               />
               <span className="field__hint">
@@ -606,12 +613,11 @@ export function SupplierItemFormModal({
 
             <div className="field">
               <label htmlFor="supplier-item-moq">Pedido mínimo</label>
-              <input
+              <DecimalField
                 id="supplier-item-moq"
-                type="text"
-                inputMode="decimal"
+                scale={CASAS_QUANTIDADE}
                 value={minimumOrderQuantity}
-                onChange={(event) => setMinimumOrderQuantity(event.target.value)}
+                onChangeValue={setMinimumOrderQuantity}
                 disabled={!preencheuOferta}
               />
             </div>

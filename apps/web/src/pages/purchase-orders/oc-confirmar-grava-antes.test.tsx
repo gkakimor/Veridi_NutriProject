@@ -221,7 +221,7 @@ function montar(entrada: string) {
 async function abrir() {
   montar("/compras/ordens/oc-1");
   await screen.findByRole("heading", { name: "OC-000001" });
-  await waitFor(() => expect(quantidade()).toHaveValue("10.000000"));
+  await waitFor(() => expect(quantidade()).toHaveValue("10"));
 }
 
 const quantidade = () => screen.getByRole("textbox", { name: "Quantidade de MP-000001" }) as HTMLInputElement;
@@ -362,13 +362,14 @@ describe("com alteração pendente — gravar antes de agir", () => {
 
   it("preço ilegível: a gravação nem sai, e a confirmação também não", async () => {
     await abrir();
-    fireEvent.change(preco(), { target: { value: "13,4,0" } });
+    // Letra e vírgula dupla nem entram no campo; o ambíguo entra e trava na borda.
+    fireEvent.change(preco(), { target: { value: "1.234" } });
 
     await confirmar();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Preço unitário de MP-000001");
     expect(escritas()).toEqual([]);
-    expect(preco()).toHaveValue("13,4,0");
+    expect(preco()).toHaveValue("1.234");
     expect(screen.getByText("Alterações não salvas")).toBeInTheDocument();
   });
 
@@ -386,8 +387,8 @@ describe("com alteração pendente — gravar antes de agir", () => {
 
       expect(await screen.findByRole("alert")).toHaveTextContent(mensagem);
       expect(eventos).toEqual(["PATCH", "PATCH gravado", "CONFIRM", "CONFIRM recusado"]);
-      expect(quantidade()).toHaveValue("12.000000");
-      expect(preco()).toHaveValue("13.4000");
+      expect(quantidade()).toHaveValue("12");
+      expect(preco()).toHaveValue("13,40");
       expect(observacoes()).toHaveValue("Entregar na doca 2");
       expect(screen.queryByText("Alterações não salvas")).toBeNull();
       expect(screen.getByText("Rascunho")).toBeInTheDocument();

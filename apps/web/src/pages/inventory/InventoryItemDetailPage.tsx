@@ -13,6 +13,8 @@ import { getAllocationSuggestion, getInventoryItem } from "../../lib/inventory-a
 import { getItemCostReferences } from "../../lib/items-api";
 import { formatUnitPriceBRL } from "../../lib/currency";
 import { exigirDecimal } from "../../lib/decimal-field";
+import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
+import { DecimalField } from "../../components/NumericField";
 import { FormSection } from "../../components/FormSection";
 import { AdjustStockDialog } from "../../components/AdjustStockDialog";
 import { EntityLink } from "../../components/EntityLink";
@@ -89,7 +91,7 @@ export function InventoryItemDetailPage() {
     try {
       const result = await getAllocationSuggestion(
         itemId,
-        exigirDecimal(requiredQuantity, "Quantidade necessária"),
+        exigirDecimal(requiredQuantity, "Quantidade necessária", OPCOES_QUANTIDADE),
       );
       setSuggestion(result);
     } catch (err) {
@@ -328,13 +330,12 @@ export function InventoryItemDetailPage() {
               <label htmlFor="fefo-quantity">
                 Quantidade necessária ({detail.unitCode})
               </label>
-              <input
+              <DecimalField
                 id="fefo-quantity"
-                type="text"
-                inputMode="decimal"
+                scale={CASAS_QUANTIDADE}
                 placeholder="0"
                 value={requiredQuantity}
-                onChange={(event) => setRequiredQuantity(event.target.value)}
+                onChangeValue={setRequiredQuantity}
               />
             </div>
             <div className="field">

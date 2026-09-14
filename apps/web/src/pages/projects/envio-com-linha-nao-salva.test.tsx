@@ -478,7 +478,7 @@ describe("QUOTE-SEND-LINE-DRAFT-01 — salvar a linha, falhar, tentar de novo", 
 
     await waitFor(() => expect(botaoEnviar().disabled).toBe(false));
     expect(avisoDeEnvio()).toBeNull();
-    expect(campo(PRECO).value).toBe("12.5000");
+    expect(campo(PRECO).value).toBe("12,50");
   });
 
   it("preço: o salvamento que falha deixa o digitado e o envio preso; a nova tentativa libera, e o que vai é o preço novo", async () => {
@@ -516,7 +516,7 @@ describe("QUOTE-SEND-LINE-DRAFT-01 — salvar a linha, falhar, tentar de novo", 
     fireEvent.blur(campo(QUANTIDADE));
 
     await screen.findByText(/Não foi possível salvar a linha\./);
-    expect(campo(QUANTIDADE).value).toBe("1200");
+    expect(campo(QUANTIDADE).value).toBe("1.200");
     conferirBloqueio(PRODUTOS);
   });
 
@@ -546,7 +546,7 @@ describe("QUOTE-SEND-LINE-DRAFT-01 — salvar a linha, falhar, tentar de novo", 
 
     await screen.findByText(/Não foi possível salvar a linha\./);
     // A primeira linha está gravada; é a segunda que segura.
-    expect(campo(PRECO).value).toBe("10.0000");
+    expect(campo(PRECO).value).toBe("10,00");
     conferirBloqueio(PRODUTOS);
 
     fireEvent.blur(campo("Preço unitário de PROD-000002"));

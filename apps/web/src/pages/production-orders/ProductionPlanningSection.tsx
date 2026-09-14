@@ -13,6 +13,8 @@ import {
 import { FormSection } from "../../components/FormSection";
 import { applyProductionProfile } from "../../lib/production-orders-api";
 import { apiErrorMessage } from "../../lib/api-errors";
+import { decimalLegivel } from "../../lib/decimal-field";
+import { OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
 import { formatDateTime } from "../../lib/dates";
 import { formatMinutes } from "../../lib/duration";
 import { formatQuantity } from "../../lib/quantity";
@@ -113,8 +115,9 @@ export function ProductionPlanningSection({
    * para o que o servidor já devolveu, e travessão quando nem isso existe.
    */
   const pedido = useMemo(() => {
-    const digitada = quantityDraft.trim().replace(",", ".");
-    return order.status === "DRAFT" && digitada !== "" ? digitada : order.plannedQuantity;
+    // A leitura do campo de quantidade: `1.234,5` é mil duzentos e trinta e quatro e meio.
+    const digitada = decimalLegivel(quantityDraft, OPCOES_QUANTIDADE);
+    return order.status === "DRAFT" && digitada !== null ? digitada : order.plannedQuantity;
   }, [quantityDraft, order.status, order.plannedQuantity]);
 
   const plan: ProductionPlan | null = useMemo(() => {

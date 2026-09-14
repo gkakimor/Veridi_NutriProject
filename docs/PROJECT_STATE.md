@@ -3675,6 +3675,69 @@ de 00:00 a 00:59 cai na véspera, contra `diaCivil`; histórico, mantido idênti
 TZ-LOCALE-STRING-REUSE-01 — `toLocaleString`/`toLocaleDateString` com opções criam formatador a
 cada chamada (~54 µs): extensos do shared, CSV e textos da API, `web lib/dates.ts`.
 
+## Campos numéricos pt-BR em todas as telas (PTBR-NUMERIC-INPUT-ROLLOUT-01, 2026-09-13)
+
+A foundation de PTBR-NUMERIC-INPUT-FOUNDATION-01 em todo campo de entrada que é número real. Só
+web: sem API, DTO, Decimal, banco, arredondamento de domínio ou migration. Leitura (tabela, card,
+PDF) fica para PTBR-NUMERIC-DISPLAY-AUDIT-01. Regra de uso em `UI_BRAND.md`, "Campos numéricos e
+valores pt-BR".
+
+**Inventário.** 85 inputs crus em 37 telas e componentes (67 `inputMode="decimal"`, 15
+`inputMode="numeric"`, 3 `type="number"`), 90 campos na tela: 18 inteiros (`IntegerField`); 42
+decimais (40 quantidades com 12 casas, 2 potências com 4); 16 dinheiros (6 com 4 casas — preço do
+Orçamento, preço faturado na linha e no diálogo, tarifa do recurso, totais do modelo de preço — e
+10 com 8 — preço da OC, oferta, preço manual da faixa, valores por unidade do modelo, custo de
+referência, custo efetivo); 13 percentuais (pureza, overage e pureza padrão com 6; desconto,
+entrada, juros, reajuste, margem, comissão e percentuais do modelo com 4); e o valor do custo
+adicional, dinheiro ou percentual conforme a base (4). Nenhum aceita negativo, nenhum é dinheiro de
+2 casas. Ficaram texto, de propósito: CEP (com `inputMode="numeric"`, na allowlist), telefone,
+CNPJ, número do endereço, código de barras, lotes, códigos, nota e documento, unidade e moeda.
+
+**Regras.** O `scale` é o da coluna (`web lib/numeric-scales.ts`, espelho de `decimal-schema.ts`).
+Valor da API entra no campo por `toPtBrEditText` — nunca cru: `1.234` da API é um vírgula duzentos
+e trinta e quatro, e escrito no campo seria o ambíguo. A borda lê com o parser do campo:
+`exigirDecimal`/`exigirDecimalOpcional` com `scale`, `decimalLegivel` (prévia) e `erroDoDecimal`
+(mensagem), e `lerInteiroOpcional` passou a ser o mesmo parser com `scale: 0`;
+`parseDecimalInput`, `isValidDecimalInput`, `mensagemDecimalInvalido` e `AJUDA_DECIMAL` saíram.
+Pendência pelo valor: `decimalComparavel` lê o texto do campo e `decimalDaApiComparavel` o canônico
+da API; Formulação (`rascunhoComparavel`), Roteiro e Projeto comparam números por valor (`250,50` =
+`250.5`, `030` = `30`), e sair do campo não suja. Payload semanticamente igual: onde ia o texto cru,
+vai o canônico (potência na criação do recurso, base da nova estrutura, quantidade planejada da
+OP, entregas programadas, quantidade do PDF do CMV). Percentual continua em pontos. Os três
+`type="number"` saíram com leitura estrita; "Dividir produção em" vazio ou `0` segue indo como 1,
+como antes. Sair da linha do Orçamento lê o texto do campo, não o DOM — fora do foco ele mostra o
+formatado (`2.000`). O plano de atendimento põe o complemento no outro campo em português.
+
+**Fechados junto.** QUOTE-PERCENT-FIELDS-01: erro do percentual com `id` e `aria-describedby`, e à
+vista entrada e juros escondidos não travam salvar nem vão à API. FORMULATION-DOSES-INPUT-01:
+doses como `IntegerField`, leitura estrita na prévia, na validação e no envio (inteiro segue como
+texto, `1e2` não entra).
+
+**Guarda.** `campo-numerico-guarda.test.ts` virou proibição sobre o código de produção: nenhum
+`type="number"`; nenhum `<input>` cru com `inputMode` decimal/numeric fora da allowlist (os dois
+CEPs, com motivo); nenhum input de texto com nome de quantidade, preço ou percentual; nenhuma leitura
+à mão (`parseFloat`, `parseInt`, `valueAsNumber`, `Number(event.target.value)`, troca de vírgula por
+ponto) fora da allowlist (foundation, `decimal-format`, `CalcHint`); allowlist sem sobra.
+
+**Validação.** Web: `formulacao-campos-numericos` (11: carga de `1.234` e `250.5`, 13ª casa,
+colagem, letra, zero, vazio, doses, pureza), `condicoes-percentuais` (10), guarda (10), helpers
+(`dirty-fields`, `integer-input`, `quantity-limit`, `decimal-input`) e 34 arquivos de tela
+ajustados ao contrato novo — letra não entra, o ilegível é o `1.234` ambíguo, o campo mostra
+`1.000`/`12,50` fora do foco. 14 mutações, todas derrubadas. Gate focado: 173 arquivos, 1912 testes
+(componentes, libs, app e as 22 pastas de tela tocadas); `pnpm typecheck`. Smoke Playwright 390px no
+Vite do worktree contra a API da 3333, sem gravar (escrita barrada, 0 tentativas): Formulação e
+Política de precificação com rascunho real, OC e Pedido novos, Roteiro com rascunho simulado —
+`type=text` com `inputmode` certo, 12·12,·12,3·12,34 sem reescrita, letra, sinal e casa a mais
+barrados, colagem `1.234,56`/`1234.5`/`5,5%`, `1.000` ambíguo acusado, formatado fora do foco, página
+sem rolagem horizontal: 60/60, console limpo. Sem full test, E2E, golden path, build nem fresh
+(FAST).
+
+**Achados** (BACKLOG): PTBR-NUMERIC-DISPLAY-AUDIT-01 (próxima) — `formatQuantity` sem milhar ao lado
+do campo que agrupa, e leituras cruas vistas no caminho; ORDER-LINE-390-OVERLAP-01 — no Pedido novo
+em 390px o seletor de produto cobre o campo de quantidade (igual na main); OP-PARTS-ZERO-COERCION-01
+— partes vazio ou `0` viram 1 em silêncio (herdado, preservado); NUMERIC-FOCUS-API-ZEROS-01 — preço
+de 8 casas servido com `toFixed` aparece `12,50` fora do foco e `12,50000000` no foco.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

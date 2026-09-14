@@ -17,9 +17,15 @@ import {
   PRICING_MODEL_VALUE_LABELS,
   validarModeloDePrecificacao,
 } from "@veridi/shared";
+import { MoneyField, PercentField } from "../../components/NumericField";
 import { exigirDecimalOpcional } from "../../lib/decimal-field";
-import { formatDecimalInput } from "../../lib/decimal-input";
 import { assinaturaDoDocumento, decimalComparavel } from "../../lib/dirty-fields";
+import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import {
+  CASAS_PERCENTUAL,
+  CASAS_PRECO_UNITARIO,
+  CASAS_VALOR_INDUSTRIAL,
+} from "../../lib/numeric-scales";
 
 /**
  * O que entra no custo que forma o preço — edição no rascunho do Modelo, §84.
@@ -48,6 +54,25 @@ function linhaDeEscolha(escolhido: boolean, desabilitado: boolean): string {
 
 type ValoresDigitados = Record<PricingModelValueField, string>;
 
+/**
+ * Cada valor do Modelo, com o campo e as casas da coluna: percentual em pontos
+ * (quatro casas), valor por unidade como preço unitário (oito) e valor total
+ * como a coluna o guarda (quatro) — PTBR-NUMERIC-INPUT-ROLLOUT-01.
+ */
+const VALOR_DO_CAMPO: Record<PricingModelValueField, { tipo: "percentual" | "moeda"; scale: number }> = {
+  industrialCostPercentOfMaterials: { tipo: "percentual", scale: CASAS_PERCENTUAL },
+  industrialCostAmountPerUnit: { tipo: "moeda", scale: CASAS_PRECO_UNITARIO },
+  industrialCostAmountTotal: { tipo: "moeda", scale: CASAS_VALOR_INDUSTRIAL },
+  estimatedTaxPercentOfSalePrice: { tipo: "percentual", scale: CASAS_PERCENTUAL },
+  estimatedTaxAmountPerUnit: { tipo: "moeda", scale: CASAS_PRECO_UNITARIO },
+  estimatedTaxAmountTotal: { tipo: "moeda", scale: CASAS_VALOR_INDUSTRIAL },
+};
+
+/** O valor da API no texto do campo, em português. */
+function textoDoValor(campo: PricingModelValueField, valor: string | null): string {
+  return toPtBrEditText(valor, { scale: VALOR_DO_CAMPO[campo].scale });
+}
+
 export interface PricingModelDraft extends ValoresDigitados {
   industrialCostMode: PricingIndustrialCostMode;
   estimatedTaxMode: PricingEstimatedTaxMode;
@@ -61,13 +86,19 @@ export function rascunhoDoModelo(
 ): PricingModelDraft {
   return {
     industrialCostMode: model.industrialCostMode,
-    industrialCostPercentOfMaterials: formatDecimalInput(model.industrialCostPercentOfMaterials),
-    industrialCostAmountPerUnit: formatDecimalInput(model.industrialCostAmountPerUnit),
-    industrialCostAmountTotal: formatDecimalInput(model.industrialCostAmountTotal),
+    industrialCostPercentOfMaterials: textoDoValor(
+      "industrialCostPercentOfMaterials",
+      model.industrialCostPercentOfMaterials,
+    ),
+    industrialCostAmountPerUnit: textoDoValor("industrialCostAmountPerUnit", model.industrialCostAmountPerUnit),
+    industrialCostAmountTotal: textoDoValor("industrialCostAmountTotal", model.industrialCostAmountTotal),
     estimatedTaxMode: model.estimatedTaxMode,
-    estimatedTaxPercentOfSalePrice: formatDecimalInput(model.estimatedTaxPercentOfSalePrice),
-    estimatedTaxAmountPerUnit: formatDecimalInput(model.estimatedTaxAmountPerUnit),
-    estimatedTaxAmountTotal: formatDecimalInput(model.estimatedTaxAmountTotal),
+    estimatedTaxPercentOfSalePrice: textoDoValor(
+      "estimatedTaxPercentOfSalePrice",
+      model.estimatedTaxPercentOfSalePrice,
+    ),
+    estimatedTaxAmountPerUnit: textoDoValor("estimatedTaxAmountPerUnit", model.estimatedTaxAmountPerUnit),
+    estimatedTaxAmountTotal: textoDoValor("estimatedTaxAmountTotal", model.estimatedTaxAmountTotal),
     externalAdditionalCosts: model.externalAdditionalCosts,
     applicableTaxProfiles: perfis,
   };
@@ -81,7 +112,9 @@ export function rascunhoDoModelo(
  */
 export function modeloDoRascunho(draft: PricingModelDraft): PricingModelConfig {
   const valor = (campo: PricingModelValueField) =>
-    exigirDecimalOpcional(draft[campo], PRICING_MODEL_VALUE_LABELS[campo]);
+    exigirDecimalOpcional(draft[campo], PRICING_MODEL_VALUE_LABELS[campo], {
+      scale: VALOR_DO_CAMPO[campo].scale,
+    });
   const model: PricingModelConfig = {
     industrialCostMode: draft.industrialCostMode,
     industrialCostPercentOfMaterials: valor("industrialCostPercentOfMaterials"),
@@ -176,16 +209,24 @@ export function PricingModelEditor({ draft, disabled, onChange }: Props) {
                   />
                   {opcoes.rotulos[modo]}
                 </label>
-                {campo && (
-                  <input
-                    type="text"
-                    inputMode="decimal"
+                {campo && VALOR_DO_CAMPO[campo].tipo === "percentual" && (
+                  <PercentField
+                    scale={VALOR_DO_CAMPO[campo].scale}
                     aria-label={PRICING_MODEL_VALUE_LABELS[campo]}
                     // Só o valor do modo escolhido vale; os outros ficam
                     // guardados, visíveis e intocados.
                     disabled={disabled || !escolhido}
                     value={draft[campo]}
-                    onChange={(event) => onChange({ ...draft, [campo]: event.target.value })}
+                    onChangeValue={(valor) => onChange({ ...draft, [campo]: valor })}
+                  />
+                )}
+                {campo && VALOR_DO_CAMPO[campo].tipo === "moeda" && (
+                  <MoneyField
+                    scale={VALOR_DO_CAMPO[campo].scale}
+                    aria-label={PRICING_MODEL_VALUE_LABELS[campo]}
+                    disabled={disabled || !escolhido}
+                    value={draft[campo]}
+                    onChangeValue={(valor) => onChange({ ...draft, [campo]: valor })}
                   />
                 )}
               </div>

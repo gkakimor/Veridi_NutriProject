@@ -46,8 +46,16 @@ import { formatPercent } from "../../lib/percent";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { textoComparavel } from "../../lib/dirty-fields";
 import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
-import { exigirDecimal } from "../../lib/decimal-field";
-import { parseDecimalInput } from "../../lib/decimal-input";
+import { decimalLegivel, erroDoDecimal, exigirDecimal } from "../../lib/decimal-field";
+import {
+  CASAS_PERCENTUAL,
+  CASAS_PRECO_UNITARIO,
+  CASAS_QUANTIDADE,
+  OPCOES_PERCENTUAL,
+  OPCOES_PRECO_UNITARIO,
+  OPCOES_QUANTIDADE,
+} from "../../lib/numeric-scales";
+import { DecimalField, MoneyField, PercentField } from "../../components/NumericField";
 import { PricingPolicyOrigin } from "../cost-templates/PricingPolicyOrigin";
 import { PricingModelSummary } from "../cost-templates/PricingModelSummary";
 
@@ -134,7 +142,7 @@ export function PricingPage() {
   const [custoDaPrevia, setCustoDaPrevia] = useState<PricingTierPreviewDTO | null>(null);
   const [previaErro, setPreviaErro] = useState<string | null>(null);
   const [previaCarregando, setPreviaCarregando] = useState(false);
-  const quantidadeLegivel = quantity.trim() === "" ? null : parseDecimalInput(quantity);
+  const quantidadeLegivel = decimalLegivel(quantity, OPCOES_QUANTIDADE);
   const editavel = canEdit && pricing?.status === "DRAFT";
 
   useEffect(() => {
@@ -178,10 +186,14 @@ export function PricingPage() {
   /** A parte comercial da prévia, imediata, pela conta canônica. */
   const previa = useMemo(() => {
     if (!custoDaPrevia) return null;
-    const comissao = commission.trim() === "" ? "0" : parseDecimalInput(commission);
-    const margem = priceMode === "TARGET_MARGIN" ? parseDecimalInput(targetMargin) : null;
-    const manual = priceMode === "MANUAL_PRICE" ? parseDecimalInput(manualPrice) : null;
-    if (comissao === null) return { faltando: "Comissão ilegível — use vírgula ou ponto." };
+    const comissao = commission.trim() === "" ? "0" : decimalLegivel(commission, OPCOES_PERCENTUAL);
+    const margem =
+      priceMode === "TARGET_MARGIN" ? decimalLegivel(targetMargin, OPCOES_PERCENTUAL) : null;
+    const manual =
+      priceMode === "MANUAL_PRICE" ? decimalLegivel(manualPrice, OPCOES_PRECO_UNITARIO) : null;
+    if (comissao === null) {
+      return { faltando: erroDoDecimal("Comissão (%)", commission, OPCOES_PERCENTUAL) ?? "" };
+    }
     if (priceMode === "TARGET_MARGIN" && (targetMargin.trim() === "" || margem === null)) {
       return { faltando: "Preencha a margem de contribuição desejada para ver o preço." };
     }
@@ -583,12 +595,11 @@ export function PricingPage() {
               <div className="field-grid-2">
                 <div className="field">
                   <label htmlFor="tier-quantity">Quantidade</label>
-                  <input
+                  <DecimalField
                     id="tier-quantity"
-                    type="text"
-                    inputMode="decimal"
+                    scale={CASAS_QUANTIDADE}
                     value={quantity}
-                    onChange={(event) => setQuantity(event.target.value)}
+                    onChangeValue={setQuantity}
                     placeholder="Ex.: 1000"
                   />
                   <span className="field__hint">
@@ -614,12 +625,11 @@ export function PricingPage() {
                 {priceMode === "TARGET_MARGIN" ? (
                   <div className="field">
                     <label htmlFor="tier-margin">Margem de contribuição desejada (%)</label>
-                    <input
+                    <PercentField
                       id="tier-margin"
-                      type="text"
-                      inputMode="decimal"
+                      scale={CASAS_PERCENTUAL}
                       value={targetMargin}
-                      onChange={(event) => setTargetMargin(event.target.value)}
+                      onChangeValue={setTargetMargin}
                     />
                     <span className="field__hint">
                       Margem somada à comissão precisa ficar abaixo de 100%.
@@ -628,24 +638,22 @@ export function PricingPage() {
                 ) : (
                   <div className="field">
                     <label htmlFor="tier-price">Preço unitário</label>
-                    <input
+                    <MoneyField
                       id="tier-price"
-                      type="text"
-                      inputMode="decimal"
+                      scale={CASAS_PRECO_UNITARIO}
                       value={manualPrice}
-                      onChange={(event) => setManualPrice(event.target.value)}
+                      onChangeValue={setManualPrice}
                     />
                   </div>
                 )}
 
                 <div className="field">
                   <label htmlFor="tier-commission">Comissão (%)</label>
-                  <input
+                  <PercentField
                     id="tier-commission"
-                    type="text"
-                    inputMode="decimal"
+                    scale={CASAS_PERCENTUAL}
                     value={commission}
-                    onChange={(event) => setCommission(event.target.value)}
+                    onChangeValue={setCommission}
                   />
                   <span className="field__hint">{COMMISSION_BASE_DESCRIPTION}</span>
                 </div>
@@ -755,10 +763,10 @@ export function PricingPage() {
                   }
                   onClick={() =>
                     void run(async () => {
-                      const quantidade = exigirDecimal(quantity, "Quantidade");
+                      const quantidade = exigirDecimal(quantity, "Quantidade", OPCOES_QUANTIDADE);
                       // Comissão vazia é zero — só o que foi digitado é lido.
                       const comissao = commission.trim()
-                        ? exigirDecimal(commission, "Comissão (%)")
+                        ? exigirDecimal(commission, "Comissão (%)", OPCOES_PERCENTUAL)
                         : "0";
                       const precoOuMargem =
                         priceMode === "TARGET_MARGIN"
@@ -766,9 +774,16 @@ export function PricingPage() {
                               targetContributionMarginPercent: exigirDecimal(
                                 targetMargin,
                                 "Margem de contribuição desejada (%)",
+                                OPCOES_PERCENTUAL,
                               ),
                             }
-                          : { manualUnitPrice: exigirDecimal(manualPrice, "Preço unitário") };
+                          : {
+                              manualUnitPrice: exigirDecimal(
+                                manualPrice,
+                                "Preço unitário",
+                                OPCOES_PRECO_UNITARIO,
+                              ),
+                            };
                       await createPricingTier(pricing.id, {
                         quantity: quantidade,
                         priceMode,

@@ -40,8 +40,17 @@ import { FormSection } from "../../components/FormSection";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
 import { IncompleteCostApiError, apiErrorMessage } from "../../lib/api-errors";
-import { exigirDecimalOpcional } from "../../lib/decimal-field";
-import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
+import { decimalLegivel, erroDoDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
+import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import {
+  CASAS_PERCENTUAL,
+  CASAS_PRECO_COMERCIAL,
+  CASAS_QUANTIDADE,
+  OPCOES_PERCENTUAL,
+  OPCOES_PRECO_COMERCIAL,
+  OPCOES_QUANTIDADE,
+} from "../../lib/numeric-scales";
+import { DecimalField, MoneyField, PercentField } from "../../components/NumericField";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { QuoteConditionsForm } from "./QuoteConditionsForm";
 import { DuplicateQuoteDialog } from "./DuplicateQuoteDialog";
@@ -73,7 +82,7 @@ function formatDate(value: string | null): string {
  */
 function previaDoReajuste(base: string, percentual: string | undefined): string | null {
   if (!percentual || percentual.trim() === "") return null;
-  const lido = parseDecimalInput(percentual);
+  const lido = decimalLegivel(percentual, OPCOES_PERCENTUAL);
   if (lido === null) return null;
   const fator = Number(lido);
   if (!Number.isFinite(fator) || fator < 0) return null;
@@ -141,6 +150,20 @@ const ROTULO_DO_CAMPO: Record<CampoDaLinha, string> = {
 };
 
 /**
+ * As casas de cada número da linha: quantidade nas doze da coluna, preço
+ * comercial nas quatro do documento (§58) — as mesmas no campo e na gravação.
+ */
+const OPCOES_DO_CAMPO = {
+  quotedQuantity: OPCOES_QUANTIDADE,
+  unitPrice: OPCOES_PRECO_COMERCIAL,
+} as const;
+
+/** O gravado da linha no texto do campo, em português — o que o campo mostra sem digitação. */
+function gravadoEmTexto(line: QuoteLineDTO, campo: "quotedQuantity" | "unitPrice"): string {
+  return toPtBrEditText(line[campo], OPCOES_DO_CAMPO[campo]);
+}
+
+/**
  * O texto que está no campo da linha É o valor gravado? Por VALOR — `1000,0`
  * e `1000.000000000000` são a mesma quantidade —, e com `Decimal`, nunca
  * `Number` (§66). Campo vazio é ausência e só equivale a gravado ausente;
@@ -153,7 +176,7 @@ function digitadoIgualAoGravado(
   gravado: string | null,
 ): boolean {
   if (campo === "uomCode") return (digitado.trim() || null) === gravado;
-  const legivel = parseDecimalInput(digitado);
+  const legivel = decimalLegivel(digitado, OPCOES_DO_CAMPO[campo]);
   if (legivel === null) return gravado === null && digitado.trim() === "";
   return gravado !== null && new Decimal(legivel).equals(new Decimal(gravado));
 }
@@ -341,13 +364,19 @@ export function QuoteVersionsSection({
   ): string | null {
     const digitado = rascunhoDeLinha[line.id]?.[campo];
     if (digitado === undefined) return line[campo];
-    return parseDecimalInput(digitado);
+    return decimalLegivel(digitado, OPCOES_DO_CAMPO[campo]);
+  }
+
+  /** A mensagem do texto digitado que não dá para ler como número, ou `null`. */
+  function erroDoCampo(line: QuoteLineDTO, campo: "quotedQuantity" | "unitPrice"): string | null {
+    const digitado = rascunhoDeLinha[line.id]?.[campo];
+    if (digitado === undefined) return null;
+    return erroDoDecimal(`${ROTULO_DO_CAMPO[campo]} de ${line.productCode}`, digitado, OPCOES_DO_CAMPO[campo]);
   }
 
   /** `true` quando o texto digitado existe e não dá para ler como número. */
   function campoIlegivel(line: QuoteLineDTO, campo: "quotedQuantity" | "unitPrice"): boolean {
-    const digitado = rascunhoDeLinha[line.id]?.[campo];
-    return digitado !== undefined && digitado.trim() !== "" && parseDecimalInput(digitado) === null;
+    return erroDoCampo(line, campo) !== null;
   }
 
   function digitarNaLinha(lineId: string, campo: CampoDaLinha, valor: string) {
@@ -389,7 +418,11 @@ export function QuoteVersionsSection({
       const valor =
         campo === "uomCode"
           ? texto.trim() || null
-          : exigirDecimalOpcional(texto, `${ROTULO_DO_CAMPO[campo]} de ${line.productCode}`);
+          : exigirDecimalOpcional(
+              texto,
+              `${ROTULO_DO_CAMPO[campo]} de ${line.productCode}`,
+              OPCOES_DO_CAMPO[campo],
+            );
       return updateQuoteLine(line.id, { [campo]: valor } as Parameters<typeof updateQuoteLine>[1]);
     });
   }
@@ -532,11 +565,17 @@ export function QuoteVersionsSection({
     acordo: QuoteLineAgreementDTO,
     percentual: string,
   ) {
+    // O que não vira número não vai ao servidor — nem lido de outro jeito lá.
+    const erro = erroDoDecimal("Percentual de reajuste", percentual, OPCOES_PERCENTUAL);
+    if (erro) {
+      setError(erro);
+      return;
+    }
     await aplicarComExcecao({
       lineId,
       tipo: "REAJUSTAR",
       sourceQuoteLineId: acordo.sourceQuoteLineId,
-      percentual: parseDecimalInput(percentual) ?? percentual,
+      percentual: decimalLegivel(percentual, OPCOES_PERCENTUAL) ?? "",
     });
   }
 
@@ -866,7 +905,7 @@ export function QuoteVersionsSection({
                     <td className="is-numeric">
                       {editable ? (
                         <>
-                          <input
+                          <DecimalField
                             /*
                              * Campo CONTROLADO pelo rascunho de tela.
                              *
@@ -879,26 +918,33 @@ export function QuoteVersionsSection({
                              * confirma — inclusive quando aplicar uma faixa
                              * define quantidade, unidade e preço de uma vez.
                              */
-                            type="text"
-                            inputMode="decimal"
+                            scale={CASAS_QUANTIDADE}
                             aria-label={`Quantidade de ${line.productCode}`}
                             aria-invalid={campoIlegivel(line, "quotedQuantity") || undefined}
                             className={
                               campoIlegivel(line, "quotedQuantity") ? "is-invalid" : undefined
                             }
                             value={
-                              rascunhoDeLinha[line.id]?.quotedQuantity ?? line.quotedQuantity ?? ""
+                              rascunhoDeLinha[line.id]?.quotedQuantity ??
+                              gravadoEmTexto(line, "quotedQuantity")
                             }
-                            onChange={(event) =>
-                              digitarNaLinha(line.id, "quotedQuantity", event.target.value)
+                            onChangeValue={(valor) =>
+                              digitarNaLinha(line.id, "quotedQuantity", valor)
                             }
-                            onBlur={(event) =>
-                              sairDoCampoDaLinha(line, "quotedQuantity", event.target.value)
+                            /* O texto do CAMPO, não o do DOM: fora do foco o campo mostra o
+                               número formatado (`2.000`), que não é o que foi digitado. */
+                            onBlur={() =>
+                              sairDoCampoDaLinha(
+                                line,
+                                "quotedQuantity",
+                                rascunhoDeLinha[line.id]?.quotedQuantity ??
+                                  gravadoEmTexto(line, "quotedQuantity"),
+                              )
                             }
                           />
                           {campoIlegivel(line, "quotedQuantity") && (
                             <p className="field__error">
-                              {mensagemDecimalInvalido(`Quantidade de ${line.productCode}`)}
+                              {erroDoCampo(line, "quotedQuantity")}
                             </p>
                           )}
                         </>
@@ -939,23 +985,26 @@ export function QuoteVersionsSection({
                     <td className="is-numeric">
                       {editable && line.priceSource === "MANUAL" ? (
                         <>
-                          <input
-                            type="text"
-                            inputMode="decimal"
+                          <MoneyField
+                            scale={CASAS_PRECO_COMERCIAL}
                             aria-label={`Preço unitário de ${line.productCode}`}
                             aria-invalid={campoIlegivel(line, "unitPrice") || undefined}
                             className={campoIlegivel(line, "unitPrice") ? "is-invalid" : undefined}
-                            value={rascunhoDeLinha[line.id]?.unitPrice ?? line.unitPrice ?? ""}
-                            onChange={(event) =>
-                              digitarNaLinha(line.id, "unitPrice", event.target.value)
+                            value={
+                              rascunhoDeLinha[line.id]?.unitPrice ?? gravadoEmTexto(line, "unitPrice")
                             }
-                            onBlur={(event) =>
-                              sairDoCampoDaLinha(line, "unitPrice", event.target.value)
+                            onChangeValue={(valor) => digitarNaLinha(line.id, "unitPrice", valor)}
+                            onBlur={() =>
+                              sairDoCampoDaLinha(
+                                line,
+                                "unitPrice",
+                                rascunhoDeLinha[line.id]?.unitPrice ?? gravadoEmTexto(line, "unitPrice"),
+                              )
                             }
                           />
                           {campoIlegivel(line, "unitPrice") && (
                             <p className="field__error">
-                              {mensagemDecimalInvalido(`Preço unitário de ${line.productCode}`)}
+                              {erroDoCampo(line, "unitPrice")}
                             </p>
                           )}
                         </>
@@ -1066,15 +1115,14 @@ export function QuoteVersionsSection({
                               <strong>Reajustar condição</strong> · base{" "}
                               {formatUnitPriceBRL(acordo.unitPrice)}
                             </span>
-                            <input
-                              type="text"
-                              inputMode="decimal"
+                            <PercentField
+                              scale={CASAS_PERCENTUAL}
                               aria-label={`Percentual de reajuste de ${line.productCode}`}
                               value={reajustePorLinha[line.id] ?? ""}
-                              onChange={(event) =>
+                              onChangeValue={(valor) =>
                                 setReajustePorLinha((atual) => ({
                                   ...atual,
-                                  [line.id]: event.target.value,
+                                  [line.id]: valor,
                                 }))
                               }
                             />

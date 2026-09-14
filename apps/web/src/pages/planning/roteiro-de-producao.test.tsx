@@ -277,7 +277,7 @@ describe("Quantidade de referência e etapas", () => {
   it("a quantidade de referência tem rótulo, exemplo e unidade própria", async () => {
     await abrirDetalhe(perfil());
 
-    expect(screen.getByLabelText("Quantidade de referência")).toHaveValue("1000");
+    expect(screen.getByLabelText("Quantidade de referência")).toHaveValue("1.000");
     // Sem separador de milhar: é a regra da tela para quantidade, porque o
     // valor exibido é copiado de volta para o campo (ver `lib/quantity.ts`).
     expect(screen.getByText(/se encapsular 1000 un leva 60 min, informe 1000/)).toBeInTheDocument();
@@ -708,7 +708,7 @@ describe("Salvar identificação não apaga o rascunho pendente", () => {
     fireEvent.click(botao("Salvar identificação"));
 
     expect(await screen.findByText("Identificação salva.")).toBeInTheDocument();
-    await waitFor(() => expect(campo("Quantidade de referência")).toHaveValue("2000"));
+    await waitFor(() => expect(campo("Quantidade de referência")).toHaveValue("2.000"));
     expect(campo("Unidade de referência")).toHaveValue("un");
     expect(campo("Nome da etapa")).toHaveValue("Encapsulamento dupla");
     expect(pendencias()).toHaveLength(0);
@@ -757,7 +757,7 @@ describe("Salvar identificação não apaga o rascunho pendente", () => {
     });
 
     // Depois de salvar o rascunho, a tela é a do servidor — normalizada.
-    await waitFor(() => expect(campo("Quantidade de referência")).toHaveValue("250.5"));
+    await waitFor(() => expect(campo("Quantidade de referência")).toHaveValue("250,5"));
     expect(campo("Preparação (min)")).toHaveValue("30");
     expect(campo("Nome da etapa")).toHaveValue("Mistura Nova");
     expect(pendencias()).toHaveLength(0);

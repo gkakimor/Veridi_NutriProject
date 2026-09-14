@@ -27,7 +27,15 @@ import {
   calcularQuantidadeDoComponente,
 } from "@veridi/shared";
 import { CalcHint } from "../../components/help/CalcHint";
-import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
+import { DecimalField, IntegerField } from "../../components/NumericField";
+import { decimalDaApiComparavel } from "../../lib/dirty-fields";
+import { lerInteiroOpcional } from "../../lib/integer-input";
+import { numericInvalidMessage, parsePtBrNumber, toPtBrEditText } from "../../lib/numeric-ptbr";
+import {
+  CASAS_QUANTIDADE,
+  OPCOES_PERCENTUAL_TECNICO,
+  OPCOES_QUANTIDADE,
+} from "../../lib/numeric-scales";
 import {
   activateFormulationVersion,
   getFormulationActivationImpact,
@@ -39,7 +47,7 @@ import { getItem, listItems } from "../../lib/items-api";
 import { listUnits } from "../../lib/units-api";
 import { unidadesDaDimensao } from "../../lib/uom-options";
 import { ApiValidationError } from "../../lib/api-errors";
-import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
+import { decimalLegivel, exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
 import { getFormulationCostEstimate } from "../../lib/costs-api";
 import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
@@ -221,6 +229,46 @@ function rascunhoDoDTO(dto: FormulationVersionDTO) {
   };
 }
 
+/**
+ * O rascunho com os decimais em forma canônica, para comparar: `1000.50` e
+ * `1000.5` são o mesmo rascunho, e sair de um campo — que normaliza o texto —
+ * não é alteração pendente (PTBR-NUMERIC-INPUT-ROLLOUT-01).
+ */
+function rascunhoComparavel<
+  T extends {
+    basisQuantity: string;
+    components: { quantity: string; purityPercentApplied: string | null; overagePercent: string | null }[];
+  },
+>(rascunho: T): unknown {
+  return {
+    ...rascunho,
+    basisQuantity: decimalDaApiComparavel(rascunho.basisQuantity) ?? "",
+    components: rascunho.components.map((componente) => ({
+      ...componente,
+      quantity: decimalDaApiComparavel(componente.quantity) ?? "",
+      purityPercentApplied: decimalDaApiComparavel(componente.purityPercentApplied),
+      overagePercent: decimalDaApiComparavel(componente.overagePercent),
+    })),
+  };
+}
+
+const MENSAGEM_DOSES_INVALIDAS = "Doses por embalagem: informe um número inteiro maior que zero.";
+
+/**
+ * Doses por embalagem como vai ao servidor — FORMULATION-DOSES-INPUT-01.
+ *
+ * Era o texto cru, e a prévia lia com `Number()`: `1e2` aparecia como 100 e
+ * gravava 100. Agora é a leitura estrita de inteiro, a mesma do Projeto e do
+ * Orçamento. Vazio é `null`; o inteiro segue como texto, como sempre foi; zero
+ * segue para o servidor, que responde no campo.
+ */
+function dosesParaEnvio(texto: string): string | null {
+  const leitura = lerInteiroOpcional(texto);
+  if (leitura.tipo === "vazio") return null;
+  if (leitura.tipo === "invalido") throw new Error(MENSAGEM_DOSES_INVALIDAS);
+  return String(leitura.valor);
+}
+
 function rowFromDTO(component: FormulationVersionDTO["components"][number]): ComponentRow {
   return {
     key: nextRowKey(),
@@ -229,12 +277,13 @@ function rowFromDTO(component: FormulationVersionDTO["components"][number]): Com
     itemName: component.itemName,
     itemActive: component.itemActive,
     stockUnitCode: component.stockUnitCode,
-    quantity: component.quantity,
+    // Números no texto do campo, em português: é o que os campos editam.
+    quantity: toPtBrEditText(component.quantity, OPCOES_QUANTIDADE),
     unitCode: component.unitCode,
     basis: component.basis,
     supplyResponsibility: component.supplyResponsibility,
-    purityPercentApplied: component.purityPercentApplied ?? "",
-    overagePercent: component.overagePercent ?? "",
+    purityPercentApplied: toPtBrEditText(component.purityPercentApplied, OPCOES_PERCENTUAL_TECNICO),
+    overagePercent: toPtBrEditText(component.overagePercent, OPCOES_PERCENTUAL_TECNICO),
     quantityMode: component.quantityMode,
     applyPurityAdjustment: component.applyPurityAdjustment,
     applyOverageAdjustment: component.applyOverageAdjustment,
@@ -291,12 +340,13 @@ function errosDaLinha(row: ComponentRow): Partial<Record<CampoDoComponente, stri
   const nome = row.itemCode || row.itemName || "Componente";
   const erros: Partial<Record<CampoDoComponente, string>> = {};
 
-  if (row.quantity.trim() === "") {
+  const quantidade = parsePtBrNumber(row.quantity, OPCOES_QUANTIDADE);
+  if (quantidade.tipo === "vazio") {
     erros.quantity = `${nome} — Quantidade é obrigatória.`;
-  } else {
-    const quantidade = parseDecimalInput(row.quantity);
-    if (quantidade === null) erros.quantity = `${nome} — ${mensagemDecimalInvalido("Quantidade")}`;
-    else if (Number(quantidade) <= 0) erros.quantity = `${nome} — Quantidade deve ser maior que zero.`;
+  } else if (quantidade.tipo === "invalido") {
+    erros.quantity = `${nome} — ${numericInvalidMessage("Quantidade", quantidade.motivo, OPCOES_QUANTIDADE)}`;
+  } else if (/^[0.]+$/.test(quantidade.valor)) {
+    erros.quantity = `${nome} — Quantidade deve ser maior que zero.`;
   }
   if (!row.unitCode) erros.unitCode = `${nome} — Unidade é obrigatória.`;
 
@@ -334,7 +384,7 @@ function previaDoComponente(
   dosesPerPackage: number | null,
   units: UnitOfMeasureDTO[],
 ): { teorico: string; fisico: string } | null {
-  const quantidade = parseDecimalInput(row.quantity);
+  const quantidade = decimalLegivel(row.quantity, OPCOES_QUANTIDADE);
   if (quantidade === null) return null;
 
   const resultado = calcularQuantidadeDoComponente(
@@ -343,14 +393,14 @@ function previaDoComponente(
       quantity: quantidade,
       unitCode: row.unitCode,
       stockUnitCode: row.stockUnitCode,
-      purityPercent: parseDecimalInput(row.purityPercentApplied),
-      overagePercent: parseDecimalInput(row.overagePercent),
+      purityPercent: decimalLegivel(row.purityPercentApplied, OPCOES_PERCENTUAL_TECNICO),
+      overagePercent: decimalLegivel(row.overagePercent, OPCOES_PERCENTUAL_TECNICO),
       quantityMode: row.quantityMode,
       applyPurityAdjustment: row.applyPurityAdjustment,
       applyOverageAdjustment: row.applyOverageAdjustment,
     },
     1,
-    { basisQuantity: parseDecimalInput(basisQuantity) ?? "0", dosesPerPackage },
+    { basisQuantity: decimalLegivel(basisQuantity, OPCOES_QUANTIDADE) ?? "0", dosesPerPackage },
     units.map((u) => ({ code: u.code, dimension: u.dimension, toBaseFactor: u.toBaseFactor })),
   );
 
@@ -378,14 +428,14 @@ function operandosDoFisico(
   const teorico = row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS";
   const operandos: { valor: string; papel: string; operador?: string; numero?: number }[] = [
     {
-      valor: `${formatQuantity(row.quantity)} ${row.unitCode}`,
+      valor: `${formatQuantity(decimalLegivel(row.quantity, OPCOES_QUANTIDADE) ?? row.quantity)} ${row.unitCode}`,
       papel: teorico ? "quantidade teórica" : "quantidade informada",
-      numero: Number(parseDecimalInput(row.quantity)),
+      numero: Number(decimalLegivel(row.quantity, OPCOES_QUANTIDADE)),
     },
   ];
 
   if (row.basis === "FIXED_BASIS") {
-    const base = parseDecimalInput(basisQuantity);
+    const base = decimalLegivel(basisQuantity, OPCOES_QUANTIDADE);
     if (base !== null && Number(base) !== 0) {
       operandos.push({
         valor: formatQuantity(base),
@@ -415,7 +465,7 @@ function operandosDoFisico(
   }
 
   if (teorico && row.applyPurityAdjustment && row.purityPercentApplied) {
-    const pureza = Number(parseDecimalInput(row.purityPercentApplied));
+    const pureza = Number(decimalLegivel(row.purityPercentApplied, OPCOES_PERCENTUAL_TECNICO));
     if (pureza > 0) {
       operandos.push({
         valor: `${row.purityPercentApplied}%`,
@@ -426,7 +476,7 @@ function operandosDoFisico(
     }
   }
   if (teorico && row.applyOverageAdjustment && row.overagePercent) {
-    const overage = Number(parseDecimalInput(row.overagePercent));
+    const overage = Number(decimalLegivel(row.overagePercent, OPCOES_PERCENTUAL_TECNICO));
     if (overage >= 0) {
       operandos.push({
         valor: `(1 + ${row.overagePercent}%)`,
@@ -526,12 +576,12 @@ export function FormulationVersionPage() {
   const gravado = useRef<string>("");
 
   const syncFromServer = useCallback((dto: FormulationVersionDTO) => {
-    setBasisQuantity(dto.basisQuantity);
+    setBasisQuantity(toPtBrEditText(dto.basisQuantity, OPCOES_QUANTIDADE));
     setCalculationMode(dto.calculationMode);
     setDosesPerPackage(dto.dosesPerPackage === null ? "" : String(dto.dosesPerPackage));
     setNotes(dto.notes ?? "");
     setComponents(dto.components.map(rowFromDTO));
-    gravado.current = JSON.stringify(rascunhoDoDTO(dto));
+    gravado.current = JSON.stringify(rascunhoComparavel(rascunhoDoDTO(dto)));
   }, []);
 
   /**
@@ -738,7 +788,10 @@ export function FormulationVersionPage() {
    */
   const dosesObrigatorias =
     calculationMode === "PER_DOSE" || components.some((row) => row.basis === "PER_DOSE");
-  const dosesInformadas = Number(dosesPerPackage.trim()) > 0;
+  /* Leitura estrita, a mesma da gravação — nunca `Number()` (FORMULATION-DOSES-INPUT-01). */
+  const leituraDasDoses = lerInteiroOpcional(dosesPerPackage);
+  const dosesPorEmbalagem = leituraDasDoses.tipo === "valido" ? leituraDasDoses.valor : null;
+  const dosesInformadas = dosesPorEmbalagem !== null && dosesPorEmbalagem > 0;
   const mostrarDoses = dosesObrigatorias || dosesPerPackage.trim() !== "";
 
   /*
@@ -904,7 +957,7 @@ export function FormulationVersionPage() {
    * que ela vai dar.
    */
   function explicacaoDoFisico(linha: ComponentRow, alterado: boolean) {
-    const doses = dosesPerPackage.trim() === "" ? null : Number(dosesPerPackage);
+    const doses = dosesPorEmbalagem;
     const previa = isDraft ? previaDoComponente(linha, basisQuantity, doses, units) : null;
     const fisico = previa?.fisico ?? (alterado ? null : linha.physicalPerUnit);
     if (fisico === null) return null;
@@ -939,7 +992,7 @@ export function FormulationVersionPage() {
     // Rascunho com campo ilegível não serializa — e é alteração pendente por
     // definição: o que está na tela não é o que está gravado.
     try {
-      return JSON.stringify(montarRascunho()) !== gravado.current;
+      return JSON.stringify(rascunhoComparavel(montarRascunho())) !== gravado.current;
     } catch {
       return true;
     }
@@ -954,10 +1007,10 @@ export function FormulationVersionPage() {
    */
   function montarRascunho() {
     return {
-      basisQuantity: exigirDecimal(basisQuantity, "Base da formulação"),
+      basisQuantity: exigirDecimal(basisQuantity, "Base da formulação", OPCOES_QUANTIDADE),
       calculationMode,
-      // Doses por embalagem é inteiro: segue como está.
-      dosesPerPackage: dosesPerPackage.trim() || null,
+      // Doses por embalagem é inteiro: leitura estrita, e o inteiro segue como texto.
+      dosesPerPackage: dosesParaEnvio(dosesPerPackage),
       notes: notes.trim(),
       components: components
         .filter((row) => row.itemId)
@@ -974,13 +1027,21 @@ export function FormulationVersionPage() {
             row.itemCode ? `${campo} de ${row.itemCode}` : campo;
           return {
           itemId: row.itemId,
-          quantity: exigirDecimal(row.quantity, doItem("Quantidade")),
+          quantity: exigirDecimal(row.quantity, doItem("Quantidade"), OPCOES_QUANTIDADE),
           unitCode: row.unitCode,
           basis: row.basis,
           supplyResponsibility: row.supplyResponsibility,
           // Campo vazio = fator DESCONHECIDO (null), nunca 100%/0% implícito.
-          purityPercentApplied: exigirDecimalOpcional(row.purityPercentApplied, doItem("Pureza %")),
-          overagePercent: exigirDecimalOpcional(row.overagePercent, doItem("Overage %")),
+          purityPercentApplied: exigirDecimalOpcional(
+            row.purityPercentApplied,
+            doItem("Pureza %"),
+            OPCOES_PERCENTUAL_TECNICO,
+          ),
+          overagePercent: exigirDecimalOpcional(
+            row.overagePercent,
+            doItem("Overage %"),
+            OPCOES_PERCENTUAL_TECNICO,
+          ),
           /*
            * O modo VIAJA no payload, senão o seletor da linha é decorativo.
            *
@@ -1012,9 +1073,14 @@ export function FormulationVersionPage() {
     // A base só precisa ser legível para GRAVAR: base zero é recusada na
     // ativação, pelo servidor, com a mensagem dele no campo. Aqui se espelha
     // o que o servidor recusaria ao salvar — não se inventa regra nova.
-    if (basisQuantity.trim() === "") erros["basisQuantity"] = "Base da formulação é obrigatória.";
-    else if (parseDecimalInput(basisQuantity) === null) {
-      erros["basisQuantity"] = mensagemDecimalInvalido("Base da formulação");
+    const base = parsePtBrNumber(basisQuantity, OPCOES_QUANTIDADE);
+    if (base.tipo === "vazio") erros["basisQuantity"] = "Base da formulação é obrigatória.";
+    else if (base.tipo === "invalido") {
+      erros["basisQuantity"] = numericInvalidMessage("Base da formulação", base.motivo, OPCOES_QUANTIDADE);
+    }
+    // Doses ilegíveis não vão ao servidor como texto cru — nem viram zero.
+    if (lerInteiroOpcional(dosesPerPackage).tipo === "invalido") {
+      erros["dosesPerPackage"] = MENSAGEM_DOSES_INVALIDAS;
     }
 
     for (const row of components) {
@@ -1355,12 +1421,11 @@ export function FormulationVersionPage() {
               <Dica id="formulacao.base" />
             </label>
             {isDraft ? (
-              <input
+              <DecimalField
                 id="version-basis"
-                type="text"
-                inputMode="decimal"
+                scale={CASAS_QUANTIDADE}
                 value={basisQuantity}
-                onChange={(event) => setBasisQuantity(event.target.value)}
+                onChangeValue={setBasisQuantity}
                 /* Liga campo, `aria-invalid` e a mensagem, para leitor de tela também. */
                 {...(fieldErrors["basisQuantity"]
                   ? {
@@ -1424,12 +1489,10 @@ export function FormulationVersionPage() {
                 Doses por embalagem {dosesObrigatorias && <span className="req">*</span>}
               </label>
               {isDraft ? (
-                <input
+                <IntegerField
                   id="version-doses"
-                  type="text"
-                  inputMode="numeric"
                   value={dosesPerPackage}
-                  onChange={(event) => setDosesPerPackage(event.target.value)}
+                  onChangeValue={setDosesPerPackage}
                   /* Liga campo, `aria-invalid` e as mensagens, para leitor de tela também. */
                   {...(dosesErrorIds.length > 0
                     ? {
@@ -1501,12 +1564,7 @@ export function FormulationVersionPage() {
                     travessão — nunca zero.
                   */
                   const previa = isDraft
-                    ? previaDoComponente(
-                        row,
-                        basisQuantity,
-                        dosesPerPackage.trim() === "" ? null : Number(dosesPerPackage),
-                        units,
-                      )
+                    ? previaDoComponente(row, basisQuantity, dosesPorEmbalagem, units)
                     : null;
                   const aberto = ajustes.aberto(row.key);
                   const configuracao = ajustesDaLinha(row);
@@ -1631,18 +1689,17 @@ export function FormulationVersionPage() {
                       {isDraft ? (
                         <>
                           <div className="quantidade-unidade">
-                            <input
+                            <DecimalField
                               id={idDoCampo(row.key, "quantity")}
-                              type="text"
-                              inputMode="decimal"
+                              scale={CASAS_QUANTIDADE}
                               placeholder="0"
                               /* O campo vive numa celula de tabela e nao tem
                                  <label> proprio: sem isto o unico nome acessivel
                                  seria o placeholder "0", que nao diz nada. */
                               aria-label={`Quantidade de ${nomeDoItem}`}
                               value={row.quantity}
-                              onChange={(event) =>
-                                handleComponentFieldChange(row.key, "quantity", event.target.value)
+                              onChangeValue={(valor) =>
+                                handleComponentFieldChange(row.key, "quantity", valor)
                               }
                               {...marcaDeErro("quantity")}
                             />

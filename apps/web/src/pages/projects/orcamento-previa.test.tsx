@@ -291,7 +291,7 @@ describe("#8H — orçamento em edição mostra o total do que está na tela", (
     cleanup();
     abrir([versao()]);
     expect((screen.getByLabelText("Quantidade de PROD-000001") as HTMLInputElement).value).toBe(
-      "1000",
+      "1.000",
     );
     expect(rodape()).toContain("R$ 12.500,00");
     expect(rodape()).not.toContain("Total salvo");
@@ -398,7 +398,8 @@ describe("#8H — orçamento em edição mostra o total do que está na tela", (
   it("N. valor ilegível não produz total falso e é dito", () => {
     abrir([versao()]);
     fireEvent.change(screen.getByLabelText("Quantidade de PROD-000001"), {
-      target: { value: "1.2.3" },
+      // `1.2.3` nem entra no campo; `1.234` entra e é ambíguo.
+      target: { value: "1.234" },
     });
     expect(rodape()).toContain("Existe valor que não dá para ler");
     // A prévia fica sem número; o gravado segue à vista, com o próprio nome.

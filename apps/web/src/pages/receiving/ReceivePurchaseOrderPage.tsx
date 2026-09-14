@@ -14,7 +14,14 @@ import { getItem } from "../../lib/items-api";
 import { createReceipt } from "../../lib/receiving-api";
 import { diaDoRecebimentoPadrao, instanteDoRecebimento } from "../../lib/receipt-instant";
 import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
-import { mensagemDecimalInvalido } from "../../lib/decimal-input";
+import { numericInvalidMessage, toPtBrEditText } from "../../lib/numeric-ptbr";
+import {
+  CASAS_CUSTO_UNITARIO,
+  CASAS_QUANTIDADE,
+  OPCOES_CUSTO_UNITARIO,
+  OPCOES_QUANTIDADE,
+} from "../../lib/numeric-scales";
+import { DecimalField, MoneyField } from "../../components/NumericField";
 import { resolverQuantidadeContraLimite } from "../../lib/quantity-limit";
 import { exigirDecimalOpcional } from "../../lib/decimal-field";
 import { formatUnitPriceBRL } from "../../lib/currency";
@@ -93,7 +100,10 @@ function validarQuantidadeRecebida(
 
   if (resolvido.status === "vazio") return { estado: "vazio" };
   if (resolvido.status === "ilegivel") {
-    return { estado: "erro", mensagem: mensagemDecimalInvalido("Receber agora") };
+    return {
+      estado: "erro",
+      mensagem: numericInvalidMessage("Receber agora", resolvido.motivo, OPCOES_QUANTIDADE),
+    };
   }
   if (resolvido.status === "acima") {
     return {
@@ -305,6 +315,7 @@ export function ReceivePurchaseOrderPage() {
           const custo = exigirDecimalOpcional(
             line.actualUnitCost,
             `Custo efetivo de aquisição de ${line.itemCode}`,
+            OPCOES_CUSTO_UNITARIO,
           );
           const quantidade = validacoes.get(line.purchaseOrderLineId);
           if (quantidade?.estado !== "ok") {
@@ -502,14 +513,13 @@ export function ReceivePurchaseOrderPage() {
                   <label htmlFor={`receive-now-${line.purchaseOrderLineId}`}>
                     Receber agora ({line.unitCode})
                   </label>
-                  <input
+                  <DecimalField
                     id={`receive-now-${line.purchaseOrderLineId}`}
-                    type="text"
-                    inputMode="decimal"
+                    scale={CASAS_QUANTIDADE}
                     placeholder="0"
                     value={line.receiveNow}
-                    onChange={(event) =>
-                      handleLineChange(line.purchaseOrderLineId, "receiveNow", event.target.value)
+                    onChangeValue={(valor) =>
+                      handleLineChange(line.purchaseOrderLineId, "receiveNow", valor)
                     }
                     /* Liga campo, `aria-invalid` e a mensagem, para leitor de tela também. */
                     {...(erroDaQuantidade
@@ -568,14 +578,13 @@ export function ReceivePurchaseOrderPage() {
                     Custo efetivo de aquisição ({line.unitCode})
                     <DicaDoCampo id="compras.custoEfetivo" />
                   </label>
-                  <input
+                  <MoneyField
                     id={`cost-${line.purchaseOrderLineId}`}
-                    type="text"
-                    inputMode="decimal"
+                    scale={CASAS_CUSTO_UNITARIO}
                     placeholder="Opcional"
                     value={line.actualUnitCost}
-                    onChange={(event) =>
-                      handleLineChange(line.purchaseOrderLineId, "actualUnitCost", event.target.value)
+                    onChangeValue={(valor) =>
+                      handleLineChange(line.purchaseOrderLineId, "actualUnitCost", valor)
                     }
                   />
                   <p className="field__hint">
@@ -593,7 +602,8 @@ export function ReceivePurchaseOrderPage() {
                         handleLineChange(
                           line.purchaseOrderLineId,
                           "actualUnitCost",
-                          line.purchaseUnitPrice!,
+                          // O preço da OC no texto do campo, em português.
+                          toPtBrEditText(line.purchaseUnitPrice, OPCOES_CUSTO_UNITARIO),
                         )
                       }
                     >

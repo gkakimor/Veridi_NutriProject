@@ -354,10 +354,15 @@ describe("Roteiro de Produção — rascunho", () => {
     ).toBeInTheDocument();
   });
 
-  it("quantidade necessária fracionária é recusada na tela, antes do servidor", async () => {
+  it("quantidade necessária fracionária nem entra no campo; zero é recusado na tela, antes do servidor", async () => {
     await abrirDetalhe(perfil({ draftVersion: versao({ steps: [passo({ resources: [operadores(2)] })] }) }));
+    const campo = screen.getByLabelText("Quantidade necessária");
 
-    fireEvent.change(screen.getByLabelText("Quantidade necessária"), { target: { value: "1,5" } });
+    // IntegerField (PTBR-NUMERIC-INPUT-ROLLOUT-01): a vírgula não entra, e o 2 fica.
+    fireEvent.change(campo, { target: { value: "1,5" } });
+    expect(campo).toHaveValue("2");
+
+    fireEvent.change(campo, { target: { value: "0" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar rascunho" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/quantidade necessária/);

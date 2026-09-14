@@ -41,6 +41,14 @@ import { RowActions } from "../../components/RowActions";
 import { useAuth } from "../../app/AuthProvider";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
+import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import {
+  CASAS_QUANTIDADE,
+  CASAS_VALOR_INDUSTRIAL,
+  OPCOES_QUANTIDADE,
+  OPCOES_VALOR_INDUSTRIAL,
+} from "../../lib/numeric-scales";
+import { DecimalField, MoneyField, PercentField } from "../../components/NumericField";
 import { decimalComparavel, textoComparavel } from "../../lib/dirty-fields";
 import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import {
@@ -91,13 +99,16 @@ const ATIVOS_SEM_ENERGIA: RecorteDeRecursos = {
  * Rascunho primeiro, vigente depois, sugestão por último — a sugestão é do
  * sistema, não digitação de ninguém, e por isso o campo já nascer preenchido
  * com ela não é alteração pendente.
+ *
+ * Já no texto do campo, em português: é o que o campo recebe na carga e o que
+ * a pendência compara com o que está nele.
  */
 function baseDoServidor(dados: ProductIndustrialCostResponse): string {
-  return (
+  return toPtBrEditText(
     dados.draft?.referenceOutputQuantity ??
-    dados.current?.referenceOutputQuantity ??
-    dados.suggestedReferenceOutputQuantity ??
-    ""
+      dados.current?.referenceOutputQuantity ??
+      dados.suggestedReferenceOutputQuantity,
+    OPCOES_QUANTIDADE,
   );
 }
 
@@ -529,15 +540,18 @@ export function IndustrialCostPage() {
                 <span aria-hidden="true">*</span>
                 <span className="sr-only">(obrigatório)</span>
               </label>
-              <input
+              <DecimalField
                 id="new-reference-output"
-                type="text"
-                inputMode="decimal"
+                scale={CASAS_QUANTIDADE}
                 required
                 aria-describedby="new-reference-output-hint"
-                placeholder={data.suggestedReferenceOutputQuantity ?? "ex.: 1000"}
+                placeholder={
+                  data.suggestedReferenceOutputQuantity
+                    ? toPtBrEditText(data.suggestedReferenceOutputQuantity, OPCOES_QUANTIDADE)
+                    : "ex.: 1000"
+                }
                 value={referenceQuantity}
-                onChange={(event) => setReferenceQuantity(event.target.value)}
+                onChangeValue={setReferenceQuantity}
               />
               <p id="new-reference-output-hint" className="field__hint">
                 Usada por “Criar estrutura de custos”. Ao usar um template, a base vem do próprio
@@ -567,7 +581,11 @@ export function IndustrialCostPage() {
                 // confirmação, quem só queria olhar saía com uma V2 no banco.
                 if (data.versions.length === 0) {
                   void run(() => {
-                    const base = exigirDecimalOpcional(referenceQuantity, "Base de produção");
+                    const base = exigirDecimalOpcional(
+                      referenceQuantity,
+                      "Base de produção",
+                      OPCOES_QUANTIDADE,
+                    );
                     return createIndustrialCostVersion(
                       productId,
                       base ? { referenceOutputQuantity: base } : {},
@@ -730,12 +748,11 @@ export function IndustrialCostPage() {
                       <label htmlFor="reference-output">
                         Base de produção ({version.referenceOutputUomCode})
                       </label>
-                      <input
+                      <DecimalField
                         id="reference-output"
-                        type="text"
-                        inputMode="decimal"
+                        scale={CASAS_QUANTIDADE}
                         value={referenceQuantity}
-                        onChange={(event) => setReferenceQuantity(event.target.value)}
+                        onChangeValue={setReferenceQuantity}
                       />
                       <span className="field__hint">
                         Quantidade de produto acabado usada para estruturar o custo.
@@ -758,6 +775,7 @@ export function IndustrialCostPage() {
                                 referenceOutputQuantity: exigirDecimal(
                                   referenceQuantity,
                                   "Base de produção",
+                                  OPCOES_QUANTIDADE,
                                 ),
                               }),
                             { acao: "base", sucesso: "Base salva." },
@@ -994,14 +1012,24 @@ export function IndustrialCostPage() {
 
                     <div className="field">
                       <label htmlFor="cost-rate">Valor</label>
-                      <input
-                        id="cost-rate"
-                        type="text"
-                        inputMode="decimal"
-                        value={rateValue}
-                        onChange={(event) => setRateValue(event.target.value)}
-                        placeholder="Deixe vazio se ainda não souber"
-                      />
+                      {/* Percentual em pontos (10 = 10%), sem conversão; os outros modos são R$. */}
+                      {basis === "PERCENT_OF_DIRECT_INDUSTRIAL_COST" ? (
+                        <PercentField
+                          id="cost-rate"
+                          scale={CASAS_VALOR_INDUSTRIAL}
+                          value={rateValue}
+                          onChangeValue={setRateValue}
+                          placeholder="Deixe vazio se ainda não souber"
+                        />
+                      ) : (
+                        <MoneyField
+                          id="cost-rate"
+                          scale={CASAS_VALOR_INDUSTRIAL}
+                          value={rateValue}
+                          onChangeValue={setRateValue}
+                          placeholder="Deixe vazio se ainda não souber"
+                        />
+                      )}
                       <span className="field__hint">
                         Percentual é informado como número (10 = 10%). Vazio significa não
                         informado — nunca zero.
@@ -1017,7 +1045,11 @@ export function IndustrialCostPage() {
                       onClick={() =>
                         void run(async () => {
                           // Vazio segue sendo "não informado" — nunca zero.
-                          const valor = exigirDecimalOpcional(rateValue, "Valor");
+                          const valor = exigirDecimalOpcional(
+                            rateValue,
+                            "Valor",
+                            OPCOES_VALOR_INDUSTRIAL,
+                          );
                           await createIndustrialCostLine(version.id, {
                             category,
                             description: description.trim(),
@@ -1164,12 +1196,11 @@ export function IndustrialCostPage() {
                           ? ` (${INDUSTRIAL_RATE_UOM_LABELS[selectedResource.defaultUsageUom]})`
                           : ""}
                       </label>
-                      <input
+                      <DecimalField
                         id="usage-quantity"
-                        type="text"
-                        inputMode="decimal"
+                        scale={CASAS_QUANTIDADE}
                         value={usageQuantity}
-                        onChange={(event) => setUsageQuantity(event.target.value)}
+                        onChangeValue={setUsageQuantity}
                       />
                       <span className="field__hint">
                         {contaRecursos
@@ -1193,6 +1224,7 @@ export function IndustrialCostPage() {
                             usageQuantity: exigirDecimal(
                               usageQuantity,
                               contaRecursos ? "Tempo por recurso" : "Consumo por lote de referência",
+                              OPCOES_QUANTIDADE,
                             ),
                             // Energia não envia quantidade: para ela o domínio usa 1 (§87).
                             ...(contaRecursos
@@ -1376,14 +1408,14 @@ export function IndustrialCostPage() {
           onConfirm={() => {
             setNewVersionConfirm(false);
             setLendoAtiva(false);
-            void run(() =>
-              createIndustrialCostVersion(
+            void run(() => {
+              // Lida antes da requisição, como em "Criar estrutura de custos".
+              const base = exigirDecimalOpcional(referenceQuantity, "Base de produção", OPCOES_QUANTIDADE);
+              return createIndustrialCostVersion(
                 productId,
-                referenceQuantity.trim()
-                  ? { referenceOutputQuantity: referenceQuantity.trim() }
-                  : {},
-              ),
-            );
+                base ? { referenceOutputQuantity: base } : {},
+              );
+            });
           }}
         />
 

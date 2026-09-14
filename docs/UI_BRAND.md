@@ -498,9 +498,25 @@ esquerda e máscara próprios: CPF, CNPJ, CEP, telefone, código de produto ou
 de documento, lote, identificador. Regra prática: se não faz sentido somar,
 não é campo numérico.
 
-As telas de hoje ainda leem com `parseDecimalInput`/`exigirDecimal` (sem
-milhar) e três usam `type="number"`: migram em PTBR-NUMERIC-INPUT-ROLLOUT-01
-(BACKLOG).
+**Nas telas** (PTBR-NUMERIC-INPUT-ROLLOUT-01). Todo campo de número real do
+produto é um dos quatro — nenhum `<input>` cru com teclado numérico, nenhum
+`type="number"`, nenhuma leitura à mão; `campo-numerico-guarda.test.ts` proíbe,
+com allowlist justificada (o CEP é `inputMode="numeric"` e é identificador).
+
+- **`scale` pela coluna**: `lib/numeric-scales.ts` — quantidade 12, custo e
+  preço técnico 8, preço comercial 4, percentual técnico 6, percentual
+  comercial e de precificação 4, tarifa/potência/total do modelo 4. Número
+  solto na tela, não.
+- **Carga**: valor da API entra por `toPtBrEditText` com o mesmo `scale` —
+  nunca cru no campo (`1.234` da API é decimal; no campo seria ambíguo).
+- **Borda**: `exigirDecimal`/`exigirDecimalOpcional` (com `scale`),
+  `decimalLegivel` para prévia e `erroDoDecimal` para a mensagem; inteiro por
+  `lerInteiroOpcional`. O que vai à API é o canônico, com as casas da coluna.
+- **Pendência**: pelo valor — `decimalComparavel` para o texto do campo,
+  `decimalDaApiComparavel` para o que veio da API. Sair do campo normaliza o
+  texto e não pode virar alteração.
+- **Gravar ao sair do campo** lê o texto guardado, não `event.target.value`:
+  fora do foco o campo mostra o formatado (`2.000`).
 
 ---
 

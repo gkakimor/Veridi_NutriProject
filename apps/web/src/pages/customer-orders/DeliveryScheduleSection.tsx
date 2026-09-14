@@ -19,7 +19,9 @@ import {
   prepareShipmentForDelivery,
   rescheduleDelivery,
 } from "../../lib/delivery-schedule-api";
-import { parseDecimalInput } from "../../lib/decimal-input";
+import { decimalLegivel } from "../../lib/decimal-field";
+import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
+import { DecimalField } from "../../components/NumericField";
 import { formatQuantity } from "../../lib/quantity";
 
 /**
@@ -374,7 +376,7 @@ function NewDeliveryForm({
     for (const linha of schedulable) {
       const digitado = quantities[linha.customerOrderLineId];
       if (!digitado) continue;
-      const valor = parseDecimalInput(digitado);
+      const valor = decimalLegivel(digitado, OPCOES_QUANTIDADE);
       if (valor === null) continue;
       if (new Decimal(valor).greaterThan(linha.schedulableQuantity)) {
         achados.push(
@@ -385,15 +387,16 @@ function NewDeliveryForm({
     return achados;
   }, [quantities, schedulable]);
 
+  // A quantidade vai canônica: `1.234,5` na tela é `1234.5` no envio.
   const linhasPreenchidas = schedulable
     .map((linha) => ({
       customerOrderLineId: linha.customerOrderLineId,
-      quantity: quantities[linha.customerOrderLineId] ?? "",
+      quantity: decimalLegivel(quantities[linha.customerOrderLineId] ?? "", OPCOES_QUANTIDADE),
     }))
-    .filter((linha) => {
-      const valor = parseDecimalInput(linha.quantity);
-      return valor !== null && new Decimal(valor).greaterThan(0);
-    });
+    .filter(
+      (linha): linha is { customerOrderLineId: string; quantity: string } =>
+        linha.quantity !== null && new Decimal(linha.quantity).greaterThan(0),
+    );
 
   const podeSalvar =
     scheduledDate !== "" && linhasPreenchidas.length > 0 && excessos.length === 0 && !saving;
@@ -447,16 +450,15 @@ function NewDeliveryForm({
                 <td className="is-numeric">{formatQuantity(linha.scheduledPendingQuantity)}</td>
                 <td className="is-numeric">{formatQuantity(linha.schedulableQuantity)}</td>
                 <td className="is-numeric">
-                  <input
-                    type="text"
-                    inputMode="decimal"
+                  <DecimalField
+                    scale={CASAS_QUANTIDADE}
                     aria-label={`Programar ${linha.productCode}`}
                     value={quantities[linha.customerOrderLineId] ?? ""}
                     disabled={Number(linha.schedulableQuantity) <= 0}
-                    onChange={(event) =>
+                    onChangeValue={(valor) =>
                       setQuantities((atual) => ({
                         ...atual,
-                        [linha.customerOrderLineId]: event.target.value,
+                        [linha.customerOrderLineId]: valor,
                       }))
                     }
                   />

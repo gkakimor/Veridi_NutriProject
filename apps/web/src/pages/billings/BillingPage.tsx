@@ -14,8 +14,10 @@ import { cancelBilling, getBilling, issueBilling, updateBilling } from "../../li
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { CalcHint } from "../../components/help/CalcHint";
 import { InfoHint } from "../../components/help/InfoHint";
-import { exigirDecimalOpcional } from "../../lib/decimal-field";
-import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
+import { decimalLegivel, erroDoDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
+import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import { CASAS_PRECO_COMERCIAL, OPCOES_PRECO_COMERCIAL } from "../../lib/numeric-scales";
+import { MoneyField } from "../../components/NumericField";
 import { FormSection } from "../../components/FormSection";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
@@ -91,7 +93,8 @@ export function BillingPage() {
     setNotes(next.notes ?? "");
     const nextPrices: Record<string, string> = {};
     for (const line of next.lines) {
-      nextPrices[line.id] = line.unitPrice ?? "";
+      // O preço gravado no texto do campo, em português.
+      nextPrices[line.id] = toPtBrEditText(line.unitPrice, OPCOES_PRECO_COMERCIAL);
     }
     setPrices(nextPrices);
     baseline.current = null;
@@ -142,7 +145,8 @@ export function BillingPage() {
           billingLineId: line.id,
           // Vazio continua sendo "sem preço" — faturamento quantitativo é
           // legítimo. Só o que foi digitado precisa ser legível.
-          unitPrice: exigirDecimalOpcional(prices[line.id] ?? "", "Preço faturado") ?? "",
+          unitPrice:
+            exigirDecimalOpcional(prices[line.id] ?? "", "Preço faturado", OPCOES_PRECO_COMERCIAL) ?? "",
         })),
     };
   }
@@ -244,7 +248,7 @@ export function BillingPage() {
       quantity: line.quantity,
       unitPrice:
         isDraft && !line.agreedUnitPrice
-          ? parseDecimalInput(prices[line.id] ?? "")
+          ? decimalLegivel(prices[line.id] ?? "", OPCOES_PRECO_COMERCIAL)
           : line.unitPrice,
     })),
   );
@@ -286,10 +290,13 @@ export function BillingPage() {
    * prévia sumia sem dizer por quê, e emitir congelava o documento com o
    * texto cru. Agora a tela nomeia o problema antes de emitir.
    */
-  const linhasComPrecoIlegivel = billing.lines.filter((line) => {
-    const digitado = (prices[line.id] ?? "").trim();
-    return digitado !== "" && parseDecimalInput(digitado) === null;
-  });
+  const linhasComPrecoIlegivel = billing.lines.filter(
+    (line) => erroDoDecimal("Preço faturado", prices[line.id] ?? "", OPCOES_PRECO_COMERCIAL) !== null,
+  );
+  const primeiroPrecoIlegivel = linhasComPrecoIlegivel[0];
+  const erroDoPrecoIlegivel = primeiroPrecoIlegivel
+    ? erroDoDecimal("Preço faturado", prices[primeiroPrecoIlegivel.id] ?? "", OPCOES_PRECO_COMERCIAL)
+    : null;
 
   return (
     <>
@@ -464,31 +471,29 @@ export function BillingPage() {
                           </div>
                         ) : isDraft ? (
                           (() => {
-                            const digitado = (prices[line.id] ?? "").trim();
-                            const ilegivel =
-                              digitado !== "" && parseDecimalInput(digitado) === null;
+                            const erroDoPreco = erroDoDecimal(
+                              "Preço faturado",
+                              prices[line.id] ?? "",
+                              OPCOES_PRECO_COMERCIAL,
+                            );
+                            const ilegivel = erroDoPreco !== null;
                             return (
                               <>
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
+                                <MoneyField
+                                  scale={CASAS_PRECO_COMERCIAL}
                                   placeholder="Opcional"
                                   aria-label={`Preço faturado de ${line.productCode}`}
                                   aria-invalid={ilegivel || undefined}
                                   className={ilegivel ? "is-invalid" : undefined}
                                   value={prices[line.id] ?? ""}
-                                  onChange={(event) =>
+                                  onChangeValue={(valor) =>
                                     setPrices((prev) => ({
                                       ...prev,
-                                      [line.id]: event.target.value,
+                                      [line.id]: valor,
                                     }))
                                   }
                                 />
-                                {ilegivel && (
-                                  <p className="field__error">
-                                    {mensagemDecimalInvalido("Preço faturado")}
-                                  </p>
-                                )}
+                                {erroDoPreco && <p className="field__error">{erroDoPreco}</p>}
                               </>
                             );
                           })()
@@ -670,9 +675,7 @@ export function BillingPage() {
                 disabled={saving || linhasComPrecoIlegivel.length > 0}
                 onClick={() => setIssueDialogOpen(true)}
                 title={
-                  linhasComPrecoIlegivel.length > 0
-                    ? mensagemDecimalInvalido("Preço faturado")
-                    : undefined
+                  erroDoPrecoIlegivel ?? undefined
                 }
               >
                 {acaoEmCurso === "emitir" ? "Emitindo…" : "Emitir faturamento"}

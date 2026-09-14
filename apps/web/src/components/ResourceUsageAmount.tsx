@@ -2,6 +2,7 @@ import type { IndustrialRateUom, IndustrialResourceType } from "@veridi/shared";
 import { INDUSTRIAL_RATE_UOM_LABELS, acceptsResourceCount } from "@veridi/shared";
 import { lerInteiroOpcional, mensagemInteiroInvalido } from "../lib/integer-input";
 import { formatQuantity } from "../lib/quantity";
+import { IntegerField } from "./NumericField";
 
 /**
  * Quantidade de recursos equivalentes (§87) — como a tela lê e escreve.
@@ -87,14 +88,12 @@ export function ResourceCountField(props: {
   return (
     <div className="field">
       <label htmlFor={props.id}>{RESOURCE_COUNT_LABEL}</label>
-      <input
+      <IntegerField
         id={props.id}
-        type="text"
-        inputMode="numeric"
         aria-describedby={`${props.id}-dica`}
         value={props.value}
         disabled={props.disabled}
-        onChange={(event) => props.onChange(event.target.value)}
+        onChangeValue={props.onChange}
       />
       <span id={`${props.id}-dica`} className="field__hint">
         {dica}

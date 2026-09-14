@@ -150,7 +150,7 @@ async function abrirEstrutura() {
       </Routes>
     </MemoryRouter>,
   );
-  await waitFor(() => expect(screen.getByLabelText("Base de produção")).toHaveValue("1000"));
+  await waitFor(() => expect(screen.getByLabelText("Base de produção")).toHaveValue("1.000"));
   return container;
 }
 

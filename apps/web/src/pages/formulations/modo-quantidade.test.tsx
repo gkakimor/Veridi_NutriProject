@@ -343,7 +343,7 @@ describe("Erro de decimal aponta a linha", () => {
 
     await user.click(screen.getByRole("button", { name: /Calculada/ }));
     const pureza = screen.getByRole("textbox", { name: /Pureza/ });
-    fireEvent.change(pureza, { target: { value: "abc" } });
+    fireEvent.change(pureza, { target: { value: "1.234" } });
     await user.click(screen.getByRole("button", { name: /Salvar rascunho/i }));
 
     /*
