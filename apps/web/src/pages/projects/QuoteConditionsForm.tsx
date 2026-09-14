@@ -7,6 +7,7 @@ import type {
 } from "@veridi/shared";
 import { LIMITES_INTEIROS_DAS_CONDICOES, QUOTE_PAYMENT_METHOD_LABELS } from "@veridi/shared";
 import { formatBRL } from "../../lib/currency";
+import { formatDate } from "../../lib/dates";
 import { emDias } from "../../lib/duration";
 import { formatPercent } from "../../lib/percent";
 import { previewQuotePaymentSchedule } from "../../lib/projects-api";
@@ -271,122 +272,117 @@ export function QuoteConditionsForm({
 
   return (
     <div className="quote-conditions">
-      <div className="quote-workspace__conditions">
-        <div className="field field--narrow">
-          <label htmlFor="quote-valid-until">Validade da proposta</label>
-          <input
-            id="quote-valid-until"
-            type="date"
-            disabled={!editable}
-            value={campos.validUntil}
-            onChange={(event) => set("validUntil", event.target.value)}
-          />
-        </div>
-        <div className="field field--narrow">
-          <label htmlFor="quote-lead-time">Prazo de entrega (dias)</label>
-          <IntegerField
-            id="quote-lead-time"
-            disabled={!editable}
-            value={campos.leadTimeDays}
-            onChangeValue={(valor) => set("leadTimeDays", valor)}
-            {...ariaDoInteiro("leadTimeDays")}
-          />
-          {avisoDoInteiro("leadTimeDays")}
-        </div>
-        <div className="field field--narrow">
-          <label htmlFor="quote-discount">Desconto (%)</label>
-          <PercentField
-            id="quote-discount"
-            scale={CASAS_PERCENTUAL}
-            disabled={!editable}
-            value={campos.discountPercent}
-            onChangeValue={(valor) => set("discountPercent", valor)}
-            {...ariaDoPercentual("discountPercent")}
-          />
-          {avisoDoPercentual("discountPercent")}
-          <p className="field__hint">Sobre o subtotal das linhas.</p>
-        </div>
-        <div className="field field--narrow">
-          <label htmlFor="quote-payment-method">Forma de pagamento</label>
-          <select
-            id="quote-payment-method"
-            disabled={!editable}
-            value={campos.paymentMethod}
-            onChange={(event) => set("paymentMethod", event.target.value as QuotePaymentMethod)}
-          >
-            {(Object.keys(QUOTE_PAYMENT_METHOD_LABELS) as QuotePaymentMethod[]).map((method) => (
-              <option key={method} value={method}>
-                {QUOTE_PAYMENT_METHOD_LABELS[method]}
-              </option>
-            ))}
-          </select>
-        </div>
+      {editable ? (
+        <div className="quote-workspace__conditions">
+          <div className="field field--narrow">
+            <label htmlFor="quote-valid-until">Validade da proposta</label>
+            <input
+              id="quote-valid-until"
+              type="date"
+              value={campos.validUntil}
+              onChange={(event) => set("validUntil", event.target.value)}
+            />
+          </div>
+          <div className="field field--narrow">
+            <label htmlFor="quote-lead-time">Prazo de entrega (dias)</label>
+            <IntegerField
+              id="quote-lead-time"
+              value={campos.leadTimeDays}
+              onChangeValue={(valor) => set("leadTimeDays", valor)}
+              {...ariaDoInteiro("leadTimeDays")}
+            />
+            {avisoDoInteiro("leadTimeDays")}
+          </div>
+          <div className="field field--narrow">
+            <label htmlFor="quote-discount">Desconto (%)</label>
+            <PercentField
+              id="quote-discount"
+              scale={CASAS_PERCENTUAL}
+              value={campos.discountPercent}
+              onChangeValue={(valor) => set("discountPercent", valor)}
+              {...ariaDoPercentual("discountPercent")}
+            />
+            {avisoDoPercentual("discountPercent")}
+            <p className="field__hint">Sobre o subtotal das linhas.</p>
+          </div>
+          <div className="field field--narrow">
+            <label htmlFor="quote-payment-method">Forma de pagamento</label>
+            <select
+              id="quote-payment-method"
+              value={campos.paymentMethod}
+              onChange={(event) => set("paymentMethod", event.target.value as QuotePaymentMethod)}
+            >
+              {(Object.keys(QUOTE_PAYMENT_METHOD_LABELS) as QuotePaymentMethod[]).map((method) => (
+                <option key={method} value={method}>
+                  {QUOTE_PAYMENT_METHOD_LABELS[method]}
+                </option>
+              ))}
+            </select>
+          </div>
 
-        {parcelado && (
-          <>
-            <div className="field field--narrow">
-              <label htmlFor="quote-down-payment">Entrada (%)</label>
-              <PercentField
-                id="quote-down-payment"
-                scale={CASAS_PERCENTUAL}
-                disabled={!editable}
-                value={campos.downPaymentPercent}
-                onChangeValue={(valor) => set("downPaymentPercent", valor)}
-                {...ariaDoPercentual("downPaymentPercent")}
-              />
-              {avisoDoPercentual("downPaymentPercent")}
-              <p className="field__hint">Vazio = sem entrada.</p>
-            </div>
-            <div className="field field--narrow">
-              <label htmlFor="quote-installments">Parcelas</label>
-              <IntegerField
-                id="quote-installments"
-                disabled={!editable}
-                value={campos.installmentCount}
-                onChangeValue={(valor) => set("installmentCount", valor)}
-                {...ariaDoInteiro("installmentCount")}
-              />
-              {avisoDoInteiro("installmentCount")}
-            </div>
-            <div className="field field--narrow">
-              <label htmlFor="quote-interval">Intervalo (dias)</label>
-              <IntegerField
-                id="quote-interval"
-                disabled={!editable}
-                value={campos.installmentIntervalDays}
-                onChangeValue={(valor) => set("installmentIntervalDays", valor)}
-                {...ariaDoInteiro("installmentIntervalDays")}
-              />
-              {avisoDoInteiro("installmentIntervalDays")}
-              <p className="field__hint">Vazio = 30 dias.</p>
-            </div>
-            <div className="field field--narrow">
-              <label htmlFor="quote-interest">Juros ao mês (%)</label>
-              <PercentField
-                id="quote-interest"
-                scale={CASAS_PERCENTUAL}
-                disabled={!editable}
-                value={campos.monthlyInterestPercent}
-                onChangeValue={(valor) => set("monthlyInterestPercent", valor)}
-                {...ariaDoPercentual("monthlyInterestPercent")}
-              />
-              {avisoDoPercentual("monthlyInterestPercent")}
-              <p className="field__hint">Vazio ou 0 = sem juros.</p>
-            </div>
-          </>
-        )}
+          {parcelado && (
+            <>
+              <div className="field field--narrow">
+                <label htmlFor="quote-down-payment">Entrada (%)</label>
+                <PercentField
+                  id="quote-down-payment"
+                  scale={CASAS_PERCENTUAL}
+                  value={campos.downPaymentPercent}
+                  onChangeValue={(valor) => set("downPaymentPercent", valor)}
+                  {...ariaDoPercentual("downPaymentPercent")}
+                />
+                {avisoDoPercentual("downPaymentPercent")}
+                <p className="field__hint">Vazio = sem entrada.</p>
+              </div>
+              <div className="field field--narrow">
+                <label htmlFor="quote-installments">Parcelas</label>
+                <IntegerField
+                  id="quote-installments"
+                  value={campos.installmentCount}
+                  onChangeValue={(valor) => set("installmentCount", valor)}
+                  {...ariaDoInteiro("installmentCount")}
+                />
+                {avisoDoInteiro("installmentCount")}
+              </div>
+              <div className="field field--narrow">
+                <label htmlFor="quote-interval">Intervalo (dias)</label>
+                <IntegerField
+                  id="quote-interval"
+                  value={campos.installmentIntervalDays}
+                  onChangeValue={(valor) => set("installmentIntervalDays", valor)}
+                  {...ariaDoInteiro("installmentIntervalDays")}
+                />
+                {avisoDoInteiro("installmentIntervalDays")}
+                <p className="field__hint">Vazio = 30 dias.</p>
+              </div>
+              <div className="field field--narrow">
+                <label htmlFor="quote-interest">Juros ao mês (%)</label>
+                <PercentField
+                  id="quote-interest"
+                  scale={CASAS_PERCENTUAL}
+                  value={campos.monthlyInterestPercent}
+                  onChangeValue={(valor) => set("monthlyInterestPercent", valor)}
+                  {...ariaDoPercentual("monthlyInterestPercent")}
+                />
+                {avisoDoPercentual("monthlyInterestPercent")}
+                <p className="field__hint">Vazio ou 0 = sem juros.</p>
+              </div>
+            </>
+          )}
 
-        <div className="field">
-          <label htmlFor="quote-notes">Observações comerciais</label>
-          <textarea
-            id="quote-notes"
-            rows={2}
-            disabled={!editable}
-            value={campos.commercialNotes}
-            onChange={(event) => set("commercialNotes", event.target.value)}
-          />
+          <div className="field">
+            <label htmlFor="quote-notes">Observações comerciais</label>
+            <textarea
+              id="quote-notes"
+              rows={2}
+              value={campos.commercialNotes}
+              onChange={(event) => set("commercialNotes", event.target.value)}
+            />
+          </div>
         </div>
-      </div>
+      ) : (
+        <CondicoesGravadas quote={quote} />
+      )}
 
       {editable && (
         <div className="form-actions form-actions--split">
@@ -520,5 +516,49 @@ export function QuoteConditionsForm({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * As condições de uma versão que não se edita — enviada, aceita, recusada, ou
+ * aberta por quem não negocia.
+ *
+ * Leitura, não formulário desabilitado (QUOTE-WORKSPACE-NAVIGATION-01): campo
+ * cinza parece formulário esperando alguém, e esta versão não espera ninguém.
+ * Os valores são os GRAVADOS, escritos como o documento do cliente os escreve
+ * — prazo sem valor é "—", e à vista não há entrada, parcelas nem juros.
+ */
+function CondicoesGravadas({ quote }: { quote: QuoteVersionDTO }) {
+  const parcelado = quote.paymentMethod === "INSTALLMENTS";
+  return (
+    <dl className="definition-list quote-conditions__read">
+      <dt>Validade da proposta</dt>
+      <dd>{formatDate(quote.validUntil)}</dd>
+      <dt>Prazo de entrega</dt>
+      <dd>{quote.leadTimeDays ? emDias(quote.leadTimeDays) : "—"}</dd>
+      <dt>Desconto</dt>
+      <dd>{quote.discountPercent ? formatPercent(quote.discountPercent) : "—"}</dd>
+      <dt>Forma de pagamento</dt>
+      <dd>{QUOTE_PAYMENT_METHOD_LABELS[quote.paymentMethod]}</dd>
+      {parcelado && (
+        <>
+          <dt>Entrada</dt>
+          <dd>{quote.downPaymentPercent ? formatPercent(quote.downPaymentPercent) : "Sem entrada"}</dd>
+          {/* "Parcelas" é do plano logo abaixo, com valor e periodicidade. */}
+          <dt>Número de parcelas</dt>
+          <dd>{quote.installmentCount ?? "—"}</dd>
+          <dt>Intervalo</dt>
+          <dd>{emDias(quote.installmentIntervalDays ?? 30)}</dd>
+          <dt>Juros ao mês</dt>
+          <dd>
+            {quote.monthlyInterestPercent && Number(quote.monthlyInterestPercent) > 0
+              ? formatPercent(quote.monthlyInterestPercent)
+              : "Sem juros"}
+          </dd>
+        </>
+      )}
+      <dt>Observações comerciais</dt>
+      <dd>{quote.commercialNotes?.trim() ? quote.commercialNotes : "—"}</dd>
+    </dl>
   );
 }

@@ -2276,20 +2276,17 @@ body:has(.confirm-dialog) .entity-select__list {
 }
 
 /**
- * Orçamento multilinha.
+ * Orçamento multilinha — a proposta na página própria da versão
+ * (QUOTE-WORKSPACE-NAVIGATION-01).
+ *
+ * A moldura é a `.form-section` "Proposta" da página. Dentro da ficha do
+ * Projeto o bloco tinha borda própria para se separar da lista de versões; na
+ * página, uma segunda borda só tiraria largura — em 390px, principalmente.
  *
  * A proposta cobre vários produtos, então a tabela precisa de espaço: o nome
  * do produto é o que a pessoa lê para saber do que se trata, e quantidade e
  * unidade cabem em pouco. Sem rolagem interna — a página rola.
  */
-.quote-workspace {
-  margin-top: var(--sp-4);
-  padding: var(--sp-4);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--canvas);
-}
-
 .quote-workspace__head {
   display: flex;
   flex-direction: column;
@@ -2297,11 +2294,38 @@ body:has(.confirm-dialog) .entity-select__list {
   margin-bottom: var(--sp-3);
 }
 
-.quote-workspace__head h4 {
+/* Versões do mesmo projeto: cada uma é um endereço, e a aberta se destaca. */
+.quote-versions-nav {
+  margin-top: var(--sp-4);
+}
+
+.quote-versions-nav ul {
+  list-style: none;
+  margin: var(--sp-1) 0 0;
+  padding: 0;
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
   gap: var(--sp-2);
-  margin: 0;
+}
+
+.quote-versions-nav a,
+.quote-versions-nav [aria-current="page"] {
+  display: inline-block;
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+}
+
+.quote-versions-nav [aria-current="page"] {
+  border-color: var(--v-green-600);
+  background: var(--selected-bg);
+  font-weight: var(--fw-semibold);
+}
+
+/* Condições de versão que não se edita: leitura, não formulário desabilitado. */
+.quote-conditions__read {
+  margin-top: var(--sp-4);
 }
 
 .quote-workspace__conditions {

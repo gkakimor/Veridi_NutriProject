@@ -139,8 +139,8 @@ export function QuotePrintPage() {
           fileName: quotePdfFileName(quote),
         };
       }}
-      // O id da rota é o da versão do orçamento; o projeto vem do documento.
-      backTo={(quote) => `/comercial/projetos/${quote.projectId}`}
+      // O id da rota é o da versão: voltar do PDF é voltar à página dela.
+      backTo={`/comercial/orcamentos/${id}`}
     />
   );
 }

@@ -28,7 +28,8 @@ import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
-import { EntityLink } from "../../components/EntityLink";
+import { EntityLink, entityHref } from "../../components/EntityLink";
+import { rotaDoOrcamento } from "../../lib/rota-do-orcamento";
 import { IndustrialCostPendencies } from "../../components/IndustrialCostPendencies";
 import { CostWarnings } from "../../components/CostWarnings";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
@@ -338,13 +339,16 @@ export function ProductCmvPage() {
               PDF
             </button>
           )}
-          {/* Voltar ao orçamento tem prioridade: é de lá que a pessoa veio. */}
-          {projectId && quoteVersionId ? (
+          {/* Voltar ao orçamento tem prioridade: é de lá que a pessoa veio. A
+              versão tem página própria (QUOTE-WORKSPACE-NAVIGATION-01): a volta
+              chega a ela, na linha de onde se saiu, e a página devolve ao Projeto. */}
+          {quoteVersionId ? (
             <Link
               className="btn btn--ghost btn--sm"
-              to={`/comercial/projetos/${projectId}?quoteVersionId=${quoteVersionId}${
-                quoteLineId ? `&quoteLineId=${quoteLineId}` : ""
-              }`}
+              to={rotaDoOrcamento(quoteVersionId, {
+                linha: quoteLineId,
+                voltar: projectId ? entityHref("project", projectId) : null,
+              })}
             >
               ← Voltar ao orçamento
             </Link>

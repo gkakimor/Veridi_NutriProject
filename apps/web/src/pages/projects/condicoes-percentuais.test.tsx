@@ -48,7 +48,7 @@ import {
   updateQuoteLine,
   updateQuoteVersion,
 } from "../../lib/projects-api";
-import { QuoteVersionsSection } from "./QuoteVersionsSection";
+import { QuoteWorkspace } from "./QuoteWorkspace";
 
 function linha(): QuoteLineDTO {
   return {
@@ -133,7 +133,7 @@ function abrirSecao(quote: QuoteVersionDTO = versao()) {
   render(
     <StrictMode>
       <MemoryRouter>
-        <QuoteVersionsSection
+        <QuoteWorkspace
           project={
             {
               id: "prj-1",
@@ -147,6 +147,7 @@ function abrirSecao(quote: QuoteVersionDTO = versao()) {
               statusHistory: [],
             } as unknown as ProjectDTO
           }
+          quote={quote}
           canEdit
           projectStatus="WAITING"
           onChanged={() => {}}

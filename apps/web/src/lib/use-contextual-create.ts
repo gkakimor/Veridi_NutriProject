@@ -208,6 +208,7 @@ export function rotuloDaOrigem(rota: string): string {
     [/^\/planejamento\/perfis-producao/, "Roteiro de produção"],
     [/^\/comercial\/pedidos/, "Pedido"],
     [/^\/comercial\/projetos/, "Projeto"],
+    [/^\/comercial\/orcamentos/, "Orçamento"],
     [/^\/comercial\/amostras/, "Amostra"],
     [/^\/comercial\/expedicoes/, "Expedição"],
     [/^\/comercial\/faturamento/, "Faturamento"],

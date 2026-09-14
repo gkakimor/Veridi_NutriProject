@@ -36,6 +36,7 @@ vi.mock("../../lib/projects-api", () => ({
 
 import { updateQuoteLine } from "../../lib/projects-api";
 import { QuoteVersionsSection } from "./QuoteVersionsSection";
+import { QuoteWorkspace } from "./QuoteWorkspace";
 
 function linha(overrides: Partial<QuoteLineDTO> = {}): QuoteLineDTO {
   return {
@@ -138,8 +139,9 @@ function texto(valor: string | null | undefined): string {
 function abrir(versions: QuoteVersionDTO[], onChanged = () => {}) {
   render(
     <MemoryRouter>
-      <QuoteVersionsSection
+      <QuoteWorkspace
         project={projeto(versions)}
+        quote={versions.find((candidata) => candidata.status === "DRAFT") ?? versions.at(-1)!}
         canEdit
         projectStatus="SAMPLE"
         onChanged={onChanged}
@@ -298,10 +300,12 @@ describe("#8H — orçamento em edição mostra o total do que está na tela", (
   });
 
   it("I2. o gravado volta a mandar assim que o servidor confirma", () => {
+    const gravada = versao();
     const { rerender } = render(
       <MemoryRouter>
-        <QuoteVersionsSection
-          project={projeto([versao()])}
+        <QuoteWorkspace
+          project={projeto([gravada])}
+          quote={gravada}
           canEdit
           projectStatus="SAMPLE"
           onChanged={() => {}}
@@ -315,16 +319,16 @@ describe("#8H — orçamento em edição mostra o total do que está na tela", (
 
     // A proposta recarregada já traz 2000 gravado: o rascunho de tela sai e o
     // rodapé deixa de ter dois números concorrendo.
+    const recarregada = versao({
+      lines: [linha({ quotedQuantity: "2000", total: "25000.00" })],
+      subtotal: "25000.00",
+      total: "25000.00",
+    });
     rerender(
       <MemoryRouter>
-        <QuoteVersionsSection
-          project={projeto([
-            versao({
-              lines: [linha({ quotedQuantity: "2000", total: "25000.00" })],
-              subtotal: "25000.00",
-              total: "25000.00",
-            }),
-          ])}
+        <QuoteWorkspace
+          project={projeto([recarregada])}
+          quote={recarregada}
           canEdit
           projectStatus="SAMPLE"
           onChanged={() => {}}
@@ -376,7 +380,21 @@ describe("#8H — orçamento em edição mostra o total do que está na tela", (
       status: "DRAFT",
       lines: [linha({ id: "ql-2", quoteVersionId: "q2" })],
     });
-    abrir([historica, rascunho]);
+    // A lista do Projeto e a página do rascunho lado a lado: a digitação de uma
+    // não chega à outra.
+    const comAsDuas = projeto([historica, rascunho]);
+    render(
+      <MemoryRouter>
+        <QuoteVersionsSection project={comAsDuas} canEdit projectStatus="SAMPLE" />
+        <QuoteWorkspace
+          project={comAsDuas}
+          quote={rascunho}
+          canEdit
+          projectStatus="SAMPLE"
+          onChanged={() => {}}
+        />
+      </MemoryRouter>,
+    );
 
     fireEvent.change(screen.getByLabelText("Quantidade de PROD-000001"), {
       target: { value: "5000" },

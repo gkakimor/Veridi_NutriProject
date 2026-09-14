@@ -42,7 +42,7 @@ vi.mock("../../lib/projects-api", () => ({
 }));
 
 import { updateQuoteLine } from "../../lib/projects-api";
-import { QuoteVersionsSection } from "./QuoteVersionsSection";
+import { QuoteWorkspace } from "./QuoteWorkspace";
 
 /** O preço comercial: quatro casas, o scale do documento. */
 const PRECO_COMERCIAL = "4.0531";
@@ -145,8 +145,9 @@ function projeto(versions: QuoteVersionDTO[]): ProjectDTO {
 function abrir(versions: QuoteVersionDTO[]) {
   render(
     <MemoryRouter>
-      <QuoteVersionsSection
+      <QuoteWorkspace
         project={projeto(versions)}
+        quote={versions.find((versao) => versao.status === "DRAFT") ?? versions.at(-1)!}
         canEdit
         projectStatus="SAMPLE"
         onChanged={() => {}}

@@ -29,7 +29,7 @@ import type {
  * 3. outra versão → o formulário é dela, nunca o rascunho da anterior;
  * 4. salvar → o valor salvo vira a base, e não há mais o que salvar;
  * 5. a cadeia real — adicionar, editar, remover linha, e a linha que falha —
- *    pela ficha do Projeto, com o servidor devolvendo objetos novos a cada
+ *    pela página do Orçamento, com o servidor devolvendo objetos novos a cada
  *    leitura, como o JSON de uma resposta HTTP.
  *
  * Tudo em StrictMode: a correção não pode depender de efeito rodar uma vez.
@@ -41,6 +41,7 @@ vi.mock("../../app/AuthProvider", () => ({
 vi.mock("../../components/AttachmentsSection", () => ({ AttachmentsSection: () => null }));
 vi.mock("../../lib/projects-api", () => ({
   getProject: vi.fn(),
+  getQuoteVersion: vi.fn(),
   approveProject: vi.fn(),
   cancelProject: vi.fn(),
   changeProjectStatus: vi.fn(),
@@ -75,15 +76,16 @@ vi.mock("../../lib/samples-api", () => ({
 import {
   addQuoteLine,
   getProject,
+  getQuoteVersion,
   previewQuotePaymentSchedule,
   removeQuoteLine,
   sendQuoteVersion,
   updateQuoteLine,
   updateQuoteVersion,
 } from "../../lib/projects-api";
-import { ProjectDetailPage } from "./ProjectDetailPage";
 import { QuoteConditionsForm } from "./QuoteConditionsForm";
-import { QuoteVersionsSection } from "./QuoteVersionsSection";
+import { QuoteVersionPage } from "./QuoteVersionPage";
+import { QuoteWorkspace } from "./QuoteWorkspace";
 import { camposDe } from "./quote-conditions-draft";
 
 const VALIDADE_GRAVADA = "2026-09-15T00:00:00.000Z";
@@ -205,6 +207,15 @@ function situacao(): string {
     .getAllByRole("status")
     .find((elemento) => /^(Alterações não salvas|Tudo salvo)$/.test(elemento.textContent ?? ""));
   return aviso?.textContent ?? "(sem aviso de situação)";
+}
+
+/**
+ * O valor que a tela LÊ ao lado de um rótulo — a condição gravada da versão que
+ * não se edita, ou um campo do Resumo da página. `null` sem o rótulo.
+ */
+function gravadoLido(rotulo: string): string | null {
+  const termo = [...document.querySelectorAll("dt")].find((dt) => dt.textContent === rotulo);
+  return termo?.nextElementSibling?.textContent ?? null;
 }
 
 /**
@@ -348,11 +359,13 @@ describe("QUOTE-DRAFT-STATE-01 — outra versão é outro documento", () => {
     const { releitura } = montarFormulario(versao());
 
     digitar("Desconto (%)", "7,5");
-    // Enviada: agora é o documento do cliente, somente leitura.
+    // Enviada: agora é o documento do cliente, e se LÊ — não é formulário
+    // desabilitado (QUOTE-WORKSPACE-NAVIGATION-01).
     releitura(versao({ status: "SENT" }), { editable: false });
 
-    expect(campo("Desconto (%)").value).toBe("");
-    expect(campo("Desconto (%)").disabled).toBe(true);
+    expect(screen.queryByLabelText("Desconto (%)")).toBeNull();
+    expect(gravadoLido("Desconto")).toBe("—");
+    expect(document.body.textContent).not.toContain("7,5");
   });
 
   /*
@@ -366,8 +379,10 @@ describe("QUOTE-DRAFT-STATE-01 — outra versão é outro documento", () => {
     const quadros: string[] = [];
     function Tela({ quote }: { quote: QuoteVersionDTO }) {
       useLayoutEffect(() => {
-        const validade = document.getElementById("quote-valid-until") as HTMLInputElement;
-        quadros.push(`${quote.versionLabel} ${quote.status}: ${validade.value}`);
+        // Rascunho: o campo. Enviada: a leitura do gravado — o que o quadro MOSTRA.
+        const validade = document.getElementById("quote-valid-until") as HTMLInputElement | null;
+        const mostrada = validade?.value ?? gravadoLido("Validade da proposta") ?? "(nada)";
+        quadros.push(`${quote.versionLabel} ${quote.status}: ${mostrada}`);
       });
       return (
         <QuoteConditionsForm
@@ -395,8 +410,10 @@ describe("QUOTE-DRAFT-STATE-01 — outra versão é outro documento", () => {
     digitar("Validade da proposta", "2026-10-15");
     trocar(versao({ status: "SENT", validUntil: "2026-09-20T00:00:00.000Z" }));
 
-    expect(quadros).toContain("ORC-000001 · V1 SENT: 2026-09-20");
+    // Enviada, a validade se lê: o dia gravado, e nunca o digitado na V2.
+    expect(quadros).toContain("ORC-000001 · V1 SENT: 20/09/2026");
     expect(quadros).not.toContain("ORC-000001 · V1 SENT: 2026-10-15");
+    expect(quadros).not.toContain("ORC-000001 · V1 SENT: 15/10/2026");
   });
 
   it("nenhum quadro desenhado mostra a versão enviada com o que ficou digitado e não foi salvo", () => {
@@ -405,8 +422,9 @@ describe("QUOTE-DRAFT-STATE-01 — outra versão é outro documento", () => {
     digitar("Validade da proposta", "2026-10-15");
     trocar(versao({ status: "SENT" }));
 
-    expect(quadros).toContain("ORC-000001 · V1 SENT: 2026-09-15");
+    expect(quadros).toContain("ORC-000001 · V1 SENT: 15/09/2026");
     expect(quadros).not.toContain("ORC-000001 · V1 SENT: 2026-10-15");
+    expect(quadros).not.toContain("ORC-000001 · V1 SENT: 15/10/2026");
   });
 });
 
@@ -482,10 +500,11 @@ describe("QUOTE-DRAFT-STATE-01 — descartar e simular descrevem o rascunho", ()
 });
 
 /*
- * A tela real. Um servidor de mentira COM MEMÓRIA: cada leitura devolve um
- * Projeto novo (JSON ida e volta, como uma resposta HTTP), e cada escrita muda
- * o que a leitura seguinte devolve. É a cadeia que causava a perda — mutação da
- * linha → `onChanged` → `load()` do Projeto → versão nova para o formulário.
+ * A tela real — a página do Orçamento. Um servidor de mentira COM MEMÓRIA: cada
+ * leitura devolve a versão e o Projeto novos (JSON ida e volta, como uma
+ * resposta HTTP), e cada escrita muda o que a leitura seguinte devolve. É a
+ * cadeia que causava a perda — mutação da linha → `onChanged` → `load()` da
+ * página → versão nova para o formulário.
  */
 const PROJETO: ProjectDTO = {
   id: "prj-1",
@@ -593,9 +612,9 @@ function leituraDoProjeto(): ProjectDTO {
 async function abrirFicha() {
   render(
     <StrictMode>
-      <MemoryRouter initialEntries={["/comercial/projetos/prj-1"]}>
+      <MemoryRouter initialEntries={["/comercial/orcamentos/q1"]}>
         <Routes>
-          <Route path="/comercial/projetos/:id" element={<ProjectDetailPage />} />
+          <Route path="/comercial/orcamentos/:id" element={<QuoteVersionPage />} />
         </Routes>
       </MemoryRouter>
     </StrictMode>,
@@ -603,20 +622,21 @@ async function abrirFicha() {
   await screen.findByLabelText("Validade da proposta");
 }
 
-/** A linha da versão na lista de versões — o "Total salvo" só muda com releitura. */
-function linhaDaVersao(): HTMLElement {
-  return screen.getByText("ORC-000001 · V1", { selector: "td" }).closest("tr") as HTMLElement;
+/** O "Total salvo" do Resumo da página — só muda com releitura. */
+function totalSalvo(): string {
+  return gravadoLido("Total salvo") ?? "";
 }
 
 function leituras(): number {
   return vi.mocked(getProject).mock.calls.length;
 }
 
-describe("QUOTE-DRAFT-STATE-01 — a ficha do Projeto, com a mutação de linha de verdade", () => {
+describe("QUOTE-DRAFT-STATE-01 — a página do Orçamento, com a mutação de linha de verdade", () => {
   beforeEach(() => {
     produtosDoProjeto = [vinculo(1, "Pré-Treino"), vinculo(2, "Whey")];
     noServidor = versao();
     vi.mocked(getProject).mockImplementation(async () => leituraDoProjeto());
+    vi.mocked(getQuoteVersion).mockImplementation(async () => leituraDoProjeto().quoteVersions[0]!);
     vi.mocked(addQuoteLine).mockImplementation(async (_quoteId, projectProductId) => {
       const link = produtosDoProjeto.find((p) => p.id === projectProductId)!;
       const nova = linha({
@@ -700,8 +720,8 @@ describe("QUOTE-DRAFT-STATE-01 — a ficha do Projeto, com a mutação de linha 
     fireEvent.change(quantidade, { target: { value: "2000" } });
     fireEvent.blur(quantidade);
 
-    // 2.000 × R$ 12,50: o "Total salvo" da lista só muda com a releitura.
-    await waitFor(() => expect(linhaDaVersao().textContent).toContain("25.000,00"));
+    // 2.000 × R$ 12,50: o "Total salvo" do Resumo só muda com a releitura.
+    await waitFor(() => expect(totalSalvo()).toContain("25.000,00"));
     expect(updateQuoteLine).toHaveBeenCalledWith("ql-1", { quotedQuantity: "2000" });
 
     expect(campo("Validade da proposta").value).toBe("2026-09-20");
@@ -842,8 +862,9 @@ describe("QUOTE-DRAFT-STATE-01 — a ficha do Projeto, com a mutação de linha 
       expect(sendQuoteVersion).toHaveBeenCalledTimes(1);
       expect(sendQuoteVersion).toHaveBeenCalledWith("q1", {});
       expect(validadeNoEnvio).toBe("2026-09-20T00:00:00.000Z");
-      expect(campo("Validade da proposta").value).toBe("2026-09-20");
-      expect(campo("Validade da proposta").disabled).toBe(true);
+      // Enviada, a versão se LÊ: a validade congelada é a nova, e sem campo.
+      expect(screen.queryByLabelText("Validade da proposta")).toBeNull();
+      expect(gravadoLido("Validade da proposta")).toBe("20/09/2026");
     });
 
     it("salvar que falha mantém o digitado e o envio bloqueado", async () => {
@@ -923,13 +944,15 @@ async function confirmarEnvio() {
   fireEvent.click(within(dialogo).getByRole("button", { name: "Enviar ao cliente" }));
 }
 
-/** A seção de orçamentos sozinha, com projeto fixo e sem servidor. */
+/** A proposta sozinha — o rascunho, se houver; senão a mais recente —, sem servidor. */
 function abrirSecao(versions: QuoteVersionDTO[]) {
+  const aberta = versions.find((candidata) => candidata.status === "DRAFT") ?? versions.at(-1)!;
   render(
     <StrictMode>
       <MemoryRouter>
-        <QuoteVersionsSection
+        <QuoteWorkspace
           project={{ ...PROJETO, products: [], quoteVersions: versions }}
+          quote={aberta}
           canEdit
           projectStatus="WAITING"
           onChanged={() => {}}
@@ -1045,24 +1068,26 @@ describe("QUOTE-SEND-DIRTY-01 — o botão de envio respeita a pendência das co
     expect(screen.getByRole("alert").textContent).toBe(`${SALVE_ANTES} ${USA_O_SALVO}`);
   });
 
-  it("a pendência é da versão: trocar de versão não a leva junto", () => {
-    abrirSecao([
-      pronta(),
-      pronta({
-        id: "q2",
-        code: "ORC-000002",
-        versionNumber: 2,
-        versionLabel: "ORC-000002 · V2",
-        validUntil: "2026-10-01T00:00:00.000Z",
-      }),
-    ]);
+  it("a pendência é da versão: abrir outra versão não a leva junto", async () => {
+    const v1 = pronta();
+    const v2 = pronta({
+      id: "q2",
+      code: "ORC-000002",
+      versionNumber: 2,
+      versionLabel: "ORC-000002 · V2",
+      validUntil: "2026-10-01T00:00:00.000Z",
+    });
+    vi.mocked(getProject).mockResolvedValue({ ...PROJETO, quoteVersions: [v1, v2] } as never);
+    vi.mocked(getQuoteVersion).mockImplementation(async (id) => (id === "q2" ? v2 : v1) as never);
+    await abrirFicha();
 
     digitar("Validade da proposta", "2026-09-20");
     expect(botaoEnviar().disabled).toBe(true);
 
-    fireEvent.click(screen.getByText("ORC-000002 · V2", { selector: "td" }));
+    // A outra versão é outro endereço: a página dela nasce sem a pendência desta.
+    fireEvent.click(screen.getByRole("link", { name: /^ORC-000002 · V2/ }));
 
-    expect(campo("Validade da proposta").value).toBe("2026-10-01");
+    await waitFor(() => expect(campo("Validade da proposta").value).toBe("2026-10-01"));
     expect(botaoEnviar().disabled).toBe(false);
     expect(avisoDeEnvio()).toBeNull();
   });

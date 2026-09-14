@@ -32,6 +32,7 @@ vi.mock("../../app/AuthProvider", () => ({
 vi.mock("../../components/AttachmentsSection", () => ({ AttachmentsSection: () => null }));
 vi.mock("../../lib/projects-api", () => ({
   getProject: vi.fn(),
+  getQuoteVersion: vi.fn(),
   approveProject: vi.fn(),
   cancelProject: vi.fn(),
   changeProjectStatus: vi.fn(),
@@ -63,9 +64,9 @@ vi.mock("../../lib/samples-api", () => ({
   createSample: vi.fn(),
 }));
 
-import { getProject, sendQuoteVersion, updateQuoteLine } from "../../lib/projects-api";
-import { ProjectDetailPage } from "./ProjectDetailPage";
-import { QuoteVersionsSection } from "./QuoteVersionsSection";
+import { getProject, getQuoteVersion, sendQuoteVersion, updateQuoteLine } from "../../lib/projects-api";
+import { QuoteVersionPage } from "./QuoteVersionPage";
+import { QuoteWorkspace } from "./QuoteWorkspace";
 
 const PRODUTOS =
   "Salve as alterações dos produtos antes de enviar o orçamento. O envio usa somente os valores já salvos.";
@@ -272,8 +273,9 @@ function abrirSecao(quote: QuoteVersionDTO = versao()) {
   render(
     <StrictMode>
       <MemoryRouter>
-        <QuoteVersionsSection
+        <QuoteWorkspace
           project={{ ...PROJETO, products: [], quoteVersions: [quote] }}
+          quote={quote}
           canEdit
           projectStatus="WAITING"
           onChanged={() => {}}
@@ -369,9 +371,10 @@ describe("QUOTE-SEND-LINE-DRAFT-01 — o que está no campo da linha segura o en
 });
 
 /*
- * A ficha inteira, com um servidor de mentira COM MEMÓRIA: cada leitura devolve
- * um Projeto novo e cada escrita muda o que a leitura seguinte devolve. É o
- * caminho real — o campo sai, a linha grava (ou não), o Projeto é relido.
+ * A página do Orçamento inteira, com um servidor de mentira COM MEMÓRIA: cada
+ * leitura devolve a versão e o Projeto novos, e cada escrita muda o que a
+ * leitura seguinte devolve. É o caminho real — o campo sai, a linha grava (ou
+ * não), a página relê a versão.
  */
 let noServidor: QuoteVersionDTO;
 /** O que o envio congelou, linha a linha. */
@@ -417,9 +420,9 @@ function gravarNoServidor(
 async function abrirFicha() {
   render(
     <StrictMode>
-      <MemoryRouter initialEntries={["/comercial/projetos/prj-1"]}>
+      <MemoryRouter initialEntries={["/comercial/orcamentos/q1"]}>
         <Routes>
-          <Route path="/comercial/projetos/:id" element={<ProjectDetailPage />} />
+          <Route path="/comercial/orcamentos/:id" element={<QuoteVersionPage />} />
         </Routes>
       </MemoryRouter>
     </StrictMode>,
@@ -439,6 +442,9 @@ describe("QUOTE-SEND-LINE-DRAFT-01 — salvar a linha, falhar, tentar de novo", 
           quoteVersions: [noServidor],
         }),
       ),
+    );
+    vi.mocked(getQuoteVersion).mockImplementation(async () =>
+      JSON.parse(JSON.stringify(noServidor)),
     );
     vi.mocked(updateQuoteLine).mockImplementation(async (lineId, input) => {
       gravarNoServidor(lineId, input);

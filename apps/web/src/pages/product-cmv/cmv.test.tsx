@@ -358,10 +358,12 @@ describe("Tela de CMV", () => {
       "/produtos/prod-1/cmv?quantity=1000&projectId=prj-1&quoteVersionId=q-2&quoteLineId=l-9",
     );
 
+    // A página própria da versão, na linha de onde se saiu, com a volta ao
+    // Projeto (QUOTE-WORKSPACE-NAVIGATION-01) — não mais o Projeto com parâmetro.
     const voltar = await screen.findByRole("link", { name: /Voltar ao orçamento/ });
     expect(voltar).toHaveAttribute(
       "href",
-      "/comercial/projetos/prj-1?quoteVersionId=q-2&quoteLineId=l-9",
+      "/comercial/orcamentos/q-2?quoteLineId=l-9&voltar=%2Fcomercial%2Fprojetos%2Fprj-1",
     );
   });
 

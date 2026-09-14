@@ -9,6 +9,7 @@ import type {
   QuoteVersionDTO,
 } from "@veridi/shared";
 import { QuoteVersionsSection } from "./QuoteVersionsSection";
+import { QuoteWorkspace } from "./QuoteWorkspace";
 import { ProjectProductsSection } from "./ProjectProductsSection";
 import { QuotePdf } from "../../pdf/documents/QuotePdf";
 
@@ -185,10 +186,12 @@ function project(quotes: QuoteVersionDTO[]): ProjectDTO {
   } as unknown as ProjectDTO;
 }
 
-function renderQuotes(quotes: QuoteVersionDTO[], url = "/comercial/projetos/prj-1") {
+/** A página da versão: o rascunho, se houver; senão a mais recente. */
+function renderQuotes(quotes: QuoteVersionDTO[], url = "/comercial/orcamentos/q1") {
+  const aberta = quotes.find((candidata) => candidata.status === "DRAFT") ?? quotes.at(-1)!;
   return render(
     <MemoryRouter initialEntries={[url]}>
-      <QuoteVersionsSection project={project(quotes)} canEdit onChanged={() => {}} />
+      <QuoteWorkspace project={project(quotes)} quote={aberta} canEdit onChanged={() => {}} />
     </MemoryRouter>,
   );
 }
@@ -276,16 +279,23 @@ describe("Sugestão de faixa na linha do orçamento", () => {
     );
   });
 
-  it("voltar do CMV reabre a mesma versão, não o rascunho corrente", async () => {
+  it("a volta do CMV chega à página da versão e traz a linha de onde saiu à vista", async () => {
     vi.mocked(getQuotePricingOptions).mockResolvedValue(opcoes([]));
-    const v1 = quote({ id: "q1", versionLabel: "ORC-000001 · V1", status: "SENT", lines: [] });
+    const rolar = vi.fn();
+    Object.defineProperty(Element.prototype, "scrollIntoView", { configurable: true, value: rolar });
+    const v1 = quote({ id: "q1", versionLabel: "ORC-000001 · V1", status: "SENT" });
     const v2 = quote({ id: "q2", versionLabel: "ORC-000001 · V2", status: "DRAFT" });
-    renderQuotes([v1, v2], "/comercial/projetos/prj-1?quoteVersionId=q1&quoteLineId=l-1");
-
-    // Sem o contexto, a seção abriria o rascunho (V2) e a pessoa se perderia.
-    await waitFor(() =>
-      expect(screen.getByText(/Proposta apresentada é histórico/)).toBeInTheDocument(),
+    render(
+      <MemoryRouter initialEntries={["/comercial/orcamentos/q1?quoteLineId=l-1"]}>
+        <QuoteWorkspace project={project([v1, v2])} quote={v1} canEdit onChanged={() => {}} />
+      </MemoryRouter>,
     );
+
+    // Qual versão abre é o endereço que diz — nunca o rascunho corrente —, e a
+    // linha volta destacada e no campo de visão.
+    expect(await screen.findByText(/Proposta apresentada é histórico/)).toBeInTheDocument();
+    expect(document.getElementById("quote-line-l-1")).toHaveClass("is-selected");
+    expect(rolar).toHaveBeenCalledWith({ block: "center" });
   });
 
   it("versão enviada não oferece aplicar preço — histórico não se renegocia", async () => {
@@ -315,7 +325,6 @@ describe("Projeto fechado e proposta nova", () => {
           project={project([quote({ status: "ACCEPTED" })])}
           canEdit
           projectStatus="APPROVED"
-          onChanged={() => {}}
         />
       </MemoryRouter>,
     );
@@ -333,7 +342,6 @@ describe("Projeto fechado e proposta nova", () => {
           project={project([quote({ status: "ACCEPTED" })])}
           canEdit
           projectStatus="CANCELLED"
-          onChanged={() => {}}
         />
       </MemoryRouter>,
     );
@@ -349,12 +357,7 @@ describe("Projeto fechado e proposta nova", () => {
     vi.mocked(getQuotePricingOptions).mockResolvedValue(opcoes([]));
     render(
       <MemoryRouter>
-        <QuoteVersionsSection
-          project={project([])}
-          canEdit
-          projectStatus="SAMPLE"
-          onChanged={() => {}}
-        />
+        <QuoteVersionsSection project={project([])} canEdit projectStatus="SAMPLE" />
       </MemoryRouter>,
     );
 

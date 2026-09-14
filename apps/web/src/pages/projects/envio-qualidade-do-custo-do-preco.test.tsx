@@ -61,7 +61,7 @@ vi.mock("../../lib/samples-api", () => ({
 }));
 
 import { sendQuoteVersion } from "../../lib/projects-api";
-import { QuoteVersionsSection } from "./QuoteVersionsSection";
+import { QuoteWorkspace } from "./QuoteWorkspace";
 
 /** Proveniência viva da faixa, como a API serve no rascunho. */
 function proveniencia(
@@ -219,8 +219,9 @@ function abrirSecao(quote: QuoteVersionDTO) {
   render(
     <StrictMode>
       <MemoryRouter>
-        <QuoteVersionsSection
+        <QuoteWorkspace
           project={{ ...PROJETO, quoteVersions: [quote] }}
+          quote={quote}
           canEdit
           projectStatus="WAITING"
           onChanged={() => {}}

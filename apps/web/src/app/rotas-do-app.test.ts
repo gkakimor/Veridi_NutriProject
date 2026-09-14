@@ -39,6 +39,8 @@ const ROTAS_ANTES_DA_MIGRACAO = [
   "/comercial/faturamento",
   "/comercial/faturamento/:id",
   "/comercial/faturamento/:id/imprimir",
+  // QUOTE-WORKSPACE-NAVIGATION-01: a versão de orçamento ganhou página própria.
+  "/comercial/orcamentos/:id",
   "/comercial/orcamentos/:id/imprimir",
   "/comercial/pedidos",
   "/comercial/pedidos/:id",

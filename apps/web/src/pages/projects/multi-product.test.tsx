@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { ProjectDTO, ProjectProductDTO, QuoteVersionDTO } from "@veridi/shared";
 import { ProjectProductsSection } from "./ProjectProductsSection";
 import { QuoteVersionsSection } from "./QuoteVersionsSection";
+import { QuoteWorkspace } from "./QuoteWorkspace";
 
 /**
  * Experiência multiproduto na tela.
@@ -135,6 +136,12 @@ function project(overrides: Partial<ProjectDTO> = {}): ProjectDTO {
   } as unknown as ProjectDTO;
 }
 
+/** Onde a navegação deixou a pessoa. */
+function Onde() {
+  const location = useLocation();
+  return <output data-testid="rota">{`${location.pathname}${location.search}`}</output>;
+}
+
 describe("Produtos do projeto", () => {
   it("lista os três produtos com nomes distintos", () => {
     render(
@@ -218,31 +225,33 @@ describe("Histórico de orçamentos", () => {
     total: "20000.00",
   });
 
-  it("abre exatamente a versão escolhida", () => {
+  it("clicar na versão abre a página DELA — a ficha do Projeto só lista", () => {
     render(
-      <MemoryRouter>
-        <QuoteVersionsSection
-          project={project({ quoteVersions: [v1, v2] })}
-          canEdit
-          onChanged={() => {}}
-        />
+      <MemoryRouter initialEntries={["/comercial/projetos/prj-1"]}>
+        <Routes>
+          <Route
+            path="/comercial/projetos/:id"
+            element={<QuoteVersionsSection project={project({ quoteVersions: [v1, v2] })} canEdit />}
+          />
+          <Route path="/comercial/orcamentos/:id" element={<Onde />} />
+        </Routes>
       </MemoryRouter>,
     );
 
-    // Abre no rascunho por padrão — é onde o trabalho está.
-    const workspace = document.querySelector(".quote-workspace") as HTMLElement;
-    expect(within(workspace).getByText(/V2/)).toBeTruthy();
+    // Nenhuma proposta aberta embaixo da lista: nem o rascunho, nem a última.
+    expect(document.querySelector(".quote-workspace")).toBeNull();
 
-    // Clicar na V1 abre a V1, não a última.
+    // Clicar na V1 leva à V1, não à última — com a volta a este Projeto.
     fireEvent.click(screen.getAllByText("ORC-000001 · V1")[0]!);
-    const reopened = document.querySelector(".quote-workspace") as HTMLElement;
-    expect(within(reopened).getByRole("link", { name: /Frutas Vermelhas/ })).toBeTruthy();
+    expect(screen.getByTestId("rota").textContent).toBe(
+      "/comercial/orcamentos/q1?voltar=%2Fcomercial%2Fprojetos%2Fprj-1",
+    );
   });
 
   it("versão enviada é somente leitura", () => {
     render(
       <MemoryRouter>
-        <QuoteVersionsSection project={project({ quoteVersions: [v1] })} canEdit onChanged={() => {}} />
+        <QuoteWorkspace project={project({ quoteVersions: [v1] })} quote={v1} canEdit onChanged={() => {}} />
       </MemoryRouter>,
     );
 
@@ -256,22 +265,21 @@ describe("Histórico de orçamentos", () => {
     expect(within(workspace).getByRole("button", { name: "Registrar aceite" })).toBeTruthy();
   });
 
-  it("a versão aberta continua sendo a escolhida quando a lista recarrega", () => {
-    // Regressão real: ao criar a V2, o id novo era selecionado, a lista ainda
-    // era a antiga por um render, e a tela voltava para a V1 enviada —
-    // parecendo que a nova versão nascia bloqueada.
+  it("a versão aberta continua sendo a do endereço quando o Projeto relido traz outra", () => {
+    // Regressão real: ao criar a V2, a ficha trocava de versão sozinha no meio
+    // da recarga, e parecia que a nova nascia bloqueada. Hoje quem escolhe é a
+    // rota da página: reler o Projeto não troca o documento aberto.
     const { rerender } = render(
       <MemoryRouter>
-        <QuoteVersionsSection project={project({ quoteVersions: [v1] })} canEdit onChanged={() => {}} />
+        <QuoteWorkspace project={project({ quoteVersions: [v1] })} quote={v1} canEdit onChanged={() => {}} />
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getAllByText("ORC-000001 · V1")[0]!);
-
     rerender(
       <MemoryRouter>
-        <QuoteVersionsSection
+        <QuoteWorkspace
           project={project({ quoteVersions: [v1, v2] })}
+          quote={v1}
           canEdit
           onChanged={() => {}}
         />
@@ -279,7 +287,8 @@ describe("Histórico de orçamentos", () => {
     );
 
     const workspace = document.querySelector(".quote-workspace") as HTMLElement;
-    expect(within(workspace).getByText(/V1/)).toBeTruthy();
+    expect(within(workspace).getByRole("link", { name: /Frutas Vermelhas/ })).toBeTruthy();
+    expect(within(workspace).queryByRole("link", { name: /Limão/ })).toBeNull();
   });
 
   it("linha sem preço não vira total parcial", () => {
@@ -295,8 +304,9 @@ describe("Histórico de orçamentos", () => {
 
     render(
       <MemoryRouter>
-        <QuoteVersionsSection
+        <QuoteWorkspace
           project={project({ quoteVersions: [incomplete] })}
+          quote={incomplete}
           canEdit
           onChanged={() => {}}
         />

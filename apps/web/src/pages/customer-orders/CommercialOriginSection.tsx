@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { CustomerOrderDTO, CustomerOrderLineDTO } from "@veridi/shared";
 import { condicaoDePagamentoPorExtenso } from "../../lib/payment-condition";
 import { entityHref } from "../../components/EntityLink";
+import { rotaDoOrcamento } from "../../lib/rota-do-orcamento";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { emDias } from "../../lib/duration";
 import { formatPercent } from "../../lib/percent";
@@ -46,9 +47,12 @@ export function CommercialOriginSection({ order }: { order: CustomerOrderDTO }) 
       <dl className="definition-list">
         <dt>Orçamento</dt>
         <dd>
-          {origem.quoteVersionId && origem.projectId ? (
+          {/* A versão aceita tem página própria; a página oferece a volta a este Pedido. */}
+          {origem.quoteVersionId ? (
             <Link
-              to={`${entityHref("project", origem.projectId)}?quoteVersionId=${origem.quoteVersionId}`}
+              to={rotaDoOrcamento(origem.quoteVersionId, {
+                voltar: entityHref("customerOrder", order.id),
+              })}
             >
               {origem.quoteCode} · V{origem.quoteVersionNumber}
             </Link>

@@ -41,6 +41,7 @@ vi.mock("../../lib/projects-api", () => ({
 }));
 
 import { QuoteVersionsSection } from "./QuoteVersionsSection";
+import { QuoteWorkspace } from "./QuoteWorkspace";
 
 function linha(overrides: Partial<QuoteLineDTO> = {}): QuoteLineDTO {
   return {
@@ -136,11 +137,22 @@ function projeto(versions: QuoteVersionDTO[], status: ProjectStatus): ProjectDTO
   } as unknown as ProjectDTO;
 }
 
+/** A lista de versões, na ficha do Projeto. */
 function abrir(versions: QuoteVersionDTO[], status: ProjectStatus = "SAMPLE") {
   render(
     <MemoryRouter>
-      <QuoteVersionsSection
+      <QuoteVersionsSection project={projeto(versions, status)} canEdit projectStatus={status} />
+    </MemoryRouter>,
+  );
+}
+
+/** A página da versão: o rascunho, se houver; senão a mais recente. */
+function abrirProposta(versions: QuoteVersionDTO[], status: ProjectStatus = "SAMPLE") {
+  render(
+    <MemoryRouter>
+      <QuoteWorkspace
         project={projeto(versions, status)}
+        quote={versions.find((candidata) => candidata.status === "DRAFT") ?? versions.at(-1)!}
         canEdit
         projectStatus={status}
         onChanged={() => {}}
@@ -216,10 +228,12 @@ describe("COM-01 — o projeto aprovado oferece a próxima negociação", () => 
 
 describe("COM-02 — validade na tela", () => {
   it("proposta enviada e vencida mostra “Vencido” com a data, e o aceite fica bloqueado", () => {
-    abrir(
-      [versao({ status: "SENT", expired: true, validUntil: "2026-09-15T00:00:00.000Z" })],
-      "SAMPLE",
-    );
+    const vencida = [
+      versao({ status: "SENT", expired: true, validUntil: "2026-09-15T00:00:00.000Z" }),
+    ];
+    // A lista do Projeto marca a vencida; a página da versão bloqueia o aceite.
+    abrir(vencida, "SAMPLE");
+    abrirProposta(vencida, "SAMPLE");
 
     expect(screen.getByText("Vencido")).toBeTruthy();
     // A data continua visível: o documento não some do histórico.
@@ -232,14 +246,14 @@ describe("COM-02 — validade na tela", () => {
   });
 
   it("proposta enviada e vigente aceita normalmente", () => {
-    abrir([versao({ status: "SENT", expired: false })], "SAMPLE");
+    abrirProposta([versao({ status: "SENT", expired: false })], "SAMPLE");
 
     expect(screen.queryByText("Vencido")).toBeNull();
     expect(botao("Registrar aceite")!.disabled).toBe(false);
   });
 
   it("rascunho sem validade não envia, e a tela diz o que falta", () => {
-    abrir([versao({ status: "DRAFT", validUntil: null })], "SAMPLE");
+    abrirProposta([versao({ status: "DRAFT", validUntil: null })], "SAMPLE");
 
     const enviar = botao("Enviar ao cliente")!;
     expect(enviar.disabled).toBe(true);
@@ -248,7 +262,7 @@ describe("COM-02 — validade na tela", () => {
   });
 
   it("rascunho com validade envia", () => {
-    abrir([versao({ status: "DRAFT" })], "SAMPLE");
+    abrirProposta([versao({ status: "DRAFT" })], "SAMPLE");
 
     expect(botao("Enviar ao cliente")!.disabled).toBe(false);
   });

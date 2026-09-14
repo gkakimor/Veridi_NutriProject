@@ -77,6 +77,7 @@ import { CustomerMaterialsPage } from "./pages/inventory/CustomerMaterialsPage";
 import { CoaQueuePage } from "./pages/quality/CoaQueuePage";
 import { ProjectsPage } from "./pages/projects/ProjectsPage";
 import { ProjectDetailPage } from "./pages/projects/ProjectDetailPage";
+import { QuoteVersionPage } from "./pages/projects/QuoteVersionPage";
 import { FormulationsPage } from "./pages/formulations/FormulationsPage";
 import { FormulationTemplatesPage } from "./pages/formulation-templates/FormulationTemplatesPage";
 import { FormulationTemplateDetailPage } from "./pages/formulation-templates/FormulationTemplateDetailPage";
@@ -285,6 +286,10 @@ const router = createBrowserRouter(
         <Route path="/producao/produto-acabado" element={<FinishedGoodsPage />} />
         <Route path="/comercial/projetos" element={<ProjectsPage />} />
         <Route path="/comercial/projetos/:id" element={<ProjectDetailPage />} />
+        {/* Orçamento: cada versão é um documento com página própria
+            (QUOTE-WORKSPACE-NAVIGATION-01). A lista geral de Orçamentos
+            (QUOTES-HUB-01) chega depois e navega para esta mesma rota. */}
+        <Route path="/comercial/orcamentos/:id" element={<QuoteVersionPage />} />
         <Route path="/compras/item-fornecedor" element={<SupplierItemsPage />} />
         <Route path="/comercial/amostras" element={<SamplesPage />} />
         <Route path="/comercial/amostras/:id" element={<SampleDetailPage />} />
