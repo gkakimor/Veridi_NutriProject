@@ -7,6 +7,7 @@ import type {
   ProductPricingResponse,
 } from "@veridi/shared";
 import {
+  hojeComercial,
   INDUSTRIAL_COST_QUALITY_LABELS,
   INDUSTRIAL_COST_VERSION_STATUS_LABELS,
 } from "@veridi/shared";
@@ -45,7 +46,8 @@ export function ProductIndustrialCostSummary({ productId }: { productId: string 
         if (!reference) return;
         return getProductCmv(productId, {
           quantity: reference,
-          referenceDate: new Date().toISOString().slice(0, 10),
+          // Hoje é o dia comercial, não o UTC (WEB-DATE-DEFAULT-TZ-01).
+          referenceDate: hojeComercial(),
         })
           .then((value) => {
             if (active) setCmv(value);

@@ -5,7 +5,7 @@ import type {
   IndustrialCostCalculationDTO,
   IndustrialCostCalculationSummaryDTO,
 } from "@veridi/shared";
-import { INDUSTRIAL_COST_QUALITY_LABELS } from "@veridi/shared";
+import { hojeComercial, INDUSTRIAL_COST_QUALITY_LABELS } from "@veridi/shared";
 import { CostBreakdown, CostQualityBadge, formatUnitCost } from "../../components/CostBreakdown";
 import { MaterialCostSourceChooser } from "../../components/MaterialCostSourceChooser";
 import { FormSection } from "../../components/FormSection";
@@ -22,8 +22,12 @@ import { formatDate, formatDateTime } from "../../lib/dates";
 import { UsePricingPolicyDialog } from "../cost-templates/UsePricingPolicyDialog";
 import { applyPricingPolicyToProduct } from "../../lib/cost-pricing-templates-api";
 
+/**
+ * Referência padrão: o dia comercial de São Paulo (§72). O dia UTC datava de
+ * amanhã o cálculo salvo entre 21h e meia-noite (WEB-DATE-DEFAULT-TZ-01).
+ */
 function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return hojeComercial();
 }
 
 /**

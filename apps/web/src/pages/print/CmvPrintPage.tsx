@@ -1,5 +1,6 @@
 import { useParams, useSearchParams } from "react-router-dom";
 import type { ProductCmvResponse } from "@veridi/shared";
+import { hojeComercial } from "@veridi/shared";
 import { useOptionalAuth } from "../../app/AuthProvider";
 import { getProductCmv } from "../../lib/product-cmv-api";
 import { PdfScreen } from "../../pdf/PdfScreen";
@@ -14,7 +15,8 @@ export function CmvPrintPage() {
   const { productId } = useParams<{ productId: string }>();
   const [params] = useSearchParams();
   const quantity = params.get("quantity") ?? "1000";
-  const referenceDate = params.get("referenceDate") ?? new Date().toISOString().slice(0, 10);
+  // Sem data na rota, hoje é o dia comercial — nunca o dia UTC (WEB-DATE-DEFAULT-TZ-01).
+  const referenceDate = params.get("referenceDate") ?? hojeComercial();
   const geradoPor = useOptionalAuth()?.user?.name ?? null;
 
   return (
