@@ -138,7 +138,7 @@ function percentuaisEmTexto(componente: {
 function assinaturaDosComponentes(linhas: LinhaEditavel[]): string {
   return assinaturaDoDocumento(
     linhas
-      .filter((linha) => linha.itemId !== "" || linha.quantity.trim() !== "")
+      .filter((linha) => !linhaEmBranco(linha))
       .map((linha) => ({
         item: linha.itemId,
         quantidade: decimalComparavel(linha.quantity),
@@ -154,6 +154,30 @@ function assinaturaDosComponentes(linhas: LinhaEditavel[]): string {
       })),
   );
 }
+
+/** "+ Adicionar componente" sem nada preenchido: não é trabalho, e não vai ao servidor. */
+function linhaEmBranco(linha: LinhaEditavel): boolean {
+  return linha.itemId === "" && linha.quantity.trim() === "";
+}
+
+/**
+ * O que falta numa linha começada — `null` se ela está completa ou em branco.
+ *
+ * O salvar filtrava item sem quantidade e quantidade sem item: a linha ficava
+ * na tela, a pendência continuava acesa e nada dizia por que ela não foi
+ * gravada. Linha começada não some em silêncio — prende o salvar e diz o quê.
+ */
+function faltaNaLinha(linha: LinhaEditavel): "item" | "quantidade" | null {
+  if (linhaEmBranco(linha)) return null;
+  if (linha.itemId === "") return "item";
+  if (linha.quantity.trim() === "") return "quantidade";
+  return null;
+}
+
+const MENSAGEM_DA_FALTA = {
+  item: "Escolha o item deste componente ou remova a linha.",
+  quantidade: "Informe a quantidade deste componente ou remova a linha.",
+} as const;
 
 function assinaturaDoRascunho(base: string, unidade: string, linhas: LinhaEditavel[]): string {
   return assinaturaDoDocumento({
@@ -252,6 +276,8 @@ export function FormulationTemplateDetailPage() {
   /** O que a última ação gravou, no bloco que a disparou — uma frase, nunca uma pilha. */
   const [feito, setFeito] = useState<{ bloco: string; texto: string } | null>(null);
   const [linhas, setLinhas] = useState<LinhaEditavel[]>([]);
+  /** Depois de um salvar recusado por linha incompleta, cada linha diz o que falta. */
+  const [conferirLinhas, setConferirLinhas] = useState(false);
   const [base, setBase] = useState("1");
   const [unidade, setUnidade] = useState("un");
   const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
@@ -841,6 +867,9 @@ export function FormulationTemplateDetailPage() {
                     const erroDaUnidade = `template-unidade-erro-${linha.chave}`;
                     const configuracao = ajustesDoModelo(linha);
                     const abertoAjuste = ajustes.aberto(linha.chave);
+                    const falta = conferirLinhas ? faltaNaLinha(linha) : null;
+                    const erroDaLinha = `template-linha-erro-${linha.chave}`;
+                    const acusarFalta = { "aria-invalid": true, "aria-describedby": erroDaLinha } as const;
                     return (
                       <Fragment key={linha.chave}>
                       <tr>
@@ -857,6 +886,7 @@ export function FormulationTemplateDetailPage() {
                             options={items.map(opcaoDoItem)}
                             onSearch={buscarItens}
                             canCreate={editavel}
+                            {...(falta === "item" ? acusarFalta : {})}
                             createLabel="Novo item de estoque"
                             /* Sair para cadastrar o item NÃO é descartar: o
                                rascunho vai junto e volta aplicado na linha. */
@@ -872,9 +902,15 @@ export function FormulationTemplateDetailPage() {
                               )
                             }
                           />
+                          {falta === "item" && (
+                            <p className="field__error" id={erroDaLinha}>
+                              {MENSAGEM_DA_FALTA.item}
+                            </p>
+                          )}
                         </td>
                         <td className="is-numeric">
                           <DecimalField
+                            id={`template-quantidade-${linha.chave}`}
                             scale={CASAS_QUANTIDADE}
                             disabled={!editavel}
                             value={linha.quantity}
@@ -883,7 +919,13 @@ export function FormulationTemplateDetailPage() {
                                 atual.map((l, i) => (i === index ? { ...l, quantity } : l)),
                               )
                             }
+                            {...(falta === "quantidade" ? acusarFalta : {})}
                           />
+                          {falta === "quantidade" && (
+                            <p className="field__error" id={erroDaLinha}>
+                              {MENSAGEM_DA_FALTA.quantidade}
+                            </p>
+                          )}
                         </td>
                         <td>
                           {/* Mesma lista da Formulação: o catálogo, na dimensão do
@@ -1043,6 +1085,21 @@ export function FormulationTemplateDetailPage() {
                        diz qual linha espera decisão. */
                     disabled={saving || temUnidadeInvalida || (!rascunhoAlterado && !ajustePendente)}
                     onClick={() => {
+                      // Linha começada e não terminada prende o salvar, e o foco
+                      // vai ao campo que falta — nada é descartado nem inventado.
+                      const incompleta = linhas.find((linha) => faltaNaLinha(linha) !== null);
+                      if (incompleta) {
+                        const campoQueFalta =
+                          faltaNaLinha(incompleta) === "item"
+                            ? `template-item-${incompleta.chave}`
+                            : `template-quantidade-${incompleta.chave}`;
+                        setFeito(null);
+                        setError(null);
+                        setConferirLinhas(true);
+                        requestAnimationFrame(() => document.getElementById(campoQueFalta)?.focus());
+                        return;
+                      }
+                      setConferirLinhas(false);
                       // Ajuste aberto e não aplicado não vai junto — e não se perde
                       // em silêncio: a tela diz qual linha espera decisão.
                       const pendente = linhas.find((linha) =>
@@ -1063,7 +1120,8 @@ export function FormulationTemplateDetailPage() {
                             basisQuantity: exigirDecimal(base, "Base da formulação", OPCOES_QUANTIDADE),
                             outputUnitCode: unidade,
                             components: linhas
-                              .filter((linha) => linha.itemId && linha.quantity)
+                              // Só a linha em branco fica de fora: a incompleta já parou acima.
+                              .filter((linha) => !linhaEmBranco(linha))
                               .map(({ chave: _chave, ...resto }) => ({
                                 ...resto,
                                 quantity: exigirDecimal(resto.quantity, "Quantidade", OPCOES_QUANTIDADE),

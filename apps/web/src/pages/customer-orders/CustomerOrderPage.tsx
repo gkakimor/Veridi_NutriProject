@@ -388,6 +388,24 @@ export function CustomerOrderPage() {
   const [feito, setFeito] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  /*
+   * Erro de AÇÃO leva a pessoa até o alerta. Ele mora no topo do documento e os
+   * botões — salvar, confirmar, plano, reservas — ficam lá embaixo: em 390px a
+   * recusa aparecia fora da vista e o clique parecia não ter efeito. Um alerta
+   * só, trazido à vista e com foco; erro de CARGA não rola a tela de ninguém.
+   */
+  const alertaRef = useRef<HTMLParagraphElement>(null);
+  const [errosDeAcao, setErrosDeAcao] = useState(0);
+  function avisarErro(mensagem: string) {
+    setError(mensagem);
+    setErrosDeAcao((total) => total + 1);
+  }
+  useEffect(() => {
+    if (errosDeAcao === 0) return;
+    // jsdom não implementa `scrollIntoView`; no navegador ele existe sempre.
+    alertaRef.current?.scrollIntoView?.({ block: "center" });
+    alertaRef.current?.focus();
+  }, [errosDeAcao]);
 
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
@@ -705,7 +723,7 @@ export function CustomerOrderPage() {
     try {
       setCustomerOrder(await createRemainderProductionOrder(id, { customerOrderLineId: lineId }));
     } catch (err) {
-      setError(apiErrorMessage(err, "Falha ao gerar OP para o saldo restante"));
+      avisarErro(apiErrorMessage(err, "Falha ao gerar OP para o saldo restante"));
     } finally {
       setGerandoSaldoLineId(null);
     }
@@ -1058,16 +1076,16 @@ export function CustomerOrderPage() {
         nextFieldErrors[issue.path] = issue.message;
       }
       setFieldErrors(nextFieldErrors);
-      setError("Corrija os campos destacados.");
+      avisarErro("Corrija os campos destacados.");
     } else {
-      setError(apiErrorMessage(err, "Falha ao salvar pedido"));
+      avisarErro(apiErrorMessage(err, "Falha ao salvar pedido"));
     }
   }
 
   async function handleSaveDraft() {
     setFeito(null);
     if (!customerId) {
-      setError("Selecione um cliente.");
+      avisarErro("Selecione um cliente.");
       return;
     }
 
@@ -1117,7 +1135,7 @@ export function CustomerOrderPage() {
       syncFormFromServer(updated);
       setFeito("Prazo e observações salvos.");
     } catch (err) {
-      setError(apiErrorMessage(err, "Falha ao salvar"));
+      avisarErro(apiErrorMessage(err, "Falha ao salvar"));
     } finally {
       setAcaoEmCurso(null);
     }
@@ -1137,7 +1155,7 @@ export function CustomerOrderPage() {
      */
     if (alteracaoPendente) {
       if (!customerId) {
-        setError("Selecione um cliente.");
+        avisarErro("Selecione um cliente.");
         return;
       }
       setAcaoEmCurso("salvar-para-confirmar");
@@ -1161,7 +1179,7 @@ export function CustomerOrderPage() {
       setCustomerOrder(updated);
       syncFormFromServer(updated);
     } catch (err) {
-      setError(apiErrorMessage(err, "Falha ao confirmar pedido"));
+      avisarErro(apiErrorMessage(err, "Falha ao confirmar pedido"));
     } finally {
       setAcaoEmCurso(null);
     }
@@ -1179,7 +1197,7 @@ export function CustomerOrderPage() {
       setCustomerOrder(updated);
       syncFormFromServer(updated);
     } catch (err) {
-      setError(apiErrorMessage(err, "Falha ao cancelar pedido"));
+      avisarErro(apiErrorMessage(err, "Falha ao cancelar pedido"));
     } finally {
       setAcaoEmCurso(null);
     }
@@ -1301,7 +1319,7 @@ export function CustomerOrderPage() {
       syncFormFromServer(updated);
       setPlan(null);
     } catch (err) {
-      setError(apiErrorMessage(err, "Falha ao aplicar plano de atendimento"));
+      avisarErro(apiErrorMessage(err, "Falha ao aplicar plano de atendimento"));
     } finally {
       setApplying(false);
     }
@@ -1360,7 +1378,7 @@ export function CustomerOrderPage() {
       syncFormFromServer(updated);
       reloadSuggestion();
     } catch (err) {
-      setError(apiErrorMessage(err, "Falha ao gerar Ordens de Compra"));
+      avisarErro(apiErrorMessage(err, "Falha ao gerar Ordens de Compra"));
     } finally {
       setGenerating(false);
     }
@@ -1394,7 +1412,7 @@ export function CustomerOrderPage() {
       setReserveInputs({});
       reloadReservationStatus();
     } catch (err) {
-      setError(apiErrorMessage(err, "Falha ao reservar produto acabado"));
+      avisarErro(apiErrorMessage(err, "Falha ao reservar produto acabado"));
     } finally {
       setReserving(false);
     }
@@ -1412,7 +1430,7 @@ export function CustomerOrderPage() {
       syncFormFromServer(updated);
       reloadReservationStatus();
     } catch (err) {
-      setError(apiErrorMessage(err, "Falha ao realocar reserva"));
+      avisarErro(apiErrorMessage(err, "Falha ao realocar reserva"));
     } finally {
       setReallocatingLineId(null);
     }
@@ -1426,7 +1444,7 @@ export function CustomerOrderPage() {
       const shipment = await createShipmentDraft(id);
       navigate(`/comercial/expedicoes/${shipment.id}`);
     } catch (err) {
-      setError(apiErrorMessage(err, "Falha ao preparar expedição"));
+      avisarErro(apiErrorMessage(err, "Falha ao preparar expedição"));
     } finally {
       setPreparingShipment(false);
     }
@@ -1495,7 +1513,12 @@ export function CustomerOrderPage() {
           dificil, nao mais facil.
         */}
         <ContextHelp topic={helpTopics["comercial.pedido"]} />
-        {error && <p className="form-alert" role="alert">{error}</p>}
+        {/* Com o diálogo de cancelamento aberto, o erro mora nele: aqui ficaria atrás. */}
+        {error && !cancelDialogOpen && (
+          <p className="form-alert" role="alert" ref={alertaRef} tabIndex={-1}>
+            {error}
+          </p>
+        )}
 
         {customerOrder?.status === "CANCELLED" && (
           <FormSection title="Cancelamento">
@@ -2848,7 +2871,7 @@ options={customerOptions.map((customer) => ({
 
       <div className="doc-actions">
         {isCancellable && (
-          <button type="button" className="btn btn--danger" disabled={saving} onClick={() => setCancelDialogOpen(true)}>
+          <button type="button" className="btn btn--danger" disabled={saving} onClick={() => { setError(null); setCancelDialogOpen(true); }}>
             Cancelar pedido
           </button>
         )}
@@ -2963,6 +2986,11 @@ options={customerOptions.map((customer) => ({
                 onChange={(event) => setCancelReason(event.target.value)}
               />
             </div>
+            {error && (
+              <p className="form-alert" role="alert" ref={alertaRef} tabIndex={-1}>
+                {error}
+              </p>
+            )}
             <div className="confirm-dialog__actions">
               <button type="button" className="btn btn--ghost" onClick={() => setCancelDialogOpen(false)}>
                 Voltar

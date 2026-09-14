@@ -3832,6 +3832,51 @@ global nem fresh (FAST).
 **Achados** (BACKLOG): LISTS-EMPTY-ROW-390-RAW-01 — linha de vazio escrita à mão, fora do
 `ListStatusRow`, não ganhou o corpo com a largura visível.
 
+## Edição do usuário e feedback depois da ação (EDITING-INTEGRITY-WAVE-01, 2026-09-13)
+
+Quatro achados confirmados, fechados juntos. Só web: sem API, domínio, migration nem redesign.
+
+**ROUTE-DRAFT-SAVE-INFLIGHT-EDIT-01.** Roteiro de Produção: preservar, não bloquear — os campos
+seguem editáveis durante "Salvar rascunho", como já era durante "Salvar identificação". A ação
+que grava o rascunho (salvar, ativar, criar versão) guarda a assinatura da tela no clique; na
+releitura, tela igual à do clique recebe o servidor normalizado (`250,5`, `030`, nome aparado),
+tela diferente fica como está, pendente contra o GRAVADO — salvou 500, digitou 700 no ar: fica
+700, "Alterações não salvas", "Ativar versão" preso e a guarda pergunta; voltar a 500 limpa. As
+outras ações seguem a regra de ROUTE-IDENTIFICATION-SAVE-DRAFT-01; restauração contextual
+intocada.
+
+**TEMPLATE-ROW-DROP-01.** Modelo de Formulação: linha começada (item sem quantidade ou quantidade
+sem item) prende "Salvar rascunho" — mensagem na própria linha ("Informe a quantidade deste
+componente ou remova a linha." / "Escolha o item…"), `aria-invalid` + `aria-describedby` no
+campo e foco nele. Nada é inventado; só a linha em branco continua fora do payload e fora da
+pendência. Corrigir ou remover a linha apaga o aviso.
+
+**PROJECT-RELOAD-ERROR-01.** Ficha do Projeto: só `NotFoundApiError` (404) vira "Projeto não
+encontrado". Rede ou 500 na releitura mantém a ficha com o alerta "Não foi possível carregar o
+projeto agora. A ficha abaixo pode estar desatualizada." e "Tentar novamente"; na primeira carga,
+o mesmo alerta sem ficha. Leitura boa limpa o alerta.
+
+**FORM-ERROR-VISIBILITY-01.** Pedido e OC: erro de AÇÃO (salvar, prazo/previsão, confirmar,
+cancelar; no Pedido também plano, OCs, reserva, realocação, expedição e OP do saldo) passa por
+`avisarErro`, que traz o alerta único do topo à vista (`scrollIntoView`) e dá foco a ele
+(`tabIndex=-1`). Erro de carga não rola a tela. Com o diálogo de cancelamento aberto, o erro
+aparece dentro dele (o do topo não é renderizado); abrir o diálogo limpa erro antigo.
+
+**Validação.** Web focado (roteiro, roteiro-volta-do-cadastro, pastas `formulation-templates`,
+`projects`, `customer-orders`, `purchase-orders`, `unsaved-changes*`): 50 arquivos, 588 testes
+antes do rebase e de novo sobre a main final (447ad15, depois de dois rebases); no rebase
+intermediário caiu a falha conhecida de `envio-com-linha-nao-salva` ("duas linhas…"), que passou
+3/3 isolada. Novos: `roteiro-de-producao` ("Edição durante a
+gravação do rascunho", 2), `modelo-linha-incompleta` (3), `projeto-recarga-com-erro` (6),
+`pedido-`/`oc-confirmar-grava-antes` ("erro de ação vem à vista", 3 cada). Mutação: 13 derrubadas
+(as quatro telas da main, tela do clique trocada pela pendência antiga ou lida na resposta, sem
+foco no campo que falta, 404 como transitório, alerta que não limpa, sem foco no alerta, alerta
+do topo com o diálogo aberto, confirmar sem `avisarErro`). Smoke 390px no navegador real, sem
+gravar (confirmar e PATCH respondem 409 simulado, o resto abortado): Pedido e OC, confirmar e
+salvar — alerta à vista (topo 186–265 px de 844), com foco, um só, `scrollWidth` 390; a main no
+mesmo script deixa o alerta em −331 a −387 px e sem foco. `pnpm typecheck`. Sem full test, E2E,
+build global nem fresh (FAST).
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

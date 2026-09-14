@@ -182,6 +182,13 @@ beforeEach(() => {
         eventos.push("CONFIRM confirmado");
         return responder({ status: 200, corpo: travada });
       }
+      if (metodo === "POST" && url.pathname === "/purchase-orders/oc-1/cancel") {
+        eventos.push("CANCEL");
+        return responder({
+          status: 409,
+          corpo: { error: "invalid_transition", message: "Esta OC não pode mais ser cancelada." },
+        });
+      }
       throw new Error(`rota não prevista: ${metodo} ${url.pathname}`);
     }),
   );
@@ -435,5 +442,77 @@ describe("com alteração pendente — gravar antes de agir", () => {
 
     await user.click(screen.getByRole("link", { name: "Estoque" }));
     expect(await screen.findByText("Sair sem salvar?")).toBeInTheDocument();
+  });
+});
+
+/**
+ * FORM-ERROR-VISIBILITY-01 — o erro de uma ação aparece onde a pessoa está.
+ *
+ * O alerta mora no topo do documento e salvar, confirmar e cancelar ficam no
+ * fim: em 390px a recusa ficava fora da vista e o clique parecia não ter
+ * efeito. O MESMO alerta — nenhuma cópia perto do botão — vem à vista e recebe
+ * o foco; com o diálogo de cancelamento aberto, o erro aparece dentro dele.
+ */
+describe("erro de ação vem à vista", () => {
+  let rolados: Element[];
+
+  beforeEach(() => {
+    rolados = [];
+    // jsdom não implementa `scrollIntoView`: aqui ele é o que se quer observar.
+    Element.prototype.scrollIntoView = function (this: Element) {
+      rolados.push(this);
+    };
+  });
+
+  afterEach(() => {
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  });
+
+  it("confirmação recusada: o alerta único rola à vista e recebe o foco", async () => {
+    recusaDaConfirmacao = {
+      status: 409,
+      corpo: { error: "inactive_supplier", message: "Fornecedor FOR-000001 está inativo." },
+    };
+    await abrir();
+
+    await confirmar();
+
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent("Fornecedor FOR-000001 está inativo.");
+    await waitFor(() => expect(alerta).toHaveFocus());
+    expect(rolados).toContain(alerta);
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+  });
+
+  it("Salvar rascunho recusado: o mesmo alerta vem à vista", async () => {
+    recusaDaGravacao = { status: 409, corpo: { error: "conflict", message: "OC alterada por outra pessoa." } };
+    await abrir();
+    editar();
+
+    fireEvent.click(botao("Salvar rascunho"));
+
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent("OC alterada por outra pessoa.");
+    await waitFor(() => expect(alerta).toHaveFocus());
+    expect(rolados).toContain(alerta);
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+  });
+
+  it("cancelamento recusado: o erro aparece dentro do diálogo, não atrás dele", async () => {
+    await abrir();
+
+    fireEvent.click(botao("Cancelar OC"));
+    const dialogo = await screen.findByRole("alertdialog");
+    fireEvent.change(within(dialogo).getByLabelText(/Motivo do cancelamento/), {
+      target: { value: "Fornecedor desistiu" },
+    });
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Cancelar OC" }));
+
+    const alerta = await within(dialogo).findByRole("alert");
+    expect(alerta).toHaveTextContent("Esta OC não pode mais ser cancelada.");
+    await waitFor(() => expect(alerta).toHaveFocus());
+    // Contando também o que o diálogo esconde: nenhuma cópia atrás dele.
+    expect(screen.getAllByRole("alert", { hidden: true })).toHaveLength(1);
+    expect(eventos).toContain("CANCEL");
   });
 });

@@ -43,7 +43,10 @@ function DicaDaColuna({ id }: { id: HelpHintId }) {
   return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
 }
 import { formatDate, formatDateTime } from "../../lib/dates";
+import { NotFoundApiError } from "../../lib/api-errors";
 
+/** Leitura que falhou sem ser 404: rede, 500. O Projeto existe; a resposta é que não veio. */
+const AVISO_DE_LEITURA = "Não foi possível carregar o projeto agora.";
 
 /**
  * Documento do projeto: resumo, pipeline, orçamentos versionados,
@@ -100,12 +103,29 @@ export function ProjectDetailPage() {
   // Preparar produto técnico e vincular precificação são atos comerciais.
   const canEdit = user?.role === "COMMERCIAL" || user?.role === "ADMIN";
 
+  /**
+   * Falha de leitura que NÃO é 404.
+   *
+   * Todo erro de `getProject` virava "Projeto não encontrado": uma queda de rede
+   * ou um 500 na releitura depois de uma ação desmontava a ficha inteira, como
+   * se o Projeto não existisse. Só o 404 diz isso; o resto mantém a ficha que já
+   * estava na tela e avisa que a leitura falhou.
+   */
+  const [loadError, setLoadError] = useState(false);
+
   const load = useCallback(() => {
     if (!id) return;
     setLoading(true);
     getProject(id)
-      .then(setProject)
-      .catch(() => setNotFound(true))
+      .then((result) => {
+        setProject(result);
+        setNotFound(false);
+        setLoadError(false);
+      })
+      .catch((err: unknown) => {
+        if (err instanceof NotFoundApiError) setNotFound(true);
+        else setLoadError(true);
+      })
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -149,7 +169,15 @@ export function ProjectDetailPage() {
     return (
       <div className="page__header">
         <div>
-          <h1 className="page__title">Projeto não encontrado</h1>
+          <h1 className="page__title">{notFound ? "Projeto não encontrado" : "Projeto"}</h1>
+          {!notFound && (
+            <p className="form-alert" role="alert">
+              {AVISO_DE_LEITURA}{" "}
+              <button type="button" className="btn btn--secondary btn--sm" onClick={load}>
+                Tentar novamente
+              </button>
+            </p>
+          )}
           <button
             type="button"
             className="btn btn--ghost"
@@ -224,6 +252,14 @@ export function ProjectDetailPage() {
 
       <div className="doc-body">
         {error && <p className="form-alert" role="alert">{error}</p>}
+        {loadError && (
+          <p className="form-alert" role="alert">
+            {AVISO_DE_LEITURA} A ficha abaixo pode estar desatualizada.{" "}
+            <button type="button" className="btn btn--secondary btn--sm" disabled={loading} onClick={load}>
+              Tentar novamente
+            </button>
+          </p>
+        )}
 
         {/* A ficha reúne quatro assuntos que a pessoa costuma tratar como
             telas diferentes — produto, custo, proposta e amostra. Dizer o
