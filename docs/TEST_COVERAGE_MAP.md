@@ -554,6 +554,7 @@ escrevem num banco de teste, nunca no da `DATABASE_URL`. Contrato em
 | Toda migration só usa tabela, tipo e coluna criados por migration de nome menor ou igual; banco vazio reconstrói só com o repositório | `scripts/migration-order.test.ts` · `pnpm validate:migrations:fresh` (Postgres local descartável) |
 | O banco que as migrations constroem do zero **é** o `schema.prisma` — `migrate diff` entre os dois sai vazio | `pnpm validate:migrations:fresh` (Postgres local descartável) |
 | Cada uma das 197 FKs declara no modelo a mesma ação de `ON DELETE` que a migration escreveu; relação opcional não herda `SetNull` por omissão (#14) | `scripts/schema-fk-actions.test.ts` |
+| Backup lógico (`prod-backup-json.mjs`) restaura sobre o banco que as migrations constroem: referência que a migration grava (`REFERENCIA_DAS_MIGRATIONS`, hoje só `UnitOfMeasure`) idêntica ao arquivo conta como restaurada; mesma chave com campo diferente, linha da migration ausente do arquivo, chave repetida ou model não declarado com linha reprovam; model comum carrega sem `skipDuplicates`; carregadas + referência = linhas lidas; sequences no mesmo ponto (BACKUP-RESTORE-CHECK-01: a prova quebrava em qualquer backup desde a migration das unidades) | `scripts/maintenance/restore-json-backup-check.test.ts` — 9 mutações derrubadas, inclusive `skipDuplicates` sem conciliação |
 
 ## O que foi aposentado, e por quê
 
