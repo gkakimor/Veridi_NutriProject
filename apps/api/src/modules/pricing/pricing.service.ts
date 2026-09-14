@@ -313,6 +313,14 @@ function toTierDTO(entry: ComputedTier, frozen: boolean, modeloPadrao: boolean):
         : modeloPadrao && tier.costPerUnitSnapshot
           ? resultadoTecnicoDaFaixa(tier.costPerUnitSnapshot)
           : null,
+      /*
+       * A qualidade desse custo, congelada com ele (QUOTE-SEND-CONFIRM-QUALITY-01).
+       * Faixa ativada antes do campo não a tem, e o DTO não a inventa: quem lê
+       * usa `costQuality`, como antes.
+       */
+      ...(tier.pricingCostQualitySnapshot
+        ? { pricingCostQuality: tier.pricingCostQualitySnapshot }
+        : {}),
       estimatedTaxPercent: tier.estimatedTaxPercentSnapshot
         ? percent(tier.estimatedTaxPercentSnapshot)
         : null,
@@ -1246,6 +1254,10 @@ export async function activatePricingVersion(
           pricingCostPerUnitSnapshot: entry.effect.pricingCostPerUnit
             ? fecharResultadoTecnicoPersistido(new Prisma.Decimal(entry.effect.pricingCostPerUnit))
             : null,
+          // E a qualidade dessa base, a mesma que pesou a confirmação acima — é
+          // a que o envio do Orçamento pesa depois (QUOTE-SEND-CONFIRM-QUALITY-01).
+          // `costQualitySnapshot` segue sendo a do cálculo: são fatos diferentes.
+          pricingCostQualitySnapshot: entry.effect.pricingCostQuality,
           estimatedTaxPercentSnapshot: entry.effect.estimatedTaxPercent
             ? new Prisma.Decimal(entry.effect.estimatedTaxPercent)
             : null,
