@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { booleanoDeConsultaSchema } from "../../lib/boolean-schema.js";
 import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
 
 /**
@@ -35,10 +36,11 @@ export const resetUserPasswordSchema = z.object({ password: passwordSchema });
 export const listUsersQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
   role: roleSchema.optional(),
-  active: z
-    .union([z.string(), z.boolean()])
-    .optional()
-    .transform((value) => (value === undefined ? undefined : value === true || value === "true")),
+  /**
+   * `"true"`/`"false"` exatos, o resto é 400 — `?active=1` listava só os
+   * inativos (QUERY-BOOLEAN-PERMISSIVE-REMAINING-01). Ausente: sem filtro.
+   */
+  active: booleanoDeConsultaSchema().optional(),
   page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
   pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
 });

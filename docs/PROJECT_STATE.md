@@ -4265,6 +4265,36 @@ golden path nem fresh (FAST).
 
 **Achados** (BACKLOG): QUOTES-HUB-01 (próxima), E2E-QUOTE-PAGE-FLOW-01, QUOTE-PAGE-NAV-ACTIVE-01.
 
+## Booleanos de query restantes estritos (QUERY-BOOLEAN-PERMISSIVE-REMAINING-01, 2026-09-14)
+
+Só API, só validação: sem migration, DTO, domínio, auth nem tela. Fecha a dívida que a varredura de
+QUERY-BOOLEAN-STRICTNESS-WAVE-02 deixou, sobre `booleanoDeConsultaSchema`, sem parser novo.
+
+**Antes.** Sete booleanos liam todo texto fora de `"true"` como `false`, calados. Reproduzido pela rota:
+`onlyPending=1` (e `0`, `yes`, `abc`, vazio…) na fila da Qualidade devolvia a fila inteira, com o laudo aprovado;
+`onlyWithBalance=1` trazia o lote zerado; `active=1` em Usuários listava só o inativo; `archived=1` nos Modelos de
+Estrutura de Custos, nas Políticas de preço (campo herdado por `.extend`) e nos Modelos de Formulação listava só o
+não arquivado; `includeArchived=1` nos anexos escondia o arquivado — este lido cru de `request.query` e comparado com
+`"true"` à mão.
+
+**Depois.** `"true"`/`"false"` exatos, o resto é 400 (`validation_error` com o campo), ausente com o padrão de antes:
+fila sem recorte (`default(false)` nos dois), Usuários sem filtro e bibliotecas sem o arquivado (`optional()`), anexos
+só com os ativos (`default(false)`). Anexos ganham `attachments.schemas.ts` (`listAttachmentsQuerySchema`): a rota
+confere a sessão, valida a query e só então lista. As telas já mandavam `true`/`false` ou omitiam: web intocada.
+
+**Legado.** `semRoteiro` das OPs e `activeOnly` dos Roteiros intocados (`1`/`0` com o contrato escrito no schema).
+
+**Guarda.** `lib/escalar-estrito-guarda.test.ts` perde a lista de dívida permissiva e a exceção de leitura crua da rota
+de anexos: nenhum booleano de URL de schema exportado aceita outro texto; `1`/`0` só no `LEGADO_EXPLICITO`; os sete
+corrigidos são conferidos na varredura como estritos; fora dos schemas, só o helper compara texto booleano.
+
+**Validação.** Antes da correção, os testes de rota novos derrubaram 7 de 28 — exatamente os de texto fora de
+`true`/`false`; `true`, `false` e ausente já tinham o efeito certo. Depois: `boolean-schema` (+7 campos: `1`, ausente,
+`true`, `false`, booleano real, 18 recusados), `escalar-estrito-guarda` e as rotas `quality-booleanos-de-consulta`,
+`users-booleanos-de-consulta`, `modelos-arquivados-booleanos` (3 bibliotecas) e `attachments-booleanos-de-consulta`,
+junto das pastas quality, users, cost-templates, formulation-templates, attachments e `paginacao-da-consulta`: 16
+arquivos, 1562 testes. `pnpm typecheck`. Sem full test, E2E nem fresh (FAST).
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { booleanoDeConsultaSchema } from "../../lib/boolean-schema.js";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import {
   CASAS_PERCENTUAL_TECNICO,
@@ -95,12 +96,12 @@ export const createTemplateFromFormulationSchema = z.object({
 
 export const listFormulationTemplatesQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
-  archived: z
-    .union([z.boolean(), z.string()])
-    .optional()
-    .transform((value) =>
-      value === undefined ? undefined : value === true || value === "true",
-    ),
+  /**
+   * `"true"`/`"false"` exatos, o resto é 400 — `?archived=1` listava os não
+   * arquivados (QUERY-BOOLEAN-PERMISSIVE-REMAINING-01). Ausente: sem os
+   * arquivados.
+   */
+  archived: booleanoDeConsultaSchema().optional(),
   page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
   pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
 });

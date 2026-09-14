@@ -6,6 +6,14 @@ import {
   listInventoryQuerySchema,
 } from "../modules/inventory/inventory.schemas.js";
 import * as relatorios from "../modules/reports/reports.schemas.js";
+import { listAttachmentsQuerySchema } from "../modules/attachments/attachments.schemas.js";
+import {
+  listPricingPoliciesQuerySchema,
+  listTemplatesQuerySchema,
+} from "../modules/cost-templates/cost-templates.schemas.js";
+import { listFormulationTemplatesQuerySchema } from "../modules/formulation-templates/formulation-templates.schemas.js";
+import { listQualityQueueQuerySchema } from "../modules/quality/quality.schemas.js";
+import { listUsersQuerySchema } from "../modules/users/users.schemas.js";
 
 /**
  * INVENTORY-EXPORT-ONLY-WITH-STOCK-01 — booleano de query é `"true"` ou
@@ -221,5 +229,83 @@ describe("Materiais de clientes — onlyWithBalance de listCustomerMaterialsQuer
     const resultado = filtro(valor);
     expect(resultado.success).toBe(false);
     expect(resultado.error?.issues[0]?.path).toEqual(["onlyWithBalance"]);
+  });
+});
+
+/**
+ * QUERY-BOOLEAN-PERMISSIVE-REMAINING-01 — os últimos booleanos de consulta que
+ * liam todo texto fora de `"true"` como `false`, calados: `?onlyPending=1`
+ * mostrava a fila inteira, `?active=1` só os inativos, `?archived=1` os não
+ * arquivados e `?includeArchived=1` escondia o anexo arquivado.
+ */
+type Consulta = { nome: string; schema: ZodTypeAny; campo: string; padrao: boolean | undefined };
+
+const CONSULTAS_RESTANTES: Consulta[] = [
+  {
+    nome: "Qualidade — listQualityQueueQuerySchema.onlyPending",
+    schema: listQualityQueueQuerySchema,
+    campo: "onlyPending",
+    padrao: false,
+  },
+  {
+    nome: "Qualidade — listQualityQueueQuerySchema.onlyWithBalance",
+    schema: listQualityQueueQuerySchema,
+    campo: "onlyWithBalance",
+    padrao: false,
+  },
+  { nome: "Usuários — listUsersQuerySchema.active", schema: listUsersQuerySchema, campo: "active", padrao: undefined },
+  {
+    nome: "Estrutura de Custos — listTemplatesQuerySchema.archived",
+    schema: listTemplatesQuerySchema,
+    campo: "archived",
+    padrao: undefined,
+  },
+  {
+    nome: "Política de preço — listPricingPoliciesQuerySchema.archived",
+    schema: listPricingPoliciesQuerySchema,
+    campo: "archived",
+    padrao: undefined,
+  },
+  {
+    nome: "Formulação — listFormulationTemplatesQuerySchema.archived",
+    schema: listFormulationTemplatesQuerySchema,
+    campo: "archived",
+    padrao: undefined,
+  },
+  {
+    nome: "Anexos — listAttachmentsQuerySchema.includeArchived",
+    schema: listAttachmentsQuerySchema,
+    campo: "includeArchived",
+    padrao: false,
+  },
+];
+
+describe.each(CONSULTAS_RESTANTES)("$nome", ({ schema, campo, padrao }) => {
+  const ler = (valor: unknown) => schema.safeParse({ [campo]: valor });
+
+  it('"1" é recusado — o defeito: era false calado', () => {
+    expect(ler("1").success).toBe(false);
+  });
+
+  it("ausente é o padrão de antes", () => {
+    const resultado = schema.safeParse({});
+    expect(resultado.success).toBe(true);
+    expect((resultado.data as Record<string, unknown>)[campo]).toBe(padrao);
+  });
+
+  it('"true" é true e "false" é false', () => {
+    expect(ler("true")).toMatchObject({ success: true, data: { [campo]: true } });
+    expect(ler("false")).toMatchObject({ success: true, data: { [campo]: false } });
+  });
+
+  it("booleano real, de quem chama o schema no código, continua valendo", () => {
+    expect(ler(true)).toMatchObject({ success: true, data: { [campo]: true } });
+    expect(ler(false)).toMatchObject({ success: true, data: { [campo]: false } });
+  });
+
+  it.each(NAO_BOOLEANOS.map((valor) => [valor]))("%j é recusado", (valor) => {
+    const resultado = ler(valor);
+    expect(resultado.success).toBe(false);
+    expect(resultado.error?.issues[0]?.path).toEqual([campo]);
   });
 });
