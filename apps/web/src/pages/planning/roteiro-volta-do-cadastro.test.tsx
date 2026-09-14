@@ -466,6 +466,42 @@ describe("Roteiro restaurado — alterações não salvas", () => {
     expect(screen.queryByText("Sair sem salvar?")).toBeNull();
   });
 
+  it("depois da volta, salvar a identificação não apaga o rascunho restaurado (StrictMode)", async () => {
+    // ROUTE-IDENTIFICATION-SAVE-DRAFT-01: a trava da restauração só vale para a
+    // carga inicial; a releitura depois de salvar o nome é outra carga.
+    const user = userEvent.setup();
+    getProductionProfile.mockResolvedValue(perfil());
+    const token = voltarDoCadastro(rascunhoDaTela({ nome: "Cápsulas — linha 2" }));
+
+    abrir(`${ROTA}?${PARAM_RETOMAR}=${token}`, { estrito: true });
+    await cabecalho();
+    await rascunhoRestauradoNaTela();
+    await waitFor(() => expect(getProductionProfile).toHaveBeenCalledTimes(2));
+    expect(screen.getAllByText("Alterações não salvas")).toHaveLength(2);
+
+    getProductionProfile.mockResolvedValue(perfil(versao(), { name: "Cápsulas — linha 2" }));
+    await user.click(botao("Salvar identificação"));
+
+    // Só com a releitura aplicada a identificação deixa de estar pendente.
+    expect(await screen.findByText("Identificação salva.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: /Cápsulas — linha 2/ })).toBeInTheDocument();
+    expect(getProductionProfile).toHaveBeenCalledTimes(3);
+    expect(updateProductionProfile).toHaveBeenCalledWith("ppr-1", {
+      name: "Cápsulas — linha 2",
+      description: null,
+    });
+    expect(updateProductionProfileVersion).not.toHaveBeenCalled();
+
+    await rascunhoRestauradoNaTela();
+    expect(screen.getAllByText("Alterações não salvas")).toHaveLength(1);
+    expect(botao("Salvar rascunho")).toBeEnabled();
+    expect(botao("Ativar versão")).toBeDisabled();
+
+    await user.click(screen.getByRole("link", { name: "Pedidos" }));
+    expect(await screen.findByText("Sair sem salvar?")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Pedidos" })).toBeNull();
+  });
+
   it("nome e descrição apagados antes de sair continuam apagados depois da carga", async () => {
     getProductionProfile.mockResolvedValue(perfil(versao(), { description: "Linha antiga" }));
     const token = voltarDoCadastro(rascunhoDaTela({ nome: "", descricao: "" }));

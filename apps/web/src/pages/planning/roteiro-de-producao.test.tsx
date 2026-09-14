@@ -1,8 +1,17 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import {
+  Link,
+  MemoryRouter,
+  Outlet,
+  Route,
+  RouterProvider,
+  createMemoryRouter,
+  createRoutesFromElements,
+} from "react-router-dom";
 import type {
   IndustrialResourceDTO,
   ProductionProfileDTO,
@@ -72,6 +81,7 @@ vi.mock("react-router-dom", async () => {
 
 import { ProductionProfilesPage } from "./ProductionProfilesPage";
 import { ProductionProfileDetailPage } from "./ProductionProfileDetailPage";
+import { UnsavedChangesProvider } from "../../app/UnsavedChangesProvider";
 import { helpTopics } from "../../help/help-content";
 
 function recursoDoCatalogo(
@@ -534,6 +544,278 @@ describe("Ações e feedback", () => {
     await waitFor(() => expect(activateProductionProfileVersion).toHaveBeenCalledWith("ppv-1"));
     expect(await screen.findByText("Versão ativada.")).toBeInTheDocument();
     expect(screen.queryByText("Rascunho salvo.")).toBeNull();
+  });
+});
+
+/**
+ * ROUTE-IDENTIFICATION-SAVE-DRAFT-01 — identificação e rascunho gravam separado,
+ * e a releitura depois de "Salvar identificação" trocava base, unidade e etapas
+ * digitadas pelas do servidor: a pendência sumia e a guarda deixava sair calada.
+ *
+ * Aqui a tela roda dentro do router de dados com a guarda do app, porque "a
+ * guarda continua" só se prova tentando sair.
+ */
+function ComGuarda() {
+  return (
+    <UnsavedChangesProvider>
+      <nav>
+        <Link to="/comercial/pedidos">Pedidos</Link>
+      </nav>
+      <Outlet />
+    </UnsavedChangesProvider>
+  );
+}
+
+async function abrirComGuarda(dto: ProductionProfileDTO) {
+  getProductionProfile.mockResolvedValue(dto);
+  const router = createMemoryRouter(
+    createRoutesFromElements(
+      <Route element={<ComGuarda />}>
+        <Route
+          path="/planejamento/perfis-producao/:profileId"
+          element={<ProductionProfileDetailPage />}
+        />
+        <Route path="/comercial/pedidos" element={<h1>Pedidos</h1>} />
+      </Route>,
+    ),
+    { initialEntries: ["/planejamento/perfis-producao/ppr-1"] },
+  );
+  render(<RouterProvider router={router} />);
+  await screen.findByRole("heading", { name: /PPR-000001/ });
+  // As unidades chegam depois do roteiro: antes delas "kg" nem é opção do campo.
+  await screen.findByRole("option", { name: "kg — Quilograma" });
+}
+
+const campo = (rotulo: string) => screen.getByLabelText(rotulo);
+const pendencias = () => screen.queryAllByText("Alterações não salvas");
+
+/** Base, unidade, nome da etapa e identificação — tudo digitado, nada salvo. */
+function editarRascunhoENome() {
+  fireEvent.change(campo("Quantidade de referência"), { target: { value: "500" } });
+  fireEvent.change(campo("Unidade de referência"), { target: { value: "kg" } });
+  fireEvent.change(campo("Nome da etapa"), { target: { value: "Mistura Nova" } });
+  fireEvent.change(campo("Nome"), { target: { value: "Cápsulas — linha 2" } });
+}
+
+/** O rascunho digitado continua na tela — nenhum campo voltou a ser o do servidor. */
+function rascunhoDigitadoNaTela() {
+  expect(campo("Quantidade de referência")).toHaveValue("500");
+  expect(campo("Unidade de referência")).toHaveValue("kg");
+  expect(screen.getAllByLabelText("Nome da etapa")).toHaveLength(1);
+  expect(campo("Nome da etapa")).toHaveValue("Mistura Nova");
+  expect(screen.queryByDisplayValue("Encapsulamento")).toBeNull();
+}
+
+async function tentarSair(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("link", { name: "Pedidos" }));
+}
+
+describe("Salvar identificação não apaga o rascunho pendente", () => {
+  it("nome salvo; base, unidade e etapa digitadas continuam, com a pendência e a guarda", async () => {
+    const user = userEvent.setup();
+    const noServidor = versao({ steps: [etapaCompleta()] });
+    await abrirComGuarda(perfil({ draftVersion: noServidor }));
+
+    editarRascunhoENome();
+    // Os dois blocos pendentes: identificação e rascunho.
+    expect(pendencias()).toHaveLength(2);
+
+    // O servidor grava só a identificação: o rascunho segue como estava gravado.
+    getProductionProfile.mockResolvedValue(
+      perfil({ name: "Cápsulas — linha 2", draftVersion: noServidor }),
+    );
+    fireEvent.click(botao("Salvar identificação"));
+
+    // A releitura chegou: o cabeçalho é o do servidor, e só com ela a
+    // identificação deixa de estar pendente e confirma.
+    expect(await screen.findByRole("heading", { name: /Cápsulas — linha 2/ })).toBeInTheDocument();
+    expect(await screen.findByText("Identificação salva.")).toBeInTheDocument();
+    expect(getProductionProfile).toHaveBeenCalledTimes(2);
+    expect(updateProductionProfile).toHaveBeenCalledWith("ppr-1", {
+      name: "Cápsulas — linha 2",
+      description: null,
+    });
+    expect(updateProductionProfileVersion).not.toHaveBeenCalled();
+    expect(campo("Nome")).toHaveValue("Cápsulas — linha 2");
+
+    rascunhoDigitadoNaTela();
+    // A pendência que sobra é a do rascunho, com o que ela bloqueia.
+    expect(pendencias()).toHaveLength(1);
+    expect(botao("Salvar rascunho")).toBeEnabled();
+    expect(botao("Ativar versão")).toBeDisabled();
+    expect(screen.getByText("Salve o rascunho antes de ativar a versão.")).toBeInTheDocument();
+
+    await tentarSair(user);
+    expect(await screen.findByText("Sair sem salvar?")).toBeInTheDocument();
+    await user.click(botao("Continuar editando"));
+    await waitFor(() => expect(screen.queryByText("Sair sem salvar?")).toBeNull());
+    rascunhoDigitadoNaTela();
+  });
+
+  it("o que se digita no rascunho enquanto a identificação grava também fica", async () => {
+    const user = userEvent.setup();
+    let responder: () => void = () => {};
+    updateProductionProfile.mockImplementation(
+      () => new Promise<void>((resolve) => (responder = () => resolve())),
+    );
+    const noServidor = versao({ steps: [etapaCompleta()] });
+    await abrirComGuarda(perfil({ draftVersion: noServidor }));
+
+    // No clique só a identificação está pendente.
+    fireEvent.change(campo("Nome"), { target: { value: "Cápsulas — linha 2" } });
+    expect(pendencias()).toHaveLength(1);
+    fireEvent.click(botao("Salvar identificação"));
+    expect(await screen.findByRole("button", { name: "Salvando…" })).toBeDisabled();
+
+    // Os campos do rascunho seguem editáveis durante a gravação.
+    fireEvent.change(campo("Quantidade de referência"), { target: { value: "500" } });
+    fireEvent.change(campo("Unidade de referência"), { target: { value: "kg" } });
+    fireEvent.change(campo("Nome da etapa"), { target: { value: "Mistura Nova" } });
+
+    getProductionProfile.mockResolvedValue(
+      perfil({ name: "Cápsulas — linha 2", draftVersion: noServidor }),
+    );
+    await act(async () => responder());
+
+    expect(await screen.findByText("Identificação salva.")).toBeInTheDocument();
+    expect(getProductionProfile).toHaveBeenCalledTimes(2);
+    rascunhoDigitadoNaTela();
+    expect(pendencias()).toHaveLength(1);
+    expect(botao("Ativar versão")).toBeDisabled();
+
+    await tentarSair(user);
+    expect(await screen.findByText("Sair sem salvar?")).toBeInTheDocument();
+  });
+
+  it("sem pendência no rascunho, a releitura traz o rascunho do servidor como antes", async () => {
+    const user = userEvent.setup();
+    await abrirComGuarda(perfil({ draftVersion: versao({ steps: [etapaCompleta()] }) }));
+
+    fireEvent.change(campo("Nome"), { target: { value: "Cápsulas — linha 2" } });
+    expect(pendencias()).toHaveLength(1);
+
+    // A identificação não mexe no rascunho: rascunho diferente na releitura é
+    // outra gravação. Sem nada pendente aqui, vale o servidor.
+    getProductionProfile.mockResolvedValue(
+      perfil({
+        name: "Cápsulas — linha 2",
+        draftVersion: versao({
+          referenceQuantity: "2000",
+          steps: [{ ...etapaCompleta(), name: "Encapsulamento dupla" }],
+        }),
+      }),
+    );
+    fireEvent.click(botao("Salvar identificação"));
+
+    expect(await screen.findByText("Identificação salva.")).toBeInTheDocument();
+    await waitFor(() => expect(campo("Quantidade de referência")).toHaveValue("2000"));
+    expect(campo("Unidade de referência")).toHaveValue("un");
+    expect(campo("Nome da etapa")).toHaveValue("Encapsulamento dupla");
+    expect(pendencias()).toHaveLength(0);
+    expect(botao("Salvar rascunho")).toBeDisabled();
+    expect(botao("Ativar versão")).toBeEnabled();
+
+    await tentarSair(user);
+    expect(await screen.findByRole("heading", { name: "Pedidos" })).toBeInTheDocument();
+    expect(screen.queryByText("Sair sem salvar?")).toBeNull();
+  });
+
+  it("salvar o rascunho troca a tela pelo que o servidor normalizou, e a pendência some", async () => {
+    const user = userEvent.setup();
+    await abrirComGuarda(perfil({ draftVersion: versao({ steps: [etapaCompleta()] }) }));
+
+    fireEvent.change(campo("Quantidade de referência"), { target: { value: "250,5" } });
+    fireEvent.change(campo("Preparação (min)"), { target: { value: "030" } });
+    fireEvent.change(campo("Nome da etapa"), { target: { value: "  Mistura Nova  " } });
+    expect(pendencias()).toHaveLength(1);
+
+    const gravado = versao({
+      referenceQuantity: "250.5",
+      steps: [{ ...etapaCompleta(), name: "Mistura Nova" }],
+    });
+    updateProductionProfileVersion.mockResolvedValue(gravado);
+    getProductionProfile.mockResolvedValue(perfil({ draftVersion: gravado }));
+    fireEvent.click(botao("Salvar rascunho"));
+
+    expect(await screen.findByText("Rascunho salvo.")).toBeInTheDocument();
+    expect(updateProductionProfileVersion).toHaveBeenCalledWith("ppv-1", {
+      referenceQuantity: "250.5",
+      referenceUomCode: "un",
+      steps: [
+        {
+          name: "Mistura Nova",
+          description: null,
+          setupDurationMinutes: 30,
+          runDurationMinutes: 60,
+          scalingMode: "PROPORTIONAL",
+          resources: [
+            { industrialResourceId: "op", resourceQuantity: 2 },
+            { industrialResourceId: "enc", resourceQuantity: 1 },
+          ],
+        },
+      ],
+    });
+
+    // Depois de salvar o rascunho, a tela é a do servidor — normalizada.
+    await waitFor(() => expect(campo("Quantidade de referência")).toHaveValue("250.5"));
+    expect(campo("Preparação (min)")).toHaveValue("30");
+    expect(campo("Nome da etapa")).toHaveValue("Mistura Nova");
+    expect(pendencias()).toHaveLength(0);
+    expect(botao("Salvar rascunho")).toBeDisabled();
+    expect(botao("Ativar versão")).toBeEnabled();
+    expect(screen.queryByText("Salve o rascunho antes de ativar a versão.")).toBeNull();
+
+    await tentarSair(user);
+    expect(await screen.findByRole("heading", { name: "Pedidos" })).toBeInTheDocument();
+    expect(screen.queryByText("Sair sem salvar?")).toBeNull();
+  });
+
+  it("tirar o padrão de um produto também não apaga o rascunho pendente", async () => {
+    const user = userEvent.setup();
+    const ativa = versao({ id: "ppv-1", status: "ACTIVE", steps: [etapaCompleta()] });
+    const rascunho = versao({
+      id: "ppv-2",
+      versionNumber: 2,
+      versionLabel: "V2",
+      steps: [etapaCompleta()],
+    });
+    const produto = {
+      productId: "prd-1",
+      productCode: "PRD-000001",
+      productName: "Cápsula de magnésio",
+      versionId: "ppv-1",
+      versionNumber: 1,
+      versionStatus: "ACTIVE" as const,
+    };
+    await abrirComGuarda(
+      perfil({
+        activeVersion: ativa,
+        draftVersion: rascunho,
+        versions: [rascunho, ativa],
+        defaultProducts: [produto],
+      }),
+    );
+
+    fireEvent.change(campo("Quantidade de referência"), { target: { value: "500" } });
+    fireEvent.change(campo("Unidade de referência"), { target: { value: "kg" } });
+    fireEvent.change(campo("Nome da etapa"), { target: { value: "Mistura Nova" } });
+    expect(pendencias()).toHaveLength(1);
+
+    getProductionProfile.mockResolvedValue(
+      perfil({ activeVersion: ativa, draftVersion: rascunho, versions: [rascunho, ativa] }),
+    );
+    fireEvent.click(botao("Tirar padrão"));
+
+    expect(
+      await screen.findByText("Nenhum produto usa este roteiro como padrão."),
+    ).toBeInTheDocument();
+    expect(setProductProductionProfile).toHaveBeenCalledWith("prd-1", null);
+    rascunhoDigitadoNaTela();
+    expect(pendencias()).toHaveLength(1);
+    expect(botao("Ativar versão")).toBeDisabled();
+
+    await tentarSair(user);
+    expect(await screen.findByText("Sair sem salvar?")).toBeInTheDocument();
   });
 });
 
