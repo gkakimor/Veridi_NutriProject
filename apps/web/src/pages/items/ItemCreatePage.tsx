@@ -33,7 +33,7 @@ const PARAM_TIPO = "tipo";
  *   item". Aí salvar devolve ao documento com o rascunho intacto e o item já
  *   selecionado; cancelar devolve sem selecionar nada.
  *
- * A trilha permanece canônica nos dois casos — `Cadastros › Itens de estoque
+ * A trilha permanece canônica nos dois casos — `Cadastros e Configurações › Itens de estoque
  * › Novo item de estoque`. De onde a pessoa veio é caminho de volta, não
  * hierarquia do sistema.
  *
@@ -79,7 +79,7 @@ export function ItemCreatePage() {
     <>
       <PageBreadcrumbs
         items={[
-          { label: "Cadastros" },
+          { label: "Cadastros e Configurações" },
           { label: "Itens de estoque", href: "/cadastros/itens" },
           { label: "Novo item de estoque", current: true },
         ]}

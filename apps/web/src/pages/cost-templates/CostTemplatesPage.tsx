@@ -12,7 +12,7 @@ import { helpTopics } from "../../help/help-content";
 import { LibraryPagination, LibraryStatus, LibraryToolbar } from "./TemplateLibraryTable";
 
 /**
- * Modelos e Parâmetros → Modelos de Estrutura de Custo.
+ * Cadastros e Configurações → Modelos de Estrutura de Custo.
  *
  * Configurações industriais reutilizáveis. Aplicar um template cria uma
  * estrutura própria do produto — e o template nunca carrega tarifa: o que

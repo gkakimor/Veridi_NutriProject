@@ -63,7 +63,7 @@ export function UseCostTemplateDialog({ onCancel, onApply, saving }: Props) {
     <FullWorkspaceModal
       open
       onClose={onCancel}
-      crumb="Modelos e Parâmetros / Modelos de Estrutura de Custo"
+      crumb="Cadastros e Configurações / Modelos de Estrutura de Custo"
       crumbActive="Usar template"
       title="Usar template de estrutura"
       footer={

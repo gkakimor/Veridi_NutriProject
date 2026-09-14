@@ -23,7 +23,7 @@ import { helpTopics } from "../../help/help-content";
  *   fornecedor". Aí salvar devolve à ordem com o rascunho intacto e o
  *   fornecedor já selecionado; cancelar devolve sem selecionar nada.
  *
- * A trilha permanece canônica nos dois casos — `Cadastros › Fornecedores ›
+ * A trilha permanece canônica nos dois casos — `Cadastros e Configurações › Fornecedores ›
  * Novo fornecedor`. De onde a pessoa veio é caminho de volta, não hierarquia
  * do sistema; misturar as duas coisas ensinaria uma estrutura que não existe.
  */
@@ -55,7 +55,7 @@ export function SupplierCreatePage() {
     <>
       <PageBreadcrumbs
         items={[
-          { label: "Cadastros" },
+          { label: "Cadastros e Configurações" },
           { label: "Fornecedores", href: "/cadastros/fornecedores" },
           { label: "Novo fornecedor", current: true },
         ]}

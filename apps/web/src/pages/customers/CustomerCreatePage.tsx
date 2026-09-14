@@ -24,7 +24,7 @@ import { helpTopics } from "../../help/help-content";
  *   rascunho intacto e o cliente já selecionado; cancelar devolve sem
  *   selecionar nada.
  *
- * A trilha permanece canônica nos dois casos — `Cadastros › Clientes › Novo
+ * A trilha permanece canônica nos dois casos — `Cadastros e Configurações › Clientes › Novo
  * cliente`. De onde a pessoa veio é caminho de volta, não hierarquia do
  * sistema; misturar as duas coisas ensinaria uma estrutura que não existe.
  */
@@ -60,7 +60,7 @@ export function CustomerCreatePage() {
     <>
       <PageBreadcrumbs
         items={[
-          { label: "Cadastros" },
+          { label: "Cadastros e Configurações" },
           { label: "Clientes", href: "/cadastros/clientes" },
           { label: "Novo cliente", current: true },
         ]}

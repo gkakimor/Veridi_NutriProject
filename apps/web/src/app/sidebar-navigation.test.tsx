@@ -32,7 +32,7 @@ const SECOES: [id: string, titulo: string, telas: string[]][] = [
     "Comercial",
     ["Visão do Cliente", "Projetos", "Orçamentos", "Amostras", "Pedidos", "Expedições", "Faturamento"],
   ],
-  ["production", "Produção", ["Ordens de Produção", "Picking / Consumo", "Formulações"]],
+  ["production", "Produção", ["Ordens de Produção", "Picking / Consumo"]],
   ["planning", "Planejamento", ["Roteiros de Produção", "Planejamento de Produção", "Calendário de Produção"]],
   ["purchasing", "Compras", ["Ordens de Compra", "Recebimentos", "Item × Fornecedor"]],
   [
@@ -41,13 +41,22 @@ const SECOES: [id: string, titulo: string, telas: string[]][] = [
     ["Posição de Estoque", "Lotes", "Lotes de Produto Acabado", "Movimentações", "Materiais de Clientes", "Inventário Físico"],
   ],
   ["quality", "Qualidade", ["Documentos / CoA", "Liberação de lotes", "Documentos controlados"]],
-  ["master-data", "Cadastros", ["Clientes", "Fornecedores", "Itens de estoque", "Produtos Acabados"]],
-  ["management", "Gestão", ["Relatórios", "Precificação"]],
   [
-    "models-parameters",
-    "Modelos e Parâmetros",
-    ["Modelos de Formulação", "Recursos Industriais", "Modelos de Estrutura de Custo", "Políticas de Precificação"],
+    "master-data",
+    "Cadastros e Configurações",
+    [
+      "Clientes",
+      "Fornecedores",
+      "Itens de estoque",
+      "Produtos Acabados",
+      "Formulações",
+      "Modelos de Formulação",
+      "Recursos Industriais",
+      "Modelos de Estrutura de Custo",
+      "Políticas de Precificação",
+    ],
   ],
+  ["management", "Gestão", ["Relatórios", "Precificação"]],
   ["administration", "Administração", ["Usuários"]],
 ];
 
@@ -150,7 +159,7 @@ beforeEach(() => {
 });
 
 describe("Navegação do ERP — arquitetura", () => {
-  it("Painel no topo e dez seções na ordem do fluxo, cada uma com as suas telas", async () => {
+  it("Painel no topo e nove seções na ordem do fluxo, cada uma com as suas telas", async () => {
     renderShell("/", { prefs: { openGroups: SECOES.map(([id]) => id) } });
     await carregar();
 
@@ -167,7 +176,7 @@ describe("Navegação do ERP — arquitetura", () => {
   });
 
   it("Visão do Cliente abre o Comercial; rótulos novos, endereços de sempre", async () => {
-    renderShell("/", { prefs: { openGroups: ["commercial", "models-parameters"] } });
+    renderShell("/", { prefs: { openGroups: ["commercial", "master-data"] } });
     await carregar();
 
     const visao = within(lista("commercial")).getAllByRole("link")[0];
@@ -175,7 +184,7 @@ describe("Navegação do ERP — arquitetura", () => {
     expect(visao).toHaveAttribute("href", "/consultas/clientes");
     expect(screen.queryByText("Consulta de Cliente")).toBeNull();
 
-    const modelos = within(lista("models-parameters"));
+    const modelos = within(lista("master-data"));
     expect(modelos.getByRole("link", { name: "Modelos de Formulação" })).toHaveAttribute(
       "href",
       "/producao/templates-formulacao",
@@ -356,7 +365,7 @@ describe("Navegação do ERP — busca de telas", () => {
 
     await user.type(busca, "cliente");
     expect(opcoes()).toEqual([
-      "Cadastros › Clientes",
+      "Cadastros e Configurações › Clientes",
       "Comercial › Visão do Cliente",
       "Estoque › Materiais de Clientes",
     ]);
@@ -402,7 +411,7 @@ describe("Navegação do ERP — busca de telas", () => {
 
     await user.clear(busca);
     await user.type(busca, "precifica");
-    expect(opcoes()).toEqual(["Modelos e Parâmetros › Políticas de Precificação"]);
+    expect(opcoes()).toEqual(["Cadastros e Configurações › Políticas de Precificação"]);
   });
 
   it("Ctrl+K e Cmd+K focam a busca; Esc fecha", async () => {

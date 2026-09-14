@@ -173,7 +173,7 @@ The Veridi ERP default desktop shell is:
 
 Default:
 - dark-green top topbar (52px);
-- left sidebar: 236px expanded, or a 56px compact icon rail (one icon per
+- left sidebar: 312px expanded, or a 56px compact icon rail (one icon per
   section, with tooltip), toggled by the discreet "Recolher menu / Expandir
   menu" control in the sidebar footer and saved per user;
 - main workspace;
@@ -196,7 +196,7 @@ similar registration screens) uses a **fullscreen modal inside the
 workspace**, not a side drawer:
 - starts below the topbar, covers the workspace (topbar + sidebar stay
   visible and interactive);
-- header: breadcrumb (`Cadastros / Itens / Editar`) + title + immutable
+- header: breadcrumb (`Cadastros e Configurações / Itens / Editar`) + title + immutable
   code as `CodeChip` (dark chip, `--font-code`, lime text) + "Fechar"
   (semantic red, closes without saving);
 - body: scrollable, organized into `FormSection` cards (uppercase
@@ -248,7 +248,7 @@ text that was typed.
 
 Cancelling returns to the same place with the draft restored and nothing
 selected. The breadcrumb on the create page stays canonical either way —
-`Cadastros › Clientes › Novo cliente`. Where the person came from is a way
+`Cadastros e Configurações › Clientes › Novo cliente`. Where the person came from is a way
 back, offered as a secondary "← Voltar para Pedido", not a level of the
 hierarchy; putting it in the trail would teach a structure the system does
 not have.

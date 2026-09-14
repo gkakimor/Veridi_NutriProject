@@ -80,7 +80,7 @@ CONCEITOS = [
 ]
 
 PRE_REQUISITOS_COMUNS = [
-    "As matérias-primas e embalagens da receita já cadastradas em Cadastros › "
+    "As matérias-primas e embalagens da receita já cadastradas em Cadastros e Configurações › "
     "Itens de estoque — e, para o custo fechar completo, já recebidas com preço, "
     "porque é do recebimento que vem a referência de custo.",
     "Os recursos industriais da estrutura (mão de obra, equipamento, energia) "

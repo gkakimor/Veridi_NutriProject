@@ -14,7 +14,7 @@ import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 
 /**
- * Modelos e Parâmetros → Modelos de Formulação.
+ * Cadastros e Configurações → Modelos de Formulação.
  *
  * A biblioteca técnica: matrizes reutilizáveis entre clientes. Nada aqui
  * pertence a um cliente — usar um template cria uma cópia independente na
