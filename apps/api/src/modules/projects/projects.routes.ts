@@ -75,6 +75,7 @@ import {
   changeProjectStatusSchema,
   createProjectSchema,
   listProjectsQuerySchema,
+  listQuoteVersionsQuerySchema,
   rejectQuoteSchema,
   duplicateQuoteVersionSchema,
   updateProjectSchema,
@@ -103,6 +104,7 @@ import {
   updateQuoteLine,
   canSeePricingProvenance,
   getQuoteById,
+  listQuoteVersions,
   rejectQuoteVersion,
   sendQuoteVersion,
   previewQuotePaymentSchedule,
@@ -441,6 +443,21 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
       if (mapped) return reply.status(mapped.status).send(mapped.body);
       throw error;
     }
+  });
+
+  /*
+   * Lista geral de Orçamentos — QUOTES-HUB-01. Uma linha por versão, de todos
+   * os projetos, só para ENCONTRAR e abrir a página da versão. O mesmo portão
+   * de `GET /projects`: a lista não carrega custo, margem nem comissão.
+   */
+  app.get("/quote-versions", async (request, reply) => {
+    const parsed = listQuoteVersionsQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply
+        .status(400)
+        .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+    }
+    return reply.send(await listQuoteVersions(parsed.data));
   });
 
   app.get("/quote-versions/:id", async (request, reply) => {

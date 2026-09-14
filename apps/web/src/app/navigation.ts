@@ -63,12 +63,18 @@ export const navGroups: NavGroup[] = [
         implemented: true,
         aliases: ["consulta de cliente", "consulta do cliente"],
       },
+      { id: "projects", label: "Projetos", path: "/comercial/projetos", implemented: true },
+      /*
+       * A lista geral das versões de orçamento (QUOTES-HUB-01). Mora depois de
+       * Projetos porque o orçamento nasce no Projeto; a página de cada versão
+       * (`/comercial/orcamentos/:id`) acende este item, não o de Projetos.
+       */
       {
-        id: "projects",
-        label: "Projetos",
-        path: "/comercial/projetos",
+        id: "quotes",
+        label: "Orçamentos",
+        path: "/comercial/orcamentos",
         implemented: true,
-        aliases: ["orçamento", "cotação"],
+        aliases: ["orçamento", "cotação", "proposta"],
       },
       { id: "samples", label: "Amostras", path: "/comercial/amostras", implemented: true },
       {

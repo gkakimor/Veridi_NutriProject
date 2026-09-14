@@ -1,11 +1,13 @@
 import { Prisma } from "@prisma/client";
-import type { Customer, Prisma as PrismaTypes, Project, User } from "@prisma/client";
+import type { Customer, Prisma as PrismaTypes, Project, QuoteVersion, User } from "@prisma/client";
 import type {
   DuplicateQuoteVersionInput,
   QuoteLineDTO,
   QuotePaymentScheduleDTO,
   QuotePricingProvenanceDTO,
   QuoteVersionDTO,
+  QuoteVersionListItemDTO,
+  QuoteVersionListResponse,
 } from "@veridi/shared";
 import {
   PRICING_PROVENANCE_ROLES,
@@ -15,7 +17,10 @@ import {
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
-import { diaComercialPorExtenso, venceuEm } from "../../lib/business-day.js";
+import { diaComercialPorExtenso, intervaloDeDiasCivis, venceuEm } from "../../lib/business-day.js";
+import { pageArgs, pageMeta } from "../../lib/pagination.js";
+import type { Pagination } from "../../lib/pagination.js";
+import { statusDoWhere } from "../../lib/status-list-schema.js";
 import {
   IncompleteQuoteError,
   ProjectLockedError,
@@ -45,6 +50,7 @@ import {
   limparOrigemPorQuantidade,
 } from "./quote-price-origin.service.js";
 import type {
+  ListQuoteVersionsQuery,
   RejectQuoteInput,
   UpdateQuoteLineInput,
   UpdateQuoteVersionInput,
@@ -191,24 +197,60 @@ export function canSeePricingProvenance(role: string): boolean {
   return (PRICING_PROVENANCE_ROLES as readonly string[]).includes(role);
 }
 
-export function toQuoteVersionDTO(
-  quote: QuoteWithLines,
-  includePricing: boolean,
-): QuoteVersionDTO {
-  /*
-   * Total de linha e subtotal saem de `calcularTotaisOrcamento`, em
-   * `@veridi/shared` — a MESMA função que a tela usa para mostrar o efeito
-   * de mudar quantidade ou preço antes de salvar. Total derivado nunca é
-   * persistido, e só existe quando TODAS as linhas têm preço: somar o que
-   * está precificado e ignorar o resto entregaria um número menor que a
-   * proposta, com cara de total.
-   */
+/** O que a conta dos totais lê da versão — o documento e a lista geral passam o mesmo. */
+type ContaDaVersao = Pick<
+  QuoteVersion,
+  | "discountPercent"
+  | "paymentMethod"
+  | "downPaymentPercent"
+  | "installmentCount"
+  | "installmentIntervalDays"
+  | "monthlyInterestPercent"
+> & { lines: { quotedQuantity: Prisma.Decimal | null; unitPrice: Prisma.Decimal | null }[] };
+
+/**
+ * Totais e plano de pagamento da versão, numa conta só.
+ *
+ * Total de linha e subtotal saem de `calcularTotaisOrcamento`, em
+ * `@veridi/shared` — a MESMA função que a tela usa para mostrar o efeito
+ * de mudar quantidade ou preço antes de salvar. Total derivado nunca é
+ * persistido, e só existe quando TODAS as linhas têm preço: somar o que
+ * está precificado e ignorar o resto entregaria um número menor que a
+ * proposta, com cara de total.
+ *
+ * O plano é derivado: desconto, entrada, parcelas e juros saem daqui, nunca
+ * de um valor digitado. `total` é o preço à vista JÁ COM desconto — é o que a
+ * proposta vale, e o que as listas de versões mostram (a do Projeto e a lista
+ * geral de Orçamentos, QUOTES-HUB-01). Enviada em diante, linhas e condições
+ * não mudam mais: a conta sobre elas é o total congelado do documento.
+ */
+function totaisDaVersao(quote: ContaDaVersao) {
   const totais = calcularTotaisOrcamento(
     quote.lines.map((line) => ({
       quotedQuantity: line.quotedQuantity ? line.quotedQuantity.toString() : null,
       unitPrice: line.unitPrice !== null ? line.unitPrice.toString() : null,
     })),
   );
+  const paymentSchedule =
+    totais.subtotal === null
+      ? null
+      : buildPaymentSchedule({
+          subtotal: new Prisma.Decimal(totais.subtotal),
+          discountPercent: quote.discountPercent,
+          method: quote.paymentMethod,
+          downPaymentPercent: quote.downPaymentPercent,
+          installmentCount: quote.installmentCount,
+          installmentIntervalDays: quote.installmentIntervalDays,
+          monthlyInterestPercent: quote.monthlyInterestPercent,
+        });
+  return { totais, paymentSchedule };
+}
+
+export function toQuoteVersionDTO(
+  quote: QuoteWithLines,
+  includePricing: boolean,
+): QuoteVersionDTO {
+  const { totais, paymentSchedule } = totaisDaVersao(quote);
   const lines = quote.lines.map((line, indice) =>
     toQuoteLineDTO(
       line,
@@ -217,22 +259,6 @@ export function toQuoteVersionDTO(
     ),
   );
   const subtotal = totais.subtotal;
-
-  // O plano é derivado: desconto, entrada, parcelas e juros saem daqui, nunca
-  // de um valor digitado. `total` passa a ser o preço à vista JÁ COM desconto
-  // — é o que a proposta vale, e o que a lista de versões mostra.
-  const paymentSchedule =
-    subtotal === null
-      ? null
-      : buildPaymentSchedule({
-          subtotal: new Prisma.Decimal(subtotal),
-          discountPercent: quote.discountPercent,
-          method: quote.paymentMethod,
-          downPaymentPercent: quote.downPaymentPercent,
-          installmentCount: quote.installmentCount,
-          installmentIntervalDays: quote.installmentIntervalDays,
-          monthlyInterestPercent: quote.monthlyInterestPercent,
-        });
   const total = paymentSchedule ? paymentSchedule.total : null;
 
   /*
@@ -320,6 +346,138 @@ export async function getQuoteById(
 ): Promise<QuoteVersionDTO | null> {
   const quote = await getPrisma().quoteVersion.findUnique({ where: { id }, include: quoteInclude });
   return quote ? toQuoteVersionDTO(quote, includePricing) : null;
+}
+
+/**
+ * O que a linha da lista geral de Orçamentos lê: cabeçalho, cadastro do
+ * projeto e do cliente, o Pedido originado e só quantidade e preço das linhas —
+ * nada de produto, precificação ou proveniência.
+ */
+const quoteListInclude = {
+  project: {
+    select: {
+      code: true,
+      name: true,
+      customerId: true,
+      customer: { select: { code: true, legalName: true } },
+    },
+  },
+  sourcedCustomerOrder: { select: { id: true, code: true } },
+  lines: { select: { quotedQuantity: true, unitPrice: true } },
+} as const;
+
+type QuoteListRow = PrismaTypes.QuoteVersionGetPayload<{ include: typeof quoteListInclude }>;
+
+function toQuoteVersionListItemDTO(quote: QuoteListRow): QuoteVersionListItemDTO {
+  const { paymentSchedule } = totaisDaVersao(quote);
+  /*
+   * A leitura do Resumo da página da versão: rascunho mostra o cadastro atual;
+   * enviada em diante, o snapshot congelado no envio — e o cadastro só quando a
+   * versão legada não tem snapshot. O link do cliente é sempre por identidade.
+   */
+  const congelado = <T>(snapshot: T | null): T | null => (quote.status === "DRAFT" ? null : snapshot);
+  const { project } = quote;
+  return {
+    id: quote.id,
+    code: quote.code,
+    versionNumber: quote.versionNumber,
+    versionLabel: `${quote.code} · V${quote.versionNumber}`,
+    status: quote.status,
+    expired: quote.status === "SENT" && venceuEm(quote.validUntil, new Date()),
+    quoteDate: quote.quoteDate.toISOString(),
+    validUntil: quote.validUntil ? quote.validUntil.toISOString() : null,
+    currencyCode: quote.currencyCode,
+    projectId: quote.projectId,
+    projectCode: congelado(quote.projectCode) ?? project.code,
+    projectName: congelado(quote.projectName) ?? project.name,
+    customerId: project.customerId,
+    customerCode: congelado(quote.customerCode) ?? project.customer.code,
+    customerName: congelado(quote.customerName) ?? project.customer.legalName,
+    productCount: quote.lines.length,
+    total: paymentSchedule ? paymentSchedule.total : null,
+    sourcedOrder: quote.sourcedCustomerOrder
+      ? { id: quote.sourcedCustomerOrder.id, code: quote.sourcedCustomerOrder.code }
+      : null,
+  };
+}
+
+/**
+ * Lista geral de Orçamentos — QUOTES-HUB-01. Uma linha por versão, de todos os
+ * projetos; filtro e página no servidor.
+ *
+ * A busca acha pelo que a pessoa lê na linha e pelo cadastro: código do
+ * orçamento, e cliente e projeto tanto no snapshot do envio quanto no cadastro
+ * atual — quem procura pelo nome novo de um cliente renomeado continua achando a
+ * proposta antiga dele.
+ *
+ * `quoteDate` é data de documento: o período compara marcadores de dia civil,
+ * os mesmos que a coluna Data mostra (componentes UTC), como a data da OC.
+ */
+export async function listQuoteVersions(
+  query: ListQuoteVersionsQuery,
+  pagination: Pagination = query,
+): Promise<QuoteVersionListResponse> {
+  const prisma = getPrisma();
+  const status = statusDoWhere(query.status);
+  const periodo = intervaloDeDiasCivis(query.dateFrom, query.dateTo);
+  const busca = query.search ? { contains: query.search, mode: "insensitive" as const } : null;
+
+  const where: PrismaTypes.QuoteVersionWhereInput = {
+    ...(query.projectId ? { projectId: query.projectId } : {}),
+    ...(query.customerId ? { project: { is: { customerId: query.customerId } } } : {}),
+    ...(status ? { status } : {}),
+    ...(periodo.inicio || periodo.fimExclusivo
+      ? {
+          quoteDate: {
+            ...(periodo.inicio ? { gte: periodo.inicio } : {}),
+            ...(periodo.fimExclusivo ? { lt: periodo.fimExclusivo } : {}),
+          },
+        }
+      : {}),
+    ...(busca
+      ? {
+          OR: [
+            { code: busca },
+            { externalCode: busca },
+            { customerCode: busca },
+            { customerName: busca },
+            { customerTradeName: busca },
+            { projectCode: busca },
+            { projectName: busca },
+            {
+              project: {
+                is: {
+                  OR: [
+                    { code: busca },
+                    { name: busca },
+                    {
+                      customer: {
+                        is: { OR: [{ code: busca }, { legalName: busca }, { tradeName: busca }] },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+        }
+      : {}),
+  };
+
+  const [quotes, total] = await Promise.all([
+    prisma.quoteVersion.findMany({
+      where,
+      include: quoteListInclude,
+      orderBy: [{ quoteDate: "desc" }, { code: "desc" }, { versionNumber: "desc" }],
+      ...pageArgs(pagination),
+    }),
+    prisma.quoteVersion.count({ where }),
+  ]);
+
+  return {
+    quoteVersions: quotes.map(toQuoteVersionListItemDTO),
+    ...pageMeta(pagination, total),
+  };
 }
 
 async function requireQuoteWithLines(id: string): Promise<QuoteWithLines> {

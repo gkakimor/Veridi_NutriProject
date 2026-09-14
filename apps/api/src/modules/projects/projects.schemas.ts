@@ -1,9 +1,19 @@
 import { z } from "zod";
-import { LIMITES_INTEIROS_DAS_CONDICOES, QUOTE_DUPLICATE_PRICE_STRATEGIES } from "@veridi/shared";
+import type { QuoteStatus } from "@veridi/shared";
+import {
+  LIMITES_INTEIROS_DAS_CONDICOES,
+  QUOTE_DUPLICATE_PRICE_STRATEGIES,
+  QUOTE_STATUSES,
+} from "@veridi/shared";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
-import { recusarPeriodoInvertido, requiredDateSchema } from "../../lib/date-schema.js";
+import {
+  diaCivilDeFiltroSchema,
+  recusarPeriodoInvertido,
+  requiredDateSchema,
+} from "../../lib/date-schema.js";
 import { CASAS_PRECO_COMERCIAL, optionalDecimalStringSchema } from "../../lib/decimal-schema.js";
 import { inteiroDeConsultaSchema, lerInteiroDecimal } from "../../lib/integer-schema.js";
+import { listaDeStatusSchema } from "../../lib/status-list-schema.js";
 
 const statusEnum = z.enum(["WAITING", "SAMPLE", "APPROVED", "CANCELLED", "STAND_BY"]);
 const cancelReasonEnum = z.enum(["PRICE", "COMPETITOR", "PROJECT_CHANGED", "NOT_MET", "OTHER"]);
@@ -107,6 +117,31 @@ export const listProjectsQuerySchema = z
   })
   .superRefine(recusarPeriodoInvertido("entryFrom", "entryTo"));
 
+/**
+ * Lista geral de Orçamentos — QUOTES-HUB-01. Uma linha por VERSÃO, de todos os
+ * projetos.
+ *
+ * Os contratos das listas de sempre: status um ou vários separados por vírgula
+ * (a tela abre em "Em aberto", Rascunho + Enviado, numa consulta só), período
+ * em dia civil `YYYY-MM-DD` com a recusa do invertido, e página e tamanho
+ * inteiros decimais estritos.
+ */
+export const listQuoteVersionsQuerySchema = z
+  .object({
+    search: z.string().trim().min(1).optional(),
+    customerId: z.string().trim().min(1).optional(),
+    projectId: z.string().trim().min(1).optional(),
+    status: listaDeStatusSchema(
+      z.enum(QUOTE_STATUSES as unknown as [QuoteStatus, ...QuoteStatus[]]),
+    ).optional(),
+    /** Data do orçamento — a mesma que a lista e a página da versão mostram. */
+    dateFrom: diaCivilDeFiltroSchema,
+    dateTo: diaCivilDeFiltroSchema,
+    page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
+    pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
+  })
+  .superRefine(recusarPeriodoInvertido("dateFrom", "dateTo"));
+
 /** Cabeçalho da proposta: condições comerciais. Preço vive na linha. */
 /** Percentual opcional com teto — desconto de 100% não é desconto, é doação. */
 function optionalPercent(max: number) {
@@ -204,6 +239,7 @@ export type ChangeProjectStatusInput = z.infer<typeof changeProjectStatusSchema>
 export type CancelProjectInput = z.infer<typeof cancelProjectSchema>;
 export type ApproveProjectInput = z.infer<typeof approveProjectSchema>;
 export type ListProjectsQuery = z.infer<typeof listProjectsQuerySchema>;
+export type ListQuoteVersionsQuery = z.infer<typeof listQuoteVersionsQuerySchema>;
 export type UpdateQuoteVersionInput = z.infer<typeof updateQuoteVersionSchema>;
 export type AddQuoteLineInput = z.infer<typeof addQuoteLineSchema>;
 export type UpdateQuoteLineInput = z.infer<typeof updateQuoteLineSchema>;

@@ -4,6 +4,7 @@ import type {
   ItemDTO,
   ProductDTO,
   ProductionOrderDTO,
+  ProjectDTO,
   PurchaseOrderDTO,
   SupplierDTO,
 } from "@veridi/shared";
@@ -16,6 +17,7 @@ import { listItems } from "./items-api";
 import type { ListItemsParams } from "./items-api";
 import { listProducts } from "./products-api";
 import { getProductionOrder, listProductionOrders } from "./production-orders-api";
+import { getProject, listProjects } from "./projects-api";
 import { getPurchaseOrder, listPurchaseOrders } from "./purchase-orders-api";
 import { listSuppliers } from "./suppliers-api";
 
@@ -272,6 +274,39 @@ export const clienteAtivoFilterSource: EntityFilterSource = {
       opcaoDeCliente,
     ),
   porId: clienteFilterSource.porId,
+};
+
+function opcaoDeProjeto(projeto: ProjectDTO): EntityOption {
+  return {
+    id: projeto.id,
+    code: projeto.code,
+    name: projeto.name,
+    // O mesmo nome de projeto se repete entre clientes: o cliente distingue.
+    hint: projeto.customerName,
+    searchTerms: projeto.customerName,
+  };
+}
+
+/**
+ * Projetos — filtro da lista geral de Orçamentos (QUOTES-HUB-01).
+ *
+ * A primeira página é a dos projetos mais recentes; o resto é busca no
+ * servidor, por código, nome ou cliente, em qualquer situação — orçamento de
+ * projeto cancelado continua sendo consultável. `porId` pergunta pelo próprio
+ * projeto: um `?projectId=` antigo não está na primeira página.
+ */
+export const projetoFilterSource: EntityFilterSource = {
+  inicial: async () => (await listProjects({ pageSize: PAGINA })).projects.map(opcaoDeProjeto),
+  buscar: async (termo) =>
+    (await listProjects({ search: termo, pageSize: PAGINA })).projects.map(opcaoDeProjeto),
+  porId: async (id) => {
+    try {
+      return opcaoDeProjeto(await getProject(id));
+    } catch {
+      // Projeto que não existe mais: o filtro vale, só o rótulo fica ausente.
+      return null;
+    }
+  },
 };
 
 function opcaoDePedido(pedido: CustomerOrderDTO): EntityOption {

@@ -23,7 +23,7 @@ import { listPricingVersionsQuerySchema } from "./pricing/pricing.schemas.js";
 import { listProductionOrdersQuerySchema } from "./production-orders/production-orders.schemas.js";
 import { listProductionProfilesQuerySchema } from "./production-profiles/production-profiles.schemas.js";
 import { listProductsQuerySchema } from "./products/products.schemas.js";
-import { listProjectsQuerySchema } from "./projects/projects.schemas.js";
+import { listProjectsQuerySchema, listQuoteVersionsQuerySchema } from "./projects/projects.schemas.js";
 import { listPurchaseOrdersQuerySchema } from "./purchase-orders/purchase-orders.schemas.js";
 import { listQualityQueueQuerySchema } from "./quality/quality.schemas.js";
 import { listReceiptsQuerySchema } from "./receiving/receiving.schemas.js";
@@ -76,6 +76,8 @@ const CONSULTAS: { nome: string; campos: Campos; maximo: number; padrao: number 
   { nome: "production-profiles", campos: camposDe(listProductionProfilesQuerySchema), maximo: 100, padrao: 20 },
   { nome: "products", campos: camposDe(listProductsQuerySchema), maximo: 1000, padrao: 20 },
   { nome: "projects", campos: camposDe(listProjectsQuerySchema), maximo: 100, padrao: 20 },
+  // QUOTES-HUB-01: a lista geral de Orçamentos.
+  { nome: "quote-versions", campos: camposDe(listQuoteVersionsQuerySchema), maximo: 100, padrao: 20 },
   { nome: "purchase-orders", campos: camposDe(listPurchaseOrdersQuerySchema), maximo: 100, padrao: 20 },
   { nome: "quality", campos: camposDe(listQualityQueueQuerySchema), maximo: 100, padrao: 20 },
   { nome: "receiving", campos: camposDe(listReceiptsQuerySchema), maximo: 100, padrao: 20 },

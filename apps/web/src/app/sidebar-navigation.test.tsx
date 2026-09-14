@@ -27,7 +27,11 @@ import { navGroups, navItems } from "./navigation";
  */
 
 const SECOES: [id: string, titulo: string, telas: string[]][] = [
-  ["commercial", "Comercial", ["Visão do Cliente", "Projetos", "Amostras", "Pedidos", "Expedições", "Faturamento"]],
+  [
+    "commercial",
+    "Comercial",
+    ["Visão do Cliente", "Projetos", "Orçamentos", "Amostras", "Pedidos", "Expedições", "Faturamento"],
+  ],
   ["production", "Produção", ["Ordens de Produção", "Picking / Consumo", "Formulações"]],
   ["planning", "Planejamento", ["Roteiros de Produção", "Planejamento de Produção", "Calendário de Produção"]],
   ["purchasing", "Compras", ["Ordens de Compra", "Recebimentos", "Item × Fornecedor"]],

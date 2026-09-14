@@ -11,7 +11,9 @@ import type {
   ProjectVocabularyResponse,
   QuoteDuplicatePriceStrategy,
   QuoteLinePricingOptionsResponse,
+  QuoteStatus,
   QuoteVersionDTO,
+  QuoteVersionListResponse,
   RejectQuoteInput,
   UpdateProjectInput,
   QuotePaymentScheduleDTO,
@@ -115,6 +117,37 @@ export async function duplicateQuoteVersion(
   return postJson<QuoteVersionDTO>(`/quote-versions/${quoteVersionId}/duplicate`, {
     priceStrategy,
   });
+}
+
+export interface ListQuoteVersionsParams {
+  search?: string;
+  customerId?: string;
+  projectId?: string;
+  /** Um ou vários — vão numa consulta só, separados por vírgula. */
+  status?: QuoteStatus[];
+  /** Data do orçamento, dia civil `YYYY-MM-DD`. */
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+/** Lista geral de Orçamentos (QUOTES-HUB-01): filtro e página no servidor. */
+export async function listQuoteVersions(
+  params: ListQuoteVersionsParams = {},
+): Promise<QuoteVersionListResponse> {
+  const query = new URLSearchParams();
+  if (params.search) query.set("search", params.search);
+  if (params.customerId) query.set("customerId", params.customerId);
+  if (params.projectId) query.set("projectId", params.projectId);
+  if (params.status && params.status.length > 0) query.set("status", params.status.join(","));
+  if (params.dateFrom) query.set("dateFrom", params.dateFrom);
+  if (params.dateTo) query.set("dateTo", params.dateTo);
+  query.set("page", String(params.page ?? 1));
+  query.set("pageSize", String(params.pageSize ?? 20));
+
+  const response = await apiFetch(`${API_URL}/quote-versions?${query.toString()}`);
+  return (await parseJsonOrThrow(response)) as QuoteVersionListResponse;
 }
 
 export async function getQuoteVersion(id: string): Promise<QuoteVersionDTO> {

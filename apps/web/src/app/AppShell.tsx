@@ -7,6 +7,8 @@ import { lookupLot } from "../lib/lots-api";
 import { useAuth } from "./AuthProvider";
 import { navItems } from "./navigation";
 import { Sidebar } from "./Sidebar";
+import { TituloDaTelaContext, tituloDaAba } from "./titulo-da-tela";
+import type { TituloDaTela } from "./titulo-da-tela";
 import { useMediaQuery } from "./use-media-query";
 import { useNavigationPreferences } from "./use-navigation-preferences";
 import "./shell.css";
@@ -43,7 +45,12 @@ export function AppShell() {
    *
    * A rota mais especifica ganha: `/estoque/lotes` e Lotes, nao Posicao de
    * Estoque.
+   *
+   * Documento com pagina propria diz qual documento (QUOTE-PAGE-NAV-ACTIVE-01):
+   * a tela entrega o nome por `useTituloDaTela`, e ele vale enquanto a rota for
+   * a que o pediu — "ORC-000444 · V1 · Veridi Nutrition".
    */
+  const [tituloDaTela, setTituloDaTela] = useState<TituloDaTela | null>(null);
   useEffect(() => {
     const atual = [...navItems]
       .filter((item) =>
@@ -52,10 +59,9 @@ export function AppShell() {
           : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`),
       )
       .sort((a, b) => b.path.length - a.path.length)[0];
-    document.title = atual && atual.path !== "/"
-      ? `${atual.label} · Veridi Nutrition`
-      : "Veridi Nutrition";
-  }, [location.pathname]);
+    const daTela = tituloDaTela?.rota === location.pathname ? tituloDaTela.titulo : null;
+    document.title = tituloDaAba(daTela ?? (atual && atual.path !== "/" ? atual.label : null));
+  }, [location.pathname, tituloDaTela]);
 
   // O drawer do celular fecha ao trocar de tela — e ao deixar de ser celular.
   useEffect(() => {
@@ -222,7 +228,9 @@ export function AppShell() {
       )}
 
       <main className="workspace" id="conteudo" tabIndex={-1}>
-        <Outlet />
+        <TituloDaTelaContext.Provider value={setTituloDaTela}>
+          <Outlet />
+        </TituloDaTelaContext.Provider>
       </main>
     </div>
   );

@@ -99,6 +99,8 @@ const PARES: [arquivo: string, topico: string][] = [
   ["pages/projects/ProjectDetailPage.tsx", "comercial.projeto"],
   // A versão de orçamento tem página própria, e a ajuda é a do Orçamento.
   ["pages/projects/QuoteVersionPage.tsx", "comercial.orcamento"],
+  // A lista geral (QUOTES-HUB-01) explica o mesmo Orçamento que ela abre.
+  ["pages/quotes/QuotesPage.tsx", "comercial.orcamento"],
   ["pages/samples/SamplesPage.tsx", "comercial.amostras"],
   ["pages/samples/SampleDetailPage.tsx", "comercial.amostra"],
   ["pages/shipments/ShipmentsPage.tsx", "comercial.expedicoes"],

@@ -21,6 +21,12 @@ describe("rotuloDaOrigem", () => {
     expect(rotuloDaOrigem("/comercial/orcamentos/qv-1?quoteLineId=ql-1")).toBe("Orçamento");
   });
 
+  it("a lista geral de Orçamentos, com ou sem filtros (QUOTES-HUB-01)", () => {
+    expect(rotuloDaOrigem("/comercial/orcamentos")).toBe("Orçamentos");
+    expect(rotuloDaOrigem("/comercial/orcamentos?status=todos&page=2")).toBe("Orçamentos");
+    expect(rotuloDaOrigem("/comercial/orcamentos/")).toBe("Orçamentos");
+  });
+
   it("rota desconhecida: tela anterior", () => {
     expect(rotuloDaOrigem("/planejamento/quadro")).toBe("tela anterior");
   });

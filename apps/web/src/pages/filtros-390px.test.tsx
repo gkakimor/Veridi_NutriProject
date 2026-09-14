@@ -36,6 +36,11 @@ vi.mock("../lib/customer-orders-api", () => ({
   getCustomerOrder: vi.fn(),
 }));
 vi.mock("../lib/customers-api", () => ({ listCustomers: vi.fn().mockResolvedValue({ customers: [], page: 1, pageSize: 20, total: 0 }) }));
+vi.mock("../lib/projects-api", () => ({
+  listQuoteVersions: vi.fn().mockResolvedValue({ quoteVersions: [], page: 1, pageSize: 20, total: 0 }),
+  listProjects: vi.fn().mockResolvedValue({ projects: [], page: 1, pageSize: 20, total: 0 }),
+  getProject: vi.fn(),
+}));
 vi.mock("../lib/shipments-api", () => ({ listShipments: vi.fn().mockResolvedValue({ shipments: [], page: 1, pageSize: 20, total: 0 }) }));
 vi.mock("../lib/purchase-orders-api", () => ({ listPurchaseOrders: vi.fn().mockResolvedValue({ purchaseOrders: [], page: 1, pageSize: 20, total: 0 }) }));
 vi.mock("../app/AuthProvider", () => ({
@@ -60,6 +65,8 @@ import { CustomerOrdersPage } from "./customer-orders/CustomerOrdersPage";
 import { ShipmentsPage } from "./shipments/ShipmentsPage";
 import { ProductionOrdersPage } from "./production-orders/ProductionOrdersPage";
 import { PurchaseOrdersPage } from "./purchase-orders/PurchaseOrdersPage";
+import { listQuoteVersions } from "../lib/projects-api";
+import { QuotesPage } from "./quotes/QuotesPage";
 
 const TELAS = [
   { nome: "Recebimentos", Tela: ReceiptsPage, carregou: listReceipts, escopo: "receipts" },
@@ -73,6 +80,8 @@ const TELAS = [
   { nome: "Expedições", Tela: ShipmentsPage, carregou: listShipments, escopo: "shipments" },
   { nome: "Ordens de Produção", Tela: ProductionOrdersPage, carregou: listProductionOrders, escopo: "production-orders" },
   { nome: "Ordens de Compra", Tela: PurchaseOrdersPage, carregou: listPurchaseOrders, escopo: "purchase-orders" },
+  // QUOTES-HUB-01 — a lista geral de Orçamentos.
+  { nome: "Orçamentos", Tela: QuotesPage, carregou: listQuoteVersions, escopo: "quote-versions" },
 ];
 
 const css = () =>

@@ -529,6 +529,49 @@ export interface ProjectDTO {
   updatedAt: string;
 }
 
+/**
+ * Uma linha da lista geral de Orçamentos — QUOTES-HUB-01.
+ *
+ * Resumo da versão, não o documento: a lista só ENCONTRA e navega para a
+ * página da versão (`/comercial/orcamentos/:id`). Cliente e projeto seguem a
+ * regra do documento — rascunho lê o cadastro atual, enviado em diante o
+ * snapshot congelado no envio — e o total é a mesma conta do DTO da versão,
+ * feita no servidor.
+ */
+export interface QuoteVersionListItemDTO {
+  id: string;
+  code: string;
+  versionNumber: number;
+  /** "ORC-000123 · V2". */
+  versionLabel: string;
+  status: QuoteStatus;
+  /** Enviada com a validade já passada — derivado pelo servidor. */
+  expired: boolean;
+  quoteDate: string;
+  validUntil: string | null;
+  currencyCode: string;
+  projectId: string;
+  projectCode: string | null;
+  projectName: string | null;
+  /** Identidade do cliente para o link — sempre o cadastro do Projeto. */
+  customerId: string;
+  customerCode: string | null;
+  customerName: string | null;
+  /** Uma linha por produto. */
+  productCount: number;
+  /** O mesmo `total` de `QuoteVersionDTO`: com desconto, `null` com linha sem preço. */
+  total: string | null;
+  /** O Pedido que a versão aceita originou, quando houver. */
+  sourcedOrder: { id: string; code: string } | null;
+}
+
+export interface QuoteVersionListResponse {
+  quoteVersions: QuoteVersionListItemDTO[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 export interface ProjectListResponse {
   projects: ProjectDTO[];
   page: number;
