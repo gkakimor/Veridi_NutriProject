@@ -39,6 +39,7 @@ import { helpTopics } from "../../help/help-content";
 import { useAuth } from "../../app/AuthProvider";
 import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import "./planning.css";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /**
  * Planejamento → Calendário de Produção (PLANNING-CALENDAR-01, jornada por dia
@@ -911,12 +912,10 @@ export function ProductionCalendarPage() {
                     </tr>
                   ))}
                   {excecoes.length === 0 && (
-                    <tr>
-                      <td colSpan={canEdit ? 6 : 5} className="table__empty">
-                        Nenhuma exceção cadastrada de {janela.from.slice(0, 4)} a{" "}
-                        {janela.to.slice(0, 4)}. Toda data segue a jornada do seu dia da semana.
-                      </td>
-                    </tr>
+                    <TableEmptyRow colSpan={canEdit ? 6 : 5}>
+                      Nenhuma exceção cadastrada de {janela.from.slice(0, 4)} a{" "}
+                      {janela.to.slice(0, 4)}. Toda data segue a jornada do seu dia da semana.
+                    </TableEmptyRow>
                   )}
                 </tbody>
               </table>

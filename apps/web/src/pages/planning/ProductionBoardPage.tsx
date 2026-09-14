@@ -26,6 +26,7 @@ import { listProducts } from "../../lib/products-api";
 import { getIndustrialResource, listIndustrialResources } from "../../lib/industrial-resources-api";
 import { ScheduleOrderDialog } from "./ScheduleOrderDialog";
 import "./planning.css";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /**
  * Planejamento → Planejamento de Produção (PLANNING-CAPACITY-BOARD-01).
@@ -409,11 +410,9 @@ export function ProductionBoardPage() {
                     </tr>
                   ))}
                   {quadro.orders.length === 0 && (
-                    <tr>
-                      <td colSpan={9} className="table__empty">
-                        Nenhuma ordem programada neste período.
-                      </td>
-                    </tr>
+                    <TableEmptyRow colSpan={9}>
+                      Nenhuma ordem programada neste período.
+                    </TableEmptyRow>
                   )}
                 </tbody>
               </table>
@@ -490,11 +489,9 @@ export function ProductionBoardPage() {
                     </tr>
                   ))}
                   {quadro.pendencies.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="table__empty">
-                        Nenhuma pendência de planejamento.
-                      </td>
-                    </tr>
+                    <TableEmptyRow colSpan={7}>
+                      Nenhuma pendência de planejamento.
+                    </TableEmptyRow>
                   )}
                 </tbody>
               </table>
@@ -561,11 +558,9 @@ export function ProductionBoardPage() {
                     </tr>
                   ))}
                   {quadro.unscheduled.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="table__empty">
-                        Nenhuma ordem aberta esperando programação.
-                      </td>
-                    </tr>
+                    <TableEmptyRow colSpan={6}>
+                      Nenhuma ordem aberta esperando programação.
+                    </TableEmptyRow>
                   )}
                 </tbody>
               </table>
@@ -620,11 +615,9 @@ export function ProductionBoardPage() {
                     </tr>
                   ))}
                   {quadro.resources.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="table__empty">
-                        Nenhum recurso de produção com capacidade cadastrada ou carga no período.
-                      </td>
-                    </tr>
+                    <TableEmptyRow colSpan={6}>
+                      Nenhum recurso de produção com capacidade cadastrada ou carga no período.
+                    </TableEmptyRow>
                   )}
                 </tbody>
               </table>

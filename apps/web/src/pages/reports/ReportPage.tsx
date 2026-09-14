@@ -13,6 +13,7 @@ import "../../print/print.css";
 import { formatDateTime } from "../../lib/dates";
 import { TABELA_COM_PERIODO_RECUSADO } from "../../lib/list-period";
 import { ID_DA_RECUSA_DO_PERIODO } from "./report-period";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /**
  * Consulta em curso, lida pela tabela do relatório: antes da resposta, tabela
@@ -252,11 +253,9 @@ export function ReportTable({
         <tbody>
           {rows}
           {isEmpty && !loading && !falhou && (
-            <tr>
-              <td colSpan={columns.length} className="table__empty">
-                {periodoRecusado ? TABELA_COM_PERIODO_RECUSADO : emptyMessage}
-              </td>
-            </tr>
+            <TableEmptyRow colSpan={columns.length}>
+              {periodoRecusado ? TABELA_COM_PERIODO_RECUSADO : emptyMessage}
+            </TableEmptyRow>
           )}
         </tbody>
       </table>

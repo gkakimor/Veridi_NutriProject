@@ -15,6 +15,7 @@ import {
   listFormulationTemplates,
 } from "../../lib/formulation-templates-api";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /**
  * Escolher um template da biblioteca, direto da tela do produto.
@@ -159,13 +160,11 @@ export function UseTemplateDialog({ onCancel, onApply, saving }: Props) {
                       </tr>
                     ))}
                     {!carregando && disponiveis.length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="table__empty">
-                          {termo
-                            ? "Nenhum template ativo encontrado para esta busca."
-                            : "A biblioteca ainda não tem nenhum template ativo."}
-                        </td>
-                      </tr>
+                      <TableEmptyRow colSpan={5}>
+                        {termo
+                          ? "Nenhum template ativo encontrado para esta busca."
+                          : "A biblioteca ainda não tem nenhum template ativo."}
+                      </TableEmptyRow>
                     )}
                   </tbody>
                 </table>

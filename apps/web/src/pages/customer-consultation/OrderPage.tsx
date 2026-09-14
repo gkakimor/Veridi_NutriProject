@@ -13,6 +13,7 @@ import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { ConsultationTrail, consultationPath, useConsultationContext } from "./ConsultationShell";
 import { ConsultationError, ConsultationLoading, ConsultationNotFound } from "./DetailStates";
 import { useScopedDetail } from "./useScopedDetail";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /**
  * Detalhe CONSULTIVO de um Pedido, dentro do shell do Cliente.
@@ -154,11 +155,9 @@ export function OrderPage() {
               ))}
 
               {order.lines.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="table__empty">
-                    Nenhum produto neste pedido.
-                  </td>
-                </tr>
+                <TableEmptyRow colSpan={7}>
+                  Nenhum produto neste pedido.
+                </TableEmptyRow>
               )}
             </tbody>
           </table>

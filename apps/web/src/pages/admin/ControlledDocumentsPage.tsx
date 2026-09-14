@@ -19,6 +19,7 @@ import { formatDate } from "../../lib/dates";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 function DicaDaColuna({ id }: { id: HelpHintId }) {
   const dica = helpHints[id];
@@ -176,11 +177,9 @@ export function ControlledDocumentsPage() {
 
             {/* Falha e vazio se excluem (LISTS-ERROR-FALSE-EMPTY-ADMIN-01). */}
             {!loading && !error && revisions.length === 0 && (
-              <tr>
-                <td colSpan={8} className="table__empty">
-                  Nenhuma revisão cadastrada.
-                </td>
-              </tr>
+              <TableEmptyRow colSpan={8}>
+                Nenhuma revisão cadastrada.
+              </TableEmptyRow>
             )}
           </tbody>
         </table>

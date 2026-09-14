@@ -75,6 +75,7 @@ import { EntityLink } from "../../components/EntityLink";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { formatDateTime } from "../../lib/dates";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /**
  * Energia ativa: a tarifa do kWh derivado e, no modo de consumo informado
@@ -893,11 +894,9 @@ export function IndustrialCostPage() {
                       </tr>
                     ))}
                     {version.materials.length === 0 && (
-                      <tr>
-                        <td colSpan={7} className="table__empty">
-                          A formulação vinculada não tem componentes.
-                        </td>
-                      </tr>
+                      <TableEmptyRow colSpan={7}>
+                        A formulação vinculada não tem componentes.
+                      </TableEmptyRow>
                     )}
                   </tbody>
                 </table>
@@ -952,11 +951,9 @@ export function IndustrialCostPage() {
                       </tr>
                     ))}
                     {version.lines.length === 0 && (
-                      <tr>
-                        <td colSpan={editable ? 5 : 4} className="table__empty">
-                          Nenhuma premissa adicional registrada.
-                        </td>
-                      </tr>
+                      <TableEmptyRow colSpan={editable ? 5 : 4}>
+                        Nenhuma premissa adicional registrada.
+                      </TableEmptyRow>
                     )}
                   </tbody>
                 </table>
@@ -1137,11 +1134,9 @@ export function IndustrialCostPage() {
                       </tr>
                     ))}
                     {version.resourceUsages.length === 0 && (
-                      <tr>
-                        <td colSpan={editable ? 7 : 6} className="table__empty">
-                          Nenhum recurso declarado nesta estrutura.
-                        </td>
-                      </tr>
+                      <TableEmptyRow colSpan={editable ? 7 : 6}>
+                        Nenhum recurso declarado nesta estrutura.
+                      </TableEmptyRow>
                     )}
                   </tbody>
                 </table>
@@ -1368,11 +1363,9 @@ export function IndustrialCostPage() {
                   </tr>
                 ))}
                 {data.versions.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="table__empty">
-                      Nenhuma versão criada.
-                    </td>
-                  </tr>
+                  <TableEmptyRow colSpan={6}>
+                    Nenhuma versão criada.
+                  </TableEmptyRow>
                 )}
               </tbody>
             </table>

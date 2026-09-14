@@ -7,6 +7,7 @@ import type { SupplierItemDTO } from "@veridi/shared";
 import { SUPPLIER_ITEM_QUALIFICATION_LABELS } from "@veridi/shared";
 import { FormSection } from "./FormSection";
 import { listSupplierItems } from "../lib/supplier-items-api";
+import { TableEmptyRow } from "./TableEmptyRow";
 
 /**
  * Bloco read-only reutilizado pelo cadastro de Item ("quem fornece isto")
@@ -95,14 +96,12 @@ export function SupplierItemsSection({
             })}
 
             {rows.length === 0 && (
-              <tr>
-                <td colSpan={6} className="table__empty">
-                  {isItemScope
-                    ? "Nenhum fornecedor cadastrado para este item."
-                    : "Nenhum item cadastrado para este fornecedor."}{" "}
-                  <Link to="/compras/item-fornecedor">Vincular em Compras → Item × Fornecedor</Link>
-                </td>
-              </tr>
+              <TableEmptyRow colSpan={6}>
+                {isItemScope
+                  ? "Nenhum fornecedor cadastrado para este item."
+                  : "Nenhum item cadastrado para este fornecedor."}{" "}
+                <Link to="/compras/item-fornecedor">Vincular em Compras → Item × Fornecedor</Link>
+              </TableEmptyRow>
             )}
           </tbody>
         </table>

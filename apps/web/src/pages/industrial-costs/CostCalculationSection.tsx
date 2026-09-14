@@ -21,6 +21,7 @@ import { createPricingVersion } from "../../lib/pricing-api";
 import { formatDate, formatDateTime } from "../../lib/dates";
 import { UsePricingPolicyDialog } from "../cost-templates/UsePricingPolicyDialog";
 import { applyPricingPolicyToProduct } from "../../lib/cost-pricing-templates-api";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /**
  * Referência padrão: o dia comercial de São Paulo (§72). O dia UTC datava de
@@ -332,11 +333,9 @@ export function CostCalculationSection({
                 </tr>
               ))}
               {history.length === 0 && (
-                <tr>
-                  <td colSpan={canSave ? 8 : 7} className="table__empty">
-                    Nenhum cálculo salvo para este produto.
-                  </td>
-                </tr>
+                <TableEmptyRow colSpan={canSave ? 8 : 7}>
+                  Nenhum cálculo salvo para este produto.
+                </TableEmptyRow>
               )}
             </tbody>
           </table>

@@ -19,6 +19,7 @@ import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 import { formatQuantity } from "../../lib/quantity";
 import { formatDateTime } from "../../lib/dates";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /**
  * ⓘ de um conceito da folha, lido do registro central.
@@ -543,11 +544,9 @@ export function RecipeSheetPage() {
                   ))}
 
                   {part.weighings.length === 0 && (
-                    <tr>
-                      <td colSpan={8} className="table__empty">
-                        Nenhuma pesagem registrada nesta parte.
-                      </td>
-                    </tr>
+                    <TableEmptyRow colSpan={8}>
+                      Nenhuma pesagem registrada nesta parte.
+                    </TableEmptyRow>
                   )}
                 </tbody>
               </table>

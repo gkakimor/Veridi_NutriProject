@@ -23,6 +23,7 @@ import { ContextHelp, InfoHint } from "../../components/help";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /** ⓘ de uma coluna, lido do registro central — o texto nunca mora no JSX. */
 function DicaDaColuna({ id }: { id: HelpHintId }) {
@@ -309,11 +310,9 @@ export function InventoryItemDetailPage() {
                   ))}
 
                   {detail.lots.length === 0 && (
-                    <tr>
-                      <td colSpan={8} className="table__empty">
-                        Nenhum lote para este item.
-                      </td>
-                    </tr>
+                    <TableEmptyRow colSpan={8}>
+                      Nenhum lote para este item.
+                    </TableEmptyRow>
                   )}
                 </tbody>
               </table>

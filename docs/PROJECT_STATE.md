@@ -4046,6 +4046,40 @@ cliente aceito sai pelo código, sem id; FO-03 com fila simulada — normal, ven
 rejeitado com os textos acima; console limpo, 0 escritas. Sem full test, E2E, build global nem
 fresh (FAST).
 
+## Linha do Pedido e vazio de seção em 390px (SMALL-MOBILE-UX-WAVE-03, 2026-09-14)
+
+Só web: sem API, domínio, `NumericField`, migration nem redesign. Fecha ORDER-LINE-390-OVERLAP-01 e
+LISTS-EMPTY-ROW-390-RAW-01.
+
+**Linha do Pedido.** Reproduzido na main: em 390px a tabela `table-layout: fixed` deixava a coluna Produto
+com ~60px, e o seletor, preso ao mínimo de 15rem de `td .entity-select`, saía da célula por cima da
+Quantidade (seletor x 50–290, campo x 82–259); o toque na quantidade abria a busca de produto. Com linhas
+editáveis, a tabela ganha `table--order-lines--editable`, e abaixo de 640px a linha empilha em grade:
+Produto na largura toda; Quantidade, unidade e remover na linha de baixo, cada um na sua trilha. Sem posição
+absoluta nem transform; títulos das colunas recortados da vista, quantidade com nome próprio
+("Quantidade de …"). Pedido só leitura e desktop seguem a tabela (1280 e 1440 com a mesma geometria de antes).
+
+**Vazio de seção.** 49 linhas `td.table__empty` escritas à mão em 33 arquivos (seções e detalhes:
+`SupplierItemsSection`, Lote, OP, Custos, Quadro, Calendário…) não tinham o `.table__empty-body` do
+`ListStatusRow`: em 390px o link "Vincular em Compras → Item × Fornecedor" ia de x=351 a 618 com a borda em
+349, e a frase do recurso sem tarifa terminava em 625. Todas eram vazio real e passaram por
+`TableEmptyRow` (`web components/TableEmptyRow.tsx`), que o `ListStatusRow` também usa — nenhuma exceção.
+CSS não mudou: a mesma estrutura central de LISTS-NAVIGATION-UX-WAVE-01; células comuns seguem `nowrap` e
+tabela com dados segue rolando.
+
+**Guarda.** `web components/linha-de-vazio-escrita-a-mao.test.ts`: `table__empty` em fonte de produção
+fora do `TableEmptyRow` cai.
+
+**Validação.** Web: `linha-de-vazio-390px` (frase longa, link e botão no corpo, Tab alcança os dois),
+guarda, `produto-do-cliente-do-pedido` (modificador, células próprias, regra da grade), pastas
+`customer-orders`, `items`, `suppliers`, `customers` e as telas com frase de vazio em teste — 30 arquivos.
+Mutações: `table__empty` num fonte e grade sem `min-width: 0` — 2 de 2 derrubadas. `pnpm typecheck`. Smoke
+Playwright 390 (toque real) e 1440 contra a main e o worktree: Pedido novo com linha (área de sobreposição
+3717 → 0; tocar Quantidade foca o campo e não abre Produto; tocar Produto abre a lista), Clientes filtrado
+(botão), `SupplierItemsSection` (link dentro de 42–349, clicável e navegando), recurso sem tarifa e
+exceções do Calendário (frases longas dentro do contêiner); `scrollWidth` = viewport, 0 escritas, console
+limpo. Sem full test, E2E, build global nem fresh (FAST).
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

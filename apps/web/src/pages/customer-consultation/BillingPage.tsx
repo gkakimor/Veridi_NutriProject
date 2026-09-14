@@ -9,6 +9,7 @@ import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { ConsultationTrail, consultationPath, useConsultationContext } from "./ConsultationShell";
 import { ConsultationError, ConsultationLoading, ConsultationNotFound } from "./DetailStates";
 import { useScopedDetail } from "./useScopedDetail";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /**
  * Detalhe CONSULTIVO de um Faturamento, dentro do shell do Cliente.
@@ -138,11 +139,9 @@ export function BillingPage() {
               ))}
 
               {billing.lines.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="table__empty">
-                    Nenhum produto neste faturamento.
-                  </td>
-                </tr>
+                <TableEmptyRow colSpan={6}>
+                  Nenhum produto neste faturamento.
+                </TableEmptyRow>
               )}
             </tbody>
           </table>

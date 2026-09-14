@@ -9,6 +9,7 @@ import { useAuth } from "../../app/AuthProvider";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 function DicaDaColuna({ id }: { id: HelpHintId }) {
   const dica = helpHints[id];
@@ -170,11 +171,9 @@ export function UsersPage() {
                 o alerta acima, "nenhum usuário" seria uma resposta que o
                 servidor não deu. */}
             {!loading && !error && users.length === 0 && (
-              <tr>
-                <td colSpan={6} className="table__empty">
-                  Nenhum usuário cadastrado.
-                </td>
-              </tr>
+              <TableEmptyRow colSpan={6}>
+                Nenhum usuário cadastrado.
+              </TableEmptyRow>
             )}
           </tbody>
         </table>

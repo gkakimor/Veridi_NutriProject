@@ -25,6 +25,7 @@ import { DecimalField, IntegerField, MoneyField } from "../../components/Numeric
 import { ContextHelp } from "../../components/help";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { helpTopics } from "../../help/help-content";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /**
  * Detalhe do recurso industrial com o histórico completo de tarifas.
@@ -321,12 +322,10 @@ export function IndustrialResourceDetailPage() {
                   </tr>
                 ))}
                 {resource.rates.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="table__empty">
-                      Nenhuma tarifa registrada. O custo deste recurso fica em aberto até que uma
-                      seja informada.
-                    </td>
-                  </tr>
+                  <TableEmptyRow colSpan={7}>
+                    Nenhuma tarifa registrada. O custo deste recurso fica em aberto até que uma
+                    seja informada.
+                  </TableEmptyRow>
                 )}
               </tbody>
             </table>

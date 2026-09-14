@@ -35,6 +35,7 @@ import { ContextHelp, InfoHint } from "../../components/help";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /** ⓘ de um campo, lido do registro central — o texto nunca mora no JSX. */
 function DicaDoCampo({ id }: { id: HelpHintId }) {
@@ -490,11 +491,9 @@ export function LotDetailPage() {
                     </tr>
                   ))}
                   {lot.shipments.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="table__empty">
-                        Este lote ainda não foi expedido.
-                      </td>
-                    </tr>
+                    <TableEmptyRow colSpan={6}>
+                      Este lote ainda não foi expedido.
+                    </TableEmptyRow>
                   )}
                 </tbody>
               </table>
@@ -836,11 +835,9 @@ export function LotDetailPage() {
                     </tr>
                   ))}
                   {traceability.consumedMaterials.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="table__empty">
-                        Nenhum material consumido registrado.
-                      </td>
-                    </tr>
+                    <TableEmptyRow colSpan={5}>
+                      Nenhum material consumido registrado.
+                    </TableEmptyRow>
                   )}
                 </tbody>
               </table>
@@ -960,11 +957,9 @@ export function LotDetailPage() {
                     </tr>
                   ))}
                   {traceability.usedIn.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="table__empty">
-                        Este lote nunca foi consumido em nenhuma Ordem de Produção.
-                      </td>
-                    </tr>
+                    <TableEmptyRow colSpan={4}>
+                      Este lote nunca foi consumido em nenhuma Ordem de Produção.
+                    </TableEmptyRow>
                   )}
                 </tbody>
               </table>
@@ -1005,11 +1000,9 @@ export function LotDetailPage() {
                     </tr>
                   ))}
                   {traceability.usedInSamples.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="table__empty">
-                        Este lote nunca foi consumido em amostra.
-                      </td>
-                    </tr>
+                    <TableEmptyRow colSpan={6}>
+                      Este lote nunca foi consumido em amostra.
+                    </TableEmptyRow>
                   )}
                 </tbody>
               </table>

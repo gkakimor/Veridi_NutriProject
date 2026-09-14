@@ -73,6 +73,7 @@ import {
   useAjustesEmEdicao,
 } from "./AjustesDaQuantidade";
 import type { AjustesDaQuantidade, CampoDeAjuste } from "./AjustesDaQuantidade";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 interface ItemOption {
   id: string;
@@ -1856,11 +1857,9 @@ export function FormulationVersionPage() {
                 })}
 
                 {components.length === 0 && (
-                  <tr>
-                    <td colSpan={isDraft ? 8 : 7} className="table__empty">
-                      Nenhum componente adicionado.
-                    </td>
-                  </tr>
+                  <TableEmptyRow colSpan={isDraft ? 8 : 7}>
+                    Nenhum componente adicionado.
+                  </TableEmptyRow>
                 )}
               </tbody>
             </table>

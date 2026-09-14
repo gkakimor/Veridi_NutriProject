@@ -45,6 +45,7 @@ import {
 import { assinaturaDoDocumento, decimalComparavel, textoComparavel } from "../../lib/dirty-fields";
 import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import { PricingModelSummary } from "./PricingModelSummary";
+import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /**
  * Detalhe de uma política de precificação.
@@ -306,11 +307,9 @@ export function PricingPolicyDetailPage() {
             </tr>
           ))}
           {version.tiers.length === 0 && (
-            <tr>
-              <td colSpan={4} className="table__empty">
-                Sem faixas.
-              </td>
-            </tr>
+            <TableEmptyRow colSpan={4}>
+              Sem faixas.
+            </TableEmptyRow>
           )}
         </tbody>
       </table>
@@ -522,11 +521,9 @@ export function PricingPolicyDetailPage() {
                     </tr>
                   ))}
                   {linhas.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="table__empty">
-                        Nenhuma faixa ainda.
-                      </td>
-                    </tr>
+                    <TableEmptyRow colSpan={4}>
+                      Nenhuma faixa ainda.
+                    </TableEmptyRow>
                   )}
                 </tbody>
               </table>

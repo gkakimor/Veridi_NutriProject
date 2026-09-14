@@ -32,6 +32,7 @@ import { formatBRL } from "../lib/currency";
 import { useAuth } from "../app/AuthProvider";
 import "./dashboard.css";
 import { formatDate, formatDateTime, formatEventDate } from "../lib/dates";
+import { TableEmptyRow } from "../components/TableEmptyRow";
 
 function severityBadgeClass(severity: AttentionSeverity): string {
   switch (severity) {
@@ -658,11 +659,9 @@ export function DashboardPage() {
                     })}
 
                     {data.recentMovements.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="table__empty">
-                          Nenhuma movimentação no período.
-                        </td>
-                      </tr>
+                      <TableEmptyRow colSpan={6}>
+                        Nenhuma movimentação no período.
+                      </TableEmptyRow>
                     )}
                   </tbody>
                 </table>
