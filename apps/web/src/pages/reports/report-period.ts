@@ -22,11 +22,6 @@ export function diaDoRelatorio(dias: number, agora: Date = new Date()): string {
   return diaCivilDeslocado(hojeComercial(agora), dias);
 }
 
-/** "1 dia", "2 dias", "0 dias" — contagem de dias civis de uma célula de relatório. */
-export function emDias(quantidade: number): string {
-  return `${quantidade} ${quantidade === 1 ? "dia" : "dias"}`;
-}
-
 /**
  * Janelas prontas do R-02, como a tela as oferece. O PDF escreve a mesma frase
  * nos filtros aplicados, no lugar do código que vai à API (`D30`)

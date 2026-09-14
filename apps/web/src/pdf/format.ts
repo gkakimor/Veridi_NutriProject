@@ -11,6 +11,7 @@ export { formatBRL, formatUnitPriceBRL } from "../lib/currency";
 export { formatQuantity, formatQuantityWithUnit } from "../lib/quantity";
 export { formatPercent } from "../lib/percent";
 export { formatDate } from "../lib/dates";
+export { emDias } from "../lib/duration";
 export { formatCnpj };
 
 /** Valor ausente vira "—": dado desconhecido nunca vira zero nem espaço vazio. */

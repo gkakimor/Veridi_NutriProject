@@ -17,6 +17,7 @@ import type {
 } from "@veridi/shared";
 import { COA_STATUS_LABELS, PRICING_PROVENANCE_ROLES, SUPPLY_RESPONSIBILITY_LABELS } from "@veridi/shared";
 import {
+  COST_QUALITY_LABELS,
   COST_SOURCE_LABELS,
   CUSTOMER_ORDER_BILLING_STATUS_LABELS,
   CUSTOMER_ORDER_STATUS_LABELS,
@@ -263,9 +264,10 @@ const r05 = defineCsvExport({
     { header: "Conclusão", value: (row: PlannedActualRowDTO) => csvDate(row.completedAt) },
     { header: "Status", value: (row: PlannedActualRowDTO) => PRODUCTION_ORDER_STATUS_LABELS[row.status] },
     // Custo PARTIAL/NO_COST fica VAZIO e a qualidade explica — nunca um
-    // subtotal apresentado como custo completo.
+    // subtotal apresentado como custo completo. A qualidade sai pelo rótulo
+    // da tela ("Estimado"), não pelo enum da API (REPORTS-PRESENTATION-WAVE-02).
     { header: "Custo material unitário", value: (row: PlannedActualRowDTO) => csvMoney(row.materialUnitCost) },
-    { header: "Qualidade do custo", value: (row: PlannedActualRowDTO) => row.costQuality },
+    { header: "Qualidade do custo", value: (row: PlannedActualRowDTO) => COST_QUALITY_LABELS[row.costQuality] },
   ],
 });
 
@@ -335,7 +337,7 @@ const r09 = defineCsvExport({
     },
     { header: "Preço previsto (OC)", value: (row: ReceiptReportRowDTO) => csvUnitPrice(row.orderedUnitPrice) },
     { header: "Custo efetivo", value: (row: ReceiptReportRowDTO) => csvMoney(row.actualUnitCost) },
-    { header: "Qualidade do custo", value: (row: ReceiptReportRowDTO) => row.costQuality },
+    { header: "Qualidade do custo", value: (row: ReceiptReportRowDTO) => COST_QUALITY_LABELS[row.costQuality] },
   ],
 });
 

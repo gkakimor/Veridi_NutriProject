@@ -45,3 +45,15 @@ export function formatMinutesPlain(valor: string | number | null | undefined): s
   const lido = ler(valor);
   return lido ? `${formatQuantity(lido.toFixed())} min` : "—";
 }
+
+/**
+ * "1 dia", "2 dias", "0 dias" — contagem de dias em leitura de gente.
+ *
+ * Nasceu nas células dos Relatórios (REPORTS-PRESENTATION-WAVE-01) e mora aqui
+ * desde que o prazo e as parcelas do Orçamento, na tela, no PDF e na Origem
+ * comercial do Pedido, passaram a precisar dela: "1 dias" saía em três lugares
+ * (REPORTS-PRESENTATION-WAVE-02). Só escreve — a contagem é de quem chama.
+ */
+export function emDias(quantidade: number): string {
+  return `${quantidade} ${quantidade === 1 ? "dia" : "dias"}`;
+}

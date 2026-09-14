@@ -3,6 +3,7 @@ import type { CustomerOrderDTO, CustomerOrderLineDTO } from "@veridi/shared";
 import { condicaoDePagamentoPorExtenso } from "../../lib/payment-condition";
 import { entityHref } from "../../components/EntityLink";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
+import { emDias } from "../../lib/duration";
 import { formatPercent } from "../../lib/percent";
 import { FormSection } from "../../components/FormSection";
 
@@ -121,7 +122,7 @@ export function CommercialOriginSection({ order }: { order: CustomerOrderDTO }) 
                 <tr key={parcela.number}>
                   <td>{parcela.number}ª parcela</td>
                   <td className="is-numeric">{formatBRL(parcela.amount)}</td>
-                  <td className="is-numeric">{parcela.dueInDays} dias</td>
+                  <td className="is-numeric">{emDias(parcela.dueInDays)}</td>
                 </tr>
               ))}
             </tbody>

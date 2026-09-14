@@ -13,6 +13,7 @@ import {
   type PdfColumn,
 } from "../components";
 import {
+  emDias,
   formatBRL,
   formatCnpj,
   formatDate,
@@ -153,7 +154,8 @@ export function QuotePdf({ quote, generatedAt }: { quote: QuoteVersionDTO; gener
             { label: "Forma de pagamento", value: formaDePagamento, span: 4 },
             {
               label: "Prazo de entrega",
-              value: quote.leadTimeDays ? `${quote.leadTimeDays} dias` : "—",
+              // "1 dia", nunca "1 dias"; sem prazo gravado, "—" como sempre.
+              value: quote.leadTimeDays ? emDias(quote.leadTimeDays) : "—",
               span: 4,
             },
             { label: "Validade", value: formatDate(quote.validUntil), span: 2 },
@@ -181,7 +183,7 @@ export function QuotePdf({ quote, generatedAt }: { quote: QuoteVersionDTO; gener
               {plano.installments.map((parcela) => (
                 <PdfTr key={parcela.number}>
                   <PdfTd>{parcela.number}ª parcela</PdfTd>
-                  <PdfTd>{parcela.dueInDays} dias</PdfTd>
+                  <PdfTd>{emDias(parcela.dueInDays)}</PdfTd>
                   <PdfTd>{formatBRL(parcela.amount)}</PdfTd>
                 </PdfTr>
               ))}
