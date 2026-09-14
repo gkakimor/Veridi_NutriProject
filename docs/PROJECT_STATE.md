@@ -3780,6 +3780,58 @@ global nem fresh (FAST).
 **Achados** (BACKLOG): API-PAGINATION-COERCION-01; TEMPLATE-PURITY-LEGACY-DATA-01 — Modelo antigo
 com pureza fora da faixa passa a dar 400 ao salvar o rascunho; PROD não conferido.
 
+## Listas e navegação: data digitada, falha × vazio, vazio em 390, troca de cliente e volta do cadastro (LISTS-NAVIGATION-UX-WAVE-01, 2026-09-13)
+
+Seis achados pequenos, só web. Sem API, sem migration.
+
+**LISTS-FILTER-INPUT-UX-01.** `DateRangeFilter` (Faturamento, OC, Recebimentos, Produto Acabado)
+separa as datas digitadas do período aplicado, o conceito de `useFiltrosDigitados`: aplica depois
+de 300 ms sem digitar (`PAUSA_DO_PERIODO_MS`) ou no Enter, as duas pontas juntas, e só com as duas
+aplicáveis — segmento pela metade (`validity.badInput`) e ano começando em 0 (0002/0020/0202) não
+saem. Apagar a data inteira abre a ponta, como antes. Período invertido é aplicado e recusado: a
+lista não consulta e a recusa aparece. Atalho aplica na hora; período aplicado por fora (Limpar)
+substitui o digitado.
+
+**LISTS-ERROR-FALSE-EMPTY-ADMIN-01.** Usuários e Documentos controlados: vazio só sem erro, e
+recarregar limpa a falha anterior.
+
+**LISTS-EMPTY-ROW-390-01.** `ListStatusRow` põe o conteúdo em `.table__empty-body`, com a largura
+visível do contêiner (`100cqi`; container query só em `.table-container:has(td.table__empty)`) e
+preso à esquerda da rolagem; `.table td.table__empty` quebra linha. Célula com `colspan` tem a
+largura da tabela (1037px em Clientes, em 390) e ignora `max-width` — `white-space` sozinho não
+mudava a medida. Tabela com linhas não muda.
+
+**CONSULTATION-CUSTOMER-SWITCH-QUERY-01.** `ConsultationShell` guarda resumo, 404 e falha com o
+`customerId` e deriva no render: a aba só monta com o resumo do cliente da rota e consulta uma vez;
+resposta atrasada do cliente que saiu é descartada.
+
+**CONTEXT-ORIGIN-LABEL-ROUTE-01.** `rotuloDaOrigem` (exportado) conhece
+`/planejamento/perfis-producao`: "← Voltar para Roteiro de produção".
+
+**F-11-1.** `EntityLink` para cadastro em lista com modal (produto, item, cliente, fornecedor) leva
+`voltar` com a rota e a busca atuais (`rotaComRetorno`, `lib/contextual-create.ts`); o aviso de
+lista reduzida (`RecordContextChip` e o de Produtos) mostra "← Voltar para …" (`RetornoDoContexto`)
+quando a URL traz `voltar` interno (`isRotaInterna`). Sem token, armazenamento nem pilha: é a URL.
+Link de documento e de menu não mudam. Com o modal aberto por `open`, a volta fica no aviso, depois
+de fechar o modal.
+
+**Validação.** Web: `DateRangeFilter` (6), `admin-falha-e-vazio` (4), `linha-de-vazio-390px` (3),
+`troca-de-cliente-uma-consulta` (2 — o shell antigo derruba os dois), `rotulo-da-origem` (3),
+`entity-link-retorno` (4), mais `components`, `list-query`, `contextual-create`, `admin`,
+`customer-consultation`, `contato-do-cliente-no-projeto` (href com `voltar`),
+`listas-consulta-em-curso-restantes`, `periodo-invertido-listas`, `referencia-e-link` — 32
+arquivos, 458 testes, depois do rebase. `pnpm typecheck`. Smoke Chromium (`--lang=pt-BR`, Vite do
+worktree contra a API dev, não-GET barrado): digitar 10/09/2026 = 0 consultas durante e 1 depois;
+Enter, 1 na hora; invertido, 0 com a recusa; vazio de Clientes dentro do contêiner em 390 (texto
+37–341 em 12–378; antes 25–437) e em 1440; células comuns `nowrap`; Usuários e Documentos com 500
+simulado sem vazio; troca de cliente com 2 consultas de B no dev com StrictMode (main: 3); rótulo do
+Roteiro; Projeto → Cliente → "← Voltar para Projeto" → Projeto; Clientes pelo endereço sem volta —
+29/29, console limpo. A main de antes, no mesmo roteiro, cai em 12. Sem full test, E2E, build
+global nem fresh (FAST).
+
+**Achados** (BACKLOG): LISTS-EMPTY-ROW-390-RAW-01 — linha de vazio escrita à mão, fora do
+`ListStatusRow`, não ganhou o corpo com a largura visível.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
