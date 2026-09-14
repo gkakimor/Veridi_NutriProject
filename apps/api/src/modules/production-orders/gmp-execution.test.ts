@@ -884,4 +884,55 @@ describe("Rateio por parte — a fonte autoritativa", () => {
 
     await app.close();
   });
+
+  /*
+   * API-INT-COERCION-REMAINING-01: `Number("1e1")` gravava 10 partes. Zero e
+   * vazio seguem recusados aqui — trocar zero/vazio por 1 é da tela
+   * (OP-PARTS-ZERO-COERCION-01), não da API.
+   */
+  it("número de partes não canônico é 400 e não grava nada", async () => {
+    const app = buildTestApp("PRODUCTION");
+    await app.ready();
+    await createAuthenticatedUser("PRODUCTION");
+    const prisma = getPrisma();
+
+    const ingredient = await createItem("RAW_MATERIAL");
+    await receiveStock(ingredient.id, "50");
+    const { product } = await createProductWithFormulation(app, [
+      { itemId: ingredient.id, quantity: "1", unitCode: "kg" },
+    ]);
+
+    const criada = await app.inject({
+      method: "POST",
+      url: "/production-orders",
+      payload: { productId: product.id, plannedQuantity: "10", numberOfParts: "007" },
+    });
+    expect(criada.statusCode).toBe(201);
+    const ordem = criada.json();
+    fixtureProductionOrderIds.push(ordem.id);
+    expect(ordem.numberOfParts).toBe(7);
+
+    const recusados = ["1e1", "0x10", "0b10", "1.0", "12.5", "12,5", "+1", "Infinity", "NaN", "10abc", true, "0", "", null];
+    for (const numberOfParts of recusados) {
+      const edicao = await app.inject({
+        method: "PATCH",
+        url: `/production-orders/${ordem.id}`,
+        payload: { numberOfParts },
+      });
+      expect(edicao.statusCode, `PATCH numberOfParts=${JSON.stringify(numberOfParts)}`).toBe(400);
+      expect(edicao.json().error).toBe("validation_error");
+
+      const criacao = await app.inject({
+        method: "POST",
+        url: "/production-orders",
+        payload: { productId: product.id, plannedQuantity: "10", numberOfParts },
+      });
+      expect(criacao.statusCode, `POST numberOfParts=${JSON.stringify(numberOfParts)}`).toBe(400);
+    }
+
+    expect((await prisma.productionOrder.findUnique({ where: { id: ordem.id } }))?.numberOfParts).toBe(7);
+    expect(await prisma.productionOrder.count({ where: { productId: product.id } })).toBe(1);
+
+    await app.close();
+  });
 });

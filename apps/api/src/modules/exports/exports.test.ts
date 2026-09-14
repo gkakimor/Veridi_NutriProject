@@ -327,6 +327,84 @@ describe("Exportação CSV — listagens", () => {
 
     await app.close();
   });
+
+  /**
+   * INVENTORY-EXPORT-ONLY-WITH-STOCK-01. O filtro lia `z.coerce.boolean()`, e
+   * `Boolean("false")` é `true`: desmarcar "Somente com estoque" mandava
+   * `onlyWithStock=false` (é o que o botão monta) e o CSV seguia sem os itens
+   * zerados. A busca pelo marcador isola os dois itens do arquivo.
+   */
+  describe("estoque — Somente com estoque", () => {
+    /** Dois itens com o MESMO marcador: a busca devolve só eles. */
+    async function itensDoCenario() {
+      const prisma = getPrisma();
+      const m = marker().toUpperCase();
+      const criar = async (sufixo: string) => {
+        const item = await prisma.item.create({
+          data: {
+            type: "RAW_MATERIAL",
+            code: `MP-OWS-${m}-${sufixo}`,
+            name: `Somente com estoque ${m} ${sufixo}`,
+            unitCode: "kg",
+            controlsLot: true,
+            controlsExpiry: false,
+            requiresQualityRelease: false,
+            active: true,
+          },
+        });
+        fixtureItemIds.push(item.id);
+        return item;
+      };
+      const comEstoque = await criar("A");
+      await stockLot(comEstoque.id, "40");
+      const semEstoque = await criar("B");
+      return { search: `OWS-${m}`, comEstoque: comEstoque.code, semEstoque: semEstoque.code };
+    }
+
+    it("true só com estoque, false e ausente com todos — no CSV e na listagem", async () => {
+      const app = buildTestApp();
+      await app.ready();
+      const { search, comEstoque, semEstoque } = await itensDoCenario();
+
+      const doArquivo = async (params: Record<string, string>) => {
+        const csv = await downloadCsv(app, "/inventory/export.csv", { search, ...params });
+        return csvLines(csv.body)
+          .slice(1)
+          .map((line) => line.split(";")[0])
+          .sort();
+      };
+      expect(await doArquivo({ onlyWithStock: "true" })).toEqual([comEstoque]);
+      expect(await doArquivo({ onlyWithStock: "false" })).toEqual([comEstoque, semEstoque]);
+      expect(await doArquivo({})).toEqual([comEstoque, semEstoque]);
+
+      const daListagem = async (sufixo: string) => {
+        const resposta = await app.inject({ method: "GET", url: `/inventory?search=${search}${sufixo}` });
+        expect(resposta.statusCode).toBe(200);
+        return (resposta.json().items as { itemCode: string }[]).map((item) => item.itemCode);
+      };
+      expect(await daListagem("&onlyWithStock=true")).toEqual([comEstoque]);
+      // Sem o filtro, quem tem posição vem primeiro — a ordem de antes.
+      expect(await daListagem("&onlyWithStock=false")).toEqual([comEstoque, semEstoque]);
+      expect(await daListagem("")).toEqual([comEstoque, semEstoque]);
+
+      await app.close();
+    });
+
+    it.each(["0", "1", "yes", "no", "on", "off", "abc", "", "TRUE", " true"])(
+      "onlyWithStock=%j é 400 no CSV e na listagem",
+      async (valor) => {
+        const app = buildTestApp();
+        await app.ready();
+        const qs = new URLSearchParams({ onlyWithStock: valor }).toString();
+        for (const url of [`/inventory/export.csv?${qs}`, `/inventory?${qs}`]) {
+          const resposta = await app.inject({ method: "GET", url });
+          expect(resposta.statusCode, url).toBe(400);
+          expect(resposta.json().error).toBe("validation_error");
+        }
+        await app.close();
+      },
+    );
+  });
 });
 
 describe("Exportação CSV — relatórios", () => {
