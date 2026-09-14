@@ -3225,6 +3225,65 @@ digitada consulta os valores do meio nas listas; dia mal formado que PARA no cam
 (ano 0002) ainda vai ao servidor e volta como "Não foi possível carregar o relatório:
 Data inválida", sem recusa da própria tela.
 
+## Recurso industrial sem corte nos seletores (SELECTOR-CUTOFF-WAVE-02, 2026-09-13)
+
+Revalidação dos oito tetos de 100 do BACKLOG W8, um por um. Três eram seletor de
+verdade — todos de recurso industrial —, e a tarifa da Estrutura de Custos tinha o
+mesmo corte com 50. Os outros cinco ficam, com motivo. Só web: sem API nova, sem
+migration.
+
+**Por que cortava.** `GET /industrial-resources` ordena por tipo e código, com energia
+por último. O Modelo de Estrutura de Custo punha os 100 primeiros (todos os tipos,
+inativos incluídos) num `<select>`; o Roteiro, os 100 primeiros ativos, filtrando
+capacidade no navegador; a Estrutura de Custos tirava a tarifa do kWh derivado da
+página de 50 ativos; o `porId` do Planejamento procurava o id nos 100 primeiros. Do
+101º em diante o recurso não era escolhível e a energia sumia primeiro. No Modelo o
+tipo da linha gravada saía da mesma lista: fora dela a linha perdia "Quantidade de
+recursos", e o próximo "Salvar rascunho" gravava `resourceCount` 1 no lugar do número.
+
+**Regra.** `lib/recursos-do-seletor.ts` (`useRecursosDoSeletor`): primeira página de 20
+uma vez, só quando o campo existe, um pedido por tipo do recorte (o servidor filtra um
+tipo só); busca no servidor com o mesmo recorte, e o achado entra no catálogo; id já
+escolhido que não veio em nenhum dos dois é perguntado por `GET
+/industrial-resources/:id` uma vez, depois de a página responder, e ganha nome sem
+virar oferta. Campos → `SearchableEntitySelect` com `onSearch`, universo de antes:
+linha do Modelo com todos os tipos e inativos; energia do Modelo só energia, inativa
+incluída; etapa do Roteiro mão de obra e equipamento ativos; tarifa da Estrutura
+energia ativa. Tipo da linha gravada vem do template; recurso gravado da etapa, do
+roteiro. Reescolher a tarifa que já vale não grava. O Roteiro só diz "Nenhum recurso de
+produção cadastrado." depois de a página responder. `porId` do Planejamento →
+`getIndustrialResource`. UOM, `resourceCount`, `resourceQuantity`, roteiro ativo e
+snapshot de OP intocados.
+
+**Mantidos.** Dica de homologação da OC: apoio visual por linha — acima de 100 relações
+do fornecedor ela some, mas fornecedor e item seguem com busca e a OC não depende
+dela; Pedido/OC intocados. `SupplierItemsSection`: tabela só leitura, a lista completa
+com filtro é Item × Fornecedor. Ficha do Projeto: as 100 amostras mais recentes; Amostras
+não tinha outro teto. Usuários: listagem, fora da fase (Auth). FO-03: PDF de pendências,
+lista operacional. Detalhe e medida do dev no BACKLOG W8.
+
+**Validação.** Web: 4 arquivos novos com servidor falso ordenado como o real (#112 fora
+dos 100, nenhuma energia nos 100 nem nos 50 ativos, tarifa #25 fora da página de
+energia) — foundation 9, Modelo 10, Roteiro 7, Estrutura 5 — e `quadro-produto-por-id`
+com mais 3; dois testes do Roteiro trocaram `<select>` por combobox, com servidor que
+filtra tipo. 17 mutações (16 âncoras e as telas de antes), todas derrubadas. Gate
+focado: 100 arquivos, 1175 testes (componentes, lib, Planejamento, Modelos, Estrutura,
+Recursos, Item × Fornecedor, Projetos, Amostras, impressos, OP, OC, filtros) e
+typecheck. Smoke Playwright com banco e portas isolados e 138 recursos: Modelo com o
+#112 achado pela busca e gravado com 3 recursos, recarregado e salvo de novo com 3;
+tarifa #25 gravada e resolvida pelo id uma vez; Roteiro com o #111 ativo gravado, sem
+inativo nem energia na busca; Planejamento pelo id uma vez; Estrutura com energia real e
+estrutura simulada por interceptação (envio capturado); pedidos na abertura 1 (Modelo)
+e 2 (Roteiro); 390px sem transbordo e listas dentro da tela; console limpo fora dois 404
+do produto simulado — 51/51.
+
+**Achados.** Roteiro: a volta de um cadastro no contexto restaura etapas, quantidade e
+unidade, e a leitura do roteiro sobrescreve os três — ROUTE-CONTEXT-RESTORE-01.
+Estrutura de Custos: recurso da linha criado no contexto fora dos 50 primeiros ativos
+volta com o campo vazio — COST-USAGE-RESOURCE-BYID-01. Os dois no BACKLOG, P3.
+
+Próximo recomendado: LISTS-LOADING-STALE-DATA-01.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
