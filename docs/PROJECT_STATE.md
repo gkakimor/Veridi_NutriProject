@@ -3410,6 +3410,51 @@ foundation, criação contextual, guardas de saída) e typecheck. Smoke Playwrig
 do worktree, estrutura e recursos interceptados (nada gravado): 45/45 em 7 cenários,
 390px sem transbordo, console limpo.
 
+## Salvar identificação não apaga o rascunho (ROUTE-IDENTIFICATION-SAVE-DRAFT-01, 2026-09-13)
+
+Só web: sem API, sem domínio, sem migration.
+
+**Causa.** Identificação e rascunho gravam separado, mas `run()` recarrega o roteiro
+depois de toda ação, e a leitura fazia `setBase`, `setUnidade` e `setEtapas` com o
+rascunho gravado. "Salvar identificação" com base, unidade ou etapas pendentes trocava o
+digitado pelo gravado: a assinatura voltava a bater com `salvo`, "Alterações não salvas"
+sumia e a guarda deixava sair. "Definir padrão" e "Tirar padrão" passavam pelo mesmo
+caminho.
+
+**Regra.** Só as ações que gravam o rascunho — "Salvar rascunho", "Ativar versão" e
+"Criar nova versão" (`ACOES_QUE_GRAVAM_O_RASCUNHO`) — trazem base, unidade e etapas do
+servidor por cima da tela, normalizadas (`250,5` → `250.5`, `030` → `30`, nome aparado),
+e a pendência some. Depois das outras, a releitura atualiza o que foi gravado (nome,
+descrição, produtos) e mantém o bloco do rascunho quando ele está pendente no instante em
+que a resposta chega (`rascunhoPendente`, o `alteradoNaTela` do último render): o que se
+digitou durante a gravação também fica. `salvo` continua sendo o servidor, então a
+pendência, a guarda e "Ativar versão" bloqueado seguem. Sem pendência, a releitura reflete
+o servidor como antes. A trava da restauração contextual (carga inicial, StrictMode) não
+mudou. Save, ativação, nova versão, snapshot, `resourceQuantity`, recursos e validação
+intocados.
+
+**Validação.** `roteiro-de-producao.test.tsx` +5, com a guarda real (router de dados):
+nome salvo com base 500, kg e "Mistura Nova" mantidos, uma pendência, "Ativar versão"
+bloqueado e "Sair sem salvar?"; digitação durante a gravação da identificação; sem
+pendência, a releitura traz o servidor; "Salvar rascunho" troca `250,5`, `030` e nome com
+espaços pelo normalizado e a guarda sai calada; "Tirar padrão" mantém o rascunho.
+`roteiro-volta-do-cadastro.test.tsx` +1: depois da volta do cadastro, em StrictMode,
+salvar a identificação não apaga o rascunho restaurado. Antes da correção, 4 dos 6
+caíam; os outros 2 protegem o que já valia. 11 mutações (cada `set` de volta, pendência
+limpa com os valores mantidos, guarda sem o rascunho, "Salvar rascunho" guardando o local,
+pendência lida no clique, ref sem espelho, identificação guardando sem pendência e duas da
+trava da restauração), todas derrubadas. Gate focado: 8 arquivos, 93 testes (Roteiro,
+volta do cadastro, guarda do roteiro, recurso da etapa, criação contextual, guarda de
+saída) e typecheck. Smoke Playwright contra a API dev, nada gravado (PPR-000027 com etapa
+sintética sobre recurso real, PATCH da identificação interceptado, releitura real
+reescrita): a main de antes volta 1000 un e "Encapsulamento", sem pendência, e sai sem
+perguntar; a correção mantém 500 mg e "Mistura Nova", uma pendência, a guarda pergunta,
+sem transbordo, console limpo — 18/18 em 390px e em 1440px.
+
+**Achados.** O que se digita no rascunho durante "Salvar rascunho" é trocado pelo gravado,
+sem pendência — ROUTE-DRAFT-SAVE-INFLIGHT-EDIT-01, no BACKLOG. CONTEXT-ORIGIN-LABEL-ROUTE-01
+segue aberto.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
