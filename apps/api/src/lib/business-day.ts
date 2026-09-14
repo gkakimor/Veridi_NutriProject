@@ -1,4 +1,4 @@
-import { diaCivil, diaCivilDeslocado, hojeComercial } from "@veridi/shared";
+import { dataCivilPorExtenso, diaCivil, diaCivilDeslocado, hojeComercial } from "@veridi/shared";
 
 /**
  * Data civil no domínio — o que "até quando vale" significa.
@@ -57,7 +57,7 @@ export function venceuEm(validUntil: Date | null | undefined, agora: Date): bool
 
 /** `15/09/2026` — o dia como o cliente o leu na proposta. */
 export function diaComercialPorExtenso(dia: Date): string {
-  return dia.toLocaleDateString("pt-BR", { timeZone: "UTC" });
+  return dataCivilPorExtenso(dia);
 }
 
 /**

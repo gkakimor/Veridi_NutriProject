@@ -1,4 +1,4 @@
-import { FUSO_COMERCIAL } from "@veridi/shared";
+import { dataCivilPorExtenso, diaDoInstantePorExtenso, instanteComercialPorExtenso } from "@veridi/shared";
 
 /**
  * Datas do Veridi na tela.
@@ -35,7 +35,9 @@ export function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("pt-BR", isDateOnly(value) ? { timeZone: "UTC" } : {});
+  // Sem opções (`undefined`, não `{}`) o fallback no fuso do navegador usa o formatador
+  // que o próprio V8 guarda; com `{}` ele criava um a cada data (TZ-LOCALE-STRING-REUSE-01).
+  return isDateOnly(value) ? dataCivilPorExtenso(date) : date.toLocaleDateString("pt-BR");
 }
 
 /**
@@ -53,7 +55,7 @@ export function formatDateTime(value: string | null | undefined): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString("pt-BR", { timeZone: FUSO_COMERCIAL });
+  return instanteComercialPorExtenso(date);
 }
 
 /** O mesmo instante, sem as horas — para tabela apertada. */
@@ -61,7 +63,7 @@ export function formatEventDate(value: string | null | undefined): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("pt-BR", { timeZone: FUSO_COMERCIAL });
+  return diaDoInstantePorExtenso(date);
 }
 
 /** Valor para `<input type="date">` — mesmo dia gravado, sem passar pelo fuso. */
