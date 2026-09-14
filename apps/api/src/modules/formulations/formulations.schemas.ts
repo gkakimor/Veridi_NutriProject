@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import {
   CASAS_PERCENTUAL_TECNICO,
@@ -77,8 +78,8 @@ const formulationComponentInputSchema = z.object({
 
 export const listFormulationsQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
+  pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
 });
 
 export const createFormulationVersionSchema = z.object({

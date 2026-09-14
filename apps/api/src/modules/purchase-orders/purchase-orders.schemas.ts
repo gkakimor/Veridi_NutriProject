@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import {
   CASAS_PRECO_UNITARIO,
@@ -77,8 +78,8 @@ export const listPurchaseOrdersQuerySchema = z
      */
     dateFrom: diaCivilDeFiltroSchema,
     dateTo: diaCivilDeFiltroSchema,
-    page: z.coerce.number().int().min(1).default(1),
-    pageSize: z.coerce.number().int().min(1).max(100).default(20),
+    page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
+    pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
   })
   .superRefine(recusarPeriodoInvertido("dateFrom", "dateTo"));
 

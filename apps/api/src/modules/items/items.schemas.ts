@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import { optionalEnum, optionalPurityPercent } from "../../lib/industrial-schema.js";
 
@@ -108,7 +109,7 @@ export const listItemsQuerySchema = z.object({
     .enum(["true", "false"])
     .optional()
     .transform((value) => (value === undefined ? undefined : value === "true")),
-  page: z.coerce.number().int().min(1).default(1),
+  page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
   /* Seletor de tela carrega o catálogo inteiro num <select>; com teto de
    100 o cadastro 101 em diante ficava impossível de escolher. */
   /**
@@ -121,7 +122,7 @@ export const listItemsQuerySchema = z.object({
     .min(1)
     .optional()
     .transform((value) => (value ? value.split(",").filter(Boolean) : undefined)),
-  pageSize: z.coerce.number().int().min(1).max(1000).default(20),
+  pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 1000, padrao: 20 }),
 });
 
 export type CreateItemInput = z.infer<typeof createItemSchema>;

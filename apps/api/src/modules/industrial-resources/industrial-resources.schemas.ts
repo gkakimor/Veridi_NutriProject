@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import { decimalStringSchema } from "../../lib/decimal-schema.js";
 import { optionalNullableDateSchema } from "../../lib/date-schema.js";
@@ -54,10 +55,10 @@ export const listResourcesQuerySchema = z.object({
     .enum(["true", "false"])
     .optional()
     .transform((value) => (value === undefined ? undefined : value === "true")),
-  page: z.coerce.number().int().min(1).default(1),
+  page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
   /* Seletor de tela carrega o catálogo inteiro num <select>; com teto de
    100 o cadastro 101 em diante ficava impossível de escolher. */
-  pageSize: z.coerce.number().int().min(1).max(1000).default(20),
+  pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 1000, padrao: 20 }),
 });
 
 export type CreateIndustrialResourceInput = z.infer<typeof createIndustrialResourceSchema>;

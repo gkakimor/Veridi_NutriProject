@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
 
 export const blockLotSchema = z.object({
   reason: z.string().trim().min(3, "Motivo do bloqueio é obrigatório").max(500),
@@ -12,8 +13,8 @@ export const listLotsQuerySchema = z.object({
   coaStatus: z.enum(["NOT_REQUIRED", "PENDING", "RECEIVED", "APPROVED", "REJECTED"]).optional(),
   ownerCustomerId: z.string().trim().min(1).optional(),
   status: z.enum(["AWAITING_RELEASE", "AVAILABLE", "BLOCKED", "EXPIRED"]).optional(),
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
+  pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
 });
 
 export const lookupLotQuerySchema = z.object({

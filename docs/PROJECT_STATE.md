@@ -3877,6 +3877,29 @@ salvar — alerta à vista (topo 186–265 px de 844), com foco, um só, `scroll
 mesmo script deixa o alerta em −331 a −387 px e sem foco. `pnpm typecheck`. Sem full test, E2E,
 build global nem fresh (FAST).
 
+## Paginação da API é inteiro decimal (API-PAGINATION-COERCION-01, 2026-09-14)
+
+Só API, só validação. Sem migration, sem mudança de rota, DTO, web ou tamanho de página.
+
+`page`/`pageSize` das 28 consultas paginadas (26 arquivos `*.schemas.ts`, 56 campos; `paginationFields`
+dos relatórios conta como uma) liam `z.coerce.number()`: `?page=1e1` abria a página 10,
+`?pageSize=0x10` devolvia 16 linhas e `?page=99999999999999999999` passava (página sem teto). Agora
+usam `inteiroDeConsultaSchema({ minimo, maximo?, padrao })` de `lib/integer-schema.ts`, que reaproveita
+`inteiroDecimalSchema` e aplica a mesma faixa e o mesmo padrão de antes. Aceita `1`, `10`, `007`, espaço
+nas pontas e número JSON inteiro; recusa com 400 `validation_error` expoente, hex, binário, decimal,
+vírgula, `+1`, `Infinity`, `NaN`, texto, vazio, acima de 2^53, booleano e parâmetro repetido. Ausente
+segue 1 e 20 (25 nos relatórios); mínimo 1; tetos 100, 500 (relatórios) e 1000 (catálogos de seletor).
+
+**Validação.** `modules/paginacao-da-consulta.test.ts` (matriz das 28 consultas, rotas `/items`, `/users`,
+`/reports/inventory/position` com 400 e 200, guarda estrutural contra `page`/`pageSize` montado direto no
+zod e contagem que obriga consulta nova a entrar na matriz) e `integer-schema` — 800 testes; com
+`items`, `items-search-alem-da-primeira-pagina`, `list-filter-options`, `reports-dia-comercial`,
+`r20-autorizacao`, `customers`, `exports`, `lots`, `purchase-orders`, `customer-orders` — 12 arquivos,
+945 testes, banco de teste isolado. Mutação (`page` de Itens de volta a `z.coerce`): 12 derrubadas —
+matriz, rota e as duas guardas. `pnpm typecheck`. Sem full test, E2E, build global nem fresh (FAST).
+
+**Achados** (BACKLOG): API-INT-COERCION-REMAINING-01; INVENTORY-EXPORT-ONLY-WITH-STOCK-01.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

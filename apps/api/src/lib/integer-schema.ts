@@ -39,3 +39,16 @@ export function inteiroDecimalSchema(message = "Informe um número inteiro") {
     return inteiro;
   });
 }
+
+/**
+ * Inteiro de query string com faixa e padrão — API-PAGINATION-COERCION-01.
+ *
+ * `page` e `pageSize` das listagens liam `Number()`: `?page=1e1` abria a página
+ * 10 e `?pageSize=0x10` devolvia 16 linhas. A leitura agora é a mesma da
+ * escrita; ausente continua sendo o padrão, e faixa inválida continua 400.
+ */
+export function inteiroDeConsultaSchema(faixa: { minimo: number; maximo?: number; padrao: number }) {
+  let limites = z.number().int().min(faixa.minimo);
+  if (faixa.maximo !== undefined) limites = limites.max(faixa.maximo);
+  return inteiroDecimalSchema().pipe(limites).default(faixa.padrao);
+}

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
 import {
   BR_STATE_CODES,
   CUSTOMER_COMMERCIAL_STATUSES,
@@ -90,7 +91,7 @@ export const listCustomersQuerySchema = z.object({
    * Cliente das outras telas usam esta mesma rota e não podem esconder Prospect.
    */
   commercialStatus: z.enum(CUSTOMER_COMMERCIAL_STATUSES).optional(),
-  page: z.coerce.number().int().min(1).default(1),
+  page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
   /* Seletor de tela carrega o catálogo inteiro num <select>; com teto de
    100 o cadastro 101 em diante ficava impossível de escolher. */
   /**
@@ -104,7 +105,7 @@ export const listCustomersQuerySchema = z.object({
     .min(1)
     .optional()
     .transform((value) => (value ? value.split(",").filter(Boolean) : undefined)),
-  pageSize: z.coerce.number().int().min(1).max(1000).default(20),
+  pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 1000, padrao: 20 }),
 });
 
 export type CreateCustomerInput = z.infer<typeof createCustomerSchema>;
