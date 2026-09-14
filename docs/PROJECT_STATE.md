@@ -3553,6 +3553,52 @@ vazio com ação passa da borda do contêiner em 390px, igual antes) e
 CONSULTATION-CUSTOMER-SWITCH-QUERY-01 (trocar de cliente pela mesma rota pede a aba duas
 vezes, igual antes). LISTS-FILTER-INPUT-UX-01 segue aberto.
 
+## Campos numéricos pt-BR — foundation (PTBR-NUMERIC-INPUT-FOUNDATION-01, 2026-09-13)
+
+Só a foundation. Nenhuma tela de negócio migrada; sem API, DTO, Decimal, banco,
+arredondamento de domínio ou migration. Regra de uso em `UI_BRAND.md`, "Campos numéricos e
+valores pt-BR".
+
+**Discovery.** Ficaram e foram reusados: `decimal-format.ts` (formatação por dígitos,
+`ROUND_HALF_UP`, sem float — base de toda exibição nova), `currency.ts`, `percent.ts` e
+`quantity.ts` (presets de leitura), a leitura vazio/válido/inválido de `integer-input.ts`, e o
+desenho de foco já aprovado em `NUMERIC_PRECISION_AUDIT.md` §11.5. `decimal-input.ts` e
+`decimal-field.ts` leem um separador só como decimal e recusam milhar: seguem servindo às telas
+de hoje, sem mudança, até o rollout. Não existia campo numérico: cada tela monta o próprio
+`<input type="text" inputMode="decimal">`, e três usam `type="number"`.
+
+**Arquitetura.** `lib/numeric-ptbr.ts` + `components/NumericField.tsx` (`IntegerField`,
+`DecimalField`, `MoneyField`, `PercentField`). O valor do campo é o texto digitado em português
+(`""` é vazio); a string canônica sai de `parsePtBrNumber` na borda (`vazio`/`valido`/`invalido`
+com motivo), e `toPtBrEditText` carrega o valor da API preservando os dígitos. Vírgula é decimal
+e pontos antes dela são milhar em grupos de três; sem vírgula, um ponto que não forma milhar é
+decimal (`1234.56`); `1.234` sozinho em campo decimal é ambíguo e recusado (em inteiro, 1234).
+Casa além do `scale` só passa se for zero. O campo: formatado fora do foco, sem milhar no foco,
+normalizado uma vez na saída; tecla inválida barrada em `beforeinput` (`onChange` como segunda
+linha), apagar/selecionar/copiar nativos, colagem normalizada (`R$` na moeda, `%` no
+percentual), `aria-invalid` + `is-invalid` só fora do foco, props do input e `ref` repassadas.
+Símbolo no rótulo; dentro do campo, só em `readOnly`. Percentual em pontos, sem conversão.
+Formatadores de leitura com `scale`/`minFractionDigits` sobre `formatarDecimalTexto`.
+
+**Validação.** Web: `lib/numeric-ptbr.test.ts` (38), `components/numeric-field.test.tsx` (54),
+`components/campo-numerico-guarda.test.ts` (2) e os helpers vizinhos (`decimal-input`,
+`decimal-format`, `currency`, `integer-input`, `quantity`, `quantity-limit`,
+`native-validation-ptbr`): 10 arquivos, 232 testes. 13 mutações, todas derrubadas. `pnpm
+typecheck` (shared, api, web). Smoke Playwright com harness temporário, não commitado, no Vite do
+worktree: 390px com toque — 7 campos cabem (358 px, sem rolagem horizontal), `inputmode` certo,
+1·12·12,·12,3·12,34 com cursor no fim, letras, `R$`, sinal e terceira casa barrados; 1440 — Tab
+formata e seleciona tudo, clique no meio do formatado põe o cursor entre os mesmos dígitos,
+Backspace/Delete/Home/Ctrl+A/Ctrl+C, Ctrl+V real de `1.234,56`, `1234.56`, `1234,56` e
+`R$ 1.234,56`, texto colado recusado, `12.5` vira `12,5`, `1.234` acusado, preço com 4 casas, 12
+casas, inteiro `1.234`, `readOnly` com `R$`: 39/39, console limpo. Sem full test, E2E, build nem
+fresh (FAST).
+
+**Achados** — no item do rollout, no BACKLOG: teclado `decimal` do iOS não tem sinal de menos
+(campo com `allowNegative` pode pedir `inputMode="text"`, que a prop aceita); trocar
+`parseDecimalInput` pelo parser novo muda o `1.234` digitado de 1,234 para recusado;
+`formatQuantity` não agrupa milhar e o campo agrupa fora do foco; o campo não limita os dígitos
+da parte inteira — quem limita é a coluna. Próxima capability: PTBR-NUMERIC-INPUT-ROLLOUT-01.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

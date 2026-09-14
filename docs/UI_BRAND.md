@@ -451,6 +451,57 @@ numa linha própria no fim do grupo, recusa em `role="alert"`; a seleção
 fica. Arquivos: `pedidos-selecionados-<dia>.pdf|csv` e
 `ordens-producao-selecionadas-<dia>.pdf|csv`, com o dia comercial.
 
+### Campos numéricos e valores pt-BR (`components/NumericField.tsx`)
+
+PTBR-NUMERIC-INPUT-FOUNDATION-01. Campo **realmente numérico** aceita só
+entrada numérica válida, e todo número mostrado segue o padrão brasileiro —
+sem depender do idioma do navegador ou do sistema.
+
+**Nunca `type="number"`**: ele decide ponto e vírgula pelo locale da máquina.
+O campo é `type="text"` com `inputMode` (`numeric` no inteiro, `decimal` nos
+outros — o teclado certo no celular) e a leitura de `lib/numeric-ptbr.ts`.
+`campo-numerico-guarda.test.ts` barra tela nova com `type="number"`.
+
+| Campo | Para | Contrato |
+|---|---|---|
+| `IntegerField` | contagem, prazo, parcelas | só dígitos; `1234` aparece `1.234` |
+| `DecimalField` | quantidade, fator, valor técnico | `scale` obrigatório, do domínio |
+| `MoneyField` | total (`scale={2}`), preço unitário (`scale={4}` ou o da coluna) | mínimo de 2 casas fora do foco; `R$` não se digita nem se envia |
+| `PercentField` | percentual em pontos: `12,5` é 12,5% | não multiplica nem divide; contrato em fração converte na borda |
+
+- **`scale`** é decisão do domínio de cada campo, nunca "2 casas para tudo".
+  Casa além do `scale` não entra; colada, só se for zero. Nada é arredondado
+  na entrada.
+- **Valor do campo = texto digitado** (`"1234,5"`). `""` é vazio: vazio não
+  vira zero, zero não vira vazio. Carga: `toPtBrEditText(valorDaApi, { scale })`.
+  Borda (prévia, gravação): `parsePtBrNumber` → `vazio`, `valido` (string
+  canônica, `"1234.5"`) ou `invalido` com motivo, e `numericInvalidMessage`
+  diz o que escrever. Obrigatório é decisão do formulário (`required`).
+- **Foco** (`NUMERIC_PRECISION_AUDIT.md` §11.5): fora do foco, formatado
+  (`1.234,56`); no foco, sem milhar; na saída, normalizado uma vez. Nada é
+  reformatado a cada tecla. O símbolo fica no rótulo ("Preço (R$)",
+  "Comissão (%)"); dentro do campo, só em `readOnly` (`R$ 1.234,56`, `12,50%`).
+- **Milhar e decimal**: vírgula é decimal, pontos antes dela são milhar; sem
+  vírgula, um ponto que não forma milhar é decimal. Colar `1.234,56`,
+  `1234,56`, `1234.56` ou `R$ 1.234,56` dá o mesmo número. `1.234` sozinho em
+  campo decimal é **ambíguo**: fica como escrito e o campo acusa
+  (`aria-invalid`) — nunca vira 1,234 nem 1234. Em campo inteiro, é 1234.
+- **Negativo** só com `allowNegative` (padrão `false`), sinal só no começo.
+- **Leitura** (texto, tabela): `formatIntegerPtBr`, `formatDecimalPtBr`,
+  `formatMoneyPtBr` e `formatPercentPtBr`, com `scale` e
+  `minFractionDigits`; os presets `formatBRL`, `formatUnitPriceBRL`,
+  `formatPercent` e `formatQuantity` continuam. Tudo sobre dígitos: sem
+  `Number`, `Intl` ou `toLocaleString`.
+
+**Quando NÃO usar.** O que só parece número continua texto, com zeros à
+esquerda e máscara próprios: CPF, CNPJ, CEP, telefone, código de produto ou
+de documento, lote, identificador. Regra prática: se não faz sentido somar,
+não é campo numérico.
+
+As telas de hoje ainda leem com `parseDecimalInput`/`exigirDecimal` (sem
+milhar) e três usam `type="number"`: migram em PTBR-NUMERIC-INPUT-ROLLOUT-01
+(BACKLOG).
+
 ---
 
 # 4. Navigation baseline
