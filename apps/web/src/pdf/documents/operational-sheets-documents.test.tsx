@@ -196,11 +196,12 @@ function linhasDoEstoque(rows: InventoryPositionRowDTO[]) {
 }
 
 function pendencias(quantidade: number): QualityQueueRowDTO[] {
+  // O recorte da folha: PENDING, RECEIVED e REJECTED (FO03-PENDING-CUTOFF-01), com um pendente vencido.
   const laudos = [
-    { requiresCoa: true, coaStatus: "PENDING", lotStatus: "AWAITING_RELEASE" },
-    { requiresCoa: true, coaStatus: "RECEIVED", lotStatus: "AWAITING_RELEASE" },
-    { requiresCoa: true, coaStatus: "REJECTED", lotStatus: "BLOCKED" },
-    { requiresCoa: false, coaStatus: "NOT_REQUIRED", lotStatus: "AWAITING_RELEASE" },
+    { requiresCoa: true, coaStatus: "PENDING", lotStatus: "AWAITING_RELEASE", isExpired: false },
+    { requiresCoa: true, coaStatus: "RECEIVED", lotStatus: "AWAITING_RELEASE", isExpired: false },
+    { requiresCoa: true, coaStatus: "REJECTED", lotStatus: "BLOCKED", isExpired: false },
+    { requiresCoa: true, coaStatus: "PENDING", lotStatus: "AWAITING_RELEASE", isExpired: true },
   ] as const;
   return Array.from({ length: quantidade }, (_, i): QualityQueueRowDTO => {
     const [itemCode, itemName, unitCode] = ITENS[i % ITENS.length]!;
@@ -219,8 +220,8 @@ function pendencias(quantidade: number): QualityQueueRowDTO[] {
       ownerType: cliente ? "CUSTOMER" : "VERIDI",
       ownerCustomerName: cliente ? "Alpha Nutrition Ltda" : null,
       receivedAt: `2026-09-${dois((i % 10) + 1)}T13:00:00.000Z`,
-      expiryDate: `2027-${dois((i % 12) + 1)}-15T00:00:00.000Z`,
-      isExpired: false,
+      expiryDate: laudo.isExpired ? "2026-01-31T00:00:00.000Z" : `2027-${dois((i % 12) + 1)}-15T00:00:00.000Z`,
+      isExpired: laudo.isExpired,
       requiresCoa: laudo.requiresCoa,
       coaStatus: laudo.coaStatus,
       coaReviewedByName: null,
@@ -404,8 +405,11 @@ describe("gerador de PDF — folhas operacionais", () => {
         linhas: rows.map((row) => ({ chave: row.lotCode, junto: row.itemCode })),
       });
       const todas = pdf.paginas.join("\n");
-      expect(todas).toContain("Laudo não recebido");
-      expect(todas).toContain("Não exigido");
+      // Pendência documental pelos rótulos da tela CoA; vencido na Qualidade (FO03-ROW-SITUATION-01).
+      expect(todas).toContain("Aguardando análise");
+      expect(todas).toContain("Laudo rejeitado");
+      expect(todas).toContain("Vencido");
+      expect(todas).not.toContain("Laudo não recebido");
       expect(pdf.paginas.at(-1)).toContain("Qualidade — responsável");
     },
     TEMPO,

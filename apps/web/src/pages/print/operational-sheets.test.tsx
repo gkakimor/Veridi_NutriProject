@@ -298,12 +298,14 @@ describe("Folhas operacionais — a rota gera o PDF da folha", () => {
     expect(listQualityQueue).toHaveBeenCalledWith({ onlyPending: true, page: 1, pageSize: 100 });
     const linha = (lote: string) => celulas(folha.getByText(lote).closest('[data-pdf-role="row"]')!);
     // Colunas: Lote, Item, Fornecedor / proprietário, CoA, Qualidade, …, Pendência.
-    expect(linha("LT-20260901-000001")[7]).toBe("Laudo não recebido");
-    expect(linha("LT-20260901-000002")[7]).toBe("Laudo aguardando análise");
+    // Pendência documental com os rótulos da tela Documentos / CoA (FO03-ROW-SITUATION-01).
+    expect(linha("LT-20260901-000001")[7]).toBe("Pendente de documento");
+    expect(linha("LT-20260901-000002")[7]).toBe("Aguardando análise");
     const rejeitado = linha("LT-20260901-000003");
     expect(rejeitado[2]).toBe("Cliente — Alpha Nutrition");
     expect(rejeitado[3]).toBe("Rejeitado");
     expect(rejeitado[4]).toBe("Bloqueado");
+    expect(rejeitado[7]).toBe("Laudo rejeitado");
     // "Tratado / observação" é papel: uma linha de escrita por lote.
     expect(container.querySelectorAll('[data-pdf-role="write"]')).toHaveLength(3);
     expect(folha.getByText("Qualidade — responsável")).toBeTruthy();

@@ -366,7 +366,7 @@ function relatorio(codigo: string, registros: number): ReportPdfInput {
     primaryColumns: definicao.primaryColumns,
     header,
     rows,
-    filters: reportAppliedFilters(new URLSearchParams(FILTROS[codigo] ?? {}), {}, definicao.filterValues),
+    filters: reportAppliedFilters(new URLSearchParams(FILTROS[codigo] ?? {}), definicao),
     generatedBy: "Maria Aparecida dos Santos",
   };
 }

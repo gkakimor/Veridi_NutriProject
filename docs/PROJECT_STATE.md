@@ -4014,6 +4014,38 @@ Sem full test, E2E, build global nem fresh (FAST).
 
 **Achados** (BACKLOG): REPORTS-QUERY-BOOLEAN-PERMISSIVE-01; CUSTOMER-MATERIALS-ONLY-WITH-BALANCE-PERMISSIVE-01.
 
+## PRINT-CORRECTNESS-WAVE-01 — filtros do PDF pelo contrato do relatório; linha da FO-03 (2026-09-14)
+
+Fecha REPORTS-PRINT-UNACCEPTED-FILTER-01 e FO03-ROW-SITUATION-01. Só web; API, schema e
+migration intocados.
+
+**Relatórios em PDF.** `reportAppliedFilters` montava "Filtros aplicados" com toda chave da URL
+e `nomesDosFiltrosPorId` consultava todo id presente: `R-08?customerId=…` escrevia "Cliente:
+CLI-… · Razão social" sobre OCs de todos os clientes (a API descarta a chave), e `foo=bar` saía
+como veio. Agora cada definição de `REPORT_PRINT_DEFINITIONS` declara `filterKeys` — as chaves do
+schema da API, sem paginação — e, quando o serviço só lê a chave em certa combinação,
+`filterAppliesWhen` (R-02: `from`/`to` só com `window=CUSTOM`). Filtro e consulta de nome passam
+pela mesma `filtroAceito`; o resto (rótulo, `filterValues`, nome resolvido de
+REPORTS-PRESENTATION-WAVE-02, "—" sem nome) não mudou. O CSV continua recebendo a URL inteira.
+A lista é cópia manual do schema — REPORTS-PRINT-FILTER-KEYS-DRIFT-01.
+
+**FO-03.** Coluna Qualidade por `situacaoDoLote` (a mesma de FO-01/FO-02): vencido manda.
+Pendência descreve o laudo com os rótulos da tela Documentos / CoA (decisão do PO): PENDING
+"Pendente de documento", RECEIVED "Aguardando análise", REJECTED "Laudo rejeitado" — nunca
+"Aguardando liberação". Recorte `onlyPending`, paginação, ordem, total e `loadAllPages`
+intocados; PAGED-DOCUMENT-SNAPSHOT-01 segue aberto, sem piora.
+
+**Validação.** Matriz `web pages/print/report-print-definitions.test.ts` (18 relatórios: aceito
+aparece; de outro relatório, desconhecido, paginação e vazio não; id aceito × não aceito;
+R-02 condicional; chave do protótipo). Mutação: contrato ignorado → 24 falhas; `LOT_STATUS_LABELS`
+cru na FO-03 → falhas no conteúdo e no arquivo. Focados (print, relatórios, folhas, CoA): 199
+passam; 1 falha anterior à rodada na `main` limpa (PRICING-PRINT-THOUSANDS-TEST-01).
+`pnpm typecheck`. Smoke (Vite do worktree contra a API dev, só GET, PDF real lido): R-08 com
+cliente e `foo=bar` — main declarava o cliente, worktree não declara nem consulta; R-20 com
+cliente aceito sai pelo código, sem id; FO-03 com fila simulada — normal, vencido, recebido,
+rejeitado com os textos acima; console limpo, 0 escritas. Sem full test, E2E, build global nem
+fresh (FAST).
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

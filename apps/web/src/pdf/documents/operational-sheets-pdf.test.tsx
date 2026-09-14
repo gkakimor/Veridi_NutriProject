@@ -225,6 +225,34 @@ describe("Folha operacional em PDF", () => {
     expect(screen.getAllByText("FO-04 · OP 007/26")).toHaveLength(2);
   });
 
+  it("FO-03: Qualidade pela situação do lote (vencido manda) e Pendência pelo laudo (FO03-ROW-SITUATION-01)", () => {
+    const { container } = render(
+      <QualityPendingPdf
+        rows={[
+          pendencia({ lotId: "l1", lotCode: "LT-NORMAL" }),
+          pendencia({ lotId: "l2", lotCode: "LT-VENCIDO", isExpired: true, expiryDate: "2026-01-31T00:00:00.000Z" }),
+          pendencia({ lotId: "l3", lotCode: "LT-RECEBIDO", coaStatus: "RECEIVED" }),
+          pendencia({ lotId: "l4", lotCode: "LT-REJEITADO", coaStatus: "REJECTED", lotStatus: "BLOCKED" }),
+          pendencia({ lotId: "l5", lotCode: "LT-REJ-VENCIDO", coaStatus: "REJECTED", lotStatus: "BLOCKED", isExpired: true }),
+        ]}
+        generatedAt={GERADO_EM}
+        generatedBy={null}
+      />,
+    );
+
+    const linhas = [...container.querySelectorAll('[data-pdf-role="row"]')].map(celulas);
+    // Colunas: Lote, Item, Fornecedor, CoA, Qualidade, Validade, Recebido em, Pendência.
+    expect(linhas.map((linha) => [linha[0], linha[3], linha[4], linha[7]])).toEqual([
+      ["LT-NORMAL", "Pendente de documento", "Aguardando liberação", "Pendente de documento"],
+      ["LT-VENCIDO", "Pendente de documento", "Vencido", "Pendente de documento"],
+      ["LT-RECEBIDO", "Aguardando análise", "Aguardando liberação", "Aguardando análise"],
+      ["LT-REJEITADO", "Rejeitado", "Bloqueado", "Laudo rejeitado"],
+      ["LT-REJ-VENCIDO", "Rejeitado", "Vencido", "Laudo rejeitado"],
+    ]);
+    // Pendência nunca é situação do lote.
+    for (const linha of linhas) expect(linha[7]).not.toBe("Aguardando liberação");
+  });
+
   it("mantém os controles fora do documento impresso", () => {
     const { container } = render(
       <QualityPendingPdf rows={[pendencia()]} generatedAt={GERADO_EM} generatedBy={null} />,

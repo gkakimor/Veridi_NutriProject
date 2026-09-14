@@ -72,6 +72,20 @@ interface ReportPrintDefinition {
    */
   primaryColumns?: string[];
   /**
+   * Chaves de filtro que o schema DESTE relatório aceita na API (sem
+   * paginação). Só elas vão a "Filtros aplicados" e só elas disparam consulta
+   * de nome: chave que o relatório não conhece a API descarta, e declará-la no
+   * papel diria um recorte que não aconteceu — `R-08?customerId=…` saía
+   * "Cliente: …" sobre todas as OCs (REPORTS-PRINT-UNACCEPTED-FILTER-01).
+   */
+  filterKeys: readonly string[];
+  /**
+   * Chave aceita que o serviço só lê em certa combinação: fora dela a API a
+   * ignora, e o papel também. Ex.: R-02 só filtra por `from`/`to` na janela
+   * `CUSTOM`.
+   */
+  filterAppliesWhen?: Readonly<Record<string, (params: URLSearchParams) => boolean>>;
+  /**
    * Rótulos dos filtros de lista fechada, com o MESMO mapa que a tela usa no
    * seletor. `status` muda de sentido de um relatório para outro — lote, OP,
    * OC, pedido, orçamento —, por isso o mapa é de cada relatório. Filtro fora
@@ -86,6 +100,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Posição de Estoque",
     csvPath: "/reports/inventory/position/export.csv",
     screenPath: "/relatorios/estoque/posicao",
+    filterKeys: ["search", "itemId", "itemType", "status", "location", "ownerType", "ownerCustomerId", "onlyWithBalance"],
     // 16 colunas não cabem numa linha da folha: lote do fornecedor, lote
     // Veridi, proprietário, fornecedor, tipo e CoA descem para o detalhe.
     primaryColumns: [
@@ -112,6 +127,12 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Vencimentos",
     csvPath: "/reports/inventory/expiry/export.csv",
     screenPath: "/relatorios/estoque/vencimentos",
+    filterKeys: ["search", "itemId", "itemType", "window", "onlyWithBalance", "from", "to"],
+    // As pontas só são filtro na janela personalizada; nas prontas a API nem as lê.
+    filterAppliesWhen: {
+      from: (params) => params.get("window") === "CUSTOM",
+      to: (params) => params.get("window") === "CUSTOM",
+    },
     primaryColumns: [
       "Item",
       "Descrição",
@@ -131,6 +152,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Movimentações",
     csvPath: "/reports/inventory/movements/export.csv",
     screenPath: "/relatorios/estoque/movimentacoes",
+    filterKeys: ["search", "itemId", "lotId", "type", "sourceType", "from", "to"],
     filterValues: { type: INVENTORY_MOVEMENT_TYPE_LABELS, sourceType: INVENTORY_MOVEMENT_SOURCE_LABELS },
   },
   "R-04": {
@@ -138,6 +160,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Necessidade / Falta para OP",
     csvPath: "/reports/production/requirements/export.csv",
     screenPath: "/relatorios/producao/necessidades",
+    filterKeys: ["search", "productionOrderId", "productId", "status", "onlyShortage"],
     primaryColumns: [
       "OP",
       "Produto",
@@ -157,6 +180,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Planejado x Realizado",
     csvPath: "/reports/production/planned-actual/export.csv",
     screenPath: "/relatorios/producao/planejado-realizado",
+    filterKeys: ["search", "productId", "productionOrderId", "status", "includeCost", "from", "to"],
     // O custo e a qualidade que o explica ficam lado a lado.
     primaryColumns: [
       "OP",
@@ -178,12 +202,14 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Consumo por período",
     csvPath: "/reports/production/consumption/export.csv",
     screenPath: "/relatorios/producao/consumo",
+    filterKeys: ["search", "itemId", "productId", "productionOrderId", "from", "to"],
   },
   "R-08": {
     code: "R-08",
     title: "Ordens de Compra",
     csvPath: "/reports/purchasing/orders/export.csv",
     screenPath: "/relatorios/compras/ordens",
+    filterKeys: ["search", "supplierId", "status", "origin", "from", "to"],
     filterValues: { status: PURCHASE_ORDER_STATUS_LABELS, origin: PURCHASE_ORDER_ORIGIN_LABELS },
   },
   "R-09": {
@@ -191,6 +217,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Recebimentos",
     csvPath: "/reports/purchasing/receipts/export.csv",
     screenPath: "/relatorios/compras/recebimentos",
+    filterKeys: ["search", "supplierId", "itemId", "purchaseOrderId", "from", "to"],
     primaryColumns: [
       "Recebimento",
       "Data",
@@ -210,18 +237,21 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Em Compra",
     csvPath: "/reports/purchasing/on-order/export.csv",
     screenPath: "/relatorios/compras/em-compra",
+    filterKeys: ["search", "supplierId", "itemId"],
   },
   "R-11": {
     code: "R-11",
     title: "OCs atrasadas",
     csvPath: "/reports/purchasing/late/export.csv",
     screenPath: "/relatorios/compras/atrasadas",
+    filterKeys: ["search", "supplierId", "itemId"],
   },
   "R-12": {
     code: "R-12",
     title: "Pedidos do Cliente",
     csvPath: "/reports/commercial/orders/export.csv",
     screenPath: "/relatorios/comercial/pedidos",
+    filterKeys: ["search", "customerId", "status", "from", "to"],
     filterValues: { status: CUSTOMER_ORDER_STATUS_LABELS },
   },
   "R-13": {
@@ -229,6 +259,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Atendimento dos Pedidos",
     csvPath: "/reports/commercial/fulfillment/export.csv",
     screenPath: "/relatorios/comercial/atendimento",
+    filterKeys: ["search", "customerId", "customerOrderId", "productId", "status", "from", "to"],
     primaryColumns: [
       "Pedido",
       "Cliente",
@@ -247,18 +278,22 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Faturamento por período",
     csvPath: "/reports/billing/period/export.csv",
     screenPath: "/relatorios/faturamento/periodo",
+    filterKeys: ["search", "customerId", "customerOrderId", "from", "to"],
   },
   "R-16": {
     code: "R-16",
     title: "Aguardando faturamento",
     csvPath: "/reports/billing/awaiting/export.csv",
     screenPath: "/relatorios/faturamento/pendentes",
+    filterKeys: ["search", "customerId"],
   },
   "R-17": {
     code: "R-17",
     title: "Pedido x Entregue x Faturado",
     csvPath: "/reports/billing/order-delivered-billed/export.csv",
     screenPath: "/relatorios/faturamento/pedido-entregue-faturado",
+    // Mesmo schema do R-13 na API.
+    filterKeys: ["search", "customerId", "customerOrderId", "productId", "status", "from", "to"],
     primaryColumns: [
       "Pedido",
       "Cliente",
@@ -278,6 +313,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Custo industrial por produto",
     csvPath: "/reports/costs/industrial-by-product/export.csv",
     screenPath: "/relatorios/custos/industrial-por-produto",
+    filterKeys: ["search", "customerId", "active"],
     // Custo industrial por produto: documento interno, como o R-20.
     internal: true,
     primaryColumns: [
@@ -296,6 +332,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Precificação por produto",
     csvPath: "/reports/costs/pricing-by-product/export.csv",
     screenPath: "/relatorios/custos/precificacao-por-produto",
+    filterKeys: ["search", "customerId"],
     // Preço, margem e contribuição: documento interno, como o R-20.
     internal: true,
     roles: PRICING_PROVENANCE_ROLES,
@@ -317,6 +354,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Orçamento × Precificação",
     csvPath: "/reports/commercial/quote-pricing/export.csv",
     screenPath: "/relatorios/comercial/orcamento-precificacao",
+    filterKeys: ["search", "customerId", "priceSource", "status", "from", "to"],
     // Contém custo e margem: nunca é o documento entregue ao cliente.
     internal: true,
     roles: PRICING_PROVENANCE_ROLES,
@@ -393,8 +431,28 @@ const FILTROS_POR_ID: Readonly<Record<string, EntityFilterSource | null>> = {
 /** Nome de cada filtro por id da URL, pela chave dela, já resolvido pela página. */
 export type ReportFilterNames = Readonly<Record<string, string | null | undefined>>;
 
+/** O que da definição decide quais filtros da URL o papel declara e como os escreve. */
+export type ReportFilterContract = Pick<ReportPrintDefinition, "filterKeys" | "filterAppliesWhen" | "filterValues">;
+
+/**
+ * A chave vale como filtro DESTE relatório: está no contrato dele e, se o
+ * serviço só a lê em certa combinação, a combinação está na URL. Paginação
+ * nunca está no contrato.
+ */
+function filtroAceito(contrato: ReportFilterContract, params: URLSearchParams, key: string): boolean {
+  if (!contrato.filterKeys.includes(key)) return false;
+  const condicao = contrato.filterAppliesWhen && Object.hasOwn(contrato.filterAppliesWhen, key)
+    ? contrato.filterAppliesWhen[key]
+    : undefined;
+  return condicao ? condicao(params) : true;
+}
+
 /**
  * Filtros da URL, rotulados, na ordem em que vieram.
+ *
+ * Só entra a chave que o relatório aceita (`filterKeys`): parâmetro que a API
+ * descarta — de outro relatório, digitado à mão (`foo=bar`) — não é recorte, e
+ * o papel não o declara (REPORTS-PRINT-UNACCEPTED-FILTER-01).
  *
  * Paginação da tela (`page`, `pageSize`) não é filtro: o documento traz o
  * recorte inteiro, e "pageSize 25" no papel sugeriria um corte que não existe.
@@ -410,11 +468,12 @@ export type ReportFilterNames = Readonly<Record<string, string | null | undefine
  */
 export function reportAppliedFilters(
   params: URLSearchParams,
+  contract: ReportFilterContract,
   names: ReportFilterNames = {},
-  filterValues: FilterValueLabels = {},
 ): { label: string; value: string }[] {
+  const filterValues = contract.filterValues ?? {};
   return [...params.entries()]
-    .filter(([key, value]) => value !== "" && key !== "all" && key !== "page" && key !== "pageSize")
+    .filter(([key, value]) => value !== "" && filtroAceito(contract, params, key))
     .map(([key, value]) => ({
       label: FILTER_LABELS[key] ?? key,
       value: Object.hasOwn(FILTROS_POR_ID, key) ? (names[key] ?? "") : rotuloDoValor(filterValues[key], value),
@@ -439,12 +498,17 @@ async function entityFilterLabel(source: EntityFilterSource, id: string | null):
 
 /**
  * Os nomes dos filtros por id que a URL traz — em paralelo, uma consulta por
- * filtro presente, nunca uma por linha do relatório. Sem filtro, nenhuma.
+ * filtro presente, nunca uma por linha do relatório. Sem filtro, nenhuma; id
+ * que o relatório não aceita também não: ele não vai ao papel.
  */
-async function nomesDosFiltrosPorId(params: URLSearchParams): Promise<ReportFilterNames> {
+async function nomesDosFiltrosPorId(
+  params: URLSearchParams,
+  contract: ReportFilterContract,
+): Promise<ReportFilterNames> {
   const nomes = await Promise.all(
     Object.entries(FILTROS_POR_ID).map(async ([chave, fonte]) => {
-      const nome = fonte ? await entityFilterLabel(fonte, params.get(chave)) : null;
+      const aceito = filtroAceito(contract, params, chave);
+      const nome = fonte && aceito ? await entityFilterLabel(fonte, params.get(chave)) : null;
       return [chave, nome] as const;
     }),
   );
@@ -542,11 +606,11 @@ export function ReportPrintPage() {
         if (!response.ok) throw new Error(await motivoDaFalha(response));
         const csv = parseReportCsv(await response.text());
         // Nomes só depois do CSV aceito: perfil recusado não consulta ninguém.
-        const nomes = await nomesDosFiltrosPorId(params);
+        const nomes = await nomesDosFiltrosPorId(params, definition);
         return {
           definition,
           ...csv,
-          filters: reportAppliedFilters(params, nomes, definition.filterValues),
+          filters: reportAppliedFilters(params, definition, nomes),
         };
       }}
       build={async ({ definition: relatorio, header, rows, filters }) => {
