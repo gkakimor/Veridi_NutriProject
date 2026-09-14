@@ -1,7 +1,8 @@
 import type { ComponentType } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
+import { PAUSA_DO_PERIODO_MS } from "../components/filters/DateRangeFilter";
 
 /**
  * Listas — o resultado do filtro anterior não se passa pelo do filtro novo
@@ -20,6 +21,16 @@ import { MemoryRouter } from "react-router-dom";
  * página aberta até a próxima chegar. O mecanismo é provado em
  * `lib/list-query.test.tsx`; aqui, que cada tela o usa com os filtros que tem.
  * Período recusado segue em `periodo-invertido-listas.test.tsx`.
+ *
+ * Data digitada (LISTS-LOADING-DATES-GESTURE-01): desde LISTS-FILTER-INPUT-UX-01
+ * o `DateRangeFilter` só aplica a data depois de `PAUSA_DO_PERIODO_MS` sem
+ * digitar, ou no Enter — no Chromium cada tecla passa por valores do meio, e
+ * cada um era uma consulta. O gesto "datas" daqui continuou disparando um
+ * `change` só e contando a consulta na hora, sem pausa: caía em Faturamento,
+ * Recebimentos, Ordens de Compra e Produto Acabado com 4 consultas em vez de 5.
+ * A tela estava certa; o gesto agora é o da pessoa — digita, para — e confere
+ * as duas pontas da pausa. O fim deste arquivo prova o período digitado com
+ * outra consulta em curso: página, URL, sessão e resposta atrasada.
  */
 
 vi.mock("../app/AuthProvider", () => ({
@@ -170,13 +181,35 @@ function entidade(nome: string, rotulo: string, codigo: string, espera: Gesto["e
   };
 }
 
-/** "Personalizado" (semeado com o período da tela, sem consulta) e a data inicial digitada. */
-function periodo(rotuloDe: string, dia: string, espera: Gesto["espera"]): Gesto {
+function esperar(ms: number) {
+  act(() => {
+    vi.advanceTimersByTime(ms);
+  });
+}
+
+interface GestoDeDatas extends Gesto {
+  /** O rótulo da data inicial e o dia digitado nela. */
+  rotuloDe: string;
+  dia: string;
+}
+
+/**
+ * "Personalizado" (semeado com o período da tela, sem consulta), a data inicial
+ * digitada e a pausa. 1 ms antes da pausa nada foi consultado — nem o semear,
+ * nem a data —; na pausa sai a consulta.
+ */
+function periodo(rotuloDe: string, dia: string, espera: Gesto["espera"]): GestoDeDatas {
   return {
     nome: "datas",
+    rotuloDe,
+    dia,
     aplicar: async () => {
+      const antes = pendentes.length;
       fireEvent.click(screen.getByRole("button", { name: "Personalizado" }));
       fireEvent.change(screen.getByLabelText(rotuloDe), { target: { value: dia } });
+      esperar(PAUSA_DO_PERIODO_MS - 1);
+      expect(pendentes, "datas: nada antes da pausa").toHaveLength(antes);
+      esperar(1);
     },
     espera,
   };
@@ -500,7 +533,15 @@ async function recusar(indice: number) {
   await act(async () => pendentes[indice]!.recusar(new Error("Serviço indisponível.")));
 }
 
-async function abrir(lista: Lista) {
+/** A query string da tela, como a URL está agora. */
+let endereco = "";
+
+function Endereco() {
+  endereco = useLocation().search;
+  return null;
+}
+
+async function abrir(lista: Lista, inicial = "/") {
   vi.mocked(lista.consulta as (f: Filtros) => Promise<unknown>).mockImplementation(
     (filtros) =>
       new Promise((responder, recusar) => {
@@ -509,8 +550,9 @@ async function abrir(lista: Lista) {
   );
   const { Componente } = lista;
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[inicial]}>
       <Componente />
+      <Endereco />
     </MemoryRouter>,
   );
   // As opções dos filtros por entidade chegam; a lista continua pendente.
@@ -696,6 +738,84 @@ describe.each(LISTAS)("$nome", (lista) => {
       Boolean(antes.compareDocumentPosition(depois) & Node.DOCUMENT_POSITION_FOLLOWING);
     expect(seguinte(screen.getByRole("searchbox"), alerta)).toBe(true);
     expect(seguinte(alerta, tabelaDaLista)).toBe(true);
+  });
+});
+
+/* ---------- período digitado com outra consulta em curso ---------- */
+
+/** A data inicial guardada na sessão da tela (`veridi:filters:<usuário>:<tela>:dateFrom`). */
+function dataInicialDaSessao(): string | null {
+  const chave = Object.keys(sessionStorage).find(
+    (guardada) => guardada.startsWith("veridi:filters:u-1:") && guardada.endsWith(":dateFrom"),
+  );
+  return chave === undefined ? null : (JSON.parse(sessionStorage.getItem(chave) ?? "null") as string);
+}
+
+const LISTAS_COM_PERIODO = LISTAS.flatMap((lista) => {
+  const datas = lista.gestos.find((gesto): gesto is GestoDeDatas => gesto.nome === "datas");
+  return datas ? [{ nome: lista.nome, lista, datas }] : [];
+});
+
+it("período digitado: as quatro listas com `DateRangeFilter` deste arquivo entram", () => {
+  expect(LISTAS_COM_PERIODO.map(({ nome }) => nome)).toEqual([
+    "Faturamento",
+    "Recebimentos",
+    "Ordens de Compra",
+    "Produto Acabado",
+  ]);
+});
+
+describe.each(LISTAS_COM_PERIODO)("$nome — período digitado", ({ lista, datas }) => {
+  it("com a página seguinte carregando: nada até a pausa; nela, uma consulta na página 1, URL e sessão com a data, e a página atrasada não vira tela", async () => {
+    // Já no Personalizado, pontas abertas, na página 2: o semear do botão fica fora deste caso.
+    await abrir(lista, "/?period=custom&page=2");
+    expect(pendentes[0]!.filtros).toMatchObject({ page: 2 });
+    expect(pendentes[0]!.filtros).not.toHaveProperty("dateFrom");
+    await responder(lista, 0, 0);
+    expect(screen.getByText(PAGINACAO)).toHaveTextContent("Página 2 de 3");
+
+    fireEvent.click(screen.getByRole("button", { name: "Próxima" }));
+    expect(pendentes).toHaveLength(2);
+    expect(pendentes[1]!.filtros).toMatchObject({ page: 3 });
+
+    // Digitada com a página 3 em curso: ainda não é filtro — nem consulta, nem URL, nem sessão.
+    fireEvent.change(screen.getByLabelText(datas.rotuloDe), { target: { value: datas.dia } });
+    esperar(PAUSA_DO_PERIODO_MS - 1);
+    expect(pendentes).toHaveLength(2);
+    expect(new URLSearchParams(endereco).get("dateFrom")).toBeNull();
+    expect(new URLSearchParams(endereco).get("page")).toBe("3");
+    expect(dataInicialDaSessao()).toBeNull();
+    // Mesmo recorte em outra página: a aberta continua à vista, ocupada.
+    expect(naTela(codigo(lista, 0))).toBe(true);
+    expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
+
+    esperar(1);
+    expect(pendentes).toHaveLength(3);
+    expect(pendentes[2]!.filtros).toMatchObject({ dateFrom: datas.dia, page: 1 });
+    const url = new URLSearchParams(endereco);
+    expect(url.get("dateFrom")).toBe(datas.dia);
+    expect(url.get("page")).toBeNull();
+    expect(dataInicialDaSessao()).toBe(datas.dia);
+    // Recorte novo: nada da página anterior enquanto carrega.
+    expect(naTela(codigo(lista, 0))).toBe(false);
+    expect(screen.getByText(CARREGANDO)).toBeInTheDocument();
+    semResposta(lista);
+    if (lista.csv) conferirCsv(pendentes[2]!.filtros);
+
+    await responder(lista, 2, 2);
+    expect(naTela(codigo(lista, 2))).toBe(true);
+    expect(screen.getByText(PAGINACAO)).toHaveTextContent("Página 1 de 3");
+    expect(screen.queryByText(CARREGANDO)).toBeNull();
+
+    // A página 3 do recorte sem data responde por último: não sobrescreve a resposta nova.
+    await responder(lista, 1, 1);
+    expect(naTela(codigo(lista, 1))).toBe(false);
+    expect(naTela(codigo(lista, 2))).toBe(true);
+    expect(screen.getByText(PAGINACAO)).toHaveTextContent("Página 1 de 3");
+    expect(screen.queryByText(CARREGANDO)).toBeNull();
+    // Nenhuma pausa sobrando consulta de novo.
+    esperar(PAUSA_DO_PERIODO_MS * 3);
+    expect(pendentes).toHaveLength(3);
   });
 });
 

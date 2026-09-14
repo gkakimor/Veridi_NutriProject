@@ -83,11 +83,15 @@ botão da ficha como se estivessem nela — "Aprovar projeto" (`projeto-aprovado
 "← Voltar ao Projeto" e ler a versão enviada como texto — agora também pela lista geral (Comercial → Orçamentos).
 ~~QUOTE-PAGE-NAV-ACTIVE-01~~ **fechado em 2026-09-14** com QUOTES-HUB-01 — Orçamentos fica ativo na lista e na página
 de cada versão, e a aba diz qual versão está aberta ("ORC-000444 · V1 · Veridi Nutrition").
-Achado de QUOTES-HUB-01, sem posição na fila: **LISTS-LOADING-DATES-GESTURE-01 (P3, teste)** —
-`web pages/listas-consulta-em-curso.test.tsx` cai de forma determinística na `main` (a5b9a73, conferido sozinho) em
-Faturamento, Recebimentos, Produto Acabado e Ordens de Compra: o gesto "datas" conta 4 consultas em vez de 5
-("datas: uma consulta"). Provável pausa de 300 ms da data digitada (`DateRangeFilter`) não avançada pelo teste; não
-é regressão da lista de Orçamentos, que não mexe no componente.
+Achado de QUOTES-HUB-01, sem posição na fila: ~~LISTS-LOADING-DATES-GESTURE-01~~ **fechado em 2026-09-14** — teste
+desatualizado, não tela: o gesto "datas" de `web pages/listas-consulta-em-curso.test.tsx` não esperava a pausa de 300 ms
+que o `DateRangeFilter` ganhou em LISTS-FILTER-INPUT-UX-01; agora espera e confere as duas pontas, e as quatro listas com
+período ganharam o caso com consulta em curso (página, URL, sessão, resposta atrasada). Achado dele, sem posição na
+fila: **LISTS-CUSTOM-PERIOD-PAGE-RESET-01 (P3, UX)** — "Personalizado" clicado fora da página 1 (Faturamento,
+Recebimentos, OC, Produto Acabado) volta para a página 1 do MESMO recorte e consulta uma vez (a partir da página 1, 0):
+semear grava `period`/datas na URL, e `useListFilters.set` sempre volta à página 1. Existe desde FILTER-FOUNDATION-01.
+Decidir se abrir o Personalizado é trocar filtro; se não for, a página só pode ficar com a tela sabendo que o recorte
+resolvido não mudou (o `set` não resolve período).
 Achados de FORMULATION-ADJUSTMENTS-UX-01, idem: **FORMULATION-PRINT-ADJUSTMENTS-01
 (para a branch de PDF)** — nenhum impresso lê o modo da quantidade, a pureza,
 o overage ou o físico por unidade; a tela passou a mostrar os ajustes resumidos

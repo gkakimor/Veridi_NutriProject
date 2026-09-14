@@ -4396,6 +4396,39 @@ tela dá 120 min para 2.000 un; `2000,0`/`2000.0`/`2000.000` sem pendência nem 
 direto; PATCH direto 409 com a frase nova, 200 com a flag e 5.000 un reprogramadas = 300 min com almoço; 390px com
 botões empilhados, sem transbordo; console limpo. Sem full test, E2E nem fresh (FAST).
 
+## Data digitada nas listas: o gesto do teste espera a pausa (LISTS-LOADING-DATES-GESTURE-01, 2026-09-14)
+
+Só teste. Sem API, tela, componente, schema ou migration.
+
+**Reprodução e causa.** Na `main` (0d3f273), `web pages/listas-consulta-em-curso.test.tsx` caía sempre, sozinho, em
+Faturamento, Recebimentos, Ordens de Compra e Produto Acabado: "datas: uma consulta", 4 consultas em vez de 5 (45 de
+49). Teste desatualizado, não regressão: desde LISTS-FILTER-INPUT-UX-01 (695e9b3) o `DateRangeFilter` só aplica a data
+digitada depois de `PAUSA_DO_PERIODO_MS` ou no Enter, e o gesto contava a consulta logo depois do `change`. O commit da
+pausa já tinha este arquivo, mas a validação daquela onda rodou `listas-consulta-em-curso-restantes`, não ele. Causa
+única: as quatro telas passam o período pelo mesmo `DateRangeFilter` → `useListFilters.set` → `useListQuery`, sem
+diferença entre elas.
+
+**Regra (a da tela, mantida).** "Personalizado" semeia com o período da tela, sem consulta. Data digitada não é filtro
+até a pausa ou o Enter: nem consulta, nem URL, nem sessão. Na pausa, uma consulta, na página 1, URL (`replace`) e
+sessão com a data, CSV com o filtro novo; "Carregando…" sem linhas, total ou páginas do recorte anterior; resposta de
+recorte ou página anterior não sobrescreve a nova.
+
+**Teste.** O gesto "datas" digita e espera: 1 ms antes da pausa nenhuma consulta, na pausa uma. Caso novo nas quatro
+listas: página 2, Próxima em curso, data digitada — até a pausa nada muda e a página aberta fica à vista; na pausa uma
+consulta na página 1, URL com `dateFrom` e sem `page`, sessão com a data, carregando sem nada do recorte anterior; a
+página 3 atrasada, respondendo depois da nova, não vira tela. Guarda de que as quatro listas entram no caso.
+
+**Validação.** `listas-consulta-em-curso` 54 de 54 (base: 45 de 49). Mutações, 6 de 6 derrubadas: sem pausa (8
+testes), data que nunca aplica (8), Personalizado que consulta no clique (1 — Faturamento; nas outras o semear já é
+vazio), resposta atrasada que escreve (16), filtro que mantém a página (14), sessão que não grava (4). Focados, antes e
+depois do rebase: `components/filters`, `list-query`, `list-filters`, `list-period`, filtros de Faturamento,
+Recebimentos, Produto Acabado e OC, `periodo-invertido-listas`, `listas-consulta-em-curso` (e `-restantes`),
+`listas-sem-consulta-solta`, `quotes` — 15 arquivos, 315 testes; `pnpm typecheck`. Interface intocada: sem smoke nem
+390. Sem full test, E2E nem fresh (FAST).
+
+**Achado** (BACKLOG): LISTS-CUSTOM-PERIOD-PAGE-RESET-01 — "Personalizado" fora da página 1 volta à página 1 do mesmo
+recorte, com uma consulta (medido nas quatro telas: 0 consultas a partir da página 1, 1 a partir da página 2).
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
