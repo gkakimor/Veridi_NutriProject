@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { Link, useNavigate } from "react-router-dom";
 import { EntityLink } from "../../components/EntityLink";
@@ -10,10 +10,10 @@ import { formatDate } from "../../lib/dates";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
 import { useListFilters } from "../../lib/list-filters";
+import { useListQuery } from "../../lib/list-query";
 import type { ListPeriodPreset } from "../../lib/list-period";
 import {
   LIST_PERIOD_PRESET_LABELS,
-  TABELA_COM_PERIODO_RECUSADO,
   ehListPeriodPreset,
   formatListPeriod,
   resolveListPeriod,
@@ -23,6 +23,7 @@ import type { FilterChip } from "../../components/filters/ActiveFilterChips";
 import { ClearFilters } from "../../components/filters/ClearFilters";
 import { DateRangeFilter } from "../../components/filters/DateRangeFilter";
 import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { fornecedorFilterSource } from "../../lib/filter-sources";
 import { useAuth } from "../../app/AuthProvider";
 
@@ -68,11 +69,6 @@ const PRESETS_DO_RECEBIMENTO: ListPeriodPreset[] = [
 export function ReceiptsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-
-  const [receipts, setReceipts] = useState<ReceiptDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const { values, page, set, setPage, clear, isActive } = useListFilters({
     defaults: FILTROS_PADRAO,
@@ -121,28 +117,13 @@ export function ReceiptsPage() {
     return () => clearTimeout(handle);
   }, [searchInput, search, set]);
 
-  const reload = useCallback(() => {
-    setError(null);
-    if (periodoRecusado) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-
-    listReceipts({ ...filtrosDaConsulta, page, pageSize: PAGE_SIZE })
-      .then((result) => {
-        setReceipts(result.receipts);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Falha ao carregar recebimentos");
-      })
-      .finally(() => setLoading(false));
-  }, [filtrosDaConsulta, page, periodoRecusado]);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  const consulta = useListQuery(
+    listReceipts,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { enabled: periodoRecusado === null, fallbackError: "Falha ao carregar recebimentos" },
+  );
+  const receipts: ReceiptDTO[] = consulta.data?.receipts ?? [];
+  const total = consulta.data?.total ?? 0;
 
   const chips: FilterChip[] = [];
   if (search) {
@@ -185,7 +166,6 @@ export function ReceiptsPage() {
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const linhas = periodoRecusado ? [] : receipts;
 
   return (
     <>
@@ -273,9 +253,9 @@ export function ReceiptsPage() {
 
       <ActiveFilterChips chips={chips} onClear={clear} />
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
@@ -290,7 +270,7 @@ export function ReceiptsPage() {
             </tr>
           </thead>
           <tbody>
-            {linhas.map((receipt) => (
+            {receipts.map((receipt) => (
               <tr
                 key={receipt.id}
                 tabIndex={0}
@@ -335,32 +315,31 @@ export function ReceiptsPage() {
               </tr>
             ))}
 
-            {!loading && linhas.length === 0 && (
-              <tr>
-                <td colSpan={8} className="table__empty">
-                  {periodoRecusado ? (
-                    TABELA_COM_PERIODO_RECUSADO
-                  ) : isActive ? (
-                    <>
-                      Nenhum recebimento encontrado para os filtros atuais.{" "}
-                      <ClearFilters onClear={clear} />
-                    </>
-                  ) : (
-                    "Nenhum recebimento encontrado."
-                  )}
-                </td>
-              </tr>
-            )}
+            <ListStatusRow
+              colSpan={8}
+              query={consulta}
+              rowCount={receipts.length}
+              periodRefused={periodoRecusado !== null}
+            >
+              {isActive ? (
+                <>
+                  Nenhum recebimento encontrado para os filtros atuais.{" "}
+                  <ClearFilters onClear={clear} />
+                </>
+              ) : (
+                "Nenhum recebimento encontrado."
+              )}
+            </ListStatusRow>
           </tbody>
         </table>
-        {!periodoRecusado && (
+        {consulta.data && (
           <div className="table-foot">
             {total} {total === 1 ? "recebimento" : "recebimentos"}
           </div>
         )}
       </div>
 
-      {!periodoRecusado && (
+      {consulta.data && (
         <div className="pagination">
           <span>
             Página {page} de {totalPages}

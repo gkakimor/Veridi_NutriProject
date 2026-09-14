@@ -1,5 +1,5 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { Link, useNavigate } from "react-router-dom";
 import type { FinishedGoodRowDTO, LotStatus } from "@veridi/shared";
@@ -14,14 +14,15 @@ import type { ListFinishedGoodsParams } from "../../lib/finished-goods-api";
 import { listFinishedGoods } from "../../lib/finished-goods-api";
 import { formatBRL } from "../../lib/currency";
 import { useListFilters } from "../../lib/list-filters";
+import { useListQuery } from "../../lib/list-query";
 import type { ListPeriodPreset } from "../../lib/list-period";
 import {
   LIST_PERIOD_PRESET_LABELS,
-  TABELA_COM_PERIODO_RECUSADO,
   ehListPeriodPreset,
   formatListPeriod,
   resolveListPeriod,
 } from "../../lib/list-period";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { ActiveFilterChips } from "../../components/filters/ActiveFilterChips";
 import type { FilterChip } from "../../components/filters/ActiveFilterChips";
 import { ClearFilters } from "../../components/filters/ClearFilters";
@@ -127,11 +128,6 @@ export function FinishedGoodsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [rows, setRows] = useState<FinishedGoodRowDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const { values, page, set, setPage, clear, isActive } = useListFilters({
     defaults: FILTROS_PADRAO,
     persistScope: "finished-goods",
@@ -187,28 +183,13 @@ export function FinishedGoodsPage() {
     return () => clearTimeout(handle);
   }, [searchInput, search, set]);
 
-  const reload = useCallback(() => {
-    setError(null);
-    if (periodoRecusado) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-
-    listFinishedGoods({ ...filtrosDaConsulta, page, pageSize: PAGE_SIZE })
-      .then((result) => {
-        setRows(result.rows);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Falha ao carregar produtos acabados");
-      })
-      .finally(() => setLoading(false));
-  }, [filtrosDaConsulta, page, periodoRecusado]);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  const consulta = useListQuery(
+    listFinishedGoods,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { enabled: periodoRecusado === null, fallbackError: "Falha ao carregar produtos acabados" },
+  );
+  const rows: FinishedGoodRowDTO[] = consulta.data?.rows ?? [];
+  const total = consulta.data?.total ?? 0;
 
   const chips: FilterChip[] = [];
   if (search) {
@@ -244,7 +225,6 @@ export function FinishedGoodsPage() {
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const linhas = periodoRecusado ? [] : rows;
 
   return (
     <>
@@ -320,9 +300,9 @@ export function FinishedGoodsPage() {
 
       <ActiveFilterChips chips={chips} onClear={clear} />
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table table--sticky-actions">
           <thead>
             <tr>
@@ -369,7 +349,7 @@ export function FinishedGoodsPage() {
             </tr>
           </thead>
           <tbody>
-            {linhas.map((row) => (
+            {rows.map((row) => (
               <tr key={row.lotId}>
                 <td>{row.productName ?? "—"}</td>
                 <td>
@@ -431,32 +411,31 @@ export function FinishedGoodsPage() {
               </tr>
             ))}
 
-            {!loading && linhas.length === 0 && (
-              <tr>
-                <td colSpan={14} className="table__empty">
-                  {periodoRecusado ? (
-                    TABELA_COM_PERIODO_RECUSADO
-                  ) : isActive ? (
-                    <>
-                      Nenhum produto acabado encontrado com esses filtros.{" "}
-                      <ClearFilters onClear={clear} />
-                    </>
-                  ) : (
-                    "Nenhum produto acabado produzido ainda."
-                  )}
-                </td>
-              </tr>
-            )}
+            <ListStatusRow
+              colSpan={14}
+              query={consulta}
+              rowCount={rows.length}
+              periodRefused={periodoRecusado !== null}
+            >
+              {isActive ? (
+                <>
+                  Nenhum produto acabado encontrado com esses filtros.{" "}
+                  <ClearFilters onClear={clear} />
+                </>
+              ) : (
+                "Nenhum produto acabado produzido ainda."
+              )}
+            </ListStatusRow>
           </tbody>
         </table>
-        {!periodoRecusado && (
+        {consulta.data && (
           <div className="table-foot">
             {total} {total === 1 ? "lote produzido" : "lotes produzidos"}
           </div>
         )}
       </div>
 
-      {!periodoRecusado && (
+      {consulta.data && (
         <div className="pagination">
           <span>
             Página {page} de {totalPages}

@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { ProjectDTO, ProjectStatus } from "@veridi/shared";
 import { PROJECT_STATUSES, PROJECT_STATUS_LABELS } from "@veridi/shared";
 import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
+import { useFilteredPage, useListQuery } from "../../lib/list-query";
+import type { ListProjectsParams } from "../../lib/projects-api";
 import { listProjects, getProjectVocabulary } from "../../lib/projects-api";
 import { clienteAtivoFilterSource } from "../../lib/filter-sources";
 import { ProjectFormModal } from "./ProjectFormModal";
@@ -52,11 +55,6 @@ export function ProjectsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [projects, setProjects] = useState<ProjectDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   /*
    * `?novo=1` abre o cadastro direto — é como a ação rápida do Dashboard
    * chega aqui sem duplicar o formulário numa rota própria.
@@ -124,39 +122,30 @@ export function ProjectsPage() {
   }, [searchInput]);
 
   useEffect(() => {
-    setPage(1);
-  }, [search, status, customerId, channel]);
-
-  useEffect(() => {
     getProjectVocabulary()
       .then((vocabulary) => setChannels(vocabulary.channels))
       .catch(() => setChannels([]));
   }, []);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
+  const filtrosDaConsulta = useMemo(() => {
+    const filtros: Omit<ListProjectsParams, "page" | "pageSize"> = {};
+    if (search) filtros.search = search;
+    if (status !== "all") filtros.status = status;
+    if (customerId) filtros.customerId = customerId;
+    if (channel) filtros.channel = channel;
+    return filtros;
+  }, [search, status, customerId, channel]);
 
-    const params: Parameters<typeof listProjects>[0] = { page, pageSize: PAGE_SIZE };
-    if (search) params.search = search;
-    if (status !== "all") params.status = status;
-    if (customerId) params.customerId = customerId;
-    if (channel) params.channel = channel;
+  /* Filtro novo é página 1 no mesmo render — uma consulta por troca. */
+  const [page, setPage] = useFilteredPage(filtrosDaConsulta);
 
-    listProjects(params)
-      .then((result) => {
-        setProjects(result.projects);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Falha ao carregar projetos"),
-      )
-      .finally(() => setLoading(false));
-  }, [page, search, status, customerId, channel]);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  const consulta = useListQuery(
+    listProjects,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { fallbackError: "Falha ao carregar projetos" },
+  );
+  const projects: ProjectDTO[] = consulta.data?.projects ?? [];
+  const total = consulta.data?.total ?? 0;
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -253,9 +242,9 @@ export function ProjectsPage() {
         )}
       </div>
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table table--clickable-rows table--sticky-actions">
           <thead>
             <tr>
@@ -336,38 +325,36 @@ export function ProjectsPage() {
               </tr>
             ))}
 
-            {!loading && projects.length === 0 && (
-              <tr>
-                <td colSpan={11} className="table__empty">
-                  Nenhum projeto encontrado.
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={11} query={consulta} rowCount={projects.length}>
+              Nenhum projeto encontrado.
+            </ListStatusRow>
           </tbody>
         </table>
       </div>
 
-      <div className="pagination">
-        <button
-          type="button"
-          className="btn btn--ghost btn--sm"
-          disabled={page <= 1}
-          onClick={() => setPage((current) => Math.max(1, current - 1))}
-        >
-          Anterior
-        </button>
-        <span className="pagination__info">
-          Página {page} de {totalPages} — {total} projeto(s)
-        </span>
-        <button
-          type="button"
-          className="btn btn--ghost btn--sm"
-          disabled={page >= totalPages}
-          onClick={() => setPage((current) => current + 1)}
-        >
-          Próxima
-        </button>
-      </div>
+      {consulta.data && (
+        <div className="pagination">
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            disabled={page <= 1}
+            onClick={() => setPage(Math.max(1, page - 1))}
+          >
+            Anterior
+          </button>
+          <span className="pagination__info">
+            Página {page} de {totalPages} — {total} projeto(s)
+          </span>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            disabled={page >= totalPages}
+            onClick={() => setPage(page + 1)}
+          >
+            Próxima
+          </button>
+        </div>
+      )}
 
       {createOpen && (
         <ProjectFormModal

@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { ProjectSampleDTO, ProjectSampleStatus } from "@veridi/shared";
 import { PROJECT_SAMPLE_STATUSES, PROJECT_SAMPLE_STATUS_LABELS } from "@veridi/shared";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
+import { useFilteredPage, useListQuery } from "../../lib/list-query";
+import type { ListSamplesParams } from "../../lib/samples-api";
 import { listSamples } from "../../lib/samples-api";
 import { clienteAtivoFilterSource } from "../../lib/filter-sources";
 import { EntityLink } from "../../components/EntityLink";
@@ -48,12 +51,6 @@ export function sampleStatusBadgeClass(status: ProjectSampleStatus): string {
 export function SamplesPage() {
   const navigate = useNavigate();
 
-  const [samples, setSamples] = useState<ProjectSampleDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<ProjectSampleStatus | "all">("all");
@@ -64,33 +61,24 @@ export function SamplesPage() {
     return () => clearTimeout(handle);
   }, [searchInput]);
 
-  useEffect(() => {
-    setPage(1);
+  const filtrosDaConsulta = useMemo(() => {
+    const filtros: Omit<ListSamplesParams, "page" | "pageSize"> = {};
+    if (search) filtros.search = search;
+    if (status !== "all") filtros.status = status;
+    if (customerId) filtros.customerId = customerId;
+    return filtros;
   }, [search, status, customerId]);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
+  /* Filtro novo é página 1 no mesmo render — uma consulta por troca. */
+  const [page, setPage] = useFilteredPage(filtrosDaConsulta);
 
-    const params: Parameters<typeof listSamples>[0] = { page, pageSize: PAGE_SIZE };
-    if (search) params.search = search;
-    if (status !== "all") params.status = status;
-    if (customerId) params.customerId = customerId;
-
-    listSamples(params)
-      .then((result) => {
-        setSamples(result.samples);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Falha ao carregar amostras"),
-      )
-      .finally(() => setLoading(false));
-  }, [page, search, status, customerId]);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  const consulta = useListQuery(
+    listSamples,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { fallbackError: "Falha ao carregar amostras" },
+  );
+  const samples: ProjectSampleDTO[] = consulta.data?.samples ?? [];
+  const total = consulta.data?.total ?? 0;
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -178,9 +166,9 @@ export function SamplesPage() {
         />
       </div>
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         {/* Sem `table--sticky-actions`: esta tabela não tem coluna de ações —
             a linha inteira é clicável. A classe congelava a última coluna de
             NEGÓCIO ("Produzida em") na borda direita, e numa tabela com mais
@@ -258,42 +246,40 @@ export function SamplesPage() {
               </tr>
             ))}
 
-            {!loading && samples.length === 0 && (
-              <tr>
-                <td colSpan={9} className="table__empty">
-                  {/* Amostra pertence a um projeto — não existe "amostra
-                      solta". Quem chega por este menu procurando criar não
-                      achava o caminho, e a lista vazia não dizia nada. */}
-                  Nenhuma amostra encontrada. Toda amostra nasce dentro de um{" "}
-                  <Link to="/comercial/projetos">projeto</Link>, no bloco "Amostras / testes".
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={9} query={consulta} rowCount={samples.length}>
+              {/* Amostra pertence a um projeto — não existe "amostra
+                  solta". Quem chega por este menu procurando criar não
+                  achava o caminho, e a lista vazia não dizia nada. */}
+              Nenhuma amostra encontrada. Toda amostra nasce dentro de um{" "}
+              <Link to="/comercial/projetos">projeto</Link>, no bloco "Amostras / testes".
+            </ListStatusRow>
           </tbody>
         </table>
       </div>
 
-      <div className="pagination">
-        <button
-          type="button"
-          className="btn btn--ghost btn--sm"
-          disabled={page <= 1}
-          onClick={() => setPage((current) => Math.max(1, current - 1))}
-        >
-          Anterior
-        </button>
-        <span className="pagination__info">
-          Página {page} de {totalPages} — {total} amostra(s)
-        </span>
-        <button
-          type="button"
-          className="btn btn--ghost btn--sm"
-          disabled={page >= totalPages}
-          onClick={() => setPage((current) => current + 1)}
-        >
-          Próxima
-        </button>
-      </div>
+      {consulta.data && (
+        <div className="pagination">
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            disabled={page <= 1}
+            onClick={() => setPage(Math.max(1, page - 1))}
+          >
+            Anterior
+          </button>
+          <span className="pagination__info">
+            Página {page} de {totalPages} — {total} amostra(s)
+          </span>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            disabled={page >= totalPages}
+            onClick={() => setPage(page + 1)}
+          >
+            Próxima
+          </button>
+        </div>
+      )}
     </>
   );
 }
