@@ -368,6 +368,35 @@ describe("Capacidade do recurso", () => {
     expect(limpo.statusCode).toBe(200);
     expect((limpo.json() as IndustrialResourceDetailDTO).capacityQuantity).toBeNull();
   });
+
+  // API-INT-COERCION-REMAINING-01: `Number("1e1")` gravava 10.
+  it("capacidade não canônica é 400 e não grava nada", async () => {
+    const criado = await criarRecurso({ type: "EQUIPMENT", capacityQuantity: "007" });
+    expect(criado.statusCode).toBe(201);
+    const id = (criado.json() as IndustrialResourceDetailDTO).id;
+    expect((criado.json() as IndustrialResourceDetailDTO).capacityQuantity).toBe(7);
+
+    for (const capacityQuantity of ["1e1", "0x10", "0b10", "1.0", "12,5", "+1", "Infinity", "10abc", true]) {
+      const edicao = await app.inject({
+        method: "PATCH",
+        url: `/industrial-resources/${id}`,
+        payload: { capacityQuantity },
+      });
+      expect(edicao.statusCode, String(capacityQuantity)).toBe(400);
+      expect(edicao.json().error).toBe("validation_error");
+    }
+    const linha = await getPrisma().industrialResource.findUnique({ where: { id } });
+    expect(linha?.capacityQuantity).toBe(7);
+
+    const nome = `Recurso recusado ${proximo()}`;
+    const recusado = await app.inject({
+      method: "POST",
+      url: "/industrial-resources",
+      payload: { name: nome, type: "LABOR", capacityQuantity: "1e1" },
+    });
+    expect(recusado.statusCode).toBe(400);
+    expect(await getPrisma().industrialResource.count({ where: { name: nome } })).toBe(0);
+  });
 });
 
 describe("Calendário e a hora exata", () => {

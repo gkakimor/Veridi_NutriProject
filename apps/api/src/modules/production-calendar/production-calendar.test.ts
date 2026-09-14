@@ -350,6 +350,32 @@ describe("dia inválido é recusado, e a recusa não grava nada", () => {
     expect(resposta.json().message).toContain("não tem horário");
   });
 
+  // API-INT-COERCION-REMAINING-01: `Number("1e1")` gravava 00:10.
+  it("minuto não canônico é 400 e não grava nada", async () => {
+    const antes = doDia(await lerCalendario(), "MONDAY");
+    for (const inicio of ["1e1", "0x1E", "0b10", "480.0", "12,5", "+480", "Infinity", "480abc", true]) {
+      const resposta = await salvarDia("MONDAY", { ...operando(480, 1020), startMinuteOfDay: inicio });
+      expect(resposta.statusCode, String(inicio)).toBe(400);
+      expect(resposta.json().error).toBe("validation_error");
+    }
+    expect(doDia(await lerCalendario(), "MONDAY")).toEqual(antes);
+
+    const data = dia(10, 6);
+    const excecao = await criarExcecao({
+      date: data,
+      type: "OUTRO",
+      operation: "HORARIO_ESPECIAL",
+      startMinuteOfDay: 480,
+      endMinuteOfDay: "7.2e2",
+    });
+    expect(excecao.statusCode).toBe(400);
+    expect(excecao.json().error).toBe("validation_error");
+    const gravadas = await getPrisma().productionCalendarException.count({
+      where: { date: new Date(`${data}T00:00:00.000Z`) },
+    });
+    expect(gravadas).toBe(0);
+  });
+
   it("horário fora do dia e dia da semana que não existe", async () => {
     expect((await salvarDia("MONDAY", operando(480, 1441))).json().error).toBe("validation_error");
     const inexistente = await salvarDia("FERIADO", operando(480, 720));

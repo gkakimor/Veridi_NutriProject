@@ -13,6 +13,7 @@ import {
 } from "@veridi/shared";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import { recusarPeriodoInvertido } from "../../lib/date-schema.js";
+import { inteiroDecimalSchema } from "../../lib/integer-schema.js";
 
 /**
  * Contrato de entrada do Calendário de Produção (PLANNING-CALENDAR-01, jornada
@@ -33,15 +34,14 @@ import { recusarPeriodoInvertido } from "../../lib/date-schema.js";
  * usa e que o banco confirma em CHECK.
  */
 
-const minutoDoDiaSchema = z.coerce
-  .number()
-  .int("Informe minutos inteiros")
-  .min(0, "O horário começa em 00:00")
-  .max(MINUTOS_DO_DIA, "O horário termina em 24:00");
+/* Inteiro decimal (API-INT-COERCION-REMAINING-01): `"1e1"` não é 00:10. */
+const minutoDoDiaSchema = inteiroDecimalSchema("Informe minutos inteiros").pipe(
+  z.number().min(0, "O horário começa em 00:00").max(MINUTOS_DO_DIA, "O horário termina em 24:00"),
+);
 
 /*
- * Campo em branco é "não informado", nunca 00:00: `z.coerce.number()` sozinho
- * transforma `""` em 0, e um horário apagado viraria meia-noite em silêncio.
+ * Campo em branco é "não informado", nunca 00:00: o antigo `z.coerce.number()`
+ * transformava `""` em 0, e um horário apagado viraria meia-noite em silêncio.
  * `undefined` continua `undefined` — na edição de exceção é ele que diz "campo
  * ausente".
  */

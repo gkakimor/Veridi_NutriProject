@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
+import { inteiroDeConsultaSchema, inteiroDecimalSchema } from "../../lib/integer-schema.js";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import { decimalStringSchema } from "../../lib/decimal-schema.js";
 import { optionalNullableDateSchema } from "../../lib/date-schema.js";
@@ -10,13 +10,16 @@ export const industrialRateUomSchema = z.enum(["HOUR", "KWH"]);
 /*
  * Quantos deste recurso trabalham AO MESMO TEMPO. Ausente ou `null` mantém a
  * capacidade NÃO CADASTRADA — que não é zero: zero descreveria uma fábrica
- * sem o recurso, e para isso já existe `active`.
+ * sem o recurso, e para isso já existe `active`. Leitura de inteiro decimal
+ * (API-INT-COERCION-REMAINING-01): `"1e1"` não é 10.
  */
-const capacityQuantitySchema = z.coerce
-  .number()
-  .int("Informe um número inteiro")
-  .min(1, "A capacidade começa em 1")
-  .max(100000, "Capacidade acima do razoável para um recurso")
+const capacityQuantitySchema = inteiroDecimalSchema("Informe um número inteiro")
+  .pipe(
+    z
+      .number()
+      .min(1, "A capacidade começa em 1")
+      .max(100000, "Capacidade acima do razoável para um recurso"),
+  )
   .nullish();
 
 export const createIndustrialResourceSchema = z.object({

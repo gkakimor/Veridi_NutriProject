@@ -3978,6 +3978,42 @@ Estrutura de Custos, Pedido e Orçamento sem transbordo (`scrollWidth` 390), sem
 científica, sem número de 4+ dígitos sem milhar, console limpo, 0 escritas. Sem full test, E2E,
 build global nem fresh (FAST).
 
+## Booleano e inteiro estritos na API (API-STRICT-SCALAR-CONTRACT-WAVE-01, 2026-09-14)
+
+Só API, só validação. Sem migration, rota, DTO nem mudança de tela. Fecha
+INVENTORY-EXPORT-ONLY-WITH-STOCK-01 e API-INT-COERCION-REMAINING-01.
+
+**Estoque.** `onlyWithStock` lia `z.coerce.boolean()`, e `Boolean("false")` é `true`. O `ExportCsvButton`
+do Estoque manda a caixa desmarcada como `onlyWithStock=false`: o CSV saía só com os itens com saldo.
+Reproduzido pela rota antes da correção (`false` devolveu só o item com estoque). Agora
+`booleanoDeConsultaSchema` (`lib/boolean-schema.ts`): `"true"`/`"false"` exatos, booleano real para
+quem chama o schema no código; `0`, `1`, `yes`, `no`, `on`, `off`, maiúsculas, espaço, vazio e texto são
+400. Listagem e CSV: `true` só com estoque, `false` e ausente com todos (quem tem posição primeiro, como
+antes). A tela não mudou — já mandava o literal certo. Era o único `z.coerce.boolean()` da API.
+
+**Inteiros restantes.** `capacityQuantity` (Recurso industrial), minuto do dia (jornada e exceções do
+Calendário) e `numberOfParts` (OP) leem `inteiroDecimalSchema(mensagem).pipe(z.number().min().max())`:
+`1e1`, `0x10`, `0b10`, `1.0`, `12.5`, `12,5`, `+1`, `Infinity`, `NaN`, `10abc` e booleano são 400 (antes
+`"1e1"` gravava 10 e `true` gravava 1). Faixa, `nullish`/opcional, vazio como "não informado" do
+Calendário e mensagens de faixa intocados. Zero e vazio em `numberOfParts` seguem 400 — a troca por 1 é da
+tela (OP-PARTS-ZERO-COERCION-01, fora desta rodada). Booleano, `null` e `NaN` param na união texto|número
+com a mensagem genérica do zod, ainda 400.
+
+**Guarda.** `lib/escalar-estrito-guarda.test.ts`: nenhum fonte de produção da API usa
+`z.coerce.boolean()` nem `z.coerce.number()` com `.int()` na cadeia (uma linha ou quebrada, comentário
+não conta); única exceção `config/env.ts` (portas do boot), com contagem que não deixa a lista envelhecer.
+
+**Validação.** `boolean-schema`, `integer-schema`, guarda, `exports` (cenário A com estoque × B sem, CSV e
+listagem, 10 valores recusados), `inventory`, `industrial-resources`, `paginacao-da-consulta` — 15 arquivos,
+1118 testes; faixa serial `production-calendar`, `production-schedules`, `gmp-execution` — 84 testes, com
+400 sem gravação (valor lido do banco antes e depois, contagem de OP/recurso/exceção); web
+`estoque-exportar-somente-com-estoque` (href do "Exportar CSV" desmarcado `false`, marcado `true`) e
+`operational-hardening` — 11 testes. Mutações: 8 de 8 derrubadas (coerção de volta nos quatro campos,
+helper aceitando `"0"`, mínimo 0 na capacidade e nas partes, botão omitindo `false`). `pnpm typecheck`.
+Sem full test, E2E, build global nem fresh (FAST).
+
+**Achados** (BACKLOG): REPORTS-QUERY-BOOLEAN-PERMISSIVE-01; CUSTOMER-MATERIALS-ONLY-WITH-BALANCE-PERMISSIVE-01.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

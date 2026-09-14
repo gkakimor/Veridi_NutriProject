@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { booleanoDeConsultaSchema } from "../../lib/boolean-schema.js";
 import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
 import { INVENTORY_MOVEMENT_TYPES } from "@veridi/shared";
 import { quantityDecimalSchema } from "../../lib/decimal-schema.js";
@@ -24,7 +25,7 @@ const inventoryMovementTypeSchema = z.enum(
 export const listInventoryQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
   type: z.enum(["RAW_MATERIAL", "PACKAGING", "FINISHED_PRODUCT"]).optional(),
-  onlyWithStock: z.coerce.boolean().optional(),
+  onlyWithStock: booleanoDeConsultaSchema().optional(),
   page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
   pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
 });
