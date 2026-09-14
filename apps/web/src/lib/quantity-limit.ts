@@ -1,5 +1,7 @@
 import { Decimal } from "@veridi/shared";
-import { parseDecimalInput } from "./decimal-input";
+import { parsePtBrNumber } from "./numeric-ptbr";
+import type { NumericInvalidReason } from "./numeric-ptbr";
+import { OPCOES_QUANTIDADE } from "./numeric-scales";
 import { formatQuantity } from "./quantity";
 
 /**
@@ -26,11 +28,16 @@ import { formatQuantity } from "./quantity";
  *
  * Nada aqui passa por `Number`: §66 é explícita de que quantidade de domínio
  * se compara com `Decimal`.
+ *
+ * O digitado é o texto de um `DecimalField` de quantidade e se lê com o parser
+ * do campo, nas doze casas da coluna (PTBR-NUMERIC-INPUT-ROLLOUT-01):
+ * `1.234,5` é mil duzentos e trinta e quatro e meio, e `1.234` sozinho é
+ * ambíguo — ilegível, com o motivo para a mensagem.
  */
 
 export type QuantidadeContraLimite =
   | { status: "vazio" }
-  | { status: "ilegivel" }
+  | { status: "ilegivel"; motivo: NumericInvalidReason }
   | { status: "acima" }
   /** `valorCanonico` é o que deve ir no payload — nunca o texto digitado. */
   | { status: "ok"; valorCanonico: string; usouTodoOLimite: boolean };
@@ -46,11 +53,10 @@ export function resolverQuantidadeContraLimite(
   digitado: string,
   limiteCanonico: string,
 ): QuantidadeContraLimite {
-  const texto = digitado.trim();
-  if (texto === "") return { status: "vazio" };
-
-  const normalizado = parseDecimalInput(texto);
-  if (normalizado === null) return { status: "ilegivel" };
+  const leitura = parsePtBrNumber(digitado, OPCOES_QUANTIDADE);
+  if (leitura.tipo === "vazio") return { status: "vazio" };
+  if (leitura.tipo === "invalido") return { status: "ilegivel", motivo: leitura.motivo };
+  const normalizado = leitura.valor;
 
   const valor = new Decimal(normalizado);
   const limite = new Decimal(limiteCanonico);
@@ -58,7 +64,8 @@ export function resolverQuantidadeContraLimite(
   // O teto tal como a tela o escreveu. `formatQuantity` devolve vírgula e
   // nunca separador de milhar — de propósito, justamente para poder ser
   // copiado de volta —, então o mesmo parser de entrada o entende.
-  const limiteExibido = parseDecimalInput(formatQuantity(limiteCanonico));
+  const exibido = parsePtBrNumber(formatQuantity(limiteCanonico), OPCOES_QUANTIDADE);
+  const limiteExibido = exibido.tipo === "valido" ? exibido.valor : null;
   if (limiteExibido !== null && valor.equals(new Decimal(limiteExibido))) {
     /* `toFixed()` e não `toString()`: teto pequeno o bastante volta da API
        como `9.79592e-7`, e `toString()` manteria a notação exponencial que a

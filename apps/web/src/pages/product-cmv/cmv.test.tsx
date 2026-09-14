@@ -92,7 +92,7 @@ describe("Tela de CMV", () => {
 
     await waitFor(() => expect(getProductCmv).toHaveBeenCalled());
     expect(vi.mocked(getProductCmv).mock.calls[0]![1].quantity).toBe("1000");
-    expect((screen.getByLabelText("Quantidade a simular") as HTMLInputElement).value).toBe("1000");
+    expect((screen.getByLabelText("Quantidade a simular") as HTMLInputElement).value).toBe("1.000");
   });
 
   it("envia a data de referência explicitamente — o domínio não escolhe o dia", async () => {

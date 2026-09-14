@@ -195,9 +195,9 @@ describe("QUOTE-LINE-NOOP-BLUR-01 — sair do campo sem mudar nada não grava", 
     passarPeloCampo(PRECO, "12,5");
 
     expect(updateQuoteLine).not.toHaveBeenCalled();
-    expect(campo(QUANTIDADE).value).toBe("1000.000000000000");
+    expect(campo(QUANTIDADE).value).toBe("1.000");
     expect(campo(UNIDADE).value).toBe("un");
-    expect(campo(PRECO).value).toBe("12.5000");
+    expect(campo(PRECO).value).toBe("12,50");
     expect(botaoEnviar().disabled).toBe(false);
   });
 });
@@ -220,7 +220,8 @@ describe("QUOTE-LINE-NOOP-BLUR-01 — alteração real continua gravando", () =>
   it("texto ilegível não vira pedido: o erro aparece e o envio fica preso", async () => {
     abrirSecao();
 
-    passarPeloCampo(QUANTIDADE, "1,2,3");
+    // Letra e vírgula dupla nem entram; `1.234` entra e é ambíguo.
+    passarPeloCampo(QUANTIDADE, "1.234");
 
     await screen.findByRole("alert");
     expect(updateQuoteLine).not.toHaveBeenCalled();

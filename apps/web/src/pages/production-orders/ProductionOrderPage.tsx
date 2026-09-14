@@ -7,9 +7,14 @@ import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import {
   assinaturaDoDocumento,
   decimalComparavel,
+  decimalDaApiComparavel,
   inteiroComparavel,
   textoComparavel,
 } from "../../lib/dirty-fields";
+import { lerInteiroOpcional } from "../../lib/integer-input";
+import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
+import { DecimalField, IntegerField } from "../../components/NumericField";
 import type {
   ItemDTO,
   ProductDTO,
@@ -49,7 +54,7 @@ import {
   updateProductionOrder,
 } from "../../lib/production-orders-api";
 import { ExtraConsumptionDialog } from "../../components/ExtraConsumptionDialog";
-import { exigirDecimal } from "../../lib/decimal-field";
+import { decimalLegivel, erroDoDecimal, exigirDecimal } from "../../lib/decimal-field";
 import { excedeLimiteExibido, resolverQuantidadeContraLimite } from "../../lib/quantity-limit";
 import { listProducts } from "../../lib/products-api";
 import { listFormulationVersionsByProduct } from "../../lib/formulations-api";
@@ -61,7 +66,6 @@ import {
   ScheduleRemovalNeedsConfirmationApiError,
   apiErrorMessage,
 } from "../../lib/api-errors";
-import { parseDecimalInput } from "../../lib/decimal-input";
 import { FormSection } from "../../components/FormSection";
 import { ProductionPlanningSection } from "./ProductionPlanningSection";
 import { ContextHelp, InfoHint } from "../../components/help";
@@ -92,8 +96,18 @@ const QUANTIDADE_COM_PROGRAMACAO_REMOVIDA =
  * são a mesma. Digitação ilegível não decide nada aqui; a validação responde.
  */
 function quantidadeMudou(digitada: string, gravada: string): boolean {
-  const lida = parseDecimalInput(digitada);
-  return lida !== null && decimalComparavel(lida) !== decimalComparavel(gravada);
+  const lida = decimalLegivel(digitada, OPCOES_QUANTIDADE);
+  return lida !== null && decimalDaApiComparavel(lida) !== decimalDaApiComparavel(gravada);
+}
+
+/**
+ * "Dividir produção em" como sempre foi enviado: o inteiro digitado, e 1 quando
+ * o campo está vazio ou em zero — a faixa (1 a 99) é da API, que responde no
+ * envio. Leitura estrita, nunca `Number()` sobre o texto.
+ */
+function partesParaEnvio(texto: string): number {
+  const leitura = lerInteiroOpcional(texto);
+  return leitura.tipo === "valido" && leitura.valor > 0 ? leitura.valor : 1;
 }
 
 function statusBadgeClass(status: ProductionOrderStatus): string {
@@ -381,7 +395,7 @@ export function ProductionOrderPage() {
   const syncFormFromServer = useCallback((order: ProductionOrderDTO) => {
     setProductId(order.productId);
     setFormulationVersionId(order.formulationVersionId ?? "");
-    setPlannedQuantity(order.plannedQuantity);
+    setPlannedQuantity(toPtBrEditText(order.plannedQuantity, OPCOES_QUANTIDADE));
     setNumberOfParts(String(order.numberOfParts));
     setLabelInstructions(order.labelInstructions ?? "");
     setNotes(order.notes ?? "");
@@ -623,6 +637,13 @@ export function ProductionOrderPage() {
       setError("Selecione um produto.");
       return;
     }
+    // Quantidade que não vira número fica no campo, com a mensagem, e nada é enviado.
+    const erroDaQuantidade = erroDoDecimal("Quantidade planejada", plannedQuantity, OPCOES_QUANTIDADE);
+    if (erroDaQuantidade) {
+      setFieldErrors({ plannedQuantity: erroDaQuantidade });
+      setError("Corrija os campos destacados.");
+      return;
+    }
 
     /*
      * OP-SCHEDULE-STALE-ON-QUANTITY-01: a programação gravada foi calculada
@@ -651,8 +672,10 @@ export function ProductionOrderPage() {
     const payload = {
       productId,
       ...(formulationVersionId ? { formulationVersionId } : {}),
-      ...(plannedQuantity.trim() ? { plannedQuantity: plannedQuantity.trim() } : {}),
-      numberOfParts: Number(numberOfParts) || 1,
+      ...(plannedQuantity.trim()
+        ? { plannedQuantity: decimalLegivel(plannedQuantity, OPCOES_QUANTIDADE) ?? plannedQuantity.trim() }
+        : {}),
+      numberOfParts: partesParaEnvio(numberOfParts),
       labelInstructions: labelInstructions.trim(),
       notes: notes.trim(),
       ...(confirmarRemocaoDaProgramacao ? { confirmScheduleRemoval: true } : {}),
@@ -836,12 +859,15 @@ export function ProductionOrderPage() {
     const resolvido = linha
       ? resolverQuantidadeContraLimite(quantity, linha.remainingQuantity)
       : null;
-    const quantidadeParaEnviar =
-      resolvido?.status === "ok" ? resolvido.valorCanonico : exigirDecimal(quantity, "Consumir agora");
 
     setConsumingLineId(lineId);
     setError(null);
     try {
+      // Lida dentro do funil: texto ilegível vira a mensagem da faixa, e nada é enviado.
+      const quantidadeParaEnviar =
+        resolvido?.status === "ok"
+          ? resolvido.valorCanonico
+          : exigirDecimal(quantity, "Consumir agora", OPCOES_QUANTIDADE);
       const updated = await recordConsumption(id, [
         { reservationLineId: lineId, quantity: quantidadeParaEnviar },
       ]);
@@ -864,15 +890,16 @@ export function ProductionOrderPage() {
        restante canônico, com as doze casas. Apontar menos continua sendo
        produção parcial e vai como foi digitado. */
     const resolvido = resolverQuantidadeContraLimite(quantity, restanteParaProduzir);
-    const quantidadeParaEnviar =
-      resolvido.status === "ok"
-        ? resolvido.valorCanonico
-        : exigirDecimal(quantity, "Quantidade produzida");
 
     setRegisteringOutput(true);
     setError(null);
     setFieldErrors({});
     try {
+      // Lida dentro do funil: texto ilegível vira a mensagem da faixa, e nada é enviado.
+      const quantidadeParaEnviar =
+        resolvido.status === "ok"
+          ? resolvido.valorCanonico
+          : exigirDecimal(quantity, "Quantidade produzida", OPCOES_QUANTIDADE);
       const updated = await registerProductionOutput(id, {
         quantity: quantidadeParaEnviar,
         destination: outputDestination,
@@ -1179,13 +1206,13 @@ export function ProductionOrderPage() {
                 Quantidade planejada <span className="req">*</span>
               </label>
               {isDraft ? (
-                <input
+                <DecimalField
                   id="op-quantity"
-                  type="text"
-                  inputMode="decimal"
+                  scale={CASAS_QUANTIDADE}
                   placeholder="0"
                   value={plannedQuantity}
-                  onChange={(event) => setPlannedQuantity(event.target.value)}
+                  onChangeValue={setPlannedQuantity}
+                  {...(fieldErrors["plannedQuantity"] ? { "aria-invalid": true as const } : {})}
                 />
               ) : (
                 <p className="field-readonly-value">{formatQuantity(productionOrder?.plannedQuantity)}</p>
@@ -1205,13 +1232,10 @@ export function ProductionOrderPage() {
             <div className="field">
               <label htmlFor="op-parts">Dividir produção em</label>
               {isDraft ? (
-                <input
+                <IntegerField
                   id="op-parts"
-                  type="number"
-                  min={1}
-                  max={99}
                   value={numberOfParts}
-                  onChange={(event) => setNumberOfParts(event.target.value)}
+                  onChangeValue={setNumberOfParts}
                 />
               ) : (
                 <p className="field-readonly-value">{productionOrder?.numberOfParts ?? 1}</p>
@@ -1699,15 +1723,14 @@ export function ProductionOrderPage() {
                       <td className="is-numeric">{formatQuantity(line.consumedQuantity)}</td>
                       <td>{formatQuantity(line.remainingQuantity)}</td>
                       <td>
-                        <input
-                          type="text"
-                          inputMode="decimal"
+                        <DecimalField
+                          scale={CASAS_QUANTIDADE}
                           placeholder="0"
                           className={excedeReserva(line) ? "is-invalid" : undefined}
                           disabled={line.pickingStatus !== "CONFIRMED" || Number(line.remainingQuantity) <= 0}
                           value={consumeQuantities[line.id] ?? ""}
-                          onChange={(event) =>
-                            setConsumeQuantities((prev) => ({ ...prev, [line.id]: event.target.value }))
+                          onChangeValue={(valor) =>
+                            setConsumeQuantities((prev) => ({ ...prev, [line.id]: valor }))
                           }
                         />
                         {/* O servidor continua sendo a autoridade — isto só
@@ -1829,15 +1852,14 @@ export function ProductionOrderPage() {
                     <label htmlFor="output-quantity">
                       Quantidade produzida <span className="req">*</span>
                     </label>
-                    <input
+                    <DecimalField
                       id="output-quantity"
-                      type="text"
-                      inputMode="decimal"
+                      scale={CASAS_QUANTIDADE}
                       placeholder="0"
                       aria-invalid={producaoAcimaDoPlanejado || undefined}
                       className={producaoAcimaDoPlanejado ? "is-invalid" : undefined}
                       value={outputQuantity}
-                      onChange={(event) => setOutputQuantity(event.target.value)}
+                      onChangeValue={setOutputQuantity}
                     />
                     {/* A regra sempre existiu no servidor; a tela deixava
                         o botão aceso e o operador descobria no envio. */}

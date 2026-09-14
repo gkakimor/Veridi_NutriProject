@@ -8,8 +8,10 @@ import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
 import { overrideBillingPrice } from "../../lib/billings-api";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
-import { exigirDecimal } from "../../lib/decimal-field";
-import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
+import { decimalLegivel, erroDoDecimal, exigirDecimal } from "../../lib/decimal-field";
+import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import { CASAS_PRECO_COMERCIAL, OPCOES_PRECO_COMERCIAL } from "../../lib/numeric-scales";
+import { MoneyField } from "../../components/NumericField";
 import { formatQuantity } from "../../lib/quantity";
 
 interface PriceOverrideDialogProps {
@@ -47,16 +49,19 @@ export function PriceOverrideDialog({
   onClose,
   onOverridden,
 }: PriceOverrideDialogProps) {
-  const [unitPrice, setUnitPrice] = useState(line.unitPrice ?? "");
+  // O preço gravado no texto do campo, em português.
+  const [unitPrice, setUnitPrice] = useState(() =>
+    toPtBrEditText(line.unitPrice, OPCOES_PRECO_COMERCIAL),
+  );
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Mesma leitura da vírgula em toda a web; `null` é "ainda não é número"
-  // (inclui negativo, que o parser central nunca aceita).
-  const digitado = unitPrice.trim();
-  const precoNovo = parseDecimalInput(unitPrice);
-  const ilegivel = digitado !== "" && precoNovo === null;
+  // A leitura dos campos numéricos; `null` é "ainda não é número" (o campo
+  // não aceita negativo).
+  const precoNovo = decimalLegivel(unitPrice, OPCOES_PRECO_COMERCIAL);
+  const erroDoPreco = erroDoDecimal("Preço faturado", unitPrice, OPCOES_PRECO_COMERCIAL);
+  const ilegivel = erroDoPreco !== null;
   const igualAoAcordado =
     line.agreedUnitPrice !== null &&
     precoNovo !== null &&
@@ -85,7 +90,7 @@ export function PriceOverrideDialog({
     setError(null);
     try {
       const atualizado = await overrideBillingPrice(billing.id, line.id, {
-        unitPrice: exigirDecimal(unitPrice, "Preço faturado"),
+        unitPrice: exigirDecimal(unitPrice, "Preço faturado", OPCOES_PRECO_COMERCIAL),
         reason: reason.trim(),
       });
       onOverridden(atualizado);
@@ -134,20 +139,19 @@ export function PriceOverrideDialog({
           <label htmlFor="override-price">
             Preço faturado <span className="req">*</span>
           </label>
-          <input
+          <MoneyField
             id="override-price"
-            type="text"
-            inputMode="decimal"
+            scale={CASAS_PRECO_COMERCIAL}
             placeholder="0,00"
             value={unitPrice}
             aria-invalid={ilegivel || undefined}
             aria-describedby={ilegivel ? "override-price-error" : undefined}
             className={ilegivel ? "is-invalid" : undefined}
-            onChange={(event) => setUnitPrice(event.target.value)}
+            onChangeValue={setUnitPrice}
           />
-          {ilegivel && (
+          {erroDoPreco && (
             <p className="field__error" id="override-price-error">
-              {mensagemDecimalInvalido("Preço faturado")}
+              {erroDoPreco}
             </p>
           )}
           {igualAoAcordado && (

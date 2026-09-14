@@ -43,6 +43,14 @@ describe("lerInteiroOpcional", () => {
     expect(lerInteiroOpcional(texto)).toEqual({ tipo: "invalido" });
   });
 
+  it("a leitura é a do IntegerField (PTBR-NUMERIC-INPUT-ROLLOUT-01): milhar em grupo de três é número", () => {
+    expect(lerInteiroOpcional("1.234")).toEqual({ tipo: "valido", valor: 1234 });
+    expect(lerInteiroOpcional("1.234.567")).toEqual({ tipo: "valido", valor: 1234567 });
+    // Casa zerada não muda o inteiro; casa com dígito não é inteiro.
+    expect(lerInteiroOpcional("30,0")).toEqual({ tipo: "valido", valor: 30 });
+    expect(lerInteiroOpcional("1.23")).toEqual({ tipo: "invalido" });
+  });
+
   it("nenhuma leitura carrega NaN", () => {
     for (const texto of ["abc", "", "30", "1e2", "NaN", "-0", "30,5"]) {
       expect(JSON.stringify(lerInteiroOpcional(texto))).not.toContain("null");

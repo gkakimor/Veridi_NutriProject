@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import type { ProjectDTO, QuoteLineDTO, QuoteVersionDTO } from "@veridi/shared";
 
@@ -16,12 +17,15 @@ import type { ProjectDTO, QuoteLineDTO, QuoteVersionDTO } from "@veridi/shared";
  * O que estes casos fixam:
  *
  * 1. texto que não é inteiro simples — letra, vírgula, ponto, notação
- *    científica, sinal — é INVÁLIDO: erro no próprio campo, salvar e simular
- *    presos, nenhum pedido, e o envio preso porque há condição por salvar;
- * 2. o inteiro fora dos limites da API (zero, acima do máximo) também;
+ *    científica, sinal — NEM ENTRA: o campo é `IntegerField`
+ *    (PTBR-NUMERIC-INPUT-ROLLOUT-01), a tecla é recusada e o gravado fica;
+ * 2. o inteiro fora dos limites da API (zero, acima do máximo) entra e é
+ *    INVÁLIDO: erro no próprio campo, salvar e simular presos, nenhum pedido,
+ *    e o envio preso porque há condição por salvar;
  * 3. campo vazio é outra coisa: continua sendo "não informado", e apagar o
  *    valor gravado continua possível;
- * 4. corrigir o inválido libera salvar, e o pedido leva o inteiro.
+ * 4. corrigir o inválido libera salvar, e o pedido leva o inteiro;
+ * 5. colar ` 45 ` ou `1.234` dá o inteiro — a colagem é a da foundation.
  */
 
 vi.mock("../../lib/products-api", () => ({ listProducts: () => Promise.resolve({ products: [] }) }));
@@ -195,18 +199,36 @@ const INTEIROS = [
   },
 ] as const;
 
-/** Não é inteiro simples, ou é inteiro que a API recusa. */
-const INVALIDOS = ["abc", "30abc", "3 dias", "30,5", "30.5", "1e2", "-1", "0"] as const;
+/** Não é inteiro simples: o `IntegerField` não deixa entrar. */
+const RECUSADOS_NA_TECLA = ["abc", "30abc", "3 dias", "30,5", "30.5", "1e2", "-1"] as const;
 
-const casos = INTEIROS.flatMap((inteiro) =>
-  INVALIDOS.map((texto) => [inteiro.chave, texto, inteiro] as const),
+const recusados = INTEIROS.flatMap((inteiro) =>
+  RECUSADOS_NA_TECLA.map((texto) => [inteiro.chave, texto, inteiro] as const),
 );
+
+/** Inteiro que entra no campo e que a API recusa — o zero, em todos os três. */
+const casos = INTEIROS.map((inteiro) => [inteiro.chave, "0", inteiro] as const);
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe("QUOTE-INT-FIELDS-01 — inteiro ilegível fica ilegível na tela", () => {
+describe("QUOTE-INT-FIELDS-01 — o que não é inteiro nem entra no campo", () => {
+  it.each(recusados)("%s = %j: recusado, o gravado fica e nada muda", (_chave, texto, inteiro) => {
+    abrirSecao();
+    const gravado = campo(inteiro.rotulo).value;
+
+    digitar(inteiro.rotulo, texto);
+
+    expect(campo(inteiro.rotulo).value).toBe(gravado);
+    expect(document.getElementById(inteiro.erro)).toBeNull();
+    expect(situacao()).toBe("Tudo salvo");
+    fireEvent.click(botao("Salvar condições"));
+    expect(updateQuoteVersion).not.toHaveBeenCalled();
+  });
+});
+
+describe("QUOTE-INT-FIELDS-01 — inteiro fora da regra fica inválido na tela", () => {
   it.each(casos)("%s = %j: erro no campo, nada salvo, nada simulado, envio preso", (_chave, texto, inteiro) => {
     abrirSecao();
 
@@ -247,7 +269,7 @@ describe("QUOTE-INT-FIELDS-01 — inteiro ilegível fica ilegível na tela", () 
   it("gravado vazio e digitado inválido: continua sendo alteração, e inválida", () => {
     abrirSecao(versao({ leadTimeDays: null }));
 
-    digitar("Prazo de entrega (dias)", "abc");
+    digitar("Prazo de entrega (dias)", "0");
 
     // Inválido nunca equivale a vazio.
     expect(situacao()).toBe("Alterações não salvas");
@@ -256,10 +278,10 @@ describe("QUOTE-INT-FIELDS-01 — inteiro ilegível fica ilegível na tela", () 
 });
 
 describe("QUOTE-INT-FIELDS-01 — vazio, correção e escrita equivalente", () => {
-  it("prazo 30, digitado abc: nada vai ao servidor; corrigido para 45, salva 45", async () => {
+  it("prazo 30, digitado 0: nada vai ao servidor; corrigido para 45, salva 45", async () => {
     abrirSecao();
 
-    digitar("Prazo de entrega (dias)", "abc");
+    digitar("Prazo de entrega (dias)", "0");
     fireEvent.click(botao("Salvar condições"));
     expect(updateQuoteVersion).not.toHaveBeenCalled();
 
@@ -276,7 +298,7 @@ describe("QUOTE-INT-FIELDS-01 — vazio, correção e escrita equivalente", () =
   it("apagar o prazo é limpar de propósito: salva null", async () => {
     abrirSecao();
 
-    digitar("Prazo de entrega (dias)", "   ");
+    digitar("Prazo de entrega (dias)", "");
 
     expect(document.getElementById("quote-lead-time-error")).toBeNull();
     fireEvent.click(botao("Salvar condições"));
@@ -286,8 +308,25 @@ describe("QUOTE-INT-FIELDS-01 — vazio, correção e escrita equivalente", () =
 
   it.each([
     [" 45 ", 45],
-    ["045", 45],
-  ])("%j é o inteiro %i", async (texto, esperado) => {
+    ["1.234", 1234],
+  ])("colar %j dá o inteiro %i", async (texto, esperado) => {
+    const user = userEvent.setup();
+    abrirSecao();
+    digitar("Prazo de entrega (dias)", "");
+
+    await user.click(campo("Prazo de entrega (dias)"));
+    await user.paste(texto);
+
+    expect(document.getElementById("quote-lead-time-error")).toBeNull();
+    fireEvent.click(botao("Salvar condições"));
+    await waitFor(() => expect(updateQuoteVersion).toHaveBeenCalledTimes(1));
+    expect(updateQuoteVersion).toHaveBeenCalledWith(
+      "q1",
+      expect.objectContaining({ leadTimeDays: esperado }),
+    );
+  });
+
+  it.each([["045", 45]])("%j é o inteiro %i", async (texto, esperado) => {
     abrirSecao();
 
     digitar("Prazo de entrega (dias)", texto);
@@ -314,8 +353,8 @@ describe("QUOTE-INT-FIELDS-01 — vazio, correção e escrita equivalente", () =
   it("parcelas e intervalo corrigidos saem como inteiros", async () => {
     abrirSecao();
 
-    digitar("Parcelas", "3,5");
-    digitar("Intervalo (dias)", "trinta");
+    digitar("Parcelas", "0");
+    digitar("Intervalo (dias)", "366");
     expect(botao("Salvar condições").disabled).toBe(true);
 
     digitar("Parcelas", "4");

@@ -272,10 +272,10 @@ describe("Linha de escolha — a opção é a linha, não a bolinha", () => {
 
     await user.click(within(industrial()).getByRole("radio", { name: "Não considerar" }));
     expect(total).toBeDisabled();
-    expect(total).toHaveValue("900");
+    expect(total).toHaveValue("900,00");
 
     await user.click(within(industrial()).getByRole("radio", { name: "R$ total" }));
-    expect(total).toHaveValue("900");
+    expect(total).toHaveValue("900,00");
   });
 
   it("custos externos: caixa, título e explicação como um bloco só", async () => {

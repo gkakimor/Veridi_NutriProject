@@ -118,14 +118,14 @@ describe("ItemCostReferenceSection", () => {
     render(<ItemCostReferenceSection itemId="item-1" />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Alterar referência" }));
-    fireEvent.change(document.getElementById("cost-reference-value")!, { target: { value: "1.300" } });
+    fireEvent.change(document.getElementById("cost-reference-value")!, { target: { value: "1.300,00" } });
     fireEvent.change(document.getElementById("cost-reference-note")!, { target: { value: "Tabela nova" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar referência" }));
 
     await waitFor(() => expect(createItemCostReference).toHaveBeenCalled());
     const [, input] = vi.mocked(createItemCostReference).mock.calls[0]!;
-    // Vírgula/ponto lidos como casa decimal; unidade padrão é a do item.
-    expect(input).toMatchObject({ unitCost: "1.300", uomCode: "kg", note: "Tabela nova" });
+    // `1.300,00` é milhar com casa decimal, e vai canônico; unidade padrão é a do item.
+    expect(input).toMatchObject({ unitCost: "1300.00", uomCode: "kg", note: "Tabela nova" });
 
     expect(await screen.findByText("R$ 1.300,00")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Histórico \(3\)/ }));

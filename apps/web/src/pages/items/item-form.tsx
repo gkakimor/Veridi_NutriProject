@@ -15,7 +15,14 @@ import { useCallback, useRef } from "react";
 import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import { assinaturaDoFormulario } from "../../lib/dirty-fields";
 import { ApiValidationError } from "../../lib/api-errors";
-import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
+import { numericInvalidMessage, parsePtBrNumber, toPtBrEditText } from "../../lib/numeric-ptbr";
+import {
+  CASAS_CUSTO_UNITARIO,
+  CASAS_PERCENTUAL_TECNICO,
+  OPCOES_CUSTO_UNITARIO,
+  OPCOES_PERCENTUAL_TECNICO,
+} from "../../lib/numeric-scales";
+import { MoneyField, PercentField } from "../../components/NumericField";
 import { RelatedLinks } from "../../components/RelatedLinks";
 import { FormSection } from "../../components/FormSection";
 import { ToggleCard } from "../../components/ToggleCard";
@@ -108,7 +115,7 @@ function initialState(item: ItemDTO | null, initialType: ItemType | null): FormS
       sourceName: item.sourceName ?? "",
       declaredNutrient: item.declaredNutrient ?? "",
       family: item.family ?? "",
-      defaultPurityPercent: item.defaultPurityPercent ?? "",
+      defaultPurityPercent: toPtBrEditText(item.defaultPurityPercent, OPCOES_PERCENTUAL_TECNICO),
       packagingSubtype: item.packagingSubtype ?? "",
       externalBarcode: item.externalBarcode ?? "",
       initialCostReference: "",
@@ -237,29 +244,37 @@ export function useItemForm({
      * web. Vazio continua sendo vazio (no edit é o que limpa o campo); o que
      * o parser não consegue ler para aqui, com o nome do campo.
      */
-    const purezaNormalizada =
-      form.defaultPurityPercent.trim() === ""
-        ? ""
-        : parseDecimalInput(form.defaultPurityPercent);
-    if (purezaNormalizada === null) {
-      setFieldErrors({ defaultPurityPercent: mensagemDecimalInvalido("Pureza padrão (%)") });
+    const pureza = parsePtBrNumber(form.defaultPurityPercent, OPCOES_PERCENTUAL_TECNICO);
+    if (pureza.tipo === "invalido") {
+      setFieldErrors({
+        defaultPurityPercent: numericInvalidMessage(
+          "Pureza padrão (%)",
+          pureza.motivo,
+          OPCOES_PERCENTUAL_TECNICO,
+        ),
+      });
       setError("Corrija os campos destacados.");
       setSaving(false);
       return;
     }
+    const purezaNormalizada = pureza.tipo === "valido" ? pureza.valor : "";
 
     // Referência inicial passa pelo mesmo parser de decimal da pureza. Vazio
     // é "sem referência" — nunca zero.
-    const referenciaNormalizada =
-      form.initialCostReference.trim() === ""
-        ? ""
-        : parseDecimalInput(form.initialCostReference);
-    if (referenciaNormalizada === null) {
-      setFieldErrors({ initialCostReference: mensagemDecimalInvalido("Custo de referência inicial") });
+    const referencia = parsePtBrNumber(form.initialCostReference, OPCOES_CUSTO_UNITARIO);
+    if (referencia.tipo === "invalido") {
+      setFieldErrors({
+        initialCostReference: numericInvalidMessage(
+          "Custo de referência inicial",
+          referencia.motivo,
+          OPCOES_CUSTO_UNITARIO,
+        ),
+      });
       setError("Corrija os campos destacados.");
       setSaving(false);
       return;
     }
+    const referenciaNormalizada = referencia.tipo === "valido" ? referencia.valor : "";
 
     const trimmedBarcode = form.externalBarcode.trim();
     const payload = {
@@ -550,14 +565,13 @@ export function ItemFormFields({
 
             <div className="field field--narrow">
               <label htmlFor="item-purity">Pureza padrão (%)</label>
-              <input
+              <PercentField
                 id="item-purity"
-                type="text"
-                inputMode="decimal"
+                scale={CASAS_PERCENTUAL_TECNICO}
                 placeholder="Ex.: 98,5"
                 value={form.defaultPurityPercent}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, defaultPurityPercent: event.target.value }))
+                onChangeValue={(defaultPurityPercent) =>
+                  setForm((prev) => ({ ...prev, defaultPurityPercent }))
                 }
                 {...fieldProps("defaultPurityPercent")}
               />
@@ -673,14 +687,13 @@ export function ItemFormFields({
               <label htmlFor="item-initial-cost-reference">
                 Custo de referência inicial (R$ por {form.unitCode || "unidade"})
               </label>
-              <input
+              <MoneyField
                 id="item-initial-cost-reference"
-                type="text"
-                inputMode="decimal"
+                scale={CASAS_CUSTO_UNITARIO}
                 placeholder="Ex.: 1200,00"
                 value={form.initialCostReference}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, initialCostReference: event.target.value }))
+                onChangeValue={(initialCostReference) =>
+                  setForm((prev) => ({ ...prev, initialCostReference }))
                 }
                 {...fieldProps("initialCostReference")}
               />

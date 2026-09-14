@@ -38,6 +38,9 @@ import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { formatDateTime } from "../../lib/dates";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal } from "../../lib/decimal-field";
+import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
+import { DecimalField, IntegerField } from "../../components/NumericField";
 import {
   assinaturaDoDocumento,
   decimalComparavel,
@@ -88,7 +91,8 @@ function linhasDaVersao(version: CostTemplateVersionDTO): LinhaRecurso[] {
   return version.resourceUsages.map((usage, index) => ({
     chave: `${usage.id}-${index}`,
     industrialResourceId: usage.industrialResourceId,
-    usageQuantity: usage.usageQuantity,
+    // Texto do campo, em português — a leitura do servidor passa por `toPtBrEditText`.
+    usageQuantity: toPtBrEditText(usage.usageQuantity, OPCOES_QUANTIDADE),
     usageUom: usage.usageUom,
     usageBasis: usage.usageBasis,
     quantidadeDeRecursos: String(usage.resourceCount),
@@ -192,7 +196,9 @@ export function CostTemplateDetailPage() {
         lido.current = {
           nome: result.name,
           descricao: result.description ?? "",
-          base: rascunho?.referenceOutputQuantity ?? anterior.base,
+          base: rascunho
+            ? toPtBrEditText(rascunho.referenceOutputQuantity, OPCOES_QUANTIDADE)
+            : anterior.base,
           unidade: rascunho?.referenceOutputUomCode ?? anterior.unidade,
           modoEnergia: rascunho?.energyCalculationMode ?? anterior.modoEnergia,
           recursoEnergia: rascunho?.energyResourceId ?? "",
@@ -201,7 +207,8 @@ export function CostTemplateDetailPage() {
         setNome((atual) => (atual === anterior.nome ? lido.current.nome : atual));
         setDescricao((atual) => (atual === anterior.descricao ? lido.current.descricao : atual));
         if (rascunho) {
-          setBase((atual) => (atual === anterior.base ? rascunho.referenceOutputQuantity : atual));
+          const baseLida = toPtBrEditText(rascunho.referenceOutputQuantity, OPCOES_QUANTIDADE);
+          setBase((atual) => (atual === anterior.base ? baseLida : atual));
           setUnidade((atual) =>
             atual === anterior.unidade ? rascunho.referenceOutputUomCode : atual,
           );
@@ -300,7 +307,7 @@ export function CostTemplateDetailPage() {
     canEdit &&
     assinaturaDoRascunho(base, unidade, modoEnergia, recursoEnergia, linhas) !==
       assinaturaDoRascunho(
-        rascunhoDoServidor.referenceOutputQuantity,
+        toPtBrEditText(rascunhoDoServidor.referenceOutputQuantity, OPCOES_QUANTIDADE),
         rascunhoDoServidor.referenceOutputUomCode,
         rascunhoDoServidor.energyCalculationMode,
         rascunhoDoServidor.energyResourceId ?? "",
@@ -593,13 +600,12 @@ export function CostTemplateDetailPage() {
             <div className="field-grid-2">
               <div className="field field--narrow">
                 <label htmlFor="tec-base">Base de produção</label>
-                <input
+                <DecimalField
                   id="tec-base"
-                  type="text"
-                  inputMode="decimal"
+                  scale={CASAS_QUANTIDADE}
                   disabled={!editavel}
                   value={base}
-                  onChange={(event) => setBase(event.target.value)}
+                  onChangeValue={setBase}
                 />
               </div>
               <div className="field field--narrow">
@@ -681,17 +687,13 @@ export function CostTemplateDetailPage() {
                       </td>
                       <td className="is-numeric">
                         {contaRecursosDaLinha(linha.industrialResourceId) ? (
-                          <input
-                            type="text"
-                            inputMode="numeric"
+                          <IntegerField
                             aria-label="Quantidade de recursos"
                             disabled={!editavel}
                             value={linha.quantidadeDeRecursos}
-                            onChange={(event) =>
+                            onChangeValue={(quantidadeDeRecursos) =>
                               setLinhas((atual) =>
-                                atual.map((l, i) =>
-                                  i === index ? { ...l, quantidadeDeRecursos: event.target.value } : l,
-                                ),
+                                atual.map((l, i) => (i === index ? { ...l, quantidadeDeRecursos } : l)),
                               )
                             }
                           />
@@ -700,16 +702,13 @@ export function CostTemplateDetailPage() {
                         )}
                       </td>
                       <td className="is-numeric">
-                        <input
-                          type="text"
-                          inputMode="decimal"
+                        <DecimalField
+                          scale={CASAS_QUANTIDADE}
                           disabled={!editavel}
                           value={linha.usageQuantity}
-                          onChange={(event) =>
+                          onChangeValue={(usageQuantity) =>
                             setLinhas((atual) =>
-                              atual.map((l, i) =>
-                                i === index ? { ...l, usageQuantity: event.target.value } : l,
-                              ),
+                              atual.map((l, i) => (i === index ? { ...l, usageQuantity } : l)),
                             )
                           }
                         />
@@ -794,7 +793,11 @@ export function CostTemplateDetailPage() {
                         "rascunho",
                         () =>
                           updateCostTemplateVersion(rascunho.id, {
-                            referenceOutputQuantity: exigirDecimal(base, "Base de produção"),
+                            referenceOutputQuantity: exigirDecimal(
+                              base,
+                              "Base de produção",
+                              OPCOES_QUANTIDADE,
+                            ),
                             referenceOutputUomCode: unidade,
                             energyCalculationMode: modoEnergia,
                             energyResourceId:
@@ -803,7 +806,11 @@ export function CostTemplateDetailPage() {
                               .filter((linha) => linha.industrialResourceId && linha.usageQuantity)
                               .map(({ chave: _chave, quantidadeDeRecursos, ...resto }) => ({
                                 ...resto,
-                                usageQuantity: exigirDecimal(resto.usageQuantity, "Uso por lote"),
+                                usageQuantity: exigirDecimal(
+                                  resto.usageQuantity,
+                                  "Uso por lote",
+                                  OPCOES_QUANTIDADE,
+                                ),
                                 // Energia não envia quantidade: para ela o domínio usa 1.
                                 ...(contaRecursosDaLinha(resto.industrialResourceId)
                                   ? {

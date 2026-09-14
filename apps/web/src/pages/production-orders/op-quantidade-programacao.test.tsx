@@ -268,7 +268,7 @@ async function abrir(agenda: ProductionOrderScheduleDTO | null) {
   );
   render(<RouterProvider router={router} />);
   await screen.findByRole("heading", { name: "OP-000001" });
-  await waitFor(() => expect(quantidade()).toHaveValue("1000"));
+  await waitFor(() => expect(quantidade()).toHaveValue("1.000"));
   if (agenda) await screen.findByRole("group", { name: "Programação da ordem" });
   else await waitFor(() => expect(getProductionOrderScheduleMock).toHaveBeenCalled());
 }
@@ -307,7 +307,7 @@ describe("OP em rascunho com programação — mudar a quantidade", () => {
     fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Cancelar" }));
 
     await waitFor(() => expect(pergunta()).toBeNull());
-    expect(quantidade()).toHaveValue("2000");
+    expect(quantidade()).toHaveValue("2.000");
     expect(screen.getByRole("status")).toHaveTextContent("Alterações não salvas");
     expect(screen.getByRole("group", { name: "Programação da ordem" })).toBeInTheDocument();
     expect(updateProductionOrderMock).not.toHaveBeenCalled();
@@ -351,7 +351,7 @@ describe("OP em rascunho com programação — mudar a quantidade", () => {
     expect(screen.getByRole("button", { name: "Definir início previsto" })).toBeInTheDocument();
     // O roteiro aplicado continua: é dele que sai a próxima programação.
     expect(screen.getByText("Roteiro de produção aplicado")).toBeInTheDocument();
-    expect(quantidade()).toHaveValue("2000");
+    expect(quantidade()).toHaveValue("2.000");
     expect(updateProductionOrderMock).toHaveBeenCalledTimes(1);
 
     // Gravou: sair não pergunta mais nada.
@@ -396,7 +396,7 @@ describe("OP em rascunho com programação — mudar a quantidade", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("só permite alterar observações");
     expect(screen.queryByText(REMOVIDA)).toBeNull();
     expect(screen.queryByText(ATUALIZADA)).toBeNull();
-    expect(quantidade()).toHaveValue("2000");
+    expect(quantidade()).toHaveValue("2.000");
     expect(screen.getByRole("status")).toHaveTextContent("Alterações não salvas");
   });
 });

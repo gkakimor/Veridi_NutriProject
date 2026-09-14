@@ -163,7 +163,8 @@ describe("Total da OC em edição é prévia da tela", () => {
   it("F. valor ilegível não vira NaN nem zero: fica fora da prévia e é dito", async () => {
     abrir();
     await screen.findByRole("heading", { level: 1, name: "OC-000001" });
-    fireEvent.change(precoDe("MP-000001"), { target: { value: "abc" } });
+    // Letra nem entra no campo; o ambíguo `1.234` entra e não vira número.
+    fireEvent.change(precoDe("MP-000001"), { target: { value: "1.234" } });
 
     expect(totalDaLinha("MP-000001")).toBe("—");
     expect(rodape()).toContain("Total (prévia): R$ 16,21");

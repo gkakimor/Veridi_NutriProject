@@ -15,6 +15,8 @@ import { itemMaterialDoClienteSource } from "../../lib/filter-sources";
 import { createCustomerSuppliedReceipt } from "../../lib/receiving-api";
 import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal } from "../../lib/decimal-field";
+import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
+import { DecimalField } from "../../components/NumericField";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
@@ -263,6 +265,7 @@ export function ReceiveCustomerMaterialPage() {
             receivedQuantity: exigirDecimal(
               line.receivedQuantity,
               `Quantidade recebida de ${selectedItem(line.itemId)?.code ?? "item"}`,
+              OPCOES_QUANTIDADE,
             ),
             ...(line.supplierLot.trim() ? { supplierLot: line.supplierLot.trim() } : {}),
             ...(line.expiryDate
@@ -453,9 +456,8 @@ options={customers.map((customer) => ({
                         )}
                       </td>
                       <td className="is-numeric">
-                        <input
-                          type="text"
-                          inputMode="decimal"
+                        <DecimalField
+                          scale={CASAS_QUANTIDADE}
                           /* Nomeia a LINHA, nao a coluna: com o rotulo fixo,
                              todas as linhas tinham o mesmo nome acessivel e
                              quem navega por leitor de tela nao sabia em qual
@@ -467,9 +469,7 @@ options={customers.map((customer) => ({
                           }
                           placeholder="0"
                           value={line.receivedQuantity}
-                          onChange={(event) =>
-                            updateLine(line.key, "receivedQuantity", event.target.value)
-                          }
+                          onChangeValue={(valor) => updateLine(line.key, "receivedQuantity", valor)}
                         />
                         {item ? <span className="field__hint"> {item.unitCode}</span> : null}
                       </td>

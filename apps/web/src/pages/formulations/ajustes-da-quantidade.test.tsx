@@ -187,7 +187,8 @@ describe("Painel de ajustes — rascunho, Aplicar e Cancelar", () => {
     expect(aplicar()).toBeDisabled();
 
     const pureza = screen.getByRole("textbox", { name: "Pureza aplicada" });
-    fireEvent.change(pureza, { target: { value: "abc" } });
+    // Letra nem entra no campo; o ambíguo `1.234` entra e não vira número.
+    fireEvent.change(pureza, { target: { value: "1.234" } });
     expect(aplicar()).toBeDisabled();
     expect(pureza).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByText(/MP-000003 — Pureza %/)).toBeInTheDocument();

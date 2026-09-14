@@ -26,6 +26,14 @@ import { formatPercent } from "../../lib/percent";
 import { formatDateTime } from "../../lib/dates";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
+import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import {
+  CASAS_PERCENTUAL,
+  CASAS_QUANTIDADE,
+  OPCOES_PERCENTUAL,
+  OPCOES_QUANTIDADE,
+} from "../../lib/numeric-scales";
+import { DecimalField, PercentField } from "../../components/NumericField";
 import { useAuth } from "../../app/AuthProvider";
 import {
   PricingModelEditor,
@@ -51,14 +59,17 @@ interface LinhaFaixa extends PricingPolicyTierInput {
   chave: string;
 }
 
-/** As faixas da versão, na forma que a tela edita. */
+/** As faixas da versão, na forma que a tela edita — números no texto do campo, em português. */
 function linhasDaVersao(version: PricingPolicyVersionDTO): LinhaFaixa[] {
   return version.tiers.map((tier, index) => ({
     chave: `${tier.id}-${index}`,
-    quantity: tier.quantity,
+    quantity: toPtBrEditText(tier.quantity, OPCOES_QUANTIDADE),
     uomCode: tier.uomCode,
-    targetContributionMarginPercent: tier.targetContributionMarginPercent ?? "",
-    commissionPercent: tier.commissionPercent,
+    targetContributionMarginPercent: toPtBrEditText(
+      tier.targetContributionMarginPercent,
+      OPCOES_PERCENTUAL,
+    ),
+    commissionPercent: toPtBrEditText(tier.commissionPercent, OPCOES_PERCENTUAL),
   }));
 }
 
@@ -456,51 +467,42 @@ export function PricingPolicyDetailPage() {
                   {linhas.map((linha, index) => (
                     <tr key={linha.chave}>
                       <td className="is-numeric">
-                        <input
-                          type="text"
-                          inputMode="decimal"
+                        <DecimalField
+                          scale={CASAS_QUANTIDADE}
                           aria-label="Quantidade da faixa"
                           disabled={!editavel}
                           value={linha.quantity}
-                          onChange={(event) =>
+                          onChangeValue={(quantity) =>
                             setLinhas((atual) =>
-                              atual.map((l, i) =>
-                                i === index ? { ...l, quantity: event.target.value } : l,
-                              ),
+                              atual.map((l, i) => (i === index ? { ...l, quantity } : l)),
                             )
                           }
                         />
                       </td>
                       <td className="is-numeric">
-                        <input
-                          type="text"
-                          inputMode="decimal"
+                        <PercentField
+                          scale={CASAS_PERCENTUAL}
                           aria-label="Margem alvo"
                           disabled={!editavel}
                           value={linha.targetContributionMarginPercent}
-                          onChange={(event) =>
+                          onChangeValue={(targetContributionMarginPercent) =>
                             setLinhas((atual) =>
                               atual.map((l, i) =>
-                                i === index
-                                  ? { ...l, targetContributionMarginPercent: event.target.value }
-                                  : l,
+                                i === index ? { ...l, targetContributionMarginPercent } : l,
                               ),
                             )
                           }
                         />
                       </td>
                       <td className="is-numeric">
-                        <input
-                          type="text"
-                          inputMode="decimal"
+                        <PercentField
+                          scale={CASAS_PERCENTUAL}
                           aria-label="Comissão"
                           disabled={!editavel}
                           value={linha.commissionPercent ?? ""}
-                          onChange={(event) =>
+                          onChangeValue={(commissionPercent) =>
                             setLinhas((atual) =>
-                              atual.map((l, i) =>
-                                i === index ? { ...l, commissionPercent: event.target.value } : l,
-                              ),
+                              atual.map((l, i) => (i === index ? { ...l, commissionPercent } : l)),
                             )
                           }
                         />
@@ -595,13 +597,15 @@ export function PricingPolicyDetailPage() {
                                 const comissao = exigirDecimalOpcional(
                                   resto.commissionPercent ?? "",
                                   "Comissão (%)",
+                                  OPCOES_PERCENTUAL,
                                 );
                                 return {
                                   ...resto,
-                                  quantity: exigirDecimal(resto.quantity, "Quantidade"),
+                                  quantity: exigirDecimal(resto.quantity, "Quantidade", OPCOES_QUANTIDADE),
                                   targetContributionMarginPercent: exigirDecimal(
                                     resto.targetContributionMarginPercent,
                                     "Margem alvo (%)",
+                                    OPCOES_PERCENTUAL,
                                   ),
                                   ...(comissao === null ? {} : { commissionPercent: comissao }),
                                 };

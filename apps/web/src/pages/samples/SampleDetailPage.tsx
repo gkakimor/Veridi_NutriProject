@@ -16,6 +16,8 @@ import { useAuth } from "../../app/AuthProvider";
 import { getInventoryItem } from "../../lib/inventory-api";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal } from "../../lib/decimal-field";
+import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
+import { DecimalField } from "../../components/NumericField";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { listItems } from "../../lib/items-api";
@@ -190,7 +192,7 @@ export function SampleDetailPage() {
   function doProduce(withoutConsumption: boolean) {
     void run(() =>
       produceSample(sampleId, {
-        outputQuantity: exigirDecimal(outputQuantity, "Quantidade produzida"),
+        outputQuantity: exigirDecimal(outputQuantity, "Quantidade produzida", OPCOES_QUANTIDADE),
         outputUomCode,
         ...(productionNotes.trim() ? { productionNotes: productionNotes.trim() } : {}),
         ...(withoutConsumption ? { confirmWithoutConsumption: true } : {}),
@@ -431,7 +433,7 @@ export function SampleDetailPage() {
                     registerSampleConsumption(id, {
                       itemId,
                       ...(lotCode ? { lotCode } : {}),
-                      quantity: exigirDecimal(quantity, "Quantidade"),
+                      quantity: exigirDecimal(quantity, "Quantidade", OPCOES_QUANTIDADE),
                       ...(consumptionNotes.trim() ? { notes: consumptionNotes.trim() } : {}),
                     }),
                   () => {
@@ -480,12 +482,11 @@ export function SampleDetailPage() {
                   <label htmlFor="sample-quantity">
                     Quantidade{selectedItem ? ` (${selectedItem.unitCode})` : ""}
                   </label>
-                  <input
+                  <DecimalField
                     id="sample-quantity"
-                    type="text"
-                    inputMode="decimal"
+                    scale={CASAS_QUANTIDADE}
                     value={quantity}
-                    onChange={(event) => setQuantity(event.target.value)}
+                    onChangeValue={setQuantity}
                     required
                   />
                 </div>
@@ -532,12 +533,11 @@ export function SampleDetailPage() {
               <div className="field-grid-2">
                 <div className="field">
                   <label htmlFor="sample-output">Quantidade produzida</label>
-                  <input
+                  <DecimalField
                     id="sample-output"
-                    type="text"
-                    inputMode="decimal"
+                    scale={CASAS_QUANTIDADE}
                     value={outputQuantity}
-                    onChange={(event) => setOutputQuantity(event.target.value)}
+                    onChangeValue={setOutputQuantity}
                     required
                   />
                 </div>

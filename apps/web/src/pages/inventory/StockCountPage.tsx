@@ -8,7 +8,10 @@ import type { ItemDTO, StockCountResultDTO } from "@veridi/shared";
 import { listItems } from "../../lib/items-api";
 import { getInventoryItem, createStockCount } from "../../lib/inventory-api";
 import { FormSection } from "../../components/FormSection";
-import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
+import { mensagemNumeroVazio } from "../../lib/decimal-field";
+import { numericInvalidMessage, parsePtBrNumber } from "../../lib/numeric-ptbr";
+import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
+import { DecimalField } from "../../components/NumericField";
 import { formatQuantity, formatQuantityWithUnit } from "../../lib/quantity";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
@@ -140,8 +143,13 @@ export function StockCountPage() {
    * justamente quando há divergência — nem chegava a existir. A contagem
    * seguia como se batesse com o sistema.
    */
-  const contagem = parseDecimalInput(countedQuantity);
-  const contagemIlegivel = countedQuantity.trim() !== "" && contagem === null;
+  const leituraDaContagem = parsePtBrNumber(countedQuantity, OPCOES_QUANTIDADE);
+  const contagem = leituraDaContagem.tipo === "valido" ? leituraDaContagem.valor : null;
+  const erroDaContagem =
+    leituraDaContagem.tipo === "invalido"
+      ? numericInvalidMessage("Contagem física", leituraDaContagem.motivo, OPCOES_QUANTIDADE)
+      : null;
+  const contagemIlegivel = erroDaContagem !== null;
   const difference =
     systemQuantity !== null && contagem !== null
       ? (Number(contagem) - Number(systemQuantity)).toString()
@@ -174,7 +182,7 @@ export function StockCountPage() {
   async function handleConfirm() {
     if (!itemId || systemQuantity === null) return;
     if (contagem === null) {
-      setError(mensagemDecimalInvalido("Contagem física"));
+      setError(erroDaContagem ?? mensagemNumeroVazio("Contagem física"));
       return;
     }
     setSaving(true);
@@ -302,19 +310,16 @@ export function StockCountPage() {
             <label htmlFor="count-quantity">
               Contagem física <span className="req">*</span>
             </label>
-            <input
+            <DecimalField
               id="count-quantity"
-              type="text"
-              inputMode="decimal"
+              scale={CASAS_QUANTIDADE}
               placeholder="0"
               value={countedQuantity}
-              onChange={(event) => setCountedQuantity(event.target.value)}
+              onChangeValue={setCountedQuantity}
               disabled={systemQuantity === null}
               aria-invalid={contagemIlegivel || undefined}
             />
-            {contagemIlegivel && (
-              <p className="field__error">{mensagemDecimalInvalido("Contagem física")}</p>
-            )}
+            {erroDaContagem && <p className="field__error">{erroDaContagem}</p>}
           </div>
 
           <div className="field">

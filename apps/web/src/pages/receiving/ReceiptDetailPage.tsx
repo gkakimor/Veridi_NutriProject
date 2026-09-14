@@ -7,6 +7,9 @@ import { getReceipt } from "../../lib/receiving-api";
 import { setAcquisitionCost } from "../../lib/costs-api";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimalOpcional } from "../../lib/decimal-field";
+import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import { CASAS_CUSTO_UNITARIO, OPCOES_CUSTO_UNITARIO } from "../../lib/numeric-scales";
+import { MoneyField } from "../../components/NumericField";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { AttachmentsSection } from "../../components/AttachmentsSection";
@@ -48,9 +51,10 @@ export function ReceiptDetailPage() {
    */
   const [custoSalvoLineId, setCustoSalvoLineId] = useState<string | null>(null);
 
-  function editarCusto(lineId: string, custoAtual: string) {
+  function editarCusto(lineId: string, custoAtual: string | null) {
     setEditingLineId(lineId);
-    setCostDraft(custoAtual);
+    // O custo gravado no texto do campo, em português.
+    setCostDraft(toPtBrEditText(custoAtual, OPCOES_CUSTO_UNITARIO));
     setCustoSalvoLineId(null);
   }
 
@@ -63,7 +67,8 @@ export function ReceiptDetailPage() {
       // é o contrato da API e a razão do placeholder. Só o que foi digitado
       // passa pelo parser.
       const updated = await setAcquisitionCost(lineId, {
-        unitCost: exigirDecimalOpcional(costDraft, "Custo efetivo de aquisição") ?? "",
+        unitCost:
+          exigirDecimalOpcional(costDraft, "Custo efetivo de aquisição", OPCOES_CUSTO_UNITARIO) ?? "",
       });
       setReceipt(updated);
       setEditingLineId(null);
@@ -270,16 +275,15 @@ export function ReceiptDetailPage() {
                     <td className="is-numeric">{formatUnitPriceBRL(line.purchaseUnitPrice)}</td>
                     <td className="is-numeric">
                       {editingLineId === line.id ? (
-                        <input
-                          type="text"
-                          inputMode="decimal"
+                        <MoneyField
+                          scale={CASAS_CUSTO_UNITARIO}
                           placeholder="Vazio = desconhecido"
                           // O placeholder explica a regra, não nomeia o campo:
                           // sem isto, o único campo editável do documento era
                           // anunciado como "editar texto".
                           aria-label={`Custo efetivo de aquisição de ${line.itemCode}`}
                           value={costDraft}
-                          onChange={(event) => setCostDraft(event.target.value)}
+                          onChangeValue={setCostDraft}
                         />
                       ) : line.actualUnitCost !== null ? (
                         <>
@@ -322,7 +326,7 @@ export function ReceiptDetailPage() {
                           <button
                             type="button"
                             className="btn btn--ghost btn--sm"
-                            onClick={() => editarCusto(line.id, line.actualUnitCost ?? "")}
+                            onClick={() => editarCusto(line.id, line.actualUnitCost)}
                           >
                             {line.actualUnitCost !== null ? "Atualizar custo" : "Definir custo"}
                           </button>

@@ -40,7 +40,10 @@ import {
 import { getProductPricing } from "../../lib/pricing-api";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { CalcHint } from "../../components/help/CalcHint";
-import { exigirDecimal } from "../../lib/decimal-field";
+import { decimalLegivel, exigirDecimal } from "../../lib/decimal-field";
+import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
+import { DecimalField } from "../../components/NumericField";
 import { formatPercent } from "../../lib/percent";
 import { formatDate } from "../../lib/dates";
 import "./cmv.css";
@@ -135,7 +138,10 @@ export function ProductCmvPage() {
   const quoteVersionId = params.get("quoteVersionId");
   const quoteLineId = params.get("quoteLineId");
 
-  const [quantity, setQuantity] = useState(params.get("quantity") ?? "1000");
+  // A quantidade da URL vem canônica (`1000.5`, do Orçamento e do PDF): no campo, em português.
+  const [quantity, setQuantity] = useState(() =>
+    toPtBrEditText(params.get("quantity") ?? "1000", OPCOES_QUANTIDADE),
+  );
   const [referenceDate, setReferenceDate] = useState(params.get("referenceDate") ?? hojeISO());
   const [data, setData] = useState<ProductCmvResponse | null>(null);
   const [tier, setTier] = useState<PricingTierDTO | null>(null);
@@ -180,7 +186,7 @@ export function ProductCmvPage() {
           // A simulação é sempre disparada com o que está no campo: a
           // vírgula é lida aqui, e o que não dá para ler nomeia o campo em
           // vez de virar "Falha ao calcular o CMV".
-          quantity: exigirDecimal(quantidade, "Quantidade a simular"),
+          quantity: exigirDecimal(quantidade, "Quantidade a simular", OPCOES_QUANTIDADE),
           referenceDate: data_,
         });
         setData(result);
@@ -213,7 +219,10 @@ export function ProductCmvPage() {
   // A quantidade que veio no link já é a pergunta: calcular sozinho evita
   // pedir um clique para repetir algo que a pessoa já disse.
   useEffect(() => {
-    void simular(params.get("quantity") ?? "1000", params.get("referenceDate") ?? hojeISO());
+    void simular(
+      toPtBrEditText(params.get("quantity") ?? "1000", OPCOES_QUANTIDADE),
+      params.get("referenceDate") ?? hojeISO(),
+    );
     // Uma vez por produto: recalcular a cada tecla digitada é o oposto de
     // "informe a quantidade e mande calcular".
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -314,7 +323,8 @@ export function ProductCmvPage() {
               onClick={() =>
                 navigate(
                   `/print/cmv/${productId}?quantity=${encodeURIComponent(
-                    quantity.trim(),
+                    // Na URL, canônica — é o que o PDF manda ao servidor.
+                    decimalLegivel(quantity, OPCOES_QUANTIDADE) ?? quantity.trim(),
                   )}&referenceDate=${referenceDate}`,
                 )
               }
@@ -368,12 +378,11 @@ export function ProductCmvPage() {
           <div className="cmv-sim">
             <div className="field field--narrow">
               <label htmlFor="cmv-quantity">Quantidade a simular</label>
-              <input
+              <DecimalField
                 id="cmv-quantity"
-                type="text"
-                inputMode="decimal"
+                scale={CASAS_QUANTIDADE}
                 value={quantity}
-                onChange={(event) => setQuantity(event.target.value)}
+                onChangeValue={setQuantity}
               />
               <p className="field__hint">Unidade: {data?.outputUomCode ?? "un"}</p>
             </div>

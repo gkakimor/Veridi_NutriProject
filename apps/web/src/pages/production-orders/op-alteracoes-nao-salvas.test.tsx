@@ -248,7 +248,7 @@ async function abrirGravada(dto = ordem()) {
   vi.mocked(getProductionOrder).mockResolvedValue(dto);
   montar(["/producao/ordens/op-1"]);
   await screen.findByRole("heading", { name: "OP-000001" });
-  await waitFor(() => expect(quantidade()).toHaveValue("3000.000000"));
+  await waitFor(() => expect(quantidade()).toHaveValue("3.000"));
 }
 
 const pergunta = () => screen.queryByRole("alertdialog");
@@ -393,7 +393,7 @@ describe("OP gravada — guarda de alterações não salvas", () => {
     vi.mocked(getProductionOrder).mockResolvedValue(ordem());
     const router = montar(["/estoque", "/producao/ordens/op-1"], 1);
     await screen.findByRole("heading", { name: "OP-000001" });
-    await waitFor(() => expect(quantidade()).toHaveValue("3000.000000"));
+    await waitFor(() => expect(quantidade()).toHaveValue("3.000"));
 
     fireEvent.change(quantidade(), { target: { value: "4000" } });
     await act(async () => {
@@ -487,7 +487,7 @@ describe("OP — salvar só com alteração pendente", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Falha de rede ao gravar a OP");
     // A edição fica, e a pendência também.
-    expect(partes()).toHaveValue(3);
+    expect(partes()).toHaveValue("3");
     expect(screen.getByRole("status")).toHaveTextContent("Alterações não salvas");
     expect(salvarRascunho()).toBeEnabled();
 

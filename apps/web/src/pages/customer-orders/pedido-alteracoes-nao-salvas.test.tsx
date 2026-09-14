@@ -173,7 +173,7 @@ async function abrirGravado(dto = pedido()) {
   vi.mocked(getCustomerOrder).mockResolvedValue(dto);
   montar(["/comercial/pedidos/co-1"]);
   await screen.findByRole("heading", { name: "PED-000001" });
-  await waitFor(() => expect(quantidade()).toHaveValue("10.000000"));
+  await waitFor(() => expect(quantidade()).toHaveValue("10"));
 }
 
 const pergunta = () => screen.queryByRole("alertdialog");

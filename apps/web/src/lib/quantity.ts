@@ -58,10 +58,12 @@ export function formatQuantity(valor: string | number | null | undefined): strin
   /*
    * SEM separador de milhar, e isto é decisão.
    *
-   * `1.000 un` é o português correto para ler, e é veneno para copiar: o campo
-   * decimal deste sistema trata um separador único como casa decimal — de
-   * propósito, porque adivinhar milhar erra por um fator de mil. Então o valor
-   * exibido com agrupamento, colado num campo, viraria 1.
+   * `1.000 un` é o português correto para ler, e é veneno para copiar: no
+   * campo decimal, `1.000` sozinho é ambíguo — milhar ou casa decimal — e é
+   * recusado em vez de adivinhado (`numeric-ptbr.ts`, PTBR-NUMERIC-INPUT-
+   * ROLLOUT-01). O valor exibido com agrupamento, colado num campo, pararia ali.
+   * O campo em si agrupa milhar fora do foco; a diferença entre as duas leituras
+   * fica para PTBR-NUMERIC-DISPLAY-AUDIT-01.
    *
    * Quantidade é número que a pessoa confere contra balança e redigita. Ela
    * precisa poder copiar o que vê. Dinheiro é outro caso e tem formatador

@@ -9,6 +9,8 @@ import {
 import { FormSection } from "../../components/FormSection";
 import { completePart, getRecipeSheet, registerWeighing } from "../../lib/recipe-api";
 import { exigirDecimal } from "../../lib/decimal-field";
+import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
+import { DecimalField } from "../../components/NumericField";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { EntityLink } from "../../components/EntityLink";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
@@ -125,7 +127,7 @@ export function RecipeSheetPage() {
       const updated = await registerWeighing(id, activePart, {
         requirementId,
         lotCode: lotCode.trim(),
-        actualQuantity: exigirDecimal(actualQuantity, "Quantidade pesada"),
+        actualQuantity: exigirDecimal(actualQuantity, "Quantidade pesada", OPCOES_QUANTIDADE),
         ...(notes.trim() ? { notes: notes.trim() } : {}),
       });
       setSheet(updated);
@@ -460,12 +462,11 @@ export function RecipeSheetPage() {
 
                 <div className="field field--narrow">
                   <label htmlFor="weighing-quantity">Quantidade pesada</label>
-                  <input
+                  <DecimalField
                     id="weighing-quantity"
-                    type="text"
-                    inputMode="decimal"
+                    scale={CASAS_QUANTIDADE}
                     value={actualQuantity}
-                    onChange={(event) => setActualQuantity(event.target.value)}
+                    onChangeValue={setActualQuantity}
                   />
                 </div>
 

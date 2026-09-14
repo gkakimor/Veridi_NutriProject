@@ -253,8 +253,8 @@ describe("Item — modal de edição", () => {
     const user = userEvent.setup();
     await abrirModalDeEdicao();
 
-    // O servidor devolve `98.000000` e a pessoa redigita `98,0`.
-    expect(pureza()).toHaveValue("98.000000");
+    // O servidor devolve `98.000000` (o campo mostra `98`) e a pessoa redigita `98,0`.
+    expect(pureza()).toHaveValue("98");
     fireEvent.change(pureza(), { target: { value: "98,0" } });
     await user.click(menuEstoque());
 

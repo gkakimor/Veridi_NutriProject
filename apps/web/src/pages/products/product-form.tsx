@@ -31,7 +31,10 @@ import { assinaturaDoFormulario } from "../../lib/dirty-fields";
 import { listCustomers } from "../../lib/customers-api";
 import { listUnits } from "../../lib/units-api";
 import { ApiValidationError } from "../../lib/api-errors";
-import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
+import { numericInvalidMessage, parsePtBrNumber, toPtBrEditText } from "../../lib/numeric-ptbr";
+import type { NumericOptions } from "../../lib/numeric-ptbr";
+import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
+import { DecimalField, IntegerField } from "../../components/NumericField";
 import { ProductIndustrialCostSummary } from "./ProductIndustrialCostSummary";
 
 /**
@@ -134,6 +137,9 @@ function numberField(value: number | string | null): string {
   return value === null || value === undefined ? "" : String(value);
 }
 
+/** Contagem inteira: cápsulas, doses, unidades por caixa, meses. */
+const INTEIRO: NumericOptions = { scale: 0 };
+
 /** Os campos que são NÚMERO — comparados pelo valor, não pelo texto. */
 const DECIMAIS = [
   "capsulesPerDose",
@@ -156,13 +162,14 @@ function initialState(product: ProductDTO | null): ProductFormState {
       dosageForm: product.dosageForm ?? "",
       presentationType: product.presentationType ?? "",
       capsulesPerDose: numberField(product.capsulesPerDose),
-      doseAmount: numberField(product.doseAmount),
+      // Decimal da API no texto do campo, em português.
+      doseAmount: toPtBrEditText(product.doseAmount, OPCOES_QUANTIDADE),
       doseUomCode: product.doseUomCode ?? "",
       dosesPerPackage: numberField(product.dosesPerPackage),
       unitsPerShippingBox: numberField(product.unitsPerShippingBox),
       targetAgeGroup: product.targetAgeGroup ?? "",
       shelfLifeMonths: numberField(product.shelfLifeMonths),
-      minimumBatchQuantity: numberField(product.minimumBatchQuantity),
+      minimumBatchQuantity: toPtBrEditText(product.minimumBatchQuantity, OPCOES_QUANTIDADE),
       notes: product.notes ?? "",
     };
   }
@@ -361,12 +368,13 @@ export function useProductForm({
      * próprio campo, com o nome do campo, em vez de seguir para a API.
      */
     const ilegiveis: Record<string, string> = {};
-    const numeric = (campo: string, rotulo: string, value: string) => {
-      const trimmed = value.trim() === "" ? "" : parseDecimalInput(value);
-      if (trimmed === null) {
-        ilegiveis[campo] = mensagemDecimalInvalido(rotulo);
+    const numeric = (campo: string, rotulo: string, value: string, opcoes: NumericOptions) => {
+      const leitura = parsePtBrNumber(value, opcoes);
+      if (leitura.tipo === "invalido") {
+        ilegiveis[campo] = numericInvalidMessage(rotulo, leitura.motivo, opcoes);
         return null;
       }
+      const trimmed = leitura.tipo === "valido" ? leitura.valor : "";
       if (mode === "edit") return { value: trimmed };
       return trimmed ? { value: trimmed } : null;
     };
@@ -377,19 +385,36 @@ export function useProductForm({
     const presentationType = enumField(form.presentationType);
     const targetAgeGroup = enumField(form.targetAgeGroup);
     const doseUomCode = enumField(form.doseUomCode);
-    const capsulesPerDose = numeric("capsulesPerDose", "Cápsulas por dose", form.capsulesPerDose);
-    const doseAmount = numeric("doseAmount", "Dose", form.doseAmount);
-    const dosesPerPackage = numeric("dosesPerPackage", "Doses por embalagem", form.dosesPerPackage);
+    const capsulesPerDose = numeric(
+      "capsulesPerDose",
+      "Cápsulas por dose",
+      form.capsulesPerDose,
+      INTEIRO,
+    );
+    const doseAmount = numeric("doseAmount", "Dose", form.doseAmount, OPCOES_QUANTIDADE);
+    const dosesPerPackage = numeric(
+      "dosesPerPackage",
+      "Doses por embalagem",
+      form.dosesPerPackage,
+      INTEIRO,
+    );
     const unitsPerShippingBox = numeric(
       "unitsPerShippingBox",
       "Unidades por caixa",
       form.unitsPerShippingBox,
+      INTEIRO,
     );
-    const shelfLifeMonths = numeric("shelfLifeMonths", "Vida útil (meses)", form.shelfLifeMonths);
+    const shelfLifeMonths = numeric(
+      "shelfLifeMonths",
+      "Vida útil (meses)",
+      form.shelfLifeMonths,
+      INTEIRO,
+    );
     const minimumBatchQuantity = numeric(
       "minimumBatchQuantity",
       "Lote mínimo",
       form.minimumBatchQuantity,
+      OPCOES_QUANTIDADE,
     );
 
     // Nada sai daqui com um número ilegível: o erro pousa no campo.
@@ -787,14 +812,10 @@ options={customerOptions.map((customer) => ({
         <div className="field-grid-2">
           <div className="field field--narrow">
             <label htmlFor="product-capsules-per-dose">Cápsulas por dose</label>
-            <input
+            <IntegerField
               id="product-capsules-per-dose"
-              type="text"
-              inputMode="numeric"
               value={form.capsulesPerDose}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, capsulesPerDose: event.target.value }))
-              }
+              onChangeValue={(capsulesPerDose) => setForm((prev) => ({ ...prev, capsulesPerDose }))}
               {...fieldProps("capsulesPerDose")}
             />
             {fieldError("capsulesPerDose")}
@@ -802,15 +823,12 @@ options={customerOptions.map((customer) => ({
 
           <div className="field field--narrow">
             <label htmlFor="product-dose-amount">Dose</label>
-            <input
+            <DecimalField
               id="product-dose-amount"
-              type="text"
-              inputMode="decimal"
+              scale={CASAS_QUANTIDADE}
               placeholder="Ex.: 500"
               value={form.doseAmount}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, doseAmount: event.target.value }))
-              }
+              onChangeValue={(doseAmount) => setForm((prev) => ({ ...prev, doseAmount }))}
               {...fieldProps("doseAmount")}
             />
             {fieldError("doseAmount")}
@@ -836,14 +854,10 @@ options={customerOptions.map((customer) => ({
 
           <div className="field field--narrow">
             <label htmlFor="product-doses-per-package">Doses por embalagem</label>
-            <input
+            <IntegerField
               id="product-doses-per-package"
-              type="text"
-              inputMode="numeric"
               value={form.dosesPerPackage}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, dosesPerPackage: event.target.value }))
-              }
+              onChangeValue={(dosesPerPackage) => setForm((prev) => ({ ...prev, dosesPerPackage }))}
               {...fieldProps("dosesPerPackage")}
             />
             {fieldError("dosesPerPackage")}
@@ -851,13 +865,11 @@ options={customerOptions.map((customer) => ({
 
           <div className="field field--narrow">
             <label htmlFor="product-units-per-box">Unidades por caixa</label>
-            <input
+            <IntegerField
               id="product-units-per-box"
-              type="text"
-              inputMode="numeric"
               value={form.unitsPerShippingBox}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, unitsPerShippingBox: event.target.value }))
+              onChangeValue={(unitsPerShippingBox) =>
+                setForm((prev) => ({ ...prev, unitsPerShippingBox }))
               }
               {...fieldProps("unitsPerShippingBox")}
             />
@@ -893,14 +905,10 @@ options={customerOptions.map((customer) => ({
 
           <div className="field field--narrow">
             <label htmlFor="product-shelf-life">Vida útil (meses)</label>
-            <input
+            <IntegerField
               id="product-shelf-life"
-              type="text"
-              inputMode="numeric"
               value={form.shelfLifeMonths}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, shelfLifeMonths: event.target.value }))
-              }
+              onChangeValue={(shelfLifeMonths) => setForm((prev) => ({ ...prev, shelfLifeMonths }))}
               {...fieldProps("shelfLifeMonths")}
             />
             {fieldError("shelfLifeMonths")}
@@ -908,13 +916,12 @@ options={customerOptions.map((customer) => ({
 
           <div className="field field--narrow">
             <label htmlFor="product-minimum-batch">Lote mínimo</label>
-            <input
+            <DecimalField
               id="product-minimum-batch"
-              type="text"
-              inputMode="decimal"
+              scale={CASAS_QUANTIDADE}
               value={form.minimumBatchQuantity}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, minimumBatchQuantity: event.target.value }))
+              onChangeValue={(minimumBatchQuantity) =>
+                setForm((prev) => ({ ...prev, minimumBatchQuantity }))
               }
               {...fieldProps("minimumBatchQuantity")}
             />

@@ -18,6 +18,10 @@ import {
 import { formatDate } from "../../lib/dates";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
+import { exigirInteiroOpcional } from "../../lib/integer-input";
+import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import { CASAS_VALOR_INDUSTRIAL } from "../../lib/numeric-scales";
+import { DecimalField, IntegerField, MoneyField } from "../../components/NumericField";
 import { ContextHelp } from "../../components/help";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { helpTopics } from "../../help/help-content";
@@ -51,7 +55,7 @@ export function IndustrialResourceDetailPage() {
     getIndustrialResource(id)
       .then((result) => {
         setResource(result);
-        setPowerKw(result.powerKw ?? "");
+        setPowerKw(toPtBrEditText(result.powerKw, { scale: CASAS_VALOR_INDUSTRIAL }));
         setCapacidade(result.capacityQuantity === null ? "" : String(result.capacityQuantity));
       })
       .catch((err: unknown) =>
@@ -187,13 +191,10 @@ export function IndustrialResourceDetailPage() {
               <div className="field-grid-2">
                 <div className="field">
                   <label htmlFor="resource-capacity">Quantidade disponível para planejamento</label>
-                  <input
+                  <IntegerField
                     id="resource-capacity"
-                    type="number"
-                    min={1}
-                    step={1}
                     value={capacidade}
-                    onChange={(event) => setCapacidade(event.target.value)}
+                    onChangeValue={setCapacidade}
                     placeholder="Deixe vazio se ainda não souber"
                   />
                   <span className="field__hint">
@@ -214,7 +215,11 @@ export function IndustrialResourceDetailPage() {
                         updateIndustrialResource(resource.id, {
                           // Vazio volta para "não cadastrada" — é resposta
                           // legítima, e diferente de não mexer no campo.
-                          capacityQuantity: capacidade.trim() === "" ? null : Number(capacidade),
+                          // A faixa (1 a 100.000) é da API, que responde na faixa de erro.
+                          capacityQuantity: exigirInteiroOpcional(
+                            capacidade,
+                            "Quantidade disponível para planejamento",
+                          ),
                         }),
                       )
                     }
@@ -231,12 +236,11 @@ export function IndustrialResourceDetailPage() {
               <div className="field-grid-2">
                 <div className="field">
                   <label htmlFor="resource-power">Potência (kW)</label>
-                  <input
+                  <DecimalField
                     id="resource-power"
-                    type="text"
-                    inputMode="decimal"
+                    scale={CASAS_VALOR_INDUSTRIAL}
                     value={powerKw}
-                    onChange={(event) => setPowerKw(event.target.value)}
+                    onChangeValue={setPowerKw}
                     placeholder="Deixe vazio se não souber"
                   />
                   <span className="field__hint">
@@ -255,7 +259,9 @@ export function IndustrialResourceDetailPage() {
                       // Vazio continua sendo "não sei" e limpa o campo; só o
                       // que foi digitado precisa ser legível.
                       updateIndustrialResource(resource.id, {
-                        powerKw: exigirDecimalOpcional(powerKw, "Potência (kW)"),
+                        powerKw: exigirDecimalOpcional(powerKw, "Potência (kW)", {
+                          scale: CASAS_VALOR_INDUSTRIAL,
+                        }),
                       }),
                     )
                   }
@@ -321,12 +327,11 @@ export function IndustrialResourceDetailPage() {
               <div className="field-grid-2">
                 <div className="field">
                   <label htmlFor="rate-value">Valor (R$ / {rateUomLabel})</label>
-                  <input
+                  <MoneyField
                     id="rate-value"
-                    type="text"
-                    inputMode="decimal"
+                    scale={CASAS_VALOR_INDUSTRIAL}
                     value={rateValue}
-                    onChange={(event) => setRateValue(event.target.value)}
+                    onChangeValue={setRateValue}
                   />
                 </div>
                 <div className="field">
@@ -348,7 +353,7 @@ export function IndustrialResourceDetailPage() {
                   onClick={() =>
                     void run(async () => {
                       await createIndustrialResourceRate(resource.id, {
-                        rateValue: exigirDecimal(rateValue, "Valor"),
+                        rateValue: exigirDecimal(rateValue, "Valor", { scale: CASAS_VALOR_INDUSTRIAL }),
                         ...(effectiveAt ? { effectiveAt } : {}),
                       });
                       setRateValue("");

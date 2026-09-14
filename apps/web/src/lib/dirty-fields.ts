@@ -1,5 +1,6 @@
 import { Decimal } from "@veridi/shared";
-import { parseDecimalInput } from "./decimal-input";
+import { parsePtBrNumber } from "./numeric-ptbr";
+import { CASAS_QUANTIDADE } from "./numeric-scales";
 
 /**
  * Normalização de campo para responder "há alteração pendente?".
@@ -7,13 +8,19 @@ import { parseDecimalInput } from "./decimal-input";
  * A guarda de alterações não salvas compara o documento na tela com o
  * documento de referência. Comparar o texto cru gera pergunta onde não há
  * perda — o servidor devolve `1000.000000` e a pessoa redigita `1000`, devolve
- * `null` e o campo vazio é `""`, devolve `0,85` e o contrato fala `0.85`. Uma
- * guarda que pergunta por isso é ruído, e ruído ensina a ignorar a pergunta
- * que importa.
+ * `null` e o campo vazio é `""`, o campo mostra `250,5` e o servidor guarda
+ * `250.5`. Uma guarda que pergunta por isso é ruído, e ruído ensina a ignorar a
+ * pergunta que importa.
  *
  * Normalizar não é afrouxar: `1000` e `1000,5` continuam diferentes, e texto
  * ilegível continua diferente de tudo — inclusive de si mesmo escrito de outro
  * jeito, porque o que a tela não sabe ler ela não sabe comparar.
+ *
+ * Dois lados, duas leituras (PTBR-NUMERIC-INPUT-ROLLOUT-01): o TEXTO DO CAMPO
+ * se lê em português, com o parser dos campos numéricos; o VALOR DA API já é
+ * canônico e se lê como `Decimal`. Passar valor da API pela leitura do campo
+ * erraria o caso que o campo existe para barrar: `1.234` da API é um vírgula
+ * duzentos e trinta e quatro, e escrito no campo seria ambíguo.
  */
 
 /** Texto de campo livre. Ausência e vazio são a mesma coisa: não informado. */
@@ -23,7 +30,14 @@ export function textoComparavel(valor: string | null | undefined): string | null
 }
 
 /**
- * Decimal digitado ou vindo do servidor, na MESMA forma canônica.
+ * Decimal DIGITADO — o texto de `DecimalField`, `MoneyField` ou `PercentField`
+ * (ou o texto que o formulário montou da API com `toPtBrEditText`) — em forma
+ * canônica.
+ *
+ * A leitura é a do campo, com o teto de casas do sistema (as doze da
+ * quantidade): o campo nunca guarda mais casas que o próprio `scale`, então o
+ * teto não recusa texto que o campo aceitou. `1.234` sozinho é ambíguo no
+ * campo decimal e aqui também.
  *
  * Vazio é `null`. Ilegível vira uma marca que só é igual a si mesma: o que
  * está na tela não é o que está gravado, e isso é alteração pendente por
@@ -32,15 +46,32 @@ export function textoComparavel(valor: string | null | undefined): string | null
 export function decimalComparavel(valor: string | null | undefined): string | null {
   const limpo = (valor ?? "").trim();
   if (limpo === "") return null;
-  const lido = parseDecimalInput(limpo);
-  if (lido === null) return `ilegível:${limpo}`;
-  return new Decimal(lido).toString();
+  const leitura = parsePtBrNumber(limpo, { scale: CASAS_QUANTIDADE });
+  if (leitura.tipo !== "valido") return `ilegível:${limpo}`;
+  return new Decimal(leitura.valor).toString();
 }
 
-/** Inteiro de contagem — partes, parcelas. Mesma regra do decimal. */
+/**
+ * Decimal VINDO DA API — já canônico (`"250.5"`, `"1000.000000000000"`) — na
+ * mesma forma de `decimalComparavel`. Vazio e ausente são `null`.
+ */
+export function decimalDaApiComparavel(valor: string | null | undefined): string | null {
+  const limpo = (valor ?? "").trim();
+  if (limpo === "") return null;
+  try {
+    return new Decimal(limpo).toString();
+  } catch {
+    return `ilegível:${limpo}`;
+  }
+}
+
+/** Inteiro de contagem — partes, parcelas: número da API ou texto do `IntegerField`. */
 export function inteiroComparavel(valor: string | number | null | undefined): string | null {
   if (typeof valor === "number") return Number.isFinite(valor) ? String(valor) : null;
-  return decimalComparavel(valor);
+  const limpo = (valor ?? "").trim();
+  if (limpo === "") return null;
+  const leitura = parsePtBrNumber(limpo, { scale: 0 });
+  return leitura.tipo === "valido" ? leitura.valor : `ilegível:${limpo}`;
 }
 
 /**

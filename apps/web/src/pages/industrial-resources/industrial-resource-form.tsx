@@ -9,8 +9,12 @@ import {
   usageUomForResourceType,
 } from "@veridi/shared";
 import { FormSection } from "../../components/FormSection";
+import { DecimalField, IntegerField } from "../../components/NumericField";
 import { createIndustrialResource } from "../../lib/industrial-resources-api";
 import { ApiValidationError } from "../../lib/api-errors";
+import { erroDoDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
+import { exigirInteiroOpcional } from "../../lib/integer-input";
+import { CASAS_VALOR_INDUSTRIAL } from "../../lib/numeric-scales";
 
 /**
  * O formulário de Recurso industrial, uma vez só.
@@ -55,19 +59,33 @@ export function useIndustrialResourceForm({
     setSaving(true);
     setError(null);
     setFieldErrors({});
+    const erroDaPotencia =
+      form.type === "EQUIPMENT"
+        ? erroDoDecimal("Potência (kW)", form.powerKw, { scale: CASAS_VALOR_INDUSTRIAL })
+        : null;
+    if (erroDaPotencia) {
+      // Texto que não vira número fica no campo, como a recusa do servidor.
+      setFieldErrors({ powerKw: erroDaPotencia });
+      setError("Corrija os campos destacados.");
+      setSaving(false);
+      return;
+    }
     try {
+      const powerKw =
+        form.type === "EQUIPMENT"
+          ? exigirDecimalOpcional(form.powerKw, "Potência (kW)", { scale: CASAS_VALOR_INDUSTRIAL })
+          : null;
+      const capacityQuantity = isCapacityResourceType(form.type)
+        ? exigirInteiroOpcional(form.capacityQuantity, "Quantidade disponível para planejamento")
+        : null;
       const created = await createIndustrialResource({
         name: form.name.trim(),
         type: form.type,
         ...(form.description.trim() ? { description: form.description.trim() } : {}),
         // Potência só vai quando informada — desconhecida continua desconhecida.
-        ...(form.type === "EQUIPMENT" && form.powerKw.trim()
-          ? { powerKw: form.powerKw.trim() }
-          : {}),
+        ...(powerKw !== null ? { powerKw } : {}),
         // Energia não ocupa capacidade; vazio mantém "não cadastrada".
-        ...(isCapacityResourceType(form.type) && form.capacityQuantity.trim()
-          ? { capacityQuantity: Number(form.capacityQuantity.trim()) }
-          : {}),
+        ...(capacityQuantity !== null ? { capacityQuantity } : {}),
       });
       onSaved(created);
     } catch (err) {
@@ -184,14 +202,11 @@ export function IndustrialResourceFormFields({
           {isCapacityResourceType(form.type) && (
             <div className="field">
               <label htmlFor="resource-capacity">Quantidade disponível para planejamento</label>
-              <input
+              <IntegerField
                 id="resource-capacity"
-                type="number"
-                min={1}
-                step={1}
                 value={form.capacityQuantity}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, capacityQuantity: event.target.value }))
+                onChangeValue={(capacityQuantity) =>
+                  setForm((prev) => ({ ...prev, capacityQuantity }))
                 }
                 placeholder="Deixe vazio se ainda não souber"
                 {...fieldProps("capacityQuantity")}
@@ -207,14 +222,11 @@ export function IndustrialResourceFormFields({
           {form.type === "EQUIPMENT" && (
             <div className="field">
               <label htmlFor="resource-power">Potência (kW)</label>
-              <input
+              <DecimalField
                 id="resource-power"
-                type="text"
-                inputMode="decimal"
+                scale={CASAS_VALOR_INDUSTRIAL}
                 value={form.powerKw}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, powerKw: event.target.value }))
-                }
+                onChangeValue={(powerKw) => setForm((prev) => ({ ...prev, powerKw }))}
                 placeholder="Deixe vazio se não souber"
                 {...fieldProps("powerKw")}
               />

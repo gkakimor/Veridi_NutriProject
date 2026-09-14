@@ -124,15 +124,16 @@ describe("preço unitário da OC preserva a casa oculta na tela", () => {
     abrir();
     await screen.findByRole("heading", { level: 1, name: "OC-000001" });
 
-    expect(precoDe("MP-000001").value).toBe(PRECO_8_CASAS);
-    expect(precoDe("MP-000001").value).not.toBe("4.0532");
+    // Em português, com as oito casas: a máscara de quatro não aparece nem no campo.
+    expect(precoDe("MP-000001").value).toBe("4,05318764");
+    expect(precoDe("MP-000001").value).not.toBe("4,0532");
   });
 
   it("salvar sem tocar no preço devolve 4,05318764 — nunca 4,0532", async () => {
     const user = userEvent.setup();
     abrir();
     await screen.findByRole("heading", { level: 1, name: "OC-000001" });
-    await waitFor(() => expect(precoDe("MP-000001").value).toBe(PRECO_8_CASAS));
+    await waitFor(() => expect(precoDe("MP-000001").value).toBe("4,05318764"));
     vi.mocked(updatePurchaseOrder).mockResolvedValue(ordem());
 
     // A alteração é outra: o preço chega ao salvamento como abriu.
@@ -175,6 +176,29 @@ describe("preço unitário da OC preserva a casa oculta na tela", () => {
 
     await waitFor(() => expect(updatePurchaseOrder).toHaveBeenCalled());
     expect(payloadDoSalvamento().lines[0]!.unitPrice).toBe("0.00000001");
+  });
+
+  it("a nona casa do preço não entra; colar 1.234,56 na quantidade vai 1234.56", async () => {
+    const user = userEvent.setup();
+    abrir();
+    await screen.findByRole("heading", { level: 1, name: "OC-000001" });
+
+    // PTBR-NUMERIC-INPUT-ROLLOUT-01: preço unitário da OC tem as oito casas da coluna.
+    fireEvent.change(precoDe("MP-000001"), { target: { value: "4,053187641" } });
+    expect(precoDe("MP-000001").value).toBe("4,05318764");
+
+    const quantidade = screen.getByRole("textbox", { name: "Quantidade de MP-000001" }) as HTMLInputElement;
+    fireEvent.change(quantidade, { target: { value: "" } });
+    await user.click(quantidade);
+    await user.paste("1.234,56");
+    vi.mocked(updatePurchaseOrder).mockResolvedValue(ordem());
+    await user.click(screen.getByRole("button", { name: /Salvar rascunho/ }));
+
+    await waitFor(() => expect(updatePurchaseOrder).toHaveBeenCalled());
+    expect(payloadDoSalvamento().lines[0]).toMatchObject({
+      orderedQuantity: "1234.56",
+      unitPrice: PRECO_8_CASAS,
+    });
   });
 
   it("OC confirmada: a leitura é formatada, e não existe caminho de volta", async () => {

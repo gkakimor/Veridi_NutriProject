@@ -3,9 +3,10 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import type { MaterialReservationLineDTO, ProductionOrderDTO } from "@veridi/shared";
 import { addExtraReservation } from "../lib/production-orders-api";
-import { exigirDecimal } from "../lib/decimal-field";
-import { parseDecimalInput } from "../lib/decimal-input";
+import { decimalLegivel, exigirDecimal } from "../lib/decimal-field";
+import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../lib/numeric-scales";
 import { ModalDialog } from "./ModalDialog";
+import { DecimalField } from "./NumericField";
 
 interface ExtraConsumptionDialogProps {
   productionOrderId: string;
@@ -40,9 +41,9 @@ export function ExtraConsumptionDialog({
   const [error, setError] = useState<string | null>(null);
 
   const livre = Number(line.lotFreeQuantity ?? "0");
-  // Mesma leitura da vírgula em toda a web: um separador é casa decimal,
-  // dois não se adivinha. `null` aqui é "ainda não dá para comparar".
-  const digitado = parseDecimalInput(quantity);
+  // A leitura dos campos numéricos, a mesma da gravação. `null` aqui é
+  // "ainda não dá para comparar".
+  const digitado = decimalLegivel(quantity, OPCOES_QUANTIDADE);
   const pedido = digitado === null ? Number.NaN : Number(digitado);
   /* Só vale como excesso quando o lote é o mesmo — em outro lote o teto é
      o saldo de lá, que esta tela ainda não conhece. */
@@ -54,7 +55,11 @@ export function ExtraConsumptionDialog({
     setError(null);
     try {
       const atualizada = await addExtraReservation(productionOrderId, line.id, {
-        quantity: exigirDecimal(quantity, `Quantidade adicional (${line.unitCode})`),
+        quantity: exigirDecimal(
+          quantity,
+          `Quantidade adicional (${line.unitCode})`,
+          OPCOES_QUANTIDADE,
+        ),
         reason: reason.trim(),
         ...(outroLote && lotCode.trim() ? { lotCode: lotCode.trim() } : {}),
       });
@@ -123,13 +128,12 @@ export function ExtraConsumptionDialog({
           <label htmlFor="extra-quantity">
             Quantidade adicional ({line.unitCode}) <span className="req">*</span>
           </label>
-          <input
+          <DecimalField
             id="extra-quantity"
-            type="text"
-            inputMode="decimal"
+            scale={CASAS_QUANTIDADE}
             placeholder="0"
             value={quantity}
-            onChange={(event) => setQuantity(event.target.value)}
+            onChangeValue={setQuantity}
             /* Liga o erro ao campo: sem isto a mensagem aparece na tela e nao
                chega a quem le por leitor de tela. Mesmo desenho de
                `customer-form`. */

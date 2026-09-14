@@ -240,18 +240,19 @@ describe("Recebimento — a tela antecipa o que já sabe (F-06-1)", () => {
     await waitFor(() => expect(botaoConfirmar().disabled).toBe(true));
   });
 
-  it("texto ilegível — vírgula dupla, sinal negativo — nomeia o formato aceito", async () => {
+  it("sinal e vírgula dupla nem entram; o ambíguo nomeia o formato aceito", async () => {
     const usuario = userEvent.setup();
     renderizar();
 
     const campo = await encontrarCampo("MP-000120");
-    await usuario.type(campo, "-5");
-    expect(await screen.findByText(/valor numérico válido/)).toBeTruthy();
-    await waitFor(() => expect(botaoConfirmar().disabled).toBe(true));
+    await usuario.type(campo, "-5,,");
+    // O sinal e a segunda vírgula não entram (PTBR-NUMERIC-INPUT-ROLLOUT-01).
+    expect(campo).toHaveValue("5,");
 
     await usuario.clear(campo);
-    await usuario.type(campo, "1.234,5");
-    expect(await screen.findByText(/valor numérico válido/)).toBeTruthy();
+    await usuario.type(campo, "1.234");
+    expect(await screen.findByText(/pode ser milhar ou decimal/)).toBeTruthy();
+    await waitFor(() => expect(botaoConfirmar().disabled).toBe(true));
   });
 
   it("zero não recebe a linha, e a tela diz por quê", async () => {

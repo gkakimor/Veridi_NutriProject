@@ -35,6 +35,13 @@ import { TemplateDiff } from "./TemplateDiff";
 import { formatDateTime } from "../../lib/dates";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
+import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import {
+  CASAS_QUANTIDADE,
+  OPCOES_PERCENTUAL_TECNICO,
+  OPCOES_QUANTIDADE,
+} from "../../lib/numeric-scales";
+import { DecimalField } from "../../components/NumericField";
 import {
   assinaturaDoDocumento,
   decimalComparavel,
@@ -79,22 +86,41 @@ interface LinhaEditavel extends FormulationTemplateComponentInput {
  * A linha carrega TUDO o que o componente é — salvar recria os componentes, e
  * o que não viesse aqui voltava ao padrão do banco: base por dose virava base
  * da fórmula, e pureza, overage e notas sumiam.
+ *
+ * Números no texto do campo, em português (`toPtBrEditText`): é o que os
+ * campos editam e o que a pendência compara.
  */
 function linhasDaVersao(version: FormulationTemplateVersionDTO): LinhaEditavel[] {
   return version.components.map((component, index) => ({
     chave: `${component.id}-${index}`,
     itemId: component.itemId,
-    quantity: component.quantity,
+    quantity: toPtBrEditText(component.quantity, OPCOES_QUANTIDADE),
     unitCode: component.unitCode,
     basis: component.basis,
     supplyResponsibility: component.supplyResponsibility,
-    purityPercentApplied: component.purityPercentApplied,
-    overagePercent: component.overagePercent,
+    ...percentuaisEmTexto(component),
     quantityMode: component.quantityMode,
     applyPurityAdjustment: component.applyPurityAdjustment,
     applyOverageAdjustment: component.applyOverageAdjustment,
     notes: component.notes,
   }));
+}
+
+/** Pureza e overage da API no texto do campo; ausente continua ausente. */
+function percentuaisEmTexto(componente: {
+  purityPercentApplied: string | null;
+  overagePercent: string | null;
+}): { purityPercentApplied: string | null; overagePercent: string | null } {
+  return {
+    purityPercentApplied:
+      componente.purityPercentApplied === null
+        ? null
+        : toPtBrEditText(componente.purityPercentApplied, OPCOES_PERCENTUAL_TECNICO),
+    overagePercent:
+      componente.overagePercent === null
+        ? null
+        : toPtBrEditText(componente.overagePercent, OPCOES_PERCENTUAL_TECNICO),
+  };
 }
 
 /**
@@ -281,7 +307,7 @@ export function FormulationTemplateDetailPage() {
         lido.current = {
           nome: result.name,
           descricao: result.description ?? "",
-          base: rascunho?.basisQuantity ?? anterior.base,
+          base: rascunho ? toPtBrEditText(rascunho.basisQuantity, OPCOES_QUANTIDADE) : anterior.base,
           unidade: rascunho?.outputUnitCode ?? anterior.unidade,
           componentes: rascunho ? assinaturaDosComponentes(novasLinhas) : anterior.componentes,
         };
@@ -290,7 +316,8 @@ export function FormulationTemplateDetailPage() {
           atual === anterior.descricao ? (result.description ?? "") : atual,
         );
         if (rascunho) {
-          setBase((atual) => (atual === anterior.base ? rascunho.basisQuantity : atual));
+          const baseLida = toPtBrEditText(rascunho.basisQuantity, OPCOES_QUANTIDADE);
+          setBase((atual) => (atual === anterior.base ? baseLida : atual));
           setUnidade((atual) => (atual === anterior.unidade ? rascunho.outputUnitCode : atual));
           setLinhas((atual) =>
             assinaturaDosComponentes(atual) === anterior.componentes ? novasLinhas : atual,
@@ -535,7 +562,7 @@ export function FormulationTemplateDetailPage() {
     canEdit &&
     assinaturaDoRascunho(base, unidade, linhas) !==
       assinaturaDoRascunho(
-        rascunhoDoServidor.basisQuantity,
+        toPtBrEditText(rascunhoDoServidor.basisQuantity, OPCOES_QUANTIDADE),
         rascunhoDoServidor.outputUnitCode,
         linhasDaVersao(rascunhoDoServidor),
       );
@@ -605,7 +632,9 @@ export function FormulationTemplateDetailPage() {
               <td className="is-numeric">{formatQuantity(component.quantity)}</td>
               <td>{component.unitCode}</td>
               <td>{SUPPLY_RESPONSIBILITY_LABELS[component.supplyResponsibility]}</td>
-              <td>{resumoDosAjustes(ajustesDoModelo(component))}</td>
+              <td>
+                {resumoDosAjustes(ajustesDoModelo({ ...component, ...percentuaisEmTexto(component) }))}
+              </td>
             </tr>
           ))}
           {version.components.length === 0 && (
@@ -764,13 +793,12 @@ export function FormulationTemplateDetailPage() {
                   Base da formulação
                   <Dica id="producao.template.base" />
                 </label>
-                <input
+                <DecimalField
                   id="template-base"
-                  type="text"
-                  inputMode="decimal"
+                  scale={CASAS_QUANTIDADE}
                   disabled={!editavel}
                   value={base}
-                  onChange={(event) => setBase(event.target.value)}
+                  onChangeValue={setBase}
                 />
               </div>
               <div className="field field--narrow">
@@ -846,16 +874,13 @@ export function FormulationTemplateDetailPage() {
                           />
                         </td>
                         <td className="is-numeric">
-                          <input
-                            type="text"
-                            inputMode="decimal"
+                          <DecimalField
+                            scale={CASAS_QUANTIDADE}
                             disabled={!editavel}
                             value={linha.quantity}
-                            onChange={(event) =>
+                            onChangeValue={(quantity) =>
                               setLinhas((atual) =>
-                                atual.map((l, i) =>
-                                  i === index ? { ...l, quantity: event.target.value } : l,
-                                ),
+                                atual.map((l, i) => (i === index ? { ...l, quantity } : l)),
                               )
                             }
                           />
@@ -1035,21 +1060,23 @@ export function FormulationTemplateDetailPage() {
                         "rascunho",
                         () =>
                           updateFormulationTemplateVersion(rascunho.id, {
-                            basisQuantity: exigirDecimal(base, "Base da formulação"),
+                            basisQuantity: exigirDecimal(base, "Base da formulação", OPCOES_QUANTIDADE),
                             outputUnitCode: unidade,
                             components: linhas
                               .filter((linha) => linha.itemId && linha.quantity)
                               .map(({ chave: _chave, ...resto }) => ({
                                 ...resto,
-                                quantity: exigirDecimal(resto.quantity, "Quantidade"),
+                                quantity: exigirDecimal(resto.quantity, "Quantidade", OPCOES_QUANTIDADE),
                                 // Vazio = não informado (null), nunca 0% nem 100%.
                                 purityPercentApplied: exigirDecimalOpcional(
                                   resto.purityPercentApplied ?? "",
                                   "Pureza %",
+                                  OPCOES_PERCENTUAL_TECNICO,
                                 ),
                                 overagePercent: exigirDecimalOpcional(
                                   resto.overagePercent ?? "",
                                   "Overage %",
+                                  OPCOES_PERCENTUAL_TECNICO,
                                 ),
                               })),
                           }),
