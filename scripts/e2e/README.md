@@ -76,18 +76,16 @@ existem para impedir:
 | `oferta-de-fornecedor-vira-custo.mjs` | dois homologados sem preferencial deixam o custo desconhecido, o preferencial define a referência sem escolher o mais barato, e oferta nova exige vigência (COST-SOURCE-01) |
 | `private-label-golden-path.mjs` | o negócio inteiro numa base que só tem usuário e unidades, pela interface: cadastros; custo dos materiais (Σ quantidade × custo, e componente sem custo nunca vira total); estrutura, cálculo, CMV e precificação; projeto, orçamento, pedido e pedido direto; plano de atendimento, sugestão de compra, OCs, recebimento parcial e completo com o dia do lote no dia comercial; qualidade; OP com número oficial, separação por leitura do lote, consumo reconciliado, produção; PA liberado, reservado e expedido do lote real; faturamento fechando em bruto, desconto, ajuste e total contra o acordado. Checkpoint por etapa, retomável com `--run` e `--desde` (FAST-DEVELOPMENT-RESET-02) |
 
-### Massa: quem ainda depende do corpus
+### Massa e a base real
 
-Sete suítes procuram código fixo do corpus da Veridi e não rodam numa base
-recriada do zero: `cancelamento-de-pedido-com-op-cancelada`,
-`custo-estimado-acompanha-o-salvamento`, `disponibilidade-comercial-explicada`,
-`formulacao-quantidade-fisica-e-custo`, `formacao-de-preco-do-novo-orcamento`,
-`ordem-de-producao-produto-fora-da-primeira-pagina` e `recebimento-validacao-viva`
-(esta passa por coincidência quando outra suíte já criou `FOR-000001` e
-`MP-000001`). Três saem sem avaliar quando não há PA disponível no DEV —
-`desconto-do-pedido-chega-ao-faturamento`, `entregas-programadas-do-pedido` e
-`expedicao-geral-entre-entregas`. Todas ferem a regra 1; o item é
-E2E-CORPUS-MASS-01 no BACKLOG.
+Desde 2026-09-14 as suítes têm base própria com a carga inicial real da Veridi:
+`pnpm e2e:baseline:rebuild` (`veridi_e2e_baseline`). A regra de massa proposta e o
+mapa de cada suíte contra essa base estão em
+[`docs/E2E_STRATEGY.md`](../../docs/E2E_STRATEGY.md). Resumo: 10 com massa própria;
+2 que dependiam de massa que a base agora tem; 7 que leem código fixo ou saldo que
+a base não tem (três sairiam "SEM MASSA", que não é verde); 10 a reescrever — 9
+pelo fluxo antigo do Orçamento (E2E-QUOTE-PAGE-FLOW-01) e a de `PROD-000214`. Os
+itens são E2E-CORPUS-MASS-01 e E2E-QUOTE-PAGE-FLOW-01 no BACKLOG.
 
 ## `lib/`
 

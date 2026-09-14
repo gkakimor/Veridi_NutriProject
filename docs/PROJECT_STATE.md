@@ -4472,6 +4472,44 @@ migrations), 25 sequences no mesmo ponto`, banco descartável removido. Focados:
 `migration-order`, `migration-prefix`, `schema-fk-actions` (32) e `faixas-de-teste` (5); `pnpm typecheck`. Sem full
 test, E2E nem fresh (FAST). PROD e `release/prod` intocados.
 
+## DEV com a carga real e base E2E reproduzível (DEV-REALDATA-BASELINE-RESET-01, 2026-09-14)
+
+Decisão do PO: o DEV deixa de ser resíduo de teste e passa a ser a carga inicial que a Veridi recebeu em PROD —
+**DEV_REALDATA_BASELINE** — e as E2E ganham base própria reconstruível. PROD, Railway, `release/prod` e o backup de
+PROD intocados; unit e integração seguem nos bancos `*_test`. Nenhuma E2E reescrita ou executada.
+
+**Limpeza local.** Antes: `veridi_dev` com resíduo (685 usuários, 943 sessões, 926 itens),
+`veridi_apply_check_1789012909474` órfão de 2026-09-10, dois worktrees sem dono (limpos, já na `main`), 143 branches
+locais, 13 dumps de DEV antigos, 2.078 anexos órfãos, `handoff/e2e-run.json`, checkpoint do golden path e log velho.
+Saíram o banco órfão, os dois worktrees, as 141 branches já ancestrais da `main` (fica `feat/contextual-help-kit`,
+com commit fora dela), os dumps antigos (fica o do reset) e os artefatos. Preservados: pacote, pendências e provas da
+carga, `handoff/migracao-producao`, backups de PROD, planilhas e docs.
+
+**DEV_REALDATA_BASELINE.** `local-db-reset.mjs --confirmar` (dump antes, 74 migrations, `seed-infra` com as 6
+unidades da migration e o ADMIN local) e o importador oficial com o pacote aplicado em PROD
+(`pacote-carga-final.json`, identidade `db8bdf94…`), sobre cópia do corpus em
+`.local-data/veridi/carga-inicial/dev-baseline/` — CSVs e overrides iguais aos da carga de PROD por SHA-256. O PLAN
+saiu idêntico ao que antecedeu o APPLY de PROD em fonte, ações, findings, pacote e `readyForLoad`; APPLY em 6 s;
+VERIFY 10/10. Depois do APPLY, `findings.csv` e os sete de-para saem byte a byte iguais aos de PROD: mesmos códigos do
+ERP para as mesmas chaves legadas. Contagens: 76 clientes, 113 fornecedores, 816 itens (643 + 173 PA), 173 produtos,
+161 formulações (1.292 componentes), 182 projetos, 2 orçamentos legados, 721 item × fornecedor, 773 ofertas, 1.233
+eventos de homologação, 6 unidades e 1 usuário — iguais a PROD pós-carga em 70 dos 76 models; os outros seis são dado
+que PROD tem fora da carga (usuários, sessões, preferência, 1 Modelo de Formulação e o ORC-000003 criado por usuário).
+Amostra contra pacote e corpus (5 clientes, 5 fornecedores, 10 itens, 5 produtos, 3 formulações, 3 projetos): 96
+conferências, 0 divergência; nenhum nome com "teste", "homologação", "importado" ou alias.
+
+**E2E_BASELINE_REBUILD.** `pnpm e2e:baseline:rebuild` (`scripts/e2e-baseline-rebuild.mjs`): drop → create →
+migrations → ADMIN → VALIDATE → PLAN → APPLY → VERIFY em `veridi_e2e_baseline`, no servidor e com a credencial da
+`.env`, só encadeando os comandos oficiais. A guarda recusa antes de qualquer efeito servidor não local, nome sem
+`e2e_baseline`, o banco da `.env` e marca de produção (`scripts/e2e-baseline-rebuild.test.ts`, 12 testes). Duas
+rodadas de 18 s, idênticas entre si e ao `veridi_dev` nos 76 models. Como usar, a regra de massa proposta e o mapa das
+29 suítes contra a base: [`E2E_STRATEGY.md`](E2E_STRATEGY.md).
+
+**Validação.** API 3333 e web 5173 no ar contra o DEV novo, sem reiniciar. Smoke sem gravar (todo não-GET abortado)
+em Painel, Clientes, Fornecedores, Itens, Produtos, Formulações, Projetos e Orçamentos: dado real, 0 resposta 4xx/5xx,
+0 erro de console. Clientes abre em 75 pelo filtro de situação comercial ativa, e Orçamentos em "em aberto" vazio —
+os 2 legados são ARCHIVED; "Ver todos" mostra os dois.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
@@ -4546,42 +4584,42 @@ real do cliente (#7, #11). Roteiro em
 
 ## DEV
 
-Banco local `veridi_dev`. Recriado pelo caminho oficial em 2026-09-11
-(FAST-DEVELOPMENT-RESET-02) — `drop/create` + as 61 migrations + seed de
-infraestrutura — **sem** o corpus da Veridi: as cargas grandes ficam para uma
-rodada própria, decidida pelo PO. A 62ª migration (`customer_tax_profile`) e a
-63ª (`pricing_template_flex`) entraram por `pnpm db:migrate`, e a 64ª
-(`cost_resource_count`) e a 65ª (`user_preferences`) também. Contém só massa carimbada — o último golden path
-e as E2E focadas.
+Banco local `veridi_dev` = **DEV_REALDATA_BASELINE** desde 2026-09-14 (DEV-REALDATA-BASELINE-RESET-01): as 74
+migrations, o ADMIN local do `seed-infra` e a carga inicial que PROD recebeu — mesmo pacote, mesmos códigos do ERP,
+mesmas contagens de negócio. Estoque, OP, pedido e custo real seguem vazios: é o que a Veridi ainda não lançou.
 
-Caminho canônico, nesta ordem (os passos 2 a 4 só quando o PO pedir a carga):
+Reconstruir, nesta ordem, no Git Bash e na raiz. `W` é uma pasta de trabalho com cópia de `csv/`, `overrides/` e
+`cmv-product-overrides.csv` de `../.local-data/veridi/` (o importador grava plano, findings e de-para ao lado dos
+CSVs); `P` é `../.local-data/veridi/carga-inicial/pacote-carga-final.json`, em caminho absoluto:
 
-1. `pnpm exec dotenv -e .env -- node scripts/local-db-reset.mjs --confirmar` —
-   no Git Bash. No PowerShell 5.1 o `--` é consumido, o `dotenv-cli` come o
-   `--confirmar` e o script cai em simulação sem alterar nada
-2. `pnpm veridi:import:validate` → `:plan` → `:apply -- --apply` → `:verify`
-3. `pnpm veridi:market-reference -- --apply`
-4. `pnpm veridi:examples -- --apply`
+1. `pnpm exec dotenv -e .env -- node scripts/local-db-reset.mjs --confirmar` — dump, drop/create, migrations e
+   `seed-infra`. No PowerShell 5.1 o `--` é consumido e o script cai em simulação sem alterar nada
+2. `VERIDI_CORPUS_DIR=$W/csv pnpm veridi:import:validate`
+3. `VERIDI_CORPUS_DIR=$W/csv pnpm veridi:import:plan -- --devolucao=$P`
+4. `VERIDI_CORPUS_DIR=$W/csv pnpm veridi:import:apply -- --apply --devolucao=$P`
+5. `VERIDI_CORPUS_DIR=$W/csv pnpm veridi:import:verify`
 
-Nunca `db push`, nunca edição manual de `_prisma_migrations`. Runbook do
-importador em [`VERIDI_MIGRATION.md`](VERIDI_MIGRATION.md). As suítes da API
-e de scripts escrevem em `veridi_dev_test`, não aqui — o corpus que o
-`importer.test.ts` grava inclusive (TEST-SUPPORT-ISOLATION-WAVE-01 e
-TEST-SCRIPTS-DB-ISOLATION-01).
+A pasta da rodada de 2026-09-14 é `.local-data/veridi/carga-inicial/dev-baseline/`, com logs, contagens e a
+comparação com PROD. Referência de mercado e cargas de exemplo (`veridi:market-reference`, `veridi:examples`) ficam
+fora: PROD não as recebeu.
+
+Nunca `db push`, nunca edição manual de `_prisma_migrations`. Runbook do importador em
+[`VERIDI_MIGRATION.md`](VERIDI_MIGRATION.md). As suítes da API e de scripts escrevem em `<banco>_test`, não aqui
+(TEST-SUPPORT-ISOLATION-WAVE-01 e TEST-SCRIPTS-DB-ISOLATION-01); as E2E ganharam a `veridi_e2e_baseline`
+(`pnpm e2e:baseline:rebuild`), ainda não adotada pelas suítes.
 
 ## Produção
 
-Railway, deploy automático da `main`. **Zerada de negócio em 2026-09-11**
-(FAST-DEVELOPMENT-RESET-02): só os 6 usuários, as sessões e o catálogo de
-unidades; a numeração de negócio recomeça em 000001 e a da OP em 001. Nenhum
-dado real subiu ainda. Implantação em [`DEPLOY.md`](DEPLOY.md); limpeza de
-produção e prova de backup em `scripts/maintenance/`.
+Railway; desde 2026-09-14 18:04Z publica só a partir de `release/prod` — push na `main` não troca PROD.
+**Zerada de negócio em 2026-09-11** (FAST-DEVELOPMENT-RESET-02) e, **em 2026-09-14, carga inicial da Veridi**
+(pacote técnico final, 4 clientes `NAO_IMPORTAR`): 76 clientes, 113 fornecedores, 816 itens, 173 produtos, 161
+formulações e 182 projetos — o que o DEV reproduz. Implantação em [`DEPLOY.md`](DEPLOY.md); limpeza de produção e
+prova de backup em `scripts/maintenance/`.
 
 **Pacote de revisão da migração** (PROD-MASTER-MIGRATION-PACK-01,
 2026-09-11): `scripts/veridi-migration-pack/` gera, do legado real, oito
-planilhas para a Veridi revisar (fora do Git, em `handoff/`); nada foi
-carregado. Depois de SUPPLIER-ADDRESS-01, regeneração curta do arquivo de
-Fornecedores; a carga é PROD-MASTER-MIGRATION-APPLY-01. Runbook em
+planilhas para a Veridi revisar (fora do Git, em `handoff/`). A revisão 02, em cópia técnica, foi a carga
+inicial de PROD em 2026-09-14. Runbook em
 [`VERIDI_MIGRATION.md`](VERIDI_MIGRATION.md).
 
 **Regra durável aprendida em 2026-09-07, e que custou uma recarga:**
