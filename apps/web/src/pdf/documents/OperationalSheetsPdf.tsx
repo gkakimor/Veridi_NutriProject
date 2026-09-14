@@ -316,11 +316,16 @@ const COLUNAS_QUALIDADE: PdfColumn[] = [
   { header: "Tratado / observação", width: 110 },
 ];
 
-/** O que falta para o lote sair da fila, pela situação do laudo. */
+/**
+ * A pendência DOCUMENTAL do lote, pelo estado do laudo — os mesmos rótulos da
+ * tela Documentos / CoA. O recorte da folha é PENDING, RECEIVED e REJECTED
+ * (FO03-PENDING-CUTOFF-01); laudo rejeitado não é "Aguardando liberação": o
+ * `else` antigo vinha de quando a folha trazia todos os lotes
+ * (FO03-ROW-SITUATION-01). Fora do recorte, o rótulo canônico do laudo.
+ */
 function pendenciaDoLote(row: QualityQueueRowDTO): string {
-  if (row.requiresCoa && row.coaStatus === "PENDING") return "Laudo não recebido";
-  if (row.requiresCoa && row.coaStatus === "RECEIVED") return "Laudo aguardando análise";
-  return "Aguardando liberação";
+  if (row.coaStatus === "REJECTED") return "Laudo rejeitado";
+  return COA_STATUS_LABELS[row.coaStatus];
 }
 
 export function qualityPendingPdfFileName(generatedAt: Date): string {
@@ -363,7 +368,8 @@ export function QualityPendingPdf({
               </PdfTd>
               <PdfTd>{fornecedorOuProprietario(row)}</PdfTd>
               <PdfTd>{row.requiresCoa ? COA_STATUS_LABELS[row.coaStatus] : "Não exigido"}</PdfTd>
-              <PdfTd>{LOT_STATUS_LABELS[row.lotStatus]}</PdfTd>
+              {/* Vencido manda sobre o gravado, como em FO-01/FO-02 e na tela CoA. */}
+              <PdfTd>{situacaoDoLote(row.lotStatus, row.isExpired)}</PdfTd>
               <PdfTd>{formatDate(row.expiryDate)}</PdfTd>
               <PdfTd>{formatDate(row.receivedAt)}</PdfTd>
               <PdfTd>{pendenciaDoLote(row)}</PdfTd>

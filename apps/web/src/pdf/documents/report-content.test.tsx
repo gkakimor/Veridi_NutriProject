@@ -442,7 +442,7 @@ describe("relatórios R-01…R-20 em PDF", () => {
       expect(renderPdfBlob).not.toHaveBeenCalled();
     });
 
-    it("fornecedor e cliente juntos não se confundem: cada um pela sua consulta", async () => {
+    it("R-08 com cliente na URL: o schema não aceita cliente — nem consulta, nem Cliente no papel (REPORTS-PRINT-UNACCEPTED-FILTER-01)", async () => {
       apiFetch.mockImplementation(async (url: string) => {
         if (url.startsWith(`${API_URL}/suppliers?`)) {
           return { ok: true, status: 200, json: () => Promise.resolve({ suppliers: [FORNECEDOR_A], total: 1, page: 1, pageSize: 1 }) };
@@ -452,12 +452,20 @@ describe("relatórios R-01…R-20 em PDF", () => {
         }
         return respostaCsv(CSV_COMPRAS);
       });
-      // Nenhuma tela manda os dois; a URL digitada pode.
-      abrir(`/print/relatorios/R-08?supplierId=${FORNECEDOR_A.id}&customerId=${CLIENTE_A.id}`);
+      // Nenhuma tela manda os dois; a URL digitada pode — e a API descarta o cliente.
+      abrir(`/print/relatorios/R-08?supplierId=${FORNECEDOR_A.id}&customerId=${CLIENTE_A.id}&foo=bar`);
 
       const documento = await documentoGerado("R-08-2026-09-11.pdf");
       expect(campo(documento, "Fornecedor")).toBe("FOR-000003 · Insumos Sul");
-      expect(campo(documento, "Cliente")).toBe("CLI-000012 · Nutri Alfa Suplementos Ltda");
+      expect(campo(documento, "Cliente")).toBeNull();
+      expect(campo(documento, "foo")).toBeNull();
+      const texto = documento.textContent ?? "";
+      for (const vestigio of ["Nutri Alfa", "CLI-000012", CLIENTE_A.id]) expect(texto, vestigio).not.toContain(vestigio);
+      const consultas = apiFetch.mock.calls.map(([url]) => String(url)).filter((url) => !url.includes("/export.csv"));
+      expect(consultas).toHaveLength(1);
+      expect(consultas[0]).toContain(`${API_URL}/suppliers?`);
+      // O CSV continua recebendo a URL como veio: quem descarta é o servidor.
+      expect(apiFetch).toHaveBeenCalledWith(expect.stringContaining(`customerId=${CLIENTE_A.id}`));
     });
   });
 
@@ -662,7 +670,7 @@ describe("relatórios R-01…R-20 em PDF", () => {
       ];
       const params = new URLSearchParams(ids.map((chave) => [chave, `${chave}-${UUID.lote}`]));
 
-      const filtros = reportAppliedFilters(params);
+      const filtros = reportAppliedFilters(params, { filterKeys: ids });
       expect(filtros).toHaveLength(ids.length);
       for (const [indice, filtro] of filtros.entries()) {
         expect(filtro.label, ids[indice]).not.toBe(ids[indice]);
@@ -773,8 +781,7 @@ describe("relatórios R-01…R-20 em PDF", () => {
     it("valor fora do mapa sai como veio — nem some, nem vira o protótipo do objeto", () => {
       const filtros = reportAppliedFilters(
         new URLSearchParams("itemType=constructor&status=toString&onlyWithBalance=hasOwnProperty&search=SENT"),
-        {},
-        REPORT_PRINT_DEFINITIONS["R-01"]!.filterValues,
+        REPORT_PRINT_DEFINITIONS["R-01"]!,
       );
       expect(filtros).toEqual([
         { label: "Tipo de item", value: "constructor" },
