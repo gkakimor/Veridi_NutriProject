@@ -487,11 +487,17 @@ outros — o teclado certo no celular) e a leitura de `lib/numeric-ptbr.ts`.
   campo decimal é **ambíguo**: fica como escrito e o campo acusa
   (`aria-invalid`) — nunca vira 1,234 nem 1234. Em campo inteiro, é 1234.
 - **Negativo** só com `allowNegative` (padrão `false`), sinal só no começo.
-- **Leitura** (texto, tabela): `formatIntegerPtBr`, `formatDecimalPtBr`,
-  `formatMoneyPtBr` e `formatPercentPtBr`, com `scale` e
-  `minFractionDigits`; os presets `formatBRL`, `formatUnitPriceBRL`,
-  `formatPercent` e `formatQuantity` continuam. Tudo sobre dígitos: sem
-  `Number`, `Intl` ou `toLocaleString`.
+- **Leitura** (texto, tabela, card, dica, PDF): `formatIntegerPtBr` (aceita
+  `number` para contagem), `formatDecimalPtBr`, `formatMoneyPtBr` e
+  `formatPercentPtBr`, com `scale` e `minFractionDigits`; os presets
+  `formatBRL`, `formatUnitPriceBRL`, `formatUnitCost`, `formatPercent` e
+  `formatQuantity` continuam. Tudo sobre dígitos: sem `Number`, `Intl` ou
+  `toLocaleString`. Leitura e campo seguem a mesma convenção: `formatQuantity`
+  agrupa milhar (`1.234,5`), como o campo fora do foco
+  (PTBR-NUMERIC-DISPLAY-AUDIT-01). Nunca `R$ ${valor}`, `${valor}%` nem o
+  decimal da API cru; soma exibida é `Decimal`, não `Number`. CSV é contrato de
+  planilha e fica com vírgula decimal sem milhar (`csvDecimal` da API).
+  `leitura-numerica-guarda.test.ts` proíbe o que é cru sem discussão.
 
 **Quando NÃO usar.** O que só parece número continua texto, com zeros à
 esquerda e máscara próprios: CPF, CNPJ, CEP, telefone, código de produto ou

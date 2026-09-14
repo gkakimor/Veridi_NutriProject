@@ -3932,6 +3932,52 @@ inválido e vazio, nos cinco fusos). 4 mutações derrubadas. Focados: shared 4 
 serial 3 (fonte de custo, dia comercial, exports, CSV do custo, formação de preço, Painel),
 web; `pnpm typecheck`. Sem full test, E2E, build global nem fresh (FAST).
 
+## Leitura numérica pt-BR em tela e PDF (PTBR-NUMERIC-DISPLAY-AUDIT-01, 2026-09-14)
+
+Só apresentação. API, banco, cálculo, `Decimal`, arredondamento de domínio, datas e campos
+intocados; sem migration.
+
+**Decisão.** `formatQuantity` agrupa milhar (`1.234,5`), como o campo fora do foco — a mesma
+informação não tem mais duas caras. O motivo antigo (copiar de volta) cai no caso comum:
+`1.234,5` é lido pelo parser do campo; só `1.234` sozinho, em campo decimal, é recusado como
+ambíguo, com mensagem. `resolverQuantidadeContraLimite` tira os pontos do exibido antes do
+round-trip (teto `1233,9999999` exibido `1.234` continua "usar tudo"). Horas de
+`formatMinutes` também agrupam. `formatIntegerPtBr` aceita `number` para contagem.
+
+**Corrigido** (a guarda contou 79 leituras cruas antes; o smoke achou mais 8 no Pedido):
+recurso industrial (potência em 4 casas, tarifa vigente e histórico por `formatMoneyPtBr`,
+capacidade, contagem de tarifas); Estrutura de Custos (tarifa de referência e congelada,
+premissa R$/% em 4 casas, pureza e overage em 6); templates de custo (premissa pela base);
+consumo extra (saldo livre do lote); Pedido (Disponível do Plano de Atendimento, reservado
+restante, ainda a reservar, disponível atual, expedido e falta expedir, quantidade fora de
+edição, em compra, total da OC, faixa do preço acordado, somas do Faturamento por `Decimal`
+em vez de `Number`); OP (estoque não liberado por `Decimal`); Orçamento (quantidade fora de
+edição); ofertas de fornecedor (preço em 8 casas, mínimo 2) e custo de hoje do item;
+relatórios de custo, produção e comercial (percentuais por `formatPercent`, variação,
+quantidade orçada, reservado); explicação da Formulação (pureza, overage, doses, fator);
+precificação e CMV (lote mínimo, lotes); contagens (total das listas, rodapé e resumo de
+relatório, Painel, células de tabela); anexos (MB com vírgula); PDFs (unidades de caixa,
+lotes da faixa, recursos, inteiros da grade, registros, linhas, partes).
+
+**CSV não mudou**: `csvDecimal`/`csvMoney`/`csvUnitPrice` da API já escrevem vírgula decimal
+sem milhar — contrato de planilha, e a rodada não toca API. **Identificadores** (código, lote,
+CNPJ, CEP, documento) continuam texto; nenhum formatador novo passa por eles.
+
+**Guarda**: `web components/leitura-numerica-guarda.test.ts` proíbe `R$ ${…}`/`R$ {…}`,
+`{valor}%` cru, decimal de domínio interpolado (lista fechada mais `*Quantity`, inclusive
+`find(...)?.campo`), soma `+ Number(…Quantity), 0)` exibida e `{total} {total === 1`, com
+allowlist justificada. Não vê variável solta nem ternário — resíduo em
+PTBR-NUMERIC-DISPLAY-RESIDUAL-01.
+
+**Validação.** Helpers: milhar, decimal, 12 casas, dinheiro, percentual, zero, null, acima de
+um milhão, `1e21` e `1.5e-3` sem notação científica, round-trip do teto. 28 asserções de tela e
+PDF passaram de `1000` para `1.000` (e do `12.000000` cru da API para `12`). Focados web depois
+do rebase: 212 arquivos, 2426 testes; `pnpm typecheck`. Smoke 390 px (Vite do worktree contra a
+API dev, só GET, valores inflados por `route` para `1.234.567,891`): Recurso Industrial,
+Estrutura de Custos, Pedido e Orçamento sem transbordo (`scrollWidth` 390), sem notação
+científica, sem número de 4+ dígitos sem milhar, console limpo, 0 escritas. Sem full test, E2E,
+build global nem fresh (FAST).
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
