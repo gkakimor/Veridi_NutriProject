@@ -15,6 +15,7 @@ import {
   COST_PER_1000_EXPLANATION,
   COST_PER_1000_LABEL,
   COST_SOURCE_AUTO_SELECTION_TEXT,
+  hojeComercial,
   INDUSTRIAL_COST_BASIS_LABELS,
   INDUSTRIAL_COST_QUALITY_HINTS,
   INDUSTRIAL_COST_QUALITY_LABELS,
@@ -70,10 +71,15 @@ const GROUP_ORDER: CmvGroup[] = [
   "OVERHEAD",
 ];
 
-/** Data de hoje como dia de calendário — a API exige a data explícita. */
+/**
+ * Data de hoje como dia de calendário — a API exige a data explícita.
+ *
+ * O dia é o comercial de São Paulo (§72), nem o do navegador nem o UTC
+ * (WEB-DATE-DEFAULT-TZ-01): num navegador fora do fuso o CMV abria no dia
+ * errado. Data que veio na URL não passa por aqui.
+ */
 function hojeISO(): string {
-  const agora = new Date();
-  return new Date(agora.getTime() - agora.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  return hojeComercial();
 }
 
 function qualityBadgeClass(quality: string): string {

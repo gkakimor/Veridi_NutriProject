@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import type { ItemCostReferencesResponse, UnitOfMeasureDTO } from "@veridi/shared";
 import {
   COST_SOURCE_AUTO_SELECTION_TEXT,
+  hojeComercial,
   INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS,
 } from "@veridi/shared";
 import { useAuth } from "../app/AuthProvider";
@@ -18,10 +19,12 @@ import { CASAS_CUSTO_UNITARIO, OPCOES_CUSTO_UNITARIO } from "../lib/numeric-scal
 import { FormSection } from "./FormSection";
 import { MoneyField } from "./NumericField";
 
-/** Hoje como dia de calendário, para o campo de data. */
+/**
+ * Hoje como dia de calendário, para o campo de data: o dia comercial de São
+ * Paulo (§72), não o do navegador (WEB-DATE-DEFAULT-TZ-01).
+ */
 function hojeISO(): string {
-  const agora = new Date();
-  return new Date(agora.getTime() - agora.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  return hojeComercial();
 }
 
 /**

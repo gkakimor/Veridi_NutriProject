@@ -157,28 +157,29 @@ describe("PROJECT-INT-FIELDS-01 — a API recusa o que não é inteiro válido, 
   });
 });
 
-describe("API-INT-COERCION-01 (aberto) — o que a API ainda aceita, e a tela não manda", () => {
+describe("API-INT-COERCION-01 — a API também recusa o que a tela nunca manda", () => {
   /*
-   * `optionalPositiveInt` lê com `Number()`, e estas escritas passam como
-   * inteiro. O achado está registrado e não se corrige aqui. O teste deixa a
-   * interação à vista — a tela recusa todas elas antes do pedido
-   * (PROJECT-INT-FIELDS-01) — e precisa mudar junto quando o achado fechar.
+   * `optionalPositiveInt` lia com `Number()`, e estas escritas gravavam como
+   * inteiro: "1e2" virava 100, "0x1E" virava 30, "+1" e "1.0" viravam 1. A tela
+   * já as recusava antes do pedido (PROJECT-INT-FIELDS-01); agora o contrato da
+   * API é o inteiro decimal canônico, e o gravado fica.
    */
-  it.each([
-    ["1e2", 100],
-    ["0x1E", 30],
-    ["+1", 1],
-    ["1.0", 1],
-  ] as const)("%j ainda grava %i", async (texto, gravado) => {
-    const app = buildTestApp("COMMERCIAL");
-    await app.ready();
-    const projectId = await projetoGravado(app);
+  it.each(["1e2", "0x1E", "+1", "1.0", "Infinity", "NaN", "12abc", "12,5"])(
+    "%j: 400, e o gravado fica",
+    async (texto) => {
+      const app = buildTestApp("COMMERCIAL");
+      await app.ready();
+      const projectId = await projetoGravado(app);
 
-    const resposta = await editar(app, projectId, { dosesPerPackage: texto });
+      const resposta = await editar(app, projectId, { dosesPerPackage: texto });
 
-    expect(resposta.statusCode, resposta.body).toBe(200);
-    expect((await inteirosGravados(app, projectId)).dosesPerPackage).toBe(gravado);
+      expect(resposta.statusCode, resposta.body).toBe(400);
+      expect(await inteirosGravados(app, projectId)).toEqual({
+        dosesPerPackage: 60,
+        shelfLifeMonths: 24,
+      });
 
-    await app.close();
-  });
+      await app.close();
+    },
+  );
 });

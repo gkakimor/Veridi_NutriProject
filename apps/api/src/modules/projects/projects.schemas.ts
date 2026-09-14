@@ -3,6 +3,7 @@ import { LIMITES_INTEIROS_DAS_CONDICOES, QUOTE_DUPLICATE_PRICE_STRATEGIES } from
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import { recusarPeriodoInvertido, requiredDateSchema } from "../../lib/date-schema.js";
 import { CASAS_PRECO_COMERCIAL, optionalDecimalStringSchema } from "../../lib/decimal-schema.js";
+import { lerInteiroDecimal } from "../../lib/integer-schema.js";
 
 const statusEnum = z.enum(["WAITING", "SAMPLE", "APPROVED", "CANCELLED", "STAND_BY"]);
 const cancelReasonEnum = z.enum(["PRICE", "COMPETITOR", "PROJECT_CHANGED", "NOT_MET", "OTHER"]);
@@ -36,7 +37,9 @@ const optionalPositiveInt = z
   .transform((value) => {
     if (value === undefined) return undefined;
     if (value === null || value === "") return null;
-    return Number(value);
+    // Leitura estrita (API-INT-COERCION-01): o que não é inteiro decimal
+    // canônico vira NaN e cai na mesma recusa abaixo.
+    return lerInteiroDecimal(value) ?? Number.NaN;
   })
   .refine((value) => value === undefined || value === null || (Number.isInteger(value) && value > 0), {
     message: "Informe um número inteiro maior que zero",

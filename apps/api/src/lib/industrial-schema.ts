@@ -5,6 +5,7 @@ import {
   casasDecimais,
   mensagemCasasPercentualTecnico,
 } from "./decimal-schema.js";
+import { lerInteiroDecimal } from "./integer-schema.js";
 
 /**
  * Validações do cadastro industrial (capacidade 33).
@@ -47,8 +48,9 @@ export function optionalPositiveInt(message: string) {
       if (value === null) return null;
       if (typeof value === "string" && value.trim() === "") return null;
 
-      const numero = typeof value === "number" ? value : Number(String(value).trim());
-      if (!Number.isFinite(numero) || !Number.isInteger(numero)) {
+      // Leitura estrita (API-INT-COERCION-01): `Number()` aceitava "1e2" e "0x1E".
+      const numero = lerInteiroDecimal(value);
+      if (numero === null) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Informe um número inteiro" });
         return z.NEVER;
       }
