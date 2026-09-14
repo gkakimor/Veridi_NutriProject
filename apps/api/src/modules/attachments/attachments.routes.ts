@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import type { AttachmentType, User } from "@prisma/client";
+import type { ZodError } from "zod";
 import { ForbiddenError } from "../auth/auth.errors.js";
 import { requireCurrentUser, requireRole } from "../../lib/current-user.js";
 import { MAX_FILE_SIZE_BYTES, readFile, sanitizeFileName } from "../../lib/file-storage.js";
@@ -12,6 +13,7 @@ import {
   MissingFileError,
   UnsupportedFileTypeError,
 } from "./attachments.errors.js";
+import { listAttachmentsQuerySchema } from "./attachments.schemas.js";
 import type { AttachmentContext } from "./attachments.service.js";
 import {
   archiveAttachment,
@@ -19,6 +21,13 @@ import {
   requireAttachment,
   uploadAttachment,
 } from "./attachments.service.js";
+
+function formatZodError(error: ZodError) {
+  return error.issues.map((issue) => ({
+    path: issue.path.join("."),
+    message: issue.message,
+  }));
+}
 
 function mapDomainError(
   error: unknown,
@@ -89,13 +98,16 @@ export const attachmentsRoutes: FastifyPluginAsync = async (app) => {
   for (const context of contexts) {
     app.get(`/${context.path}/:id/attachments`, async (request, reply) => {
       const { id } = request.params as { id: string };
-      const { includeArchived } = request.query as { includeArchived?: string };
       requireCurrentUser(request);
 
-      const attachments = await listAttachments(
-        { kind: context.kind, id },
-        { includeArchived: includeArchived === "true" },
-      );
+      const parsed = listAttachmentsQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+
+      const attachments = await listAttachments({ kind: context.kind, id }, parsed.data);
       return reply.send({ attachments });
     });
 

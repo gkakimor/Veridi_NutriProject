@@ -7,7 +7,8 @@ import { booleanoDeConsultaSchema } from "./boolean-schema.js";
 import { inteiroDeConsultaSchema } from "./integer-schema.js";
 
 /**
- * Guarda de API-STRICT-SCALAR-CONTRACT-WAVE-01 e QUERY-BOOLEAN-STRICTNESS-WAVE-02.
+ * Guarda de API-STRICT-SCALAR-CONTRACT-WAVE-01, QUERY-BOOLEAN-STRICTNESS-WAVE-02 e
+ * QUERY-BOOLEAN-PERMISSIVE-REMAINING-01.
  *
  * - inteiro não volta a ler `z.coerce.number().int()` — `Number()` aceita
  *   `"1e1"`, `"0x10"`, `"+1"` e `true`; a leitura é `inteiroDecimalSchema`;
@@ -118,20 +119,27 @@ const LEGADO_EXPLICITO = new Map([
   ],
 ]);
 
-/**
- * Dívida conhecida — BACKLOG QUERY-BOOLEAN-PERMISSIVE-REMAINING-01: texto fora
- * de `"true"` vira `false` calado. Corrigida, a entrada sai daqui: a guarda
- * reprova a que deixar de ser permissiva.
+/*
+ * Sem lista de dívida permissiva: QUERY-BOOLEAN-PERMISSIVE-REMAINING-01 fechou
+ * a última. Campo que aceite texto fora de `"true"`/`"false"` (e do `1`/`0`
+ * declarado acima) reprova, sem lugar para escondê-lo.
  */
-const DIVIDA_PERMISSIVA = new Set([
-  "modules/cost-templates/cost-templates.schemas.ts#listTemplatesQuerySchema.archived",
-  // Herda o `archived` acima por `.extend` — a mesma correção fecha os dois.
-  "modules/cost-templates/cost-templates.schemas.ts#listPricingPoliciesQuerySchema.archived",
-  "modules/formulation-templates/formulation-templates.schemas.ts#listFormulationTemplatesQuerySchema.archived",
+
+/**
+ * Liam todo texto fora de `"true"` como `false`, calados, até
+ * QUERY-BOOLEAN-PERMISSIVE-REMAINING-01. `includeArchived` nem tinha schema:
+ * a rota comparava `request.query` com `"true"` à mão.
+ */
+const CORRIGIDOS = [
   "modules/quality/quality.schemas.ts#listQualityQueueQuerySchema.onlyPending",
   "modules/quality/quality.schemas.ts#listQualityQueueQuerySchema.onlyWithBalance",
   "modules/users/users.schemas.ts#listUsersQuerySchema.active",
-]);
+  "modules/cost-templates/cost-templates.schemas.ts#listTemplatesQuerySchema.archived",
+  // Herda o `archived` acima por `.extend` — a busca por texto não o achava.
+  "modules/cost-templates/cost-templates.schemas.ts#listPricingPoliciesQuerySchema.archived",
+  "modules/formulation-templates/formulation-templates.schemas.ts#listFormulationTemplatesQuerySchema.archived",
+  "modules/attachments/attachments.schemas.ts#listAttachmentsQuerySchema.includeArchived",
+];
 
 /** `x === "true"`, `"false" !== x` — texto de URL comparado à mão. */
 const COMPARACAO_COM_TEXTO_BOOLEANO = /[!=]==?\s*(["'`])(?:true|false)\1|(["'`])(?:true|false)\2\s*[!=]==?/g;
@@ -147,10 +155,8 @@ function leiturasCruasDeBooleano(fonte: string): number {
 
 /** Fora dos `*.schemas.ts`, que a varredura interroga campo a campo, só estes comparam texto booleano. */
 const LEITURA_CRUA_PERMITIDA = new Map([
-  // O próprio contrato.
+  // O próprio contrato — e mais ninguém.
   ["lib/boolean-schema.ts", 2],
-  // `includeArchived` lido direto de `request.query` — QUERY-BOOLEAN-PERMISSIVE-REMAINING-01.
-  ["modules/attachments/attachments.routes.ts", 1],
 ]);
 
 describe("a guarda pega a coerção e só ela", () => {
@@ -278,19 +284,25 @@ describe("fontes de produção da API", () => {
       );
     });
 
-    it('todo booleano de URL é "true"/"false" exato, fora das exceções declaradas', () => {
+    it("nenhum booleano de URL aceita texto arbitrário — não há dívida permissiva", () => {
+      expect(achados.filter(({ classe }) => classe === "PERMISSIVE_BUG")).toEqual([]);
+    });
+
+    it('todo booleano de URL é "true"/"false" exato; `1`/`0` só no legado explícito', () => {
       const fora = achados.filter(
-        ({ id, classe }) =>
-          (classe === "LEGACY_EXPLICIT" && !LEGADO_EXPLICITO.has(id)) ||
-          (classe === "PERMISSIVE_BUG" && !DIVIDA_PERMISSIVA.has(id)),
+        ({ id, classe }) => classe !== "STRICT_OK" && !(classe === "LEGACY_EXPLICIT" && LEGADO_EXPLICITO.has(id)),
       );
       expect(fora).toEqual([]);
     });
 
-    it("as exceções não envelhecem", () => {
+    it("o legado explícito não envelhece", () => {
       const classeDe = new Map(achados.map(({ id, classe }) => [id, classe]));
       for (const id of LEGADO_EXPLICITO.keys()) expect(classeDe.get(id), id).toBe("LEGACY_EXPLICIT");
-      for (const id of DIVIDA_PERMISSIVA) expect(classeDe.get(id), id).toBe("PERMISSIVE_BUG");
+    });
+
+    it("os corrigidos em QUERY-BOOLEAN-PERMISSIVE-REMAINING-01 estão na varredura, estritos", () => {
+      const classeDe = new Map(achados.map(({ id, classe }) => [id, classe]));
+      for (const id of CORRIGIDOS) expect(classeDe.get(id), id).toBe("STRICT_OK");
     });
   });
 
