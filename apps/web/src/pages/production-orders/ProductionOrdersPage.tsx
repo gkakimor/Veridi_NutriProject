@@ -1,5 +1,5 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BulkSelectionBar,
   BulkSelectionCell,
@@ -9,6 +9,7 @@ import {
 import { BulkDocumentActions } from "../../components/BulkDocumentActions";
 import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../app/AuthProvider";
 import type { BulkSelectionDescriptor, ProductionOrderDTO, ProductionOrderStatus } from "@veridi/shared";
@@ -24,6 +25,7 @@ import { formatDate } from "../../lib/dates";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
 import { useListFilters } from "../../lib/list-filters";
+import { useListQuery } from "../../lib/list-query";
 import { produtoFilterSource } from "../../lib/filter-sources";
 import { ActiveFilterChips } from "../../components/filters/ActiveFilterChips";
 import type { FilterChip } from "../../components/filters/ActiveFilterChips";
@@ -172,10 +174,6 @@ export function ProductionOrdersPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [productionOrders, setProductionOrders] = useState<ProductionOrderDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [produtoEscolhido, setProdutoEscolhido] = useState<EntityOption | null>(null);
 
   const { values, page, set, setPage, clear, isActive } = useListFilters({
@@ -213,24 +211,13 @@ export function ProductionOrdersPage() {
     return () => clearTimeout(handle);
   }, [searchInput, search, set]);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
-
-    listProductionOrders({ ...filtrosDaConsulta, page, pageSize: PAGE_SIZE })
-      .then((result) => {
-        setProductionOrders(result.productionOrders);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Falha ao carregar ordens de produção");
-      })
-      .finally(() => setLoading(false));
-  }, [filtrosDaConsulta, page]);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  const consulta = useListQuery(
+    listProductionOrders,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { fallbackError: "Falha ao carregar ordens de produção" },
+  );
+  const productionOrders: ProductionOrderDTO[] = consulta.data?.productionOrders ?? [];
+  const total = consulta.data?.total ?? 0;
 
   /*
    * Seleção em massa sobre o MESMO recorte da consulta e do CSV — "sem
@@ -241,7 +228,7 @@ export function ProductionOrdersPage() {
     pageIds: productionOrders.map((op) => op.id),
     total,
     filters: filtrosDaConsulta,
-    loading,
+    loading: consulta.loading,
   });
 
   const chips: FilterChip[] = [];
@@ -346,7 +333,7 @@ export function ProductionOrdersPage() {
 
       <ActiveFilterChips chips={chips} onClear={clear} />
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
       <BulkSelectionBar selection={selecao}>
         <BulkDocumentActions
@@ -356,7 +343,7 @@ export function ProductionOrdersPage() {
         />
       </BulkSelectionBar>
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table table--clickable-rows table--sticky-actions">
           <thead>
             <tr>
@@ -446,59 +433,59 @@ export function ProductionOrdersPage() {
               </tr>
             ))}
 
-            {!loading && productionOrders.length === 0 && (
-              <tr>
-                <td colSpan={10} className="table__empty">
-                  {isActive ? (
-                    <>
-                      Nenhuma ordem de produção encontrada para os filtros atuais.{" "}
-                      <ClearFilters onClear={clear} />
-                    </>
-                  ) : (
-                    <>
-                      Nenhuma ordem de produção em aberto.{" "}
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm"
-                        onClick={() => set({ status: "todos" })}
-                      >
-                        Ver todas
-                      </button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={10} query={consulta} rowCount={productionOrders.length}>
+              {isActive ? (
+                <>
+                  Nenhuma ordem de produção encontrada para os filtros atuais.{" "}
+                  <ClearFilters onClear={clear} />
+                </>
+              ) : (
+                <>
+                  Nenhuma ordem de produção em aberto.{" "}
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => set({ status: "todos" })}
+                  >
+                    Ver todas
+                  </button>
+                </>
+              )}
+            </ListStatusRow>
           </tbody>
         </table>
-        <div className="table-foot">
-          {total} {total === 1 ? "ordem de produção" : "ordens de produção"}
-        </div>
+        {consulta.data && (
+          <div className="table-foot">
+            {total} {total === 1 ? "ordem de produção" : "ordens de produção"}
+          </div>
+        )}
       </div>
 
-      <div className="pagination">
-        <span>
-          Página {page} de {totalPages}
-        </span>
-        <div className="table__actions">
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page <= 1}
-            onClick={() => setPage(page - 1)}
-          >
-            Anterior
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage(page + 1)}
-          >
-            Próxima
-          </button>
+      {consulta.data && (
+        <div className="pagination">
+          <span>
+            Página {page} de {totalPages}
+          </span>
+          <div className="table__actions">
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Próxima
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

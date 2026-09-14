@@ -1,5 +1,6 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { RejectCoaDialog } from "../../components/RejectCoaDialog";
 import { useNavigate, Link } from "react-router-dom";
 import type { CoaStatus, QualityQueueRowDTO } from "@veridi/shared";
@@ -13,6 +14,7 @@ import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 import { useListFilters } from "../../lib/list-filters";
+import { useListQuery } from "../../lib/list-query";
 import { ActiveFilterChips } from "../../components/filters/ActiveFilterChips";
 import type { FilterChip } from "../../components/filters/ActiveFilterChips";
 import { ClearFilters } from "../../components/filters/ClearFilters";
@@ -80,9 +82,7 @@ export function CoaQueuePage() {
   const { user } = useAuth();
   const canReview = user?.role === "QUALITY" || user?.role === "ADMIN";
 
-  const [rows, setRows] = useState<QualityQueueRowDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
+  /* Falha de Aprovar/Rejeitar — a da consulta vem de `consulta.error`. */
   const [error, setError] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<{ lotId: string; lotCode: string } | null>(null);
 
@@ -125,24 +125,14 @@ export function CoaQueuePage() {
     return () => clearTimeout(handle);
   }, [searchInput, search, set]);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
-
-    listQualityQueue({ ...filtrosDaConsulta, page, pageSize: PAGE_SIZE })
-      .then((result) => {
-        setRows(result.rows);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Falha ao carregar a fila da Qualidade"),
-      )
-      .finally(() => setLoading(false));
-  }, [filtrosDaConsulta, page]);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  const consulta = useListQuery(
+    listQualityQueue,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { fallbackError: "Falha ao carregar a fila da Qualidade" },
+  );
+  const rows: QualityQueueRowDTO[] = consulta.data?.rows ?? [];
+  const total = consulta.data?.total ?? 0;
+  const { reload } = consulta;
 
   async function handleApprove(lotId: string) {
     setError(null);
@@ -279,8 +269,9 @@ export function CoaQueuePage() {
       <ActiveFilterChips chips={chips} onClear={clear} />
 
       {error && <p className="form-alert" role="alert">{error}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table table--sticky-actions">
           <thead>
             <tr>
@@ -370,54 +361,52 @@ export function CoaQueuePage() {
               </tr>
             ))}
 
-            {!loading && rows.length === 0 && (
-              <tr>
-                <td colSpan={9} className="table__empty">
-                  {/*
-                    Esta fila é sobre LAUDO, não sobre liberação. Um lote
-                    aguardando liberação cujo item não exige CoA nunca
-                    aparece aqui — e o atalho do Dashboard chama esta tela de
-                    "Fila da Qualidade", então o vazio parecia dizer que não
-                    havia trabalho.
-                  */}
-                  Nenhum lote nesta situação documental. Esta fila mostra o andamento do{" "}
-                  <strong>laudo (CoA)</strong>; a liberação de lote para uso é decidida em{" "}
-                  <Link to="/estoque/lotes">Estoque › Lotes</Link>, inclusive para itens que não
-                  exigem CoA.
-                  {isActive && (
-                    <>
-                      {" "}
-                      <ClearFilters onClear={clear} />
-                    </>
-                  )}
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={9} query={consulta} rowCount={rows.length}>
+              {/*
+                Esta fila é sobre LAUDO, não sobre liberação. Um lote
+                aguardando liberação cujo item não exige CoA nunca
+                aparece aqui — e o atalho do Dashboard chama esta tela de
+                "Fila da Qualidade", então o vazio parecia dizer que não
+                havia trabalho.
+              */}
+              Nenhum lote nesta situação documental. Esta fila mostra o andamento do{" "}
+              <strong>laudo (CoA)</strong>; a liberação de lote para uso é decidida em{" "}
+              <Link to="/estoque/lotes">Estoque › Lotes</Link>, inclusive para itens que não
+              exigem CoA.
+              {isActive && (
+                <>
+                  {" "}
+                  <ClearFilters onClear={clear} />
+                </>
+              )}
+            </ListStatusRow>
           </tbody>
         </table>
       </div>
 
-      <div className="pagination">
-        <button
-          type="button"
-          className="btn btn--ghost btn--sm"
-          disabled={page <= 1}
-          onClick={() => setPage(Math.max(1, page - 1))}
-        >
-          Anterior
-        </button>
-        <span className="pagination__info">
-          Página {page} de {totalPages} — {total} lote(s)
-        </span>
-        <button
-          type="button"
-          className="btn btn--ghost btn--sm"
-          disabled={page >= totalPages}
-          onClick={() => setPage(page + 1)}
-        >
-          Próxima
-        </button>
-      </div>
+      {consulta.data && (
+        <div className="pagination">
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            disabled={page <= 1}
+            onClick={() => setPage(Math.max(1, page - 1))}
+          >
+            Anterior
+          </button>
+          <span className="pagination__info">
+            Página {page} de {totalPages} — {total} lote(s)
+          </span>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            disabled={page >= totalPages}
+            onClick={() => setPage(page + 1)}
+          >
+            Próxima
+          </button>
+        </div>
+      )}
 
       {rejecting && (
         <RejectCoaDialog

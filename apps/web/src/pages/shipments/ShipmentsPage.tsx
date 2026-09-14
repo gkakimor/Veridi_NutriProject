@@ -1,6 +1,7 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { EntityLink } from "../../components/EntityLink";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
@@ -13,6 +14,7 @@ import { listShipments } from "../../lib/shipments-api";
 import { formatDate } from "../../lib/dates";
 import { useAuth } from "../../app/AuthProvider";
 import { useListFilters } from "../../lib/list-filters";
+import { useListQuery } from "../../lib/list-query";
 import { pedidoFilterSource } from "../../lib/filter-sources";
 import { ActiveFilterChips } from "../../components/filters/ActiveFilterChips";
 import type { FilterChip } from "../../components/filters/ActiveFilterChips";
@@ -98,10 +100,6 @@ export function ShipmentsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [shipments, setShipments] = useState<ShipmentDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [pedidoEscolhido, setPedidoEscolhido] = useState<EntityOption | null>(null);
 
   const { values, page, set, setPage, clear, isActive } = useListFilters({
@@ -135,24 +133,13 @@ export function ShipmentsPage() {
     return () => clearTimeout(handle);
   }, [searchInput, search, set]);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
-
-    listShipments({ ...filtrosDaConsulta, page, pageSize: PAGE_SIZE })
-      .then((result) => {
-        setShipments(result.shipments);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Falha ao carregar expedições");
-      })
-      .finally(() => setLoading(false));
-  }, [filtrosDaConsulta, page]);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  const consulta = useListQuery(
+    listShipments,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { fallbackError: "Falha ao carregar expedições" },
+  );
+  const shipments: ShipmentDTO[] = consulta.data?.shipments ?? [];
+  const total = consulta.data?.total ?? 0;
 
   const chips: FilterChip[] = [];
   if (search) {
@@ -241,9 +228,9 @@ export function ShipmentsPage() {
 
       <ActiveFilterChips chips={chips} onClear={clear} />
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
@@ -305,59 +292,59 @@ export function ShipmentsPage() {
               </tr>
             ))}
 
-            {!loading && shipments.length === 0 && (
-              <tr>
-                <td colSpan={7} className="table__empty">
-                  {isActive ? (
-                    <>
-                      Nenhuma expedição encontrada para os filtros atuais.{" "}
-                      <ClearFilters onClear={clear} />
-                    </>
-                  ) : (
-                    <>
-                      Nenhuma expedição em aberto.{" "}
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm"
-                        onClick={() => set({ status: "todos" })}
-                      >
-                        Ver todas
-                      </button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={7} query={consulta} rowCount={shipments.length}>
+              {isActive ? (
+                <>
+                  Nenhuma expedição encontrada para os filtros atuais.{" "}
+                  <ClearFilters onClear={clear} />
+                </>
+              ) : (
+                <>
+                  Nenhuma expedição em aberto.{" "}
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => set({ status: "todos" })}
+                  >
+                    Ver todas
+                  </button>
+                </>
+              )}
+            </ListStatusRow>
           </tbody>
         </table>
-        <div className="table-foot">
-          {total} {total === 1 ? "expedição" : "expedições"}
-        </div>
+        {consulta.data && (
+          <div className="table-foot">
+            {total} {total === 1 ? "expedição" : "expedições"}
+          </div>
+        )}
       </div>
 
-      <div className="pagination">
-        <span>
-          Página {page} de {totalPages}
-        </span>
-        <div className="table__actions">
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page <= 1}
-            onClick={() => setPage(page - 1)}
-          >
-            Anterior
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage(page + 1)}
-          >
-            Próxima
-          </button>
+      {consulta.data && (
+        <div className="pagination">
+          <span>
+            Página {page} de {totalPages}
+          </span>
+          <div className="table__actions">
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Próxima
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

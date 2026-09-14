@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { EntityLink } from "../../components/EntityLink";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import type { ProductionOrderDTO, ProductionOrderStatus } from "@veridi/shared";
 import { PRODUCTION_ORDER_STATUS_LABELS } from "@veridi/shared";
 import type { ListProductionOrdersParams } from "../../lib/production-orders-api";
@@ -9,6 +10,7 @@ import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 import { useListFilters } from "../../lib/list-filters";
+import { useListQuery } from "../../lib/list-query";
 import { ActiveFilterChips } from "../../components/filters/ActiveFilterChips";
 import type { FilterChip } from "../../components/filters/ActiveFilterChips";
 import { ClearFilters } from "../../components/filters/ClearFilters";
@@ -96,11 +98,6 @@ export function PickingConsumptionPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [orders, setOrders] = useState<ProductionOrderDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const { values, page, set, setPage, clear, isActive } = useListFilters({
     defaults: FILTROS_PADRAO,
     persistScope: "picking",
@@ -129,24 +126,13 @@ export function PickingConsumptionPage() {
     return () => clearTimeout(handle);
   }, [searchInput, search, set]);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
-
-    listProductionOrders({ ...filtrosDaConsulta, page, pageSize: PAGE_SIZE })
-      .then((result) => {
-        setOrders(result.productionOrders);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Falha ao carregar ordens de produção");
-      })
-      .finally(() => setLoading(false));
-  }, [filtrosDaConsulta, page]);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  const consulta = useListQuery(
+    listProductionOrders,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { fallbackError: "Falha ao carregar ordens de produção" },
+  );
+  const orders: ProductionOrderDTO[] = consulta.data?.productionOrders ?? [];
+  const total = consulta.data?.total ?? 0;
 
   const chips: FilterChip[] = [];
   if (search) {
@@ -218,9 +204,9 @@ export function PickingConsumptionPage() {
 
       <ActiveFilterChips chips={chips} onClear={clear} />
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table table--clickable-rows">
           <thead>
             <tr>
@@ -280,52 +266,52 @@ export function PickingConsumptionPage() {
               </tr>
             ))}
 
-            {!loading && orders.length === 0 && (
-              <tr>
-                <td colSpan={6} className="table__empty">
-                  {isActive ? (
-                    <>
-                      Nenhuma ordem encontrada para os filtros atuais.{" "}
-                      <ClearFilters onClear={clear} />
-                    </>
-                  ) : (
-                    "Nenhuma ordem liberada ou em produção no momento."
-                  )}
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={6} query={consulta} rowCount={orders.length}>
+              {isActive ? (
+                <>
+                  Nenhuma ordem encontrada para os filtros atuais.{" "}
+                  <ClearFilters onClear={clear} />
+                </>
+              ) : (
+                "Nenhuma ordem liberada ou em produção no momento."
+              )}
+            </ListStatusRow>
           </tbody>
         </table>
         {/* O total é o do SERVIDOR, não o tamanho da página: a tela dizia
             "N ordens" contando as linhas que tinha em mão. */}
-        <div className="table-foot">
-          {total} {total === 1 ? "ordem" : "ordens"}
-        </div>
+        {consulta.data && (
+          <div className="table-foot">
+            {total} {total === 1 ? "ordem" : "ordens"}
+          </div>
+        )}
       </div>
 
-      <div className="pagination">
-        <span>
-          Página {page} de {totalPages}
-        </span>
-        <div className="table__actions">
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page <= 1}
-            onClick={() => setPage(page - 1)}
-          >
-            Anterior
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage(page + 1)}
-          >
-            Próxima
-          </button>
+      {consulta.data && (
+        <div className="pagination">
+          <span>
+            Página {page} de {totalPages}
+          </span>
+          <div className="table__actions">
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Próxima
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

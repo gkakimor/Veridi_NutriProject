@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { Link, useNavigate } from "react-router-dom";
@@ -12,14 +12,15 @@ import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
 import { useAuth } from "../../app/AuthProvider";
 import { useListFilters } from "../../lib/list-filters";
+import { useListQuery } from "../../lib/list-query";
 import type { ListPeriodPreset } from "../../lib/list-period";
 import {
   LIST_PERIOD_PRESET_LABELS,
-  TABELA_COM_PERIODO_RECUSADO,
   ehListPeriodPreset,
   formatListPeriod,
   resolveListPeriod,
 } from "../../lib/list-period";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { fornecedorFilterSource } from "../../lib/filter-sources";
 import { ActiveFilterChips } from "../../components/filters/ActiveFilterChips";
 import type { FilterChip } from "../../components/filters/ActiveFilterChips";
@@ -114,10 +115,6 @@ export function PurchaseOrdersPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [fornecedorEscolhido, setFornecedorEscolhido] = useState<EntityOption | null>(null);
 
   const { values, page, set, setPage, clear, isActive } = useListFilters({
@@ -166,28 +163,13 @@ export function PurchaseOrdersPage() {
     return () => clearTimeout(handle);
   }, [searchInput, search, set]);
 
-  const reload = useCallback(() => {
-    setError(null);
-    if (periodoRecusado) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-
-    listPurchaseOrders({ ...filtrosDaConsulta, page, pageSize: PAGE_SIZE })
-      .then((result) => {
-        setPurchaseOrders(result.purchaseOrders);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Falha ao carregar ordens de compra");
-      })
-      .finally(() => setLoading(false));
-  }, [filtrosDaConsulta, page, periodoRecusado]);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  const consulta = useListQuery(
+    listPurchaseOrders,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { enabled: periodoRecusado === null, fallbackError: "Falha ao carregar ordens de compra" },
+  );
+  const purchaseOrders: PurchaseOrderDTO[] = consulta.data?.purchaseOrders ?? [];
+  const total = consulta.data?.total ?? 0;
 
   const chips: FilterChip[] = [];
   if (search) {
@@ -216,7 +198,6 @@ export function PurchaseOrdersPage() {
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const linhas = periodoRecusado ? [] : purchaseOrders;
 
   return (
     <>
@@ -291,9 +272,9 @@ export function PurchaseOrdersPage() {
 
       <ActiveFilterChips chips={chips} onClear={clear} />
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
@@ -308,7 +289,7 @@ export function PurchaseOrdersPage() {
             </tr>
           </thead>
           <tbody>
-            {linhas.map((po) => (
+            {purchaseOrders.map((po) => (
               <tr
                 key={po.id}
                 tabIndex={0}
@@ -345,41 +326,40 @@ export function PurchaseOrdersPage() {
               </tr>
             ))}
 
-            {!loading && linhas.length === 0 && (
-              <tr>
-                <td colSpan={8} className="table__empty">
-                  {periodoRecusado ? (
-                    TABELA_COM_PERIODO_RECUSADO
-                  ) : isActive ? (
-                    <>
-                      Nenhuma ordem de compra encontrada para os filtros atuais.{" "}
-                      <ClearFilters onClear={clear} />
-                    </>
-                  ) : (
-                    <>
-                      Nenhuma ordem de compra em aberto.{" "}
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm"
-                        onClick={() => set({ status: "todos" })}
-                      >
-                        Ver todas
-                      </button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            )}
+            <ListStatusRow
+              colSpan={8}
+              query={consulta}
+              rowCount={purchaseOrders.length}
+              periodRefused={periodoRecusado !== null}
+            >
+              {isActive ? (
+                <>
+                  Nenhuma ordem de compra encontrada para os filtros atuais.{" "}
+                  <ClearFilters onClear={clear} />
+                </>
+              ) : (
+                <>
+                  Nenhuma ordem de compra em aberto.{" "}
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => set({ status: "todos" })}
+                  >
+                    Ver todas
+                  </button>
+                </>
+              )}
+            </ListStatusRow>
           </tbody>
         </table>
-        {!periodoRecusado && (
+        {consulta.data && (
           <div className="table-foot">
             {total} {total === 1 ? "ordem de compra" : "ordens de compra"}
           </div>
         )}
       </div>
 
-      {!periodoRecusado && (
+      {consulta.data && (
         <div className="pagination">
           <span>
             Página {page} de {totalPages}

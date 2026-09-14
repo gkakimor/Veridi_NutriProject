@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 /**
@@ -202,6 +202,8 @@ function conferirRecusa(lista: Lista) {
   expect(screen.queryByText(lista.codigo)).toBeNull();
   expect(screen.queryByText(lista.contagem)).toBeNull();
   expect(screen.queryByText(PAGINAS)).toBeNull();
+  // Sem consulta não há o que carregar (LISTS-LOADING-STALE-DATA-01).
+  expect(screen.queryByText("Carregando…")).toBeNull();
   expect(screen.queryByRole("link", { name: "Exportar CSV" })).toBeNull();
   expect(screen.getByRole("button", { name: "Exportar CSV" })).toBeDisabled();
 }
@@ -267,5 +269,45 @@ describe("endereço com o período invertido (link colado, filtro lembrado)", ()
     expect(screen.queryByRole("alert")).toBeNull();
     expect(chamadas(lista.consulta).at(-1)).not.toHaveProperty("dateFrom");
     expect(chamadas(lista.consulta).at(-1)).not.toHaveProperty("dateTo");
+  });
+});
+
+/**
+ * A recusa no meio de uma consulta em curso (LISTS-LOADING-STALE-DATA-01): a
+ * resposta que o período válido pediu chega DEPOIS da inversão, e não pode
+ * virar a tela da pergunta recusada. Voltar ao período de antes consulta de
+ * novo — não serve a resposta guardada de antes da recusa.
+ */
+describe("consulta em curso quando o período é invertido", () => {
+  it.each(LISTAS)("$nome: a resposta atrasada não aparece; voltar ao período consulta uma vez", async (lista) => {
+    const pendentes: ((resposta: unknown) => void)[] = [];
+    vi.mocked(lista.consulta as Consulta).mockImplementation(
+      () => new Promise((responder) => void pendentes.push(responder)),
+    );
+    const { Componente } = lista;
+    render(
+      <MemoryRouter initialEntries={["/?period=custom&dateFrom=2026-09-10&dateTo=2026-09-12"]}>
+        <Componente />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(pendentes).toHaveLength(1));
+    expect(screen.getByText("Carregando…")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(lista.de), { target: { value: "2026-09-13" } });
+    expect(await screen.findByRole("alert")).toHaveTextContent(RECUSA);
+    await act(async () => pendentes[0]!(lista.resposta));
+    await esperar();
+    expect(pendentes).toHaveLength(1);
+    conferirRecusa(lista);
+
+    fireEvent.change(screen.getByLabelText(lista.de), { target: { value: "2026-09-10" } });
+    await waitFor(() => expect(pendentes).toHaveLength(2));
+    expect(screen.getByText("Carregando…")).toBeInTheDocument();
+    expect(screen.queryByText(lista.codigo)).toBeNull();
+    await act(async () => pendentes[1]!(lista.resposta));
+    expect(screen.getByText(lista.codigo)).toBeInTheDocument();
+    expect(screen.getByText(lista.contagem)).toBeInTheDocument();
+    await esperar();
+    expect(pendentes).toHaveLength(2);
   });
 });

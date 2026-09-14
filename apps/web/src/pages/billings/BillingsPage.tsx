@@ -21,10 +21,10 @@ import { formatDate } from "../../lib/dates";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
 import { useListFilters } from "../../lib/list-filters";
+import { useListQuery } from "../../lib/list-query";
 import type { ListPeriodPreset } from "../../lib/list-period";
 import {
   LIST_PERIOD_PRESET_LABELS,
-  TABELA_COM_PERIODO_RECUSADO,
   ehListPeriodPreset,
   formatListPeriod,
   resolveListPeriod,
@@ -33,6 +33,7 @@ import { ActiveFilterChips } from "../../components/filters/ActiveFilterChips";
 import type { FilterChip } from "../../components/filters/ActiveFilterChips";
 import { ClearFilters } from "../../components/filters/ClearFilters";
 import { DateRangeFilter } from "../../components/filters/DateRangeFilter";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { useAuth } from "../../app/AuthProvider";
 
 type ActiveFilter = BillingStatus | "all";
@@ -91,9 +92,7 @@ export function BillingsPage() {
   const { user } = useAuth();
 
   const [awaiting, setAwaiting] = useState<AwaitingBillingRowDTO[]>([]);
-  const [billings, setBillings] = useState<BillingDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
+  /* Falha de "Preparar faturamento" — a da consulta vem de `consulta.error`. */
   const [error, setError] = useState<string | null>(null);
   const [preparingShipmentId, setPreparingShipmentId] = useState<string | null>(null);
   const [clienteEscolhido, setClienteEscolhido] = useState<EntityOption | null>(null);
@@ -164,28 +163,13 @@ export function BillingsPage() {
       .catch(() => setAwaiting([]));
   }, []);
 
-  const reload = useCallback(() => {
-    setError(null);
-    if (periodoRecusado) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-
-    listBillings({ ...filtrosDaConsulta, page, pageSize: PAGE_SIZE })
-      .then((result) => {
-        setBillings(result.billings);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Falha ao carregar faturamentos");
-      })
-      .finally(() => setLoading(false));
-  }, [filtrosDaConsulta, page, periodoRecusado]);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  const consulta = useListQuery(
+    listBillings,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { enabled: periodoRecusado === null, fallbackError: "Falha ao carregar faturamentos" },
+  );
+  const billings: BillingDTO[] = consulta.data?.billings ?? [];
+  const total = consulta.data?.total ?? 0;
 
   useEffect(() => {
     reloadAwaiting();
@@ -251,7 +235,6 @@ export function BillingsPage() {
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const linhas = periodoRecusado ? [] : billings;
 
   return (
     <>
@@ -410,7 +393,12 @@ export function BillingsPage() {
 
       <ActiveFilterChips chips={chips} onClear={clear} />
 
-      <div className="table-container">
+      {/* A falha da consulta mora junto da tabela que ela deixou sem linhas —
+          no topo, acima da fila "Aguardando faturamento", ficava fora da vista
+          de quem acabou de mexer num filtro aqui embaixo. */}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
+
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table table--clickable-rows table--sticky-actions">
           <thead>
             <tr>
@@ -430,7 +418,7 @@ export function BillingsPage() {
             </tr>
           </thead>
           <tbody>
-            {linhas.map((billing) => (
+            {billings.map((billing) => (
               <tr
                 key={billing.id}
                 tabIndex={0}
@@ -480,32 +468,33 @@ export function BillingsPage() {
               </tr>
             ))}
 
-            {!loading && linhas.length === 0 && (
-              <tr>
-                <td colSpan={9} className="table__empty">
-                  {periodoRecusado ? (
-                    TABELA_COM_PERIODO_RECUSADO
-                  ) : isActive ? (
-                    <>
-                      Nenhum faturamento encontrado para os filtros atuais.{" "}
-                      <ClearFilters onClear={clear} />
-                    </>
-                  ) : (
-                    "Nenhum faturamento cadastrado."
-                  )}
-                </td>
-              </tr>
-            )}
+            <ListStatusRow
+              colSpan={9}
+              query={consulta}
+              rowCount={billings.length}
+              periodRefused={periodoRecusado !== null}
+            >
+              {isActive ? (
+                <>
+                  Nenhum faturamento encontrado para os filtros atuais.{" "}
+                  <ClearFilters onClear={clear} />
+                </>
+              ) : (
+                "Nenhum faturamento cadastrado."
+              )}
+            </ListStatusRow>
           </tbody>
         </table>
-        {!periodoRecusado && (
+        {/* Total e páginas só com a resposta do recorte atual: os do filtro
+            anterior, debaixo do novo, contavam outra coisa. */}
+        {consulta.data && (
           <div className="table-foot">
             {total} {total === 1 ? "faturamento" : "faturamentos"}
           </div>
         )}
       </div>
 
-      {!periodoRecusado && (
+      {consulta.data && (
         <div className="pagination">
           <span>
             Página {page} de {totalPages}

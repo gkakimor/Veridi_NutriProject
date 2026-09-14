@@ -1,6 +1,7 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
+import { ListStatusRow } from "../../components/ListStatusRow";
 import { Link, useNavigate } from "react-router-dom";
 import type { InventoryOwnerType, LotDTO, LotStatus } from "@veridi/shared";
 import { LOT_STATUSES, LOT_STATUS_LABELS, ownerLabel } from "@veridi/shared";
@@ -14,6 +15,7 @@ import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 import { useListFilters } from "../../lib/list-filters";
+import { useListQuery } from "../../lib/list-query";
 import { ActiveFilterChips } from "../../components/filters/ActiveFilterChips";
 import type { FilterChip } from "../../components/filters/ActiveFilterChips";
 import { ClearFilters } from "../../components/filters/ClearFilters";
@@ -104,10 +106,6 @@ export function LotsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [lots, setLots] = useState<LotDTO[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [itemEscolhido, setItemEscolhido] = useState<EntityOption | null>(null);
 
   const { values, page, set, setPage, clear, isActive } = useListFilters({
@@ -147,31 +145,20 @@ export function LotsPage() {
     return () => clearTimeout(handle);
   }, [searchInput, search, set]);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
-
-    listLots({ ...filtrosDaConsulta, page, pageSize: PAGE_SIZE })
-      .then((result) => {
-        setLots(result.lots);
-        setTotal(result.total);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Falha ao carregar lotes");
-      })
-      .finally(() => setLoading(false));
-    /*
-     * `filtrosDaConsulta` inclui `itemId`. Antes as dependências eram
-     * `[page, search, statusFilter, ownerFilter]` e o item ficava de fora:
-     * trocar `?itemId=` sem desmontar a página — navegar de um item para
-     * outro pelo mesmo link — deixava na tela os lotes do item ANTERIOR, com
-     * a URL já apontando para o novo.
-     */
-  }, [filtrosDaConsulta, page]);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  /*
+   * `filtrosDaConsulta` inclui `itemId`. Antes as dependências eram
+   * `[page, search, statusFilter, ownerFilter]` e o item ficava de fora:
+   * trocar `?itemId=` sem desmontar a página — navegar de um item para
+   * outro pelo mesmo link — deixava na tela os lotes do item ANTERIOR, com
+   * a URL já apontando para o novo.
+   */
+  const consulta = useListQuery(
+    listLots,
+    { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
+    { fallbackError: "Falha ao carregar lotes" },
+  );
+  const lots: LotDTO[] = consulta.data?.lots ?? [];
+  const total = consulta.data?.total ?? 0;
 
   const chips: FilterChip[] = [];
   if (search) {
@@ -294,9 +281,9 @@ export function LotsPage() {
           contexto trocava de endereço e deixava a sessão intacta. */}
       <ActiveFilterChips chips={chips} onClear={clear} />
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
 
-      <div className="table-container">
+      <div className="table-container" aria-busy={consulta.loading || undefined}>
         <table className="table table--clickable-rows table--sticky-actions">
           <thead>
             <tr>
@@ -390,50 +377,50 @@ export function LotsPage() {
               </tr>
             ))}
 
-            {!loading && lots.length === 0 && (
-              <tr>
-                <td colSpan={10} className="table__empty">
-                  {isActive ? (
-                    <>
-                      Nenhum lote encontrado para os filtros atuais.{" "}
-                      <ClearFilters onClear={clear} />
-                    </>
-                  ) : (
-                    "Nenhum lote encontrado."
-                  )}
-                </td>
-              </tr>
-            )}
+            <ListStatusRow colSpan={10} query={consulta} rowCount={lots.length}>
+              {isActive ? (
+                <>
+                  Nenhum lote encontrado para os filtros atuais.{" "}
+                  <ClearFilters onClear={clear} />
+                </>
+              ) : (
+                "Nenhum lote encontrado."
+              )}
+            </ListStatusRow>
           </tbody>
         </table>
-        <div className="table-foot">
-          {total} {total === 1 ? "lote" : "lotes"}
-        </div>
+        {consulta.data && (
+          <div className="table-foot">
+            {total} {total === 1 ? "lote" : "lotes"}
+          </div>
+        )}
       </div>
 
-      <div className="pagination">
-        <span>
-          Página {page} de {totalPages}
-        </span>
-        <div className="table__actions">
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page <= 1}
-            onClick={() => setPage(page - 1)}
-          >
-            Anterior
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage(page + 1)}
-          >
-            Próxima
-          </button>
+      {consulta.data && (
+        <div className="pagination">
+          <span>
+            Página {page} de {totalPages}
+          </span>
+          <div className="table__actions">
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Próxima
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }
