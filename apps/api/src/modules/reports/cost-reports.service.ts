@@ -5,11 +5,13 @@ import type {
   QuotePricingAuditRowDTO,
   ReportPageDTO,
 } from "@veridi/shared";
+import { isDefaultPricingModel } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta, slicePage } from "../../lib/pagination.js";
 import { latestCalculationsByProduct } from "../industrial-cost-calculation/snapshot.service.js";
 import { precoUnitario, resultadoTecnico } from "../../lib/decimal-serialization.js";
+import { modeloDasColunas } from "../pricing/pricing-model.js";
 import { periodoDeInstante } from "./report-period.js";
 import type {
   IndustrialCostByProductQuery,
@@ -88,6 +90,19 @@ export async function getIndustrialCostByProductReport(
 }
 
 /**
+ * Custo p/ preço por unidade da faixa ativa — a mesma leitura do DTO da
+ * Precificação: o congelado; sem ele, no Modelo padrão, o custo do cálculo
+ * (ali o preço se formou sobre ele); fora do padrão, `null`.
+ */
+function custoParaPrecoDaFaixa(
+  tier: { pricingCostPerUnitSnapshot: PrismaTypes.Decimal | null; costPerUnitSnapshot: PrismaTypes.Decimal | null },
+  modeloPadrao: boolean,
+): string | null {
+  if (tier.pricingCostPerUnitSnapshot) return resultadoTecnico(tier.pricingCostPerUnitSnapshot);
+  return modeloPadrao && tier.costPerUnitSnapshot ? resultadoTecnico(tier.costPerUnitSnapshot) : null;
+}
+
+/**
  * R-19 — Precificação por produto.
  *
  * Somente precificações ATIVAS, uma linha por faixa, lendo os snapshots
@@ -124,8 +139,11 @@ export async function getPricingByProductReport(
     orderBy: [{ product: { code: "asc" } }],
   });
 
-  const rows: PricingByProductRowDTO[] = versions.flatMap((version) =>
-    version.tiers.map((tier) => ({
+  const rows: PricingByProductRowDTO[] = versions.flatMap((version) => {
+    // O Modelo da versão ativa é imutável: copiado na aplicação, congelado com ela.
+    const pricingModel = modeloDasColunas(version);
+    const modeloPadrao = isDefaultPricingModel(pricingModel);
+    return version.tiers.map((tier) => ({
       pricingVersionId: version.id,
       pricingLabel: `${version.code} · V${version.versionNumber}`,
       productId: version.productId,
@@ -139,6 +157,17 @@ export async function getPricingByProductReport(
       uomCode: tier.uomCode,
       priceMode: tier.priceMode,
       costPerUnit: tier.costPerUnitSnapshot ? resultadoTecnico(tier.costPerUnitSnapshot) : null,
+      pricingCostPerUnit: custoParaPrecoDaFaixa(tier, modeloPadrao),
+      /*
+       * A qualidade do custo que formou o preço, congelada com ele. No Modelo
+       * padrão esse custo é o do cálculo, e a faixa ativada antes do campo lê
+       * a do cálculo (§84). Fora do padrão, sem o campo, ela não foi congelada:
+       * `null`, nunca a do cálculo no lugar.
+       */
+      pricingCostQuality:
+        tier.pricingCostQualitySnapshot ??
+        (modeloPadrao ? (tier.costQualitySnapshot ?? version.costQualitySnapshot) : null),
+      pricingModel,
       commissionPercent: (tier.commissionPercentSnapshot ?? tier.commissionPercent).toFixed(4),
       // Preço TÉCNICO da faixa — oito casas, §58. Relatório de precificação
       // é leitura técnica, não documento comercial.
@@ -153,8 +182,8 @@ export async function getPricingByProductReport(
         ? resultadoTecnico(tier.contributionPerUnitSnapshot)
         : null,
       activatedAt: version.activatedAt ? version.activatedAt.toISOString() : null,
-    })),
-  );
+    }));
+  });
 
   // Paginação em memória: a linha do relatório é a FAIXA, não a versão.
   return { rows: slicePage(rows, pagination), ...pageMeta(pagination, rows.length) };
@@ -258,6 +287,13 @@ export async function getQuotePricingAuditReport(
     const contribution = frozen
       ? line.contributionMarginSnapshot
       : (line.pricingTier?.contributionMarginSnapshot ?? null);
+    /*
+     * Modelo e custo p/ preço só na linha viva, lidos da faixa ativa vinculada
+     * (imutável). A linha enviada congelou custo do cálculo e margem, não o
+     * Modelo nem o custo p/ preço — o relatório não os deduz do vínculo
+     * (PRICING-MODEL-VIEW-REPORTS-01).
+     */
+    const liveModel = !frozen && line.pricingTier && line.pricingVersion ? modeloDasColunas(line.pricingVersion) : null;
 
     return {
       quoteLineId: line.id,
@@ -289,6 +325,10 @@ export async function getQuotePricingAuditReport(
       // campo (o snapshot congelado da linha e o `costPerUnitSnapshot` da
       // faixa viva) estão agora na MESMA escala; servir seis cortaria as duas.
       industrialCostPerUnit: costPerUnit ? resultadoTecnico(costPerUnit) : null,
+      pricingCostPerUnit:
+        liveModel && line.pricingTier ? custoParaPrecoDaFaixa(line.pricingTier, isDefaultPricingModel(liveModel)) : null,
+      pricingModel: liveModel,
+      pricingModelNotFrozen: frozen,
       contributionMarginPercent: contribution ? contribution.toFixed(4) : null,
       sentAt: quote.sentAt ? quote.sentAt.toISOString() : null,
       acceptedAt: quote.acceptedAt ? quote.acceptedAt.toISOString() : null,

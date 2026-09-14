@@ -5,11 +5,13 @@ import { useNavigate } from "react-router-dom";
 import {
   COST_PER_1000_LABEL,
   INDUSTRIAL_COST_QUALITY_LABELS,
+  MODELO_NAO_CONGELADO_NO_ENVIO,
   PRICE_MODE_LABELS,
   PRICING_PROVENANCE_ROLES,
   QUOTE_PRICE_SOURCE_LABELS,
   QUOTE_STATUS_LABELS,
 } from "@veridi/shared";
+import { resumoDoModelo } from "../../lib/pricing-cost";
 import { useOptionalAuth } from "../../app/AuthProvider";
 import { ReportForbidden, ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
@@ -183,9 +185,11 @@ function PricingByProductReport() {
           "Cliente",
           "Precificação",
           "Quantidade",
+          "Modelo de Precificação",
           "Cálculo",
-          "Qualidade",
-          "Custo/un",
+          "Qualidade do custo do cálculo",
+          "Custo do cálculo/un",
+          "Custo p/ preço/un",
           "Comissão",
           "Preço",
           "Margem contrib.",
@@ -212,9 +216,18 @@ function PricingByProductReport() {
               {formatQuantity(row.quantity)} {row.uomCode}
               <span className="field__hint"> {PRICE_MODE_LABELS[row.priceMode]}</span>
             </td>
+            {/* Sobre qual custo a margem desta linha se formou (§84). */}
+            <td>{resumoDoModelo(row.pricingModel)}</td>
             <td className="is-code">{row.calculationCode}</td>
             <td>{INDUSTRIAL_COST_QUALITY_LABELS[row.costQuality]}</td>
             <td>{formatUnitCost(row.costPerUnit)}</td>
+            <td>
+              {formatUnitCost(row.pricingCostPerUnit)}
+              {/* A qualidade do custo que formou o preço só aparece quando não é a do cálculo. */}
+              {row.pricingCostQuality && row.pricingCostQuality !== row.costQuality && (
+                <span className="field__hint"> {INDUSTRIAL_COST_QUALITY_LABELS[row.pricingCostQuality]}</span>
+              )}
+            </td>
             <td>{formatPercent(row.commissionPercent)}</td>
             <td>{formatUnitCost(row.unitPrice)}</td>
             <td>
@@ -340,8 +353,10 @@ function QuotePricingAuditReport() {
           "Origem",
           "Precificação",
           "Cálculo",
-          "Qualidade",
-          "Custo/un",
+          "Modelo de Precificação",
+          "Qualidade do custo do cálculo",
+          "Custo do cálculo/un",
+          "Custo p/ preço/un",
           "Margem contrib.",
           "Enviado",
           "Aceito",
@@ -373,8 +388,18 @@ function QuotePricingAuditReport() {
             <td>{QUOTE_PRICE_SOURCE_LABELS[row.priceSource]}</td>
             <td className="is-code">{row.pricingLabel ?? "—"}</td>
             <td className="is-code">{row.calculationCode ?? "—"}</td>
+            {/* Proposta enviada não congelou o Modelo: o relatório diz isso em
+                vez de deduzir do vínculo com a faixa. */}
+            <td>
+              {row.pricingModel
+                ? resumoDoModelo(row.pricingModel)
+                : row.pricingModelNotFrozen
+                  ? MODELO_NAO_CONGELADO_NO_ENVIO
+                  : "—"}
+            </td>
             <td>{row.costQuality ? INDUSTRIAL_COST_QUALITY_LABELS[row.costQuality] : "—"}</td>
             <td>{formatUnitCost(row.industrialCostPerUnit)}</td>
+            <td>{formatUnitCost(row.pricingCostPerUnit)}</td>
             <td>
               {formatPercent(row.contributionMarginPercent)}
             </td>

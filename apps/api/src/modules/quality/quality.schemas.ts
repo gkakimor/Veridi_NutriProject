@@ -29,6 +29,12 @@ export const listQualityQueueQuerySchema = z.object({
   onlyWithBalance: booleanoDeConsultaSchema().default(false),
   page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
   pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
+  /**
+   * O recorte INTEIRO num retrato só, com teto (`QUALITY_QUEUE_ALL_ROWS_LIMIT`)
+   * — para documento, que não pode ler páginas de uma fila que muda entre
+   * elas (PAGED-DOCUMENT-SNAPSHOT-01). `page`/`pageSize` são ignorados.
+   */
+  all: booleanoDeConsultaSchema().default(false),
 });
 
 export type ApproveCoaInput = z.infer<typeof approveCoaSchema>;

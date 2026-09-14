@@ -1,4 +1,28 @@
-import { isDefaultPricingModel, type PricingTierDTO, type PricingVersionDTO } from "@veridi/shared";
+import {
+  isDefaultPricingModel,
+  resumoDoModeloDePrecificacao,
+  type FormatosDoModelo,
+  type PricingModelConfig,
+  type PricingTierDTO,
+  type PricingVersionDTO,
+} from "@veridi/shared";
+import { formatBRL, formatUnitPriceBRL } from "./currency";
+import { formatPercent } from "./percent";
+
+/**
+ * Os valores do Modelo como a tela e o PDF os escrevem. As palavras vêm do
+ * shared — as mesmas do CSV (PRICING-MODEL-VIEW-REPORTS-01).
+ */
+export const FORMATOS_DO_MODELO: FormatosDoModelo = {
+  percentual: formatPercent,
+  porUnidade: formatUnitPriceBRL,
+  total: formatBRL,
+};
+
+/** O Modelo numa linha — "Padrão", ou o que entrou no custo p/ preço. */
+export function resumoDoModelo(modelo: PricingModelConfig): string {
+  return resumoDoModeloDePrecificacao(modelo, FORMATOS_DO_MODELO);
+}
 
 /**
  * O custo que FORMA o preço — `PRODUCT_RULES.md` §84. Ausente em resposta

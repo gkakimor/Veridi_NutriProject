@@ -86,6 +86,7 @@ import {
   requirementsQuerySchema,
 } from "../reports/reports.schemas.js";
 import type {
+  FormatosDoModelo,
   IndustrialCostByProductRowDTO,
   PricingByProductRowDTO,
   QuotePricingAuditRowDTO,
@@ -93,9 +94,11 @@ import type {
 import {
   COST_PER_1000_LABEL,
   INDUSTRIAL_COST_QUALITY_LABELS,
+  MODELO_NAO_CONGELADO_NO_ENVIO,
   PRICE_MODE_LABELS,
   QUOTE_PRICE_SOURCE_LABELS,
   QUOTE_STATUS_LABELS,
+  resumoDoModeloDePrecificacao,
 } from "@veridi/shared";
 import {
   getIndustrialCostByProductReport,
@@ -537,6 +540,16 @@ const r18 = defineCsvExport({
   ],
 });
 
+/**
+ * Os valores do Modelo de Precificação no texto do CSV — as palavras são as do
+ * shared, as mesmas do PDF de Precificação (PRICING-MODEL-VIEW-REPORTS-01).
+ */
+const FORMATOS_DO_MODELO_NO_CSV: FormatosDoModelo = {
+  percentual: (valor) => (valor === null ? "—" : `${csvDecimal(valor)}%`),
+  porUnidade: (valor) => (valor === null ? "—" : `R$ ${csvUnitPrice(valor)}`),
+  total: (valor) => (valor === null ? "—" : `R$ ${csvMoney(valor)}`),
+};
+
 const r19 = defineCsvExport({
   path: "/reports/costs/pricing-by-product/export.csv",
   slug: "r19_precificacao_por_produto",
@@ -553,13 +566,27 @@ const r19 = defineCsvExport({
     { header: "Quantidade", value: (row: PricingByProductRowDTO) => csvDecimal(row.quantity) },
     { header: "Unidade", value: (row: PricingByProductRowDTO) => csvText(row.uomCode) },
     { header: "Modo de preço", value: (row: PricingByProductRowDTO) => PRICE_MODE_LABELS[row.priceMode] },
+    // O Modelo diz sobre qual custo a margem e o markup desta linha se formaram (§84).
+    {
+      header: "Modelo de Precificação",
+      value: (row: PricingByProductRowDTO) =>
+        csvText(resumoDoModeloDePrecificacao(row.pricingModel, FORMATOS_DO_MODELO_NO_CSV)),
+    },
     { header: "Cálculo de custo", value: (row: PricingByProductRowDTO) => csvCode(row.calculationCode) },
     { header: "Data do custo", value: (row: PricingByProductRowDTO) => csvDate(row.costReferenceDate) },
+    // Custo do cálculo (CMV) e custo p/ preço, cada um com o seu nome: fora do
+    // Modelo padrão os dois diferem de propósito.
     {
-      header: "Qualidade do custo",
+      header: "Qualidade do custo do cálculo",
       value: (row: PricingByProductRowDTO) => INDUSTRIAL_COST_QUALITY_LABELS[row.costQuality],
     },
-    { header: "Custo/unidade", value: (row: PricingByProductRowDTO) => csvDecimal(row.costPerUnit) },
+    { header: "Custo do cálculo/un", value: (row: PricingByProductRowDTO) => csvDecimal(row.costPerUnit) },
+    {
+      header: "Qualidade do custo p/ preço",
+      value: (row: PricingByProductRowDTO) =>
+        row.pricingCostQuality ? INDUSTRIAL_COST_QUALITY_LABELS[row.pricingCostQuality] : "",
+    },
+    { header: "Custo p/ preço/un", value: (row: PricingByProductRowDTO) => csvDecimal(row.pricingCostPerUnit) },
     { header: "Comissão (%)", value: (row: PricingByProductRowDTO) => csvDecimal(row.commissionPercent) },
     { header: "Preço", value: (row: PricingByProductRowDTO) => csvDecimal(row.unitPrice) },
     {
@@ -601,14 +628,29 @@ const r20 = defineCsvExport({
     { header: "Precificação", value: (row: QuotePricingAuditRowDTO) => csvCode(row.pricingLabel) },
     { header: "Faixa", value: (row: QuotePricingAuditRowDTO) => csvDecimal(row.tierQuantity) },
     { header: "Cálculo", value: (row: QuotePricingAuditRowDTO) => csvCode(row.calculationCode) },
+    // Linha viva: o Modelo da faixa ativa. Linha enviada: o envio não congelou
+    // o Modelo, e o relatório diz isso em vez de deduzir do vínculo.
     {
-      header: "Qualidade do custo",
+      header: "Modelo de Precificação",
+      value: (row: QuotePricingAuditRowDTO) =>
+        row.pricingModel
+          ? csvText(resumoDoModeloDePrecificacao(row.pricingModel, FORMATOS_DO_MODELO_NO_CSV))
+          : row.pricingModelNotFrozen
+            ? MODELO_NAO_CONGELADO_NO_ENVIO
+            : "",
+    },
+    {
+      header: "Qualidade do custo do cálculo",
       value: (row: QuotePricingAuditRowDTO) =>
         row.costQuality ? INDUSTRIAL_COST_QUALITY_LABELS[row.costQuality] : "",
     },
     {
-      header: "Custo industrial/un",
+      header: "Custo do cálculo/un",
       value: (row: QuotePricingAuditRowDTO) => csvDecimal(row.industrialCostPerUnit),
+    },
+    {
+      header: "Custo p/ preço/un",
+      value: (row: QuotePricingAuditRowDTO) => csvDecimal(row.pricingCostPerUnit),
     },
     {
       header: "Margem de contribuição (%)",

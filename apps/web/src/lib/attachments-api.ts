@@ -61,6 +61,11 @@ export interface QualityQueueParams {
   lotStatus?: LotStatus;
   onlyPending?: boolean;
   onlyWithBalance?: boolean;
+  /**
+   * O recorte inteiro num retrato só, com teto no servidor — para documento
+   * (PAGED-DOCUMENT-SNAPSHOT-01). Com ele, `page`/`pageSize` não vão.
+   */
+  all?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -79,8 +84,12 @@ export async function listQualityQueue(
   if (params.lotStatus) query.set("lotStatus", params.lotStatus);
   if (params.onlyPending) query.set("onlyPending", "true");
   if (params.onlyWithBalance) query.set("onlyWithBalance", "true");
-  query.set("page", String(params.page ?? 1));
-  query.set("pageSize", String(params.pageSize ?? 20));
+  if (params.all) {
+    query.set("all", "true");
+  } else {
+    query.set("page", String(params.page ?? 1));
+    query.set("pageSize", String(params.pageSize ?? 20));
+  }
 
   const response = await apiFetch(`${API_URL}/quality/coa-queue?${query.toString()}`);
   return (await parseJsonOrThrow(response)) as QualityQueueResponse;

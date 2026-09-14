@@ -162,8 +162,9 @@ describe("R-20 — versão com vários produtos", () => {
 
     expect(cabecalho!.split(";")).toEqual([
       "Orçamento", "Projeto", "Nome do projeto", "Cliente", "Produto", "Status", "Quantidade", "Unidade",
-      "Preço unitário", "Total", "Origem do preço", "Precificação", "Faixa", "Cálculo", "Qualidade do custo",
-      "Custo industrial/un", "Margem de contribuição (%)", "Enviado em", "Aceito em",
+      "Preço unitário", "Total", "Origem do preço", "Precificação", "Faixa", "Cálculo", "Modelo de Precificação",
+      "Qualidade do custo do cálculo", "Custo do cálculo/un", "Custo p/ preço/un", "Margem de contribuição (%)",
+      "Enviado em", "Aceito em",
     ]);
     expect(linhas).toHaveLength(4);
     for (const id of [...Object.values(linhaDe), versaoNova, versaoAntiga]) {

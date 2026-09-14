@@ -6,11 +6,12 @@ import {
   COST_PER_1000_LABEL,
   INDUSTRIAL_COST_QUALITY_LABELS,
   PRICE_MODE_LABELS,
-  PRICING_INDUSTRIAL_COST_MODE_LABELS,
   PRICING_VERSION_STATUS_LABELS,
+  textoDoCustoIndustrialNoPreco,
+  textoDosImpostosNoPreco,
 } from "@veridi/shared";
 import { formatUnitCost } from "../../components/CostBreakdown";
-import { custoQueFormaPreco, usaModeloFlexivel } from "../../lib/pricing-cost";
+import { custoQueFormaPreco, FORMATOS_DO_MODELO, usaModeloFlexivel } from "../../lib/pricing-cost";
 import {
   PdfBlock,
   PdfDataGrid,
@@ -29,7 +30,6 @@ import {
   formatDate,
   formatPercent,
   formatQuantity,
-  formatUnitPriceBRL,
   pdfFileName,
   formatIntegerPtBr,
 } from "../format";
@@ -139,33 +139,22 @@ const DEFINICAO_DOS_DOIS_CUSTOS =
  */
 
 function custoIndustrialNoPreco(modelo: PricingModelConfig): string {
-  if (modelo.externalAdditionalCosts) return "Fora da conta — administrado externamente";
-  switch (modelo.industrialCostMode) {
-    case "CALCULATED":
-      return PRICING_INDUSTRIAL_COST_MODE_LABELS.CALCULATED;
-    case "IGNORE":
-      return "Não considerado";
-    case "PERCENT_MATERIAL_COST":
-      return `${formatPercent(modelo.industrialCostPercentOfMaterials)} sobre custo de materiais`;
-    case "PER_UNIT":
-      return `${formatUnitPriceBRL(modelo.industrialCostAmountPerUnit)} por unidade`;
-    case "TOTAL":
-      return `${formatBRL(modelo.industrialCostAmountTotal)} uma vez em cada faixa`;
-  }
+  // As palavras são do shared: R-19, R-20 e CMV contam o Modelo com as mesmas.
+  return textoDoCustoIndustrialNoPreco(modelo, FORMATOS_DO_MODELO);
 }
 
 function impostosNoPreco(modelo: PricingModelConfig): string {
-  if (modelo.externalAdditionalCosts) return "Fora da conta — administrados externamente";
+  const texto = textoDosImpostosNoPreco(modelo, FORMATOS_DO_MODELO);
+  if (modelo.externalAdditionalCosts) return texto;
   switch (modelo.estimatedTaxMode) {
     case "IGNORE":
-      return "Não considerados";
+      return texto;
     case "PERCENT_SALE_PRICE":
       // Percentual sobre a venda não é custo: vai ao divisor, como a comissão.
-      return `${formatPercent(modelo.estimatedTaxPercentOfSalePrice)} sobre preço de venda — no divisor do preço, com margem e comissão`;
+      return `${texto} — no divisor do preço, com margem e comissão`;
     case "PER_UNIT":
-      return `${formatUnitPriceBRL(modelo.estimatedTaxAmountPerUnit)} por unidade — somados ao custo p/ preço`;
     case "TOTAL":
-      return `${formatBRL(modelo.estimatedTaxAmountTotal)} uma vez em cada faixa — somados ao custo p/ preço`;
+      return `${texto} — somados ao custo p/ preço`;
   }
 }
 

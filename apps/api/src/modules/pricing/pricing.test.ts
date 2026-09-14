@@ -1433,3 +1433,242 @@ describe("Prévia da faixa — antes de gravar", () => {
     await app.close();
   });
 });
+
+/**
+ * PRICING-MODEL-VIEW-REPORTS-01 — R-19 e R-20 dizem o Modelo de Precificação e
+ * mostram o custo p/ preço ao lado do custo do cálculo.
+ *
+ * O cenário é o de sempre: material a R$ 10/un e energia a R$ 0,001/un, preço
+ * manual de R$ 25 com 5% de comissão. No Modelo padrão o preço se forma sobre
+ * o custo do cálculo (R$ 10,001); ignorando o custo industrial, sobre os
+ * materiais (R$ 10); com R$ 0,50/un, sobre R$ 10,50. O Modelo chega à versão
+ * pela aplicação de uma política — aqui vai direto no rascunho, antes da faixa,
+ * e a ativação congela o resto.
+ */
+describe("R-19 e R-20 — Modelo de Precificação e os dois custos", () => {
+  type Modelo = { industrialCostMode: "IGNORE" | "PER_UNIT"; industrialCostAmountPerUnit?: string };
+
+  async function precificacaoAtiva(app: App, modelo: Modelo | null) {
+    const scenario = await createScenario(app, { materialUnitCost: "10", materialQuantityPerUnit: "1" });
+    const pricing = await createPricing(app, scenario.product.id, scenario.calculation.id);
+    if (modelo) await getPrisma().pricingVersion.update({ where: { id: pricing.id }, data: modelo });
+    await addTier(app, pricing.id, {
+      quantity: "1000",
+      priceMode: "MANUAL_PRICE",
+      manualUnitPrice: "25",
+      commissionPercent: "5",
+    });
+    const ativada = await app.inject({ method: "POST", url: `/pricing-versions/${pricing.id}/activate`, payload: {} });
+    expect(ativada.statusCode, ativada.body.slice(0, 300)).toBeLessThan(300);
+    return { scenario, pricing };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function jsonDoR19(app: App, codigo: string): Promise<any[]> {
+    const resposta = await app.inject({ method: "GET", url: `/reports/costs/pricing-by-product?search=${codigo}` });
+    expect(resposta.statusCode).toBe(200);
+    return resposta.json().rows;
+  }
+
+  /** Cada linha do CSV como coluna → valor. */
+  async function csvDe(app: App, url: string): Promise<Record<string, string>[]> {
+    const resposta = await app.inject({ method: "GET", url });
+    expect(resposta.statusCode).toBe(200);
+    const [cabecalho, ...linhas] = resposta.body
+      .replace(/^﻿/, "")
+      .split("\r\n")
+      .filter((linha) => linha.length > 0);
+    const colunas = cabecalho!.split(";");
+    return linhas.map((linha) => Object.fromEntries(linha.split(";").map((valor, i) => [colunas[i]!, valor])));
+  }
+
+  async function semRetratoDoCustoParaPreco(productId: string) {
+    // Faixa ativada antes do campo: nem o custo p/ preço nem a qualidade dele congelados.
+    await getPrisma().pricingTier.updateMany({
+      where: { pricingVersion: { productId } },
+      data: { pricingCostPerUnitSnapshot: null, pricingCostQualitySnapshot: null },
+    });
+  }
+
+  it("Modelo padrão: os dois custos são o mesmo, o CSV diz Padrão, e a faixa sem o campo lê o do cálculo", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const { scenario } = await precificacaoAtiva(app, null);
+    const codigo = scenario.product.code;
+
+    const [linha] = await jsonDoR19(app, codigo);
+    expect(linha.pricingModel).toMatchObject({
+      industrialCostMode: "CALCULATED",
+      estimatedTaxMode: "IGNORE",
+      externalAdditionalCosts: false,
+    });
+    expect(linha.costPerUnit).toBe("10.001000000000");
+    expect(linha.pricingCostPerUnit).toBe("10.001000000000");
+    expect(linha.pricingCostQuality).toBe(linha.costQuality);
+
+    const [csv] = await csvDe(app, `/reports/costs/pricing-by-product/export.csv?search=${codigo}`);
+    expect(csv!["Modelo de Precificação"]).toBe("Padrão");
+    expect(csv!["Custo do cálculo/un"]).toBe("10,001");
+    expect(csv!["Custo p/ preço/un"]).toBe("10,001");
+    expect(csv!["Qualidade do custo p/ preço"]).toBe(csv!["Qualidade do custo do cálculo"]);
+    expect(Object.keys(csv!)).not.toContain("Custo/unidade");
+
+    await semRetratoDoCustoParaPreco(scenario.product.id);
+    const [antiga] = await jsonDoR19(app, codigo);
+    expect(antiga.pricingCostPerUnit).toBe("10.001000000000");
+    expect(antiga.pricingCostQuality).toBe(antiga.costQuality);
+
+    await app.close();
+  });
+
+  it("IGNORE: margem sobre o custo p/ preço, custo do cálculo à parte; sem o campo congelado, nada no lugar", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const { scenario } = await precificacaoAtiva(app, { industrialCostMode: "IGNORE" });
+    const codigo = scenario.product.code;
+
+    const [linha] = await jsonDoR19(app, codigo);
+    expect(linha.pricingModel.industrialCostMode).toBe("IGNORE");
+    expect(linha.costPerUnit).toBe("10.001000000000");
+    expect(linha.pricingCostPerUnit).toBe("10.000000000000");
+    // 25 − 5% de comissão − 10: a contribuição saiu do custo p/ preço, não do cálculo.
+    expect(linha.contributionPerUnit).toBe("13.750000000000");
+
+    const [csv] = await csvDe(app, `/reports/costs/pricing-by-product/export.csv?search=${codigo}`);
+    expect(csv!["Modelo de Precificação"]).toBe(
+      "Custo industrial no preço: Não considerado · Impostos estimados: Não considerados",
+    );
+    expect(csv!["Custo do cálculo/un"]).toBe("10,001");
+    expect(csv!["Custo p/ preço/un"]).toBe("10");
+
+    await semRetratoDoCustoParaPreco(scenario.product.id);
+    const [antiga] = await jsonDoR19(app, codigo);
+    expect(antiga.pricingCostPerUnit).toBeNull();
+    expect(antiga.pricingCostQuality).toBeNull();
+    const [csvAntigo] = await csvDe(app, `/reports/costs/pricing-by-product/export.csv?search=${codigo}`);
+    expect(csvAntigo!["Custo p/ preço/un"]).toBe("");
+    expect(csvAntigo!["Qualidade do custo p/ preço"]).toBe("");
+    expect(csvAntigo!["Custo do cálculo/un"]).toBe("10,001");
+
+    await app.close();
+  });
+
+  it("PER_UNIT: a base dita no Modelo e o custo p/ preço diferente do cálculo", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const { scenario } = await precificacaoAtiva(app, {
+      industrialCostMode: "PER_UNIT",
+      industrialCostAmountPerUnit: "0.5",
+    });
+
+    const [linha] = await jsonDoR19(app, scenario.product.code);
+    expect(linha.costPerUnit).toBe("10.001000000000");
+    expect(linha.pricingCostPerUnit).toBe("10.500000000000");
+
+    const [csv] = await csvDe(app, `/reports/costs/pricing-by-product/export.csv?search=${scenario.product.code}`);
+    expect(csv!["Modelo de Precificação"]).toBe(
+      "Custo industrial no preço: R$ 0,50 por unidade · Impostos estimados: Não considerados",
+    );
+    expect(csv!["Custo p/ preço/un"]).toBe("10,5");
+
+    await app.close();
+  });
+
+  it("R-20: linha viva mostra Modelo e custo p/ preço da faixa; a enviada diz que não congelou e não deduz do vínculo", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const prisma = getPrisma();
+    const { scenario, pricing } = await precificacaoAtiva(app, { industrialCostMode: "IGNORE" });
+    const tier = await prisma.pricingTier.findFirstOrThrow({ where: { pricingVersionId: pricing.id } });
+    const m = marker();
+    const projeto = await prisma.project.create({
+      data: { code: `PROJ-MOD-${m}`, customerId: await fixtureCustomerId(), name: `Projeto Modelo ${m}`, entryDate: new Date() },
+    });
+
+    try {
+      const vinculo = {
+        productId: scenario.product.id,
+        quotedQuantity: "1000",
+        uomCode: "un",
+        unitPrice: "25",
+        priceSource: "PRICING_TIER" as const,
+        pricingVersionId: pricing.id,
+        pricingTierId: tier.id,
+      };
+      await prisma.quoteVersion.create({
+        data: {
+          code: `ORC-MOD-${m}-1`,
+          projectId: projeto.id,
+          versionNumber: 1,
+          status: "DRAFT",
+          quoteDate: new Date("2026-09-13T12:00:00.000Z"),
+          lines: { create: [vinculo] },
+        },
+      });
+      // A enviada guarda o que `buildProvenanceSnapshot` congela no envio: custo
+      // do cálculo, qualidade dele e margem — nem Modelo, nem custo p/ preço.
+      await prisma.quoteVersion.create({
+        data: {
+          code: `ORC-MOD-${m}-2`,
+          projectId: projeto.id,
+          versionNumber: 2,
+          status: "SENT",
+          quoteDate: new Date("2026-09-14T12:00:00.000Z"),
+          sentAt: new Date("2026-09-14T12:00:00.000Z"),
+          lines: {
+            create: [
+              {
+                ...vinculo,
+                pricingCodeSnapshot: pricing.code,
+                pricingVersionNumberSnapshot: 1,
+                pricingTierQuantitySnapshot: "1000",
+                costCalculationCodeSnapshot: scenario.calculation.code,
+                industrialCostPerUnitSnapshot: tier.costPerUnitSnapshot,
+                costQualitySnapshot: tier.costQualitySnapshot,
+                contributionMarginSnapshot: tier.contributionMarginSnapshot,
+              },
+            ],
+          },
+        },
+      });
+
+      const resposta = await app.inject({
+        method: "GET",
+        url: `/reports/commercial/quote-pricing?search=${projeto.code}&all=true`,
+      });
+      expect(resposta.statusCode).toBe(200);
+      // Mais recente primeiro: a enviada, depois o rascunho.
+      const [enviada, rascunho] = resposta.json().rows;
+      expect(enviada).toMatchObject({
+        status: "SENT",
+        industrialCostPerUnit: "10.001000000000",
+        pricingCostPerUnit: null,
+        pricingModel: null,
+        pricingModelNotFrozen: true,
+        contributionMarginPercent: tier.contributionMarginSnapshot!.toFixed(4),
+      });
+      expect(rascunho).toMatchObject({
+        status: "DRAFT",
+        industrialCostPerUnit: "10.001000000000",
+        pricingCostPerUnit: "10.000000000000",
+        pricingModelNotFrozen: false,
+      });
+      expect(rascunho.pricingModel.industrialCostMode).toBe("IGNORE");
+
+      const [csvEnviada, csvRascunho] = await csvDe(
+        app,
+        `/reports/commercial/quote-pricing/export.csv?search=${projeto.code}`,
+      );
+      expect(csvEnviada!["Modelo de Precificação"]).toBe("Não congelado no envio");
+      expect(csvEnviada!["Custo p/ preço/un"]).toBe("");
+      expect(csvEnviada!["Custo do cálculo/un"]).toBe("10,001");
+      expect(csvRascunho!["Modelo de Precificação"]).toBe(
+        "Custo industrial no preço: Não considerado · Impostos estimados: Não considerados",
+      );
+      expect(csvRascunho!["Custo p/ preço/un"]).toBe("10");
+    } finally {
+      await prisma.project.delete({ where: { id: projeto.id } });
+      await app.close();
+    }
+  });
+});

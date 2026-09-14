@@ -14,6 +14,7 @@
 import type { CostQuality, CostSource } from "./costs.js";
 import type { IndustrialCostQuality } from "./industrial-cost-calculation.js";
 import type { PriceMode } from "./pricing.js";
+import type { PricingModelConfig } from "./pricing-model.js";
 import type { QuotePriceSource, QuoteStatus } from "./projects.js";
 import type { BillingStatus, CustomerOrderBillingStatus } from "./billings.js";
 import type { CustomerOrderStatus } from "./customer-orders.js";
@@ -561,7 +562,23 @@ export interface PricingByProductRowDTO {
   quantity: string;
   uomCode: string;
   priceMode: PriceMode;
+  /** Custo do cálculo por unidade (CMV da faixa), congelado na ativação. */
   costPerUnit: string | null;
+  /**
+   * Custo p/ preço por unidade — o que FORMOU preço, markup e contribuição
+   * (§84), congelado na ativação. No Modelo padrão é o custo do cálculo, e a
+   * faixa ativada antes do campo lê o do cálculo. Fora do padrão, `null` é
+   * base incompleta ou não congelada: nunca cai para o custo do cálculo
+   * (PRICING-MODEL-VIEW-REPORTS-01).
+   */
+  pricingCostPerUnit: string | null;
+  /**
+   * Qualidade do custo p/ preço, congelada na ativação. Modelo padrão sem o
+   * campo lê a do cálculo; Modelo flexível sem o campo é `null` — não congelada.
+   */
+  pricingCostQuality: IndustrialCostQuality | null;
+  /** Modelo de Precificação da versão — copiado na aplicação, imutável depois da ativação. */
+  pricingModel: PricingModelConfig;
   commissionPercent: string;
   unitPrice: string | null;
   contributionMarginPercent: string | null;
@@ -577,6 +594,12 @@ export interface PricingByProductRowDTO {
  * qual foi preço de exceção. Contém custo e margem — é documento INTERNO,
  * nunca o orçamento do cliente.
  */
+/**
+ * O que o R-20 escreve no lugar do Modelo da linha enviada: o envio não o
+ * congela, e o relatório não o deduz do vínculo.
+ */
+export const MODELO_NAO_CONGELADO_NO_ENVIO = "Não congelado no envio";
+
 export interface QuotePricingAuditRowDTO {
   /**
    * Identidade da linha do relatório: uma por linha de orçamento. A versão
@@ -600,8 +623,24 @@ export interface QuotePricingAuditRowDTO {
   pricingLabel: string | null;
   tierQuantity: string | null;
   calculationCode: string | null;
+  /** Qualidade do custo do cálculo — a que a linha enviada congela. */
   costQuality: IndustrialCostQuality | null;
+  /** Custo do cálculo por unidade (CMV da faixa) — o que a linha enviada congela. */
   industrialCostPerUnit: string | null;
+  /**
+   * Custo p/ preço por unidade da faixa vinculada. Só na linha viva
+   * (rascunho), lido da faixa ativa, que é imutável. A linha enviada não
+   * congela esse custo: `null`, com `pricingModelNotFrozen` dizendo por quê.
+   */
+  pricingCostPerUnit: string | null;
+  /** Modelo da precificação vinculada — só na linha viva, pela mesma regra. */
+  pricingModel: PricingModelConfig | null;
+  /**
+   * Linha enviada com proveniência de precificação: o envio congelou custo do
+   * cálculo e margem, mas não o Modelo nem o custo p/ preço. O relatório não
+   * os deduz do vínculo — fica dito que não foram congelados.
+   */
+  pricingModelNotFrozen: boolean;
   contributionMarginPercent: string | null;
   sentAt: string | null;
   acceptedAt: string | null;
