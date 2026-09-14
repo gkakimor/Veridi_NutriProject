@@ -3738,6 +3738,48 @@ em 390px o seletor de produto cobre o campo de quantidade (igual na main); OP-PA
 — partes vazio ou `0` viram 1 em silêncio (herdado, preservado); NUMERIC-FOCUS-API-ZEROS-01 — preço
 de 8 casas servido com `toFixed` aparece `12,50` fora do foco e `12,50000000` no foco.
 
+## Contrato de entrada e data padrão (INPUT-DATE-CONTRACT-WAVE-01, 2026-09-13)
+
+Três achados confirmados, fechados juntos. Sem migration, sem mudança de rota nem de DTO.
+
+**API-INT-COERCION-01.** Inteiro de escrita na API é lido como decimal inteiro canônico
+(`apps/api/src/lib/integer-schema.ts`: `lerInteiroDecimal`, `inteiroDecimalSchema`). Dígitos com
+menos opcional e espaço nas pontas; número JSON só se já for inteiro seguro. `Number()` e
+`z.coerce.number()` aceitavam `"1e2"` (100), `"0x1E"` (30), `"+1"`, `"1.0"`, `"Infinity"` e
+`true` (1) — agora 400. Vale para `optionalPositiveInt` de `projects.schemas.ts` (doses e vida útil
+do Projeto; prazo, parcelas e intervalo do Orçamento) e de `lib/industrial-schema.ts` (Produto,
+Formulação) e para o `dosesPerPackage` do Modelo. Mínimo, tetos de
+`LIMITES_INTEIROS_DAS_CONDICOES`, ausente, null e vazio como antes. Único teste que dependia da
+coerção permissiva: a caracterização de `projeto-inteiros-api.test.ts` (4 casos esperavam 200),
+que passou a esperar 400 com o gravado mantido. Paginação (`page`/`pageSize`) ficou em
+`z.coerce` — API-PAGINATION-COERCION-01.
+
+**FORMULATION-TEMPLATE-PURITY-RANGE-01.** Regra canônica conferida no domínio (cadastro do Item,
+componente da Formulação, PREC-MIG-C): pureza `0 < x <= 100`, até seis casas, vazio/null =
+desconhecida. O componente do Modelo passou a usar o mesmo `optionalPurityPercent`; antes só
+limitava casas, aceitava 0 e acima de 100, e vazio era 400. Overage do Modelo intocado.
+
+**WEB-DATE-DEFAULT-TZ-01.** "Hoje" padrão é `hojeComercial()` em CMV (`ProductCmvPage`), impresso
+do CMV (`CmvPrintPage`), referência do cálculo padrão (`CostCalculationSection`) e — mesmo achado,
+listados no BACKLOG — resumo de custo do Produto (`ProductIndustrialCostSummary`) e vigência da
+referência manual do Item (`ItemCostReferenceSection`). Data vinda da URL ou digitada não muda;
+`costReferenceDate`/`effectiveFrom` continuam saindo do dia escolhido como antes.
+TZ-DST-MIDNIGHT-GAP-01 intocado.
+
+**Validação.** API (banco de teste isolado): `integer-schema`, `projeto-inteiros-api`,
+`condicoes-inteiras-api`, `product-optional-fields`, `pureza-do-modelo-api` (17 entradas, Modelo e
+Formulação), pastas `formulation-templates` e `formulations`, `business-day`,
+`custo-no-dia-comercial`, `dia-comercial-em-uso` — 17 arquivos, 390 testes. Shared:
+`business-timezone` e `fuso-comercial-formatadores` (34). Web: `data-padrao-dia-comercial` (47:
+22:30, 23:59:59 e 00:30 de SP × UTC, Vancouver, Tóquio, offset conferido), `product-cmv`,
+`base-calculada-impressos`, `cost-source-override`, `item-cost-reference-section`,
+`product-cmv-access`, `oc-data-do-pedido`, `receipt-instant` — 9 arquivos, 92 testes. Mutação:
+fonte revertida derruba 41 testes da API e 28 da web. `pnpm typecheck`. Sem full test, E2E, build
+global nem fresh (FAST).
+
+**Achados** (BACKLOG): API-PAGINATION-COERCION-01; TEMPLATE-PURITY-LEGACY-DATA-01 — Modelo antigo
+com pureza fora da faixa passa a dar 400 ao salvar o rascunho; PROD não conferido.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
