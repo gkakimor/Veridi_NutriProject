@@ -422,11 +422,11 @@ describe("Ordem de Produção — roteiro aplicado", () => {
     const { container } = renderizar();
     await screen.findByText("Roteiro de produção aplicado");
     // 2 kg = 2000 g; 60 min por 1000 g são 2 h — nunca 0,12 min.
-    await waitFor(() => expect(container.textContent).toContain("= 2000 g na unidade do roteiro"));
+    await waitFor(() => expect(container.textContent).toContain("= 2.000 g na unidade do roteiro"));
     expect(container.textContent).toContain("2 h");
 
     fireEvent.change(screen.getByLabelText(/Quantidade planejada/), { target: { value: "3" } });
-    await waitFor(() => expect(container.textContent).toContain("= 3000 g na unidade do roteiro"));
+    await waitFor(() => expect(container.textContent).toContain("= 3.000 g na unidade do roteiro"));
     expect(container.textContent).toContain("3 h");
   });
 

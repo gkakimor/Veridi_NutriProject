@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { useCallback } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { ProductDTO } from "@veridi/shared";
@@ -83,7 +84,7 @@ export function ProductPage() {
               : "—"}
           </dd>
           <dt>Doses por embalagem</dt>
-          <dd>{product.dosesPerPackage ?? "—"}</dd>
+          <dd>{formatIntegerPtBr(product.dosesPerPackage)}</dd>
           <dt>Referência externa</dt>
           <dd>{product.externalCode ?? "—"}</dd>
         </dl>

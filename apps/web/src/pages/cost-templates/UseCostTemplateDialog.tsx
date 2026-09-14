@@ -1,3 +1,5 @@
+import { OPCOES_VALOR_INDUSTRIAL } from "../../lib/numeric-scales";
+import { formatIntegerPtBr, formatMoneyPtBr, formatPercentPtBr } from "../../lib/numeric-ptbr";
 import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useMemo, useState } from "react";
 import type { CostTemplateDTO, CostTemplateSummaryDTO } from "@veridi/shared";
@@ -127,7 +129,7 @@ export function UseCostTemplateDialog({ onCancel, onApply, saving }: Props) {
                       <td className="is-numeric">
                         {formatQuantity(template.referenceOutputQuantity)} {template.referenceOutputUomCode}
                       </td>
-                      <td className="is-numeric">{template.resourceCount}</td>
+                      <td className="is-numeric">{formatIntegerPtBr(template.resourceCount)}</td>
                       <td>
                         <button
                           type="button"
@@ -224,7 +226,11 @@ export function UseCostTemplateDialog({ onCancel, onApply, saving }: Props) {
                       <tr key={cost.id}>
                         <td>{cost.description}</td>
                         <td>{INDUSTRIAL_COST_BASIS_LABELS[cost.calculationBasis]}</td>
-                        <td className="is-numeric">{cost.rateValue ?? "—"}</td>
+                        <td className="is-numeric">
+                          {cost.calculationBasis === "PERCENT_OF_DIRECT_INDUSTRIAL_COST"
+                            ? formatPercentPtBr(cost.rateValue, OPCOES_VALOR_INDUSTRIAL)
+                            : formatMoneyPtBr(cost.rateValue, OPCOES_VALOR_INDUSTRIAL)}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

@@ -204,7 +204,7 @@ describe("Sugestão de faixa na linha do orçamento", () => {
     );
     renderQuotes([quote()]);
 
-    await screen.findByText(/Existe uma precificação vigente para 1000 un/);
+    await screen.findByText(/Existe uma precificação vigente para 1\.000 un/);
     expect(screen.getByText("R$ 38,90")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Aplicar preço calculado" }),

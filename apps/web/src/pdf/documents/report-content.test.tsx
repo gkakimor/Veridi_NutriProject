@@ -910,7 +910,7 @@ describe("R-06 Rastreabilidade por OP em PDF", () => {
     expect(campo(documento, "Ordem de produção")).toBe("OP-000010");
     expect(campo(documento, "Produto")).toBe("PROD-000123 — Whey Protein Isolado 900 g");
     expect(campo(documento, "Situação")).toBe("Concluída");
-    expect(campo(documento, "Planejado × produzido")).toBe("1000 / 985,5 un");
+    expect(campo(documento, "Planejado × produzido")).toBe("1.000 / 985,5 un");
     expect(campo(documento, "Concluída em")).toBe("08/09/2026");
     expect(linhas(documento)[0]).toEqual(["MP-000001 — Maltodextrina", "—", "—", "—", "12,5", "kg"]);
     expect(texto).toContain("Nenhuma produção apontada.");

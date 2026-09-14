@@ -19,7 +19,7 @@ import {
   PdfTr,
   type PdfColumn,
 } from "../components";
-import { formatBRL, formatDate, formatQuantity, formatUnitPriceBRL, orDash, pdfFileName } from "../format";
+import { formatBRL, formatDate, formatQuantity, formatUnitPriceBRL, orDash, pdfFileName, formatIntegerPtBr } from "../format";
 
 /**
  * CMV — a base econômica de uma quantidade.
@@ -97,7 +97,7 @@ function QuantidadeDoComponente({ component }: { component: CmvComponentDTO }) {
   if ((component.resourceCount ?? 1) > 1 && component.quantityPerResource) {
     return (
       <>
-        <PdfText>{`${component.resourceCount} × ${comUnidade(component.quantityPerResource)}`}</PdfText>
+        <PdfText>{`${formatIntegerPtBr(component.resourceCount)} × ${comUnidade(component.quantityPerResource)}`}</PdfText>
         <PdfNote>{`Total: ${comUnidade(component.requiredQuantity)}`}</PdfNote>
       </>
     );

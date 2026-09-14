@@ -41,12 +41,13 @@ import { RowActions } from "../../components/RowActions";
 import { useAuth } from "../../app/AuthProvider";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
-import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import { toPtBrEditText, formatMoneyPtBr, formatPercentPtBr } from "../../lib/numeric-ptbr";
 import {
   CASAS_QUANTIDADE,
   CASAS_VALOR_INDUSTRIAL,
   OPCOES_QUANTIDADE,
   OPCOES_VALOR_INDUSTRIAL,
+  OPCOES_PERCENTUAL_TECNICO,
 } from "../../lib/numeric-scales";
 import { DecimalField, MoneyField, PercentField } from "../../components/NumericField";
 import { decimalComparavel, textoComparavel } from "../../lib/dirty-fields";
@@ -125,11 +126,11 @@ function statusBadgeClass(status: string): string {
 function describeRate(usage: IndustrialCostResourceUsageDTO, status: string): string {
   if (status === "DRAFT") {
     return usage.currentRate
-      ? `R$ ${usage.currentRate.rateValue} / ${INDUSTRIAL_RATE_UOM_LABELS[usage.currentRate.rateUom]} (referência atual)`
+      ? `${formatMoneyPtBr(usage.currentRate.rateValue, OPCOES_VALOR_INDUSTRIAL)} / ${INDUSTRIAL_RATE_UOM_LABELS[usage.currentRate.rateUom]} (referência atual)`
       : "Tarifa não informada";
   }
   if (!usage.rateValueSnapshot || !usage.rateUomSnapshot) return "Tarifa não informada";
-  return `R$ ${usage.rateValueSnapshot} / ${INDUSTRIAL_RATE_UOM_LABELS[usage.rateUomSnapshot]}`;
+  return `${formatMoneyPtBr(usage.rateValueSnapshot, OPCOES_VALOR_INDUSTRIAL)} / ${INDUSTRIAL_RATE_UOM_LABELS[usage.rateUomSnapshot]}`;
 }
 
 /**
@@ -879,8 +880,8 @@ export function IndustrialCostPage() {
                             material.basis as keyof typeof FORMULATION_COMPONENT_BASIS_LABELS
                           ] ?? material.basis}
                         </td>
-                        <td>{material.purityPercentApplied ?? "—"}</td>
-                        <td>{material.overagePercent ?? "—"}</td>
+                        <td>{formatPercentPtBr(material.purityPercentApplied, OPCOES_PERCENTUAL_TECNICO)}</td>
+                        <td>{formatPercentPtBr(material.overagePercent, OPCOES_PERCENTUAL_TECNICO)}</td>
                         <td>
                           {material.customerSupplied ? (
                             // Pertence à estrutura física, não ao custo Veridi.
@@ -930,8 +931,8 @@ export function IndustrialCostPage() {
                           {line.rateValue === null
                             ? "—"
                             : line.calculationBasis === "PERCENT_OF_DIRECT_INDUSTRIAL_COST"
-                              ? `${line.rateValue}%`
-                              : `R$ ${line.rateValue}`}
+                              ? formatPercentPtBr(line.rateValue, OPCOES_VALOR_INDUSTRIAL)
+                              : formatMoneyPtBr(line.rateValue, OPCOES_VALOR_INDUSTRIAL)}
                         </td>
                         {editable && (
                           <td onClick={(event) => event.stopPropagation()}>

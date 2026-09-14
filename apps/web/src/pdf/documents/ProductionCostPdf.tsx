@@ -201,7 +201,7 @@ export function ProductionCostPdf({
               <PdfTr key={line.lineId}>
                 <PdfTd>{line.description}</PdfTd>
                 <PdfTd>Premissa</PdfTd>
-                <PdfTd>{line.computedUnits ?? "—"}</PdfTd>
+                <PdfTd>{formatQuantity(line.computedUnits)}</PdfTd>
                 <PdfTd>
                   {/* Premissa percentual é percentual: o impresso antigo a
                       escrevia como dinheiro ("R$ 8,00" para 8%). */}

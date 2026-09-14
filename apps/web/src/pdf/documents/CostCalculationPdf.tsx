@@ -222,7 +222,7 @@ export function CostCalculationPdf({
                 <PdfTd>{INDUSTRIAL_COST_CATEGORY_LABELS[line.category]}</PdfTd>
                 <PdfTd>
                   {INDUSTRIAL_COST_BASIS_LABELS[line.calculationBasis]}
-                  {line.computedUnits ? ` (${line.computedUnits}${INSEPARAVEL}cx)` : ""}
+                  {line.computedUnits ? ` (${formatQuantity(line.computedUnits)}${INSEPARAVEL}cx)` : ""}
                 </PdfTd>
                 <PdfTd>
                   {line.rateValue === null

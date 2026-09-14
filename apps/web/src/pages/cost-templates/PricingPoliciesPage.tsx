@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { PricingPolicySummaryDTO } from "@veridi/shared";
@@ -158,7 +159,7 @@ export function PricingPoliciesPage() {
                   {policy.activeVersionNumber !== null ? `V${policy.activeVersionNumber}` : "—"}
                   {policy.hasDraft && <span className="cell-sub">Rascunho em edição</span>}
                 </td>
-                <td className="is-numeric">{policy.tierCount}</td>
+                <td className="is-numeric">{formatIntegerPtBr(policy.tierCount)}</td>
                 <td>{formatDate(policy.updatedAt)}</td>
                 <td>
                   <LibraryStatus

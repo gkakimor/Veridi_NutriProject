@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { ProductionProfileSummaryDTO } from "@veridi/shared";
@@ -178,7 +179,7 @@ export function ProductionProfilesPage() {
                 <td className="is-numeric">
                   {profile.activeVersionId ? profile.stepNames.length : "—"}
                 </td>
-                <td className="is-numeric">{profile.defaultProductCount}</td>
+                <td className="is-numeric">{formatIntegerPtBr(profile.defaultProductCount)}</td>
                 <td>{formatDate(profile.updatedAt)}</td>
                 <td>
                   <Link

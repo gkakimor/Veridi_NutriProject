@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { Link } from "react-router-dom";
 import type { CustomerOrderDTO, CustomerOrderLineDTO } from "@veridi/shared";
 import { condicaoDePagamentoPorExtenso } from "../../lib/payment-condition";
@@ -148,7 +149,7 @@ export function AgreedPriceCell({
   const origem =
     price.source === "PRICING_TIER"
       ? price.pricingCode
-        ? `${price.pricingCode} · faixa ${price.tierQuantity ?? ""} ${price.tierUomCode ?? ""}`.trim()
+        ? `${price.pricingCode} · faixa ${price.tierQuantity ? formatQuantity(price.tierQuantity) : ""} ${price.tierUomCode ?? ""}`.trim()
         : "Faixa de precificação"
       : "Preço manual";
   return (

@@ -16,7 +16,7 @@ import {
   PdfTr,
   type PdfColumn,
 } from "../components";
-import { formatBRL, formatDate, formatQuantity, orDash, pdfFileName } from "../format";
+import { formatBRL, formatDate, formatQuantity, orDash, pdfFileName, formatIntegerPtBr } from "../format";
 
 /**
  * R-14 — Pedido → Operação: a cadeia completa de um pedido.
@@ -140,7 +140,7 @@ export function OrderOperationReportPdf({
               <PdfTd>{order.code}</PdfTd>
               <PdfTd>{order.supplierName}</PdfTd>
               <PdfTd>{PURCHASE_ORDER_STATUS_LABELS[order.status]}</PdfTd>
-              <PdfTd>{String(order.itemCount)}</PdfTd>
+              <PdfTd>{formatIntegerPtBr(order.itemCount)}</PdfTd>
               <PdfTd>{formatDate(order.expectedDeliveryDate)}</PdfTd>
             </PdfTr>
           ))}

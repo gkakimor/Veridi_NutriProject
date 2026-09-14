@@ -38,8 +38,8 @@ import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { formatDateTime } from "../../lib/dates";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal } from "../../lib/decimal-field";
-import { toPtBrEditText } from "../../lib/numeric-ptbr";
-import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
+import { toPtBrEditText, formatIntegerPtBr, formatMoneyPtBr, formatPercentPtBr } from "../../lib/numeric-ptbr";
+import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE, OPCOES_VALOR_INDUSTRIAL } from "../../lib/numeric-scales";
 import { DecimalField, IntegerField } from "../../components/NumericField";
 import {
   assinaturaDoDocumento,
@@ -450,7 +450,11 @@ export function CostTemplateDetailPage() {
                   <td>{cost.description}</td>
                   <td>{INDUSTRIAL_COST_CATEGORY_LABELS[cost.category]}</td>
                   <td>{INDUSTRIAL_COST_BASIS_LABELS[cost.calculationBasis]}</td>
-                  <td className="is-numeric">{cost.rateValue ?? "—"}</td>
+                  <td className="is-numeric">
+                    {cost.calculationBasis === "PERCENT_OF_DIRECT_INDUSTRIAL_COST"
+                      ? formatPercentPtBr(cost.rateValue, OPCOES_VALOR_INDUSTRIAL)
+                      : formatMoneyPtBr(cost.rateValue, OPCOES_VALOR_INDUSTRIAL)}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -888,7 +892,7 @@ export function CostTemplateDetailPage() {
                         : "—"}
                     </td>
                     <td className="is-numeric">{version.resourceUsages.length}</td>
-                    <td className="is-numeric">{version.usageCount}</td>
+                    <td className="is-numeric">{formatIntegerPtBr(version.usageCount)}</td>
                     <td>{formatDateTime(version.createdAt)}</td>
                     <td>
                       {version.sourceVersionId && (

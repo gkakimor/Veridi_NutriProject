@@ -1,4 +1,4 @@
-import { formatQuantity } from "../lib/quantity";
+import { formatQuantity, formatQuantityWithUnit } from "../lib/quantity";
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type { MaterialReservationLineDTO, ProductionOrderDTO } from "@veridi/shared";
@@ -118,7 +118,7 @@ export function ExtraConsumptionDialog({
         <div>
           <dt>Disponível não reservado</dt>
           <dd>
-            {line.lotFreeQuantity ?? "—"} {line.lotFreeQuantity ? line.unitCode : ""}
+            {formatQuantityWithUnit(line.lotFreeQuantity, line.unitCode)}
           </dd>
         </div>
       </dl>

@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import type { ScopedList } from "./useScopedList";
 
 /**
@@ -19,7 +20,7 @@ export function ConsultationCount<T>({
   if (!list.data) return null;
   return (
     <div className="table-foot">
-      {list.total} {list.total === 1 ? noun : pluralNoun}
+      {formatIntegerPtBr(list.total)} {list.total === 1 ? noun : pluralNoun}
     </div>
   );
 }

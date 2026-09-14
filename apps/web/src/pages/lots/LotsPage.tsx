@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useMemo, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
@@ -391,7 +392,7 @@ export function LotsPage() {
         </table>
         {consulta.data && (
           <div className="table-foot">
-            {total} {total === 1 ? "lote" : "lotes"}
+            {formatIntegerPtBr(total)} {total === 1 ? "lote" : "lotes"}
           </div>
         )}
       </div>

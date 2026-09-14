@@ -127,7 +127,7 @@ describe("formatPartShare", () => {
   it("quantidade grande do domínio não perde dígito no caminho", () => {
     // Cabe em DECIMAL(24,12) e não cabe num double.
     expect(formatPartShare("999999999999.000000000003", 3)).toBe(
-      "333333333333 × 2 + 333333333333",
+      "333.333.333.333 × 2 + 333.333.333.333",
     );
   });
 

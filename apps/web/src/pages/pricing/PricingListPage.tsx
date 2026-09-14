@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { PricingVersionSummaryDTO } from "@veridi/shared";
@@ -186,7 +187,7 @@ export function PricingListPage() {
                 <td>{row.industrialCostVersionLabel}</td>
                 <td>{formatDate(row.costReferenceDate)}</td>
                 <td>{INDUSTRIAL_COST_QUALITY_LABELS[row.costQuality]}</td>
-                <td>{row.tierCount}</td>
+                <td>{formatIntegerPtBr(row.tierCount)}</td>
                 <td>
                   {formatDate(row.activatedAt)}
                 </td>
@@ -212,7 +213,7 @@ export function PricingListPage() {
         </table>
         {consulta.data && (
           <div className="table-foot">
-            {total} {total === 1 ? "precificação" : "precificações"}
+            {formatIntegerPtBr(total)} {total === 1 ? "precificação" : "precificações"}
           </div>
         )}
       </div>

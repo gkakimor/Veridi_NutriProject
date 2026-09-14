@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { useEffect, useMemo, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { Link, useNavigate } from "react-router-dom";
@@ -334,7 +335,7 @@ export function ReceiptsPage() {
         </table>
         {consulta.data && (
           <div className="table-foot">
-            {total} {total === 1 ? "recebimento" : "recebimentos"}
+            {formatIntegerPtBr(total)} {total === 1 ? "recebimento" : "recebimentos"}
           </div>
         )}
       </div>

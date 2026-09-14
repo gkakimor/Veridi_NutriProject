@@ -11,7 +11,7 @@ import {
   PdfTr,
   type PdfColumn,
 } from "../components";
-import { orDash, pdfFileName } from "../format";
+import { orDash, pdfFileName, formatIntegerPtBr } from "../format";
 
 /**
  * Relatórios R-01…R-20 em PDF — um documento só, dirigido pelas colunas.
@@ -294,7 +294,7 @@ export function ReportPdf({ report, generatedAt }: { report: ReportPdfInput; gen
         <PdfDataGrid
           fields={[
             ...filters.map((filtro) => ({ label: filtro.label, value: orDash(filtro.value), span: 3 })),
-            { label: "Registros", value: String(rows.length), span: 3 },
+            { label: "Registros", value: formatIntegerPtBr(rows.length), span: 3 },
           ]}
         />
       </PdfSection>

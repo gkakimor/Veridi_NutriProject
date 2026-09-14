@@ -84,8 +84,8 @@ function renderPage() {
 /**
  * A linha do histórico daquela tarifa, pelo valor que só ela tem.
  *
- * A célula é `{moeda} {valor}` — dois nós de texto —, então a busca é pelo
- * conteúdo da LINHA, não por um nó isolado.
+ * A célula é o valor em reais formatado (`R$ 30,00`), então a busca é pelo
+ * conteúdo da LINHA, com o número em pt-BR.
  */
 function linhaDaTarifa(valor: string): HTMLElement {
   const linha = screen
@@ -122,7 +122,7 @@ describe("Histórico de tarifas — a borda do último dia", () => {
     );
     renderPage();
 
-    const linha = await esperarHistorico("30.0000");
+    const linha = await esperarHistorico("30,00");
     expect(within(linha).getByText("Vigente")).toBeTruthy();
     // A data impressa é a mesma que o backend recebeu — sem deslocamento de
     // fuso na leitura de uma data civil.
@@ -143,7 +143,7 @@ describe("Histórico de tarifas — a borda do último dia", () => {
     );
     renderPage();
 
-    const linha = await esperarHistorico("27.5000");
+    const linha = await esperarHistorico("27,50");
     expect(within(linha).getByText("Histórica")).toBeTruthy();
     expect(screen.queryByText("Vigente")).toBeNull();
   });
@@ -173,8 +173,8 @@ describe("Histórico de tarifas — a borda do último dia", () => {
     );
     renderPage();
 
-    await esperarHistorico("42.0000");
-    expect(within(linhaDaTarifa("42.0000")).getByText("Vigente")).toBeTruthy();
-    expect(within(linhaDaTarifa("31.0000")).getByText("Histórica")).toBeTruthy();
+    await esperarHistorico("42,00");
+    expect(within(linhaDaTarifa("42,00")).getByText("Vigente")).toBeTruthy();
+    expect(within(linhaDaTarifa("31,00")).getByText("Histórica")).toBeTruthy();
   });
 });

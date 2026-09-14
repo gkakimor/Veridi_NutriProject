@@ -10,6 +10,7 @@ import { FUSO_COMERCIAL, formatCnpj } from "@veridi/shared";
 export { formatBRL, formatUnitPriceBRL } from "../lib/currency";
 export { formatQuantity, formatQuantityWithUnit } from "../lib/quantity";
 export { formatPercent } from "../lib/percent";
+export { formatIntegerPtBr } from "../lib/numeric-ptbr";
 export { formatDate } from "../lib/dates";
 export { emDias } from "../lib/duration";
 export { formatCnpj };

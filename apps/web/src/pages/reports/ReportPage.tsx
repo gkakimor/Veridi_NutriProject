@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { createContext, useContext } from "react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
@@ -143,7 +144,7 @@ export function ReportPage({
           <div className="print-doc__status">Gerado por {user?.name ?? "—"}</div>
           {total !== undefined && (
             <div className="print-doc__status">
-              {total} {total === 1 ? "registro" : "registros"}
+              {formatIntegerPtBr(total)} {total === 1 ? "registro" : "registros"}
             </div>
           )}
         </div>
@@ -212,7 +213,9 @@ export function ReportSummaryItem({ label, value }: { label: string; value: Reac
   return (
     <div className="report-summary__item">
       <span className="report-summary__label">{label}</span>
-      <strong className="report-summary__value">{value}</strong>
+      <strong className="report-summary__value">
+        {typeof value === "number" ? formatIntegerPtBr(value) : value}
+      </strong>
     </div>
   );
 }
@@ -277,7 +280,7 @@ export function ReportPagination({
   return (
     <div className="pagination">
       <span>
-        Página {page} de {totalPages} · {total} {total === 1 ? "registro" : "registros"}
+        Página {page} de {totalPages} · {formatIntegerPtBr(total)} {total === 1 ? "registro" : "registros"}
       </span>
       <div className="table__actions">
         <button

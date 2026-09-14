@@ -141,7 +141,7 @@ describe("CMV em PDF", () => {
     expect(energia).toHaveTextContent("50 kWh");
     expect(energia.textContent).not.toContain("×");
 
-    expect(linha(/WPC 80/)).toHaveTextContent("1450 kg");
+    expect(linha(/WPC 80/)).toHaveTextContent("1.450 kg");
   });
 
   it("nome do arquivo: produto, quantidade e data de referência", () => {

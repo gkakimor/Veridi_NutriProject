@@ -1,3 +1,4 @@
+import { formatPercent } from "../lib/percent";
 import { formatQuantity } from "../lib/quantity";
 import type { IndustrialCostCalculationDTO } from "@veridi/shared";
 import {
@@ -266,7 +267,7 @@ export function CostBreakdown({
                   <td>{line.description}</td>
                   <td>{INDUSTRIAL_COST_CATEGORY_LABELS[line.category]}</td>
                   <td className="is-numeric">
-                    {line.computedUnits ? `${line.computedUnits} cx` : "—"}
+                    {line.computedUnits ? `${formatQuantity(line.computedUnits)} cx` : "—"}
                     <span className="field__hint">
                       {" "}
                       {INDUSTRIAL_COST_BASIS_LABELS[line.calculationBasis]}
@@ -276,7 +277,7 @@ export function CostBreakdown({
                     {line.rateValue === null
                       ? "—"
                       : line.calculationBasis === "PERCENT_OF_DIRECT_INDUSTRIAL_COST"
-                        ? `${line.rateValue}%`
+                        ? formatPercent(line.rateValue)
                         : formatBRL(line.rateValue)}
                   </td>
                   <td className="is-numeric">{line.subtotal === null ? "—" : formatBRL(line.subtotal)}</td>

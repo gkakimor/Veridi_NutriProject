@@ -17,7 +17,7 @@ import type {
   ProductionMaterialCostLineDTO,
   ProductionOrderCostDTO,
 } from "@veridi/shared";
-import { formatBRL, formatPdfDateTime } from "../format";
+import { formatBRL, formatPdfDateTime, formatQuantity } from "../format";
 import { renderPdfBlob } from "../render";
 import { lerPdf, type PdfLido } from "../testing/pdf-text";
 import { CostCalculationPdf, costCalculationPdfFileName } from "./CostCalculationPdf";
@@ -783,14 +783,14 @@ describe("gerador de PDF — Cálculo de custo industrial", () => {
       expect(folhaDoResultado).toBeGreaterThanOrEqual(0);
       for (const trecho of [
         "Quantidade calculada",
-        "Custo industrial total para 3000 un",
+        "Custo industrial total para 3.000 un",
         "Equivalente por 1.000 un",
         "Valor normalizado a partir do custo por unidade",
       ]) {
         expect(pdf.paginas[folhaDoResultado], trecho).toContain(trecho);
       }
-      expect(linhaCom(pdf, "Quantidade calculada")).toContain("3000 un");
-      expect(linhaCom(pdf, "Custo industrial total para 3000 un")).toContain(
+      expect(linhaCom(pdf, "Quantidade calculada")).toContain("3.000 un");
+      expect(linhaCom(pdf, "Custo industrial total para 3.000 un")).toContain(
         formatBRL(calculo.totalIndustrialCost),
       );
       expect(linhaCom(pdf, "Equivalente por 1.000 un")).toContain(formatBRL(calculo.costPer1000));
@@ -953,17 +953,17 @@ describe("gerador de PDF — Simulação de preço e margem", () => {
       expect(tudo).toContain("Abaixo do lote de referência");
 
       conferirCabecalho(pdf, (linha) => linha.includes("Calcular pela margem") || linha.includes("Informar preço"), "MARKUP");
-      conferirCabecalho(pdf, (linha) => /^\d+ un \d+ R\$/.test(linha), "CUSTO TOTAL DA FAIXA");
+      conferirCabecalho(pdf, (linha) => /^[\d.]+ un \d+ R\$/.test(linha), "CUSTO TOTAL DA FAIXA");
       // Seção curta não se parte: título, primeira e última faixa e ressalva na mesma folha.
       const folhaDoCusto = folhaCom(pdf, "CUSTO POR FAIXA");
       expect(folhaDoCusto).toBeGreaterThanOrEqual(0);
       expect(folhaCom(pdf, "300 un 1 R$")).toBe(folhaDoCusto);
-      expect(folhaCom(pdf, "12000 un 4 R$")).toBe(folhaDoCusto);
+      expect(folhaCom(pdf, "12.000 un 4 R$")).toBe(folhaDoCusto);
       expect(folhaCom(pdf, "Valor normalizado a partir do custo por unidade")).toBe(folhaDoCusto);
       // Cada faixa é da sua quantidade: custo total e equivalência lado a lado.
       const linhas = todasAsLinhas(pdf);
       for (const tier of precificacao.tiers) {
-        const inicio = `${tier.quantity} un ${tier.batchCount} `;
+        const inicio = `${formatQuantity(tier.quantity)} un ${tier.batchCount} `;
         expect(
           linhas.some(
             (linha) =>
@@ -1005,7 +1005,7 @@ describe("gerador de PDF — Simulação de preço e margem", () => {
       // Custo incompleto: a faixa mostra o subtotal conhecido com esse nome.
       const linhas = todasAsLinhas(pdf);
       for (const tier of precificacao.tiers) {
-        const inicio = `${tier.quantity} un ${tier.batchCount} `;
+        const inicio = `${formatQuantity(tier.quantity)} un ${tier.batchCount} `;
         expect(
           linhas.some(
             (linha) => linha.startsWith(inicio) && linha.includes(`${formatBRL(tier.knownSubtotal)} (subtotal conhecido)`),

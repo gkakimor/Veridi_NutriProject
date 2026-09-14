@@ -29,7 +29,7 @@ import {
   type PdfColumn,
   type PdfField,
 } from "../components";
-import { formatDate, formatQuantity, orDash, pdfFileName } from "../format";
+import { formatDate, formatQuantity, orDash, pdfFileName, formatIntegerPtBr } from "../format";
 
 /**
  * Folhas operacionais (FO-01…FO-05) em PDF.
@@ -175,7 +175,7 @@ export function InventoryCountPdf({
         fields={[
           search ? { label: "Busca", value: search, span: 3 } : null,
           itemType ? { label: "Tipo de item", value: itemType, span: 3 } : null,
-          { label: "Linhas", value: String(rows.length), span: 3 },
+          { label: "Linhas", value: formatIntegerPtBr(rows.length), span: 3 },
           { label: "Modo", value: blind ? "Contagem cega" : "Com saldo do sistema", span: 3 },
         ]}
       />
@@ -268,7 +268,7 @@ export function InventoryPositionPdf({
       <FiltrosAplicados
         fields={[
           search ? { label: "Busca", value: search, span: 3 } : null,
-          { label: "Linhas", value: String(rows.length), span: 3 },
+          { label: "Linhas", value: formatIntegerPtBr(rows.length), span: 3 },
         ]}
       />
 
@@ -346,7 +346,7 @@ export function QualityPendingPdf({
       generatedAt={generatedAt}
       landscape
     >
-      <FiltrosAplicados fields={[{ label: "Lotes pendentes", value: String(rows.length), span: 3 }]} />
+      <FiltrosAplicados fields={[{ label: "Lotes pendentes", value: formatIntegerPtBr(rows.length), span: 3 }]} />
 
       <PdfSection title="Lotes a tratar">
         <PdfTable

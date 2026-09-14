@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
@@ -379,7 +380,7 @@ export function ProductsPage() {
         </table>
         {consulta.data && (
           <div className="table-foot">
-            {total} {total === 1 ? "produto" : "produtos"}
+            {formatIntegerPtBr(total)} {total === 1 ? "produto" : "produtos"}
           </div>
         )}
       </div>

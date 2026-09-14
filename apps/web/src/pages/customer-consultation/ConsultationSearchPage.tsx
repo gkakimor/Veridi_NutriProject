@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { CustomerDTO } from "@veridi/shared";
@@ -132,7 +133,7 @@ export function ConsultationSearchPage() {
         </table>
         {consulta.data && (
           <div className="table-foot">
-            {total} {total === 1 ? "cliente" : "clientes"}
+            {formatIntegerPtBr(total)} {total === 1 ? "cliente" : "clientes"}
           </div>
         )}
       </div>

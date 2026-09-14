@@ -1,3 +1,4 @@
+import { formatQuantity } from "../lib/quantity";
 // @vitest-environment node
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -298,7 +299,7 @@ describe("gerador de PDF — Orçamento", () => {
     for (const item of linhas.filter((l) => l.productName.startsWith("Produto de teste"))) {
       const folha = pdf.paginas.findIndex((texto) => texto.includes(item.productName));
       expect(folha, item.productName).toBeGreaterThanOrEqual(0);
-      expect(pdf.paginas[folha]).toContain(item.quotedQuantity!);
+      expect(pdf.paginas[folha]).toContain(formatQuantity(item.quotedQuantity!));
     }
     // Totais depois da última linha; o plano de pagamento fecha o documento.
     const folhaDaUltimaLinha = pdf.paginas.findIndex((texto) => texto.includes("Produto de teste 040"));

@@ -1,3 +1,5 @@
+import { OPCOES_PRECO_UNITARIO } from "../../lib/numeric-scales";
+import { formatDecimalPtBr, formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -69,14 +71,14 @@ export function SupplierItemPriceCell({ row }: { row: SupplierItemDTO }) {
   if (row.currentOffer) {
     return (
       <span>
-        {row.currentOffer.unitPrice} {row.currentOffer.currencyCode}/{row.currentOffer.priceUomCode}
+        {formatDecimalPtBr(row.currentOffer.unitPrice, { ...OPCOES_PRECO_UNITARIO, minFractionDigits: 2 })} {row.currentOffer.currencyCode}/{row.currentOffer.priceUomCode}
       </span>
     );
   }
   if (row.latestLegacyOffer) {
     return (
       <span title={SUPPLIER_OFFER_ELIGIBILITY_HINTS[row.latestLegacyOffer.eligibility]}>
-        {row.latestLegacyOffer.unitPrice} {row.latestLegacyOffer.currencyCode}/
+        {formatDecimalPtBr(row.latestLegacyOffer.unitPrice, { ...OPCOES_PRECO_UNITARIO, minFractionDigits: 2 })} {row.latestLegacyOffer.currencyCode}/
         {row.latestLegacyOffer.priceUomCode}{" "}
         {/* Sem vigência não é oferta inválida: é histórico, e some da
             grade quem o esconder. A frase inteira fica no title e no
@@ -433,7 +435,7 @@ export function SupplierItemsPage() {
                         ? ` ${row.latestLegacyOffer.minimumOrderUomCode ?? ""}`
                         : "")}
                 </td>
-                <td className="col-tight">{row.offerCount}</td>
+                <td className="col-tight">{formatIntegerPtBr(row.offerCount)}</td>
                 <td className="col-tight">{row.active ? "Ativa" : "Inativa"}</td>
               </tr>
             ))}

@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { formatQuantity } from "../../lib/quantity";
 import { useMemo, useState } from "react";
 import type { CustomerOrderStatus } from "@veridi/shared";
@@ -136,11 +137,11 @@ export function CustomerOrdersReportPage() {
             <td>{formatDate(row.requestedDeliveryDate)}</td>
             {/* Produtos são listados, nunca somados entre unidades diferentes. */}
             <td>{row.productCodes.join(", ")}</td>
-            <td className="is-number">{row.lineCount}</td>
+            <td className="is-number">{formatIntegerPtBr(row.lineCount)}</td>
             <td>{CUSTOMER_ORDER_STATUS_LABELS[row.status]}</td>
             <td>{CUSTOMER_ORDER_BILLING_STATUS_LABELS[row.billingStatus]}</td>
-            <td className="is-number">{row.shipmentCount}</td>
-            <td className="is-number">{row.billingCount}</td>
+            <td className="is-number">{formatIntegerPtBr(row.shipmentCount)}</td>
+            <td className="is-number">{formatIntegerPtBr(row.billingCount)}</td>
           </tr>
         ))}
       />
@@ -234,9 +235,9 @@ export function FulfillmentReportPage() {
             <td className="is-number">
               {formatQuantity(row.orderedQuantity)} {row.unitCode}
             </td>
-            <td className="is-number">{row.reservedRemaining}</td>
+            <td className="is-number">{formatQuantity(row.reservedRemaining)}</td>
             <td className="is-number">{formatQuantity(row.producedQuantity)}</td>
-            <td className="is-number">{row.productionOrderCount}</td>
+            <td className="is-number">{formatIntegerPtBr(row.productionOrderCount)}</td>
             <td className="is-number">{formatQuantity(row.shippedQuantity)}</td>
             <td className="is-number">{formatQuantity(row.billedQuantity)}</td>
             <td className="is-number">{formatQuantity(row.outstandingQuantity)}</td>
@@ -376,7 +377,7 @@ export function OrderOperationReportPage() {
                   </td>
                   <td>{row.supplierName}</td>
                   <td>{PURCHASE_ORDER_STATUS_LABELS[row.status]}</td>
-                  <td className="is-number">{row.itemCount}</td>
+                  <td className="is-number">{formatIntegerPtBr(row.itemCount)}</td>
                   <td>{formatDate(row.expectedDeliveryDate)}</td>
                 </tr>
               ))}
@@ -420,7 +421,7 @@ export function OrderOperationReportPage() {
                   </td>
                   <td>{row.status}</td>
                   <td>{formatDate(row.issuedAt)}</td>
-                  <td className="is-number">{row.lineCount}</td>
+                  <td className="is-number">{formatIntegerPtBr(row.lineCount)}</td>
                   {/* Valor só quando o documento inteiro tem preço. */}
                   <td className="is-number">
                     {row.totalAmount ? formatBRL(row.totalAmount) : "Preço incompleto"}

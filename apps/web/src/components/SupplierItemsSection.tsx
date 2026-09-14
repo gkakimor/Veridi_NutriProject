@@ -1,3 +1,5 @@
+import { OPCOES_PRECO_UNITARIO } from "../lib/numeric-scales";
+import { formatDecimalPtBr } from "../lib/numeric-ptbr";
 import { formatQuantity } from "../lib/quantity";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -74,7 +76,7 @@ export function SupplierItemsSection({
                   <td className="is-numeric">
                     {offer ? (
                       <>
-                        {offer.unitPrice} {offer.currencyCode}/{offer.priceUomCode}
+                        {formatDecimalPtBr(offer.unitPrice, { ...OPCOES_PRECO_UNITARIO, minFractionDigits: 2 })} {offer.currencyCode}/{offer.priceUomCode}
                         {!row.currentOffer && (
                           <span className="field__hint"> (referência histórica)</span>
                         )}

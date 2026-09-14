@@ -42,7 +42,7 @@ import { getProductPricing } from "../../lib/pricing-api";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { CalcHint } from "../../components/help/CalcHint";
 import { decimalLegivel, exigirDecimal } from "../../lib/decimal-field";
-import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import { toPtBrEditText, formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
 import { DecimalField } from "../../components/NumericField";
 import { formatPercent } from "../../lib/percent";
@@ -438,7 +438,7 @@ export function ProductCmvPage() {
                     {formatQuantity(simulation.quantity)} {simulation.uomCode}
                   </div>
                   <div className="cmv-card__note">
-                    {simulation.batchCount}{" "}
+                    {formatIntegerPtBr(simulation.batchCount)}{" "}
                     {simulation.batchCount === "1" ? "lote de referência" : "lotes de referência"}{" "}
                     {/*
                       O número de lotes é TETO, não proporção: pedir 1,1 lote
@@ -453,7 +453,7 @@ export function ProductCmvPage() {
                         { valor: formatQuantity(simulation.quantity), papel: `quantidade pedida em ${simulation.uomCode}` },
                         { valor: formatQuantity(data?.referenceOutputQuantity ?? "0"), papel: "lote de referência", operador: "÷" },
                       ]}
-                      resultado={`${simulation.batchCount} (arredondado para cima)`}
+                      resultado={`${formatIntegerPtBr(simulation.batchCount)} (arredondado para cima)`}
                       nota="Um lote parcial custa um lote inteiro: a fábrica não produz meia batelada. Por isso o custo sobe em degraus, não continuamente."
                     />
                   </div>

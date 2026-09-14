@@ -56,23 +56,24 @@ export function formatQuantity(valor: string | number | null | undefined): strin
   }
 
   /*
-   * SEM separador de milhar, e isto é decisão.
+   * COM separador de milhar desde PTBR-NUMERIC-DISPLAY-AUDIT-01.
    *
-   * `1.000 un` é o português correto para ler, e é veneno para copiar: no
-   * campo decimal, `1.000` sozinho é ambíguo — milhar ou casa decimal — e é
-   * recusado em vez de adivinhado (`numeric-ptbr.ts`, PTBR-NUMERIC-INPUT-
-   * ROLLOUT-01). O valor exibido com agrupamento, colado num campo, pararia ali.
-   * O campo em si agrupa milhar fora do foco; a diferença entre as duas leituras
-   * fica para PTBR-NUMERIC-DISPLAY-AUDIT-01.
+   * Até ali a quantidade saía sem agrupamento, para poder ser copiada de volta
+   * num campo. O preço era a mesma informação com duas caras: o campo, fora do
+   * foco, mostra `1.234,5`, e a leitura ao lado mostrava `1234,5`. Número
+   * exibido segue a convenção pt-BR, como o campo.
    *
-   * Quantidade é número que a pessoa confere contra balança e redigita. Ela
-   * precisa poder copiar o que vê. Dinheiro é outro caso e tem formatador
-   * próprio, onde o agrupamento ajuda e ninguém copia de volta.
+   * Copiar de volta continua funcionando no caso comum: `1.234,5` e
+   * `12.345,678` são lidos pelo parser do campo (`numeric-ptbr.ts`). O único
+   * texto que ele recusa é `1.234` sozinho — milhar sem casa decimal, ambíguo
+   * em campo decimal —, com mensagem dizendo como escrever. Recusar é o lado
+   * seguro: errar esse número é errar por mil. Quem compara digitado com o
+   * exibido (`quantity-limit.ts`) tira os pontos antes de ler.
    */
   const corpo = formatarDecimalTexto(texto, {
     minimo: 0,
     maximo: CASAS,
-    agruparMilhar: false,
+    agruparMilhar: true,
   });
   return corpo ?? String(valor);
 }

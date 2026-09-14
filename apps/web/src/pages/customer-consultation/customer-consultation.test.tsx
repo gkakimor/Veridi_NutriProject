@@ -791,7 +791,7 @@ describe("Consulta do Cliente — produção", () => {
 
     expect(screen.getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["OP", "Produto", "Pedido", "Planejado", "Produzido", "Situação", "Criada em"]);
 
-    expect(screen.getByText("1000 un")).toBeInTheDocument();
+    expect(screen.getByText("1.000 un")).toBeInTheDocument();
     expect(screen.getByText("600 un")).toBeInTheDocument();
     // Rótulo do domínio, nunca o código cru do enum.
     expect(screen.getByText("Em produção")).toBeInTheDocument();
@@ -829,7 +829,7 @@ describe("Consulta do Cliente — produção", () => {
 
     // Identificação e quantidades — derivadas do domínio, não recalculadas aqui.
     expect(screen.getByText("PA-000008")).toBeInTheDocument();
-    expect(screen.getByText("1000 un")).toBeInTheDocument();
+    expect(screen.getByText("1.000 un")).toBeInTheDocument();
     expect(screen.getByText("600 un")).toBeInTheDocument();
     expect(screen.getByText("400 un")).toBeInTheDocument();
 

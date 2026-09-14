@@ -65,8 +65,8 @@ import {
   exigirDecimal,
   exigirDecimalOpcional,
 } from "../../lib/decimal-field";
-import { toPtBrEditText } from "../../lib/numeric-ptbr";
-import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
+import { toPtBrEditText, formatDecimalPtBr, formatIntegerPtBr } from "../../lib/numeric-ptbr";
+import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE, OPCOES_PRECO_UNITARIO } from "../../lib/numeric-scales";
 import { DecimalField } from "../../components/NumericField";
 import { FormSection } from "../../components/FormSection";
 import { ContextHelp, InfoHint } from "../../components/help";
@@ -1737,7 +1737,9 @@ options={customerOptions.map((customer) => ({
                           onChangeValue={(valor) => handleLineQuantityChange(line.key, valor)}
                         />
                       ) : (
-                        line.orderedQuantity
+                        // Fora de edição a linha guarda o texto do campo (`1234,5`):
+                        // lido de volta e exibido como leitura, com milhar.
+                        formatQuantity(decimalLegivel(line.orderedQuantity, OPCOES_QUANTIDADE) ?? line.orderedQuantity)
                       )}
                     </td>
                     <td>{line.unitCode || "—"}</td>
@@ -1753,13 +1755,14 @@ options={customerOptions.map((customer) => ({
                     )}
                     {!isDraft && (
                       <td className="is-numeric">
-                        {customerOrder?.lines.find((l) => l.productId === line.productId)?.shippedQuantity ?? "—"}
+                        {formatQuantity(customerOrder?.lines.find((l) => l.productId === line.productId)?.shippedQuantity)}
                       </td>
                     )}
                     {!isDraft && (
                       <td className="is-numeric">
-                        {customerOrder?.lines.find((l) => l.productId === line.productId)?.outstandingQuantity ??
-                          "—"}
+                        {formatQuantity(
+                          customerOrder?.lines.find((l) => l.productId === line.productId)?.outstandingQuantity,
+                        )}
                       </td>
                     )}
                     {linhasEditaveis && (
@@ -1843,7 +1846,7 @@ options={customerOptions.map((customer) => ({
                             <td>
                               {formatQuantity(line.orderedQuantity)} {line.unitCode}
                             </td>
-                            <td className="is-numeric">{line.finishedGoodsAvailable}</td>
+                            <td className="is-numeric">{formatQuantity(line.finishedGoodsAvailable)}</td>
                             <td>
                               {/* Sem nome acessível, um leitor de tela anuncia
                                   só "editar texto" no campo que decide reserva
@@ -1963,7 +1966,7 @@ options={customerOptions.map((customer) => ({
                               <td className="is-numeric">{formatQuantity(row.reserved)}</td>
                               <td className="is-numeric">{formatQuantity(row.available)}</td>
                               <td className="is-numeric">
-                                {row.supplyResponsibility === "CUSTOMER" ? "—" : row.onOrder}
+                                {row.supplyResponsibility === "CUSTOMER" ? "—" : formatQuantity(row.onOrder)}
                               </td>
                               <td className="is-numeric">
                                 <span className={Number(row.shortage) > 0 ? "badge badge--warn" : "badge badge--active"}>
@@ -2156,7 +2159,7 @@ options={customerOptions.map((customer) => ({
                                       {candidate.referenceUnitPrice ? (
                                         <span className="field__hint">
                                           {" "}
-                                          {candidate.referenceUnitPrice}{" "}
+                                          {formatDecimalPtBr(candidate.referenceUnitPrice, { ...OPCOES_PRECO_UNITARIO, minFractionDigits: 2 })}{" "}
                                           {candidate.referenceCurrencyCode}/
                                           {candidate.referencePriceUomCode}
                                         </span>
@@ -2392,10 +2395,10 @@ options={customerOptions.map((customer) => ({
                         {formatQuantity(line.orderedQuantity)} {line.unitCode}
                       </td>
                       <td className="is-numeric">{formatQuantity(line.shippedQuantity)}</td>
-                      <td className="is-numeric">{line.reservedRemaining}</td>
-                      <td className="is-numeric">{line.stillToReserve}</td>
+                      <td className="is-numeric">{formatQuantity(line.reservedRemaining)}</td>
+                      <td className="is-numeric">{formatQuantity(line.stillToReserve)}</td>
                       <td className="is-numeric">
-                        {line.currentAvailable}
+                        {formatQuantity(line.currentAvailable)}
                         {/*
                             Mil unidades produzidas e "0" na coluna ao lado é a
                             linha que alguém pergunta. A causa vem dos lotes
@@ -2555,19 +2558,27 @@ options={customerOptions.map((customer) => ({
             <dl className="definition-list">
               <dt>Pedido</dt>
               <dd>
-                {customerOrder.lines.reduce((sum, line) => sum + Number(line.orderedQuantity), 0)}
+                {formatQuantity(
+                  customerOrder.lines.reduce((soma, line) => soma.plus(line.orderedQuantity ?? 0), new Decimal(0)).toFixed(),
+                )}
               </dd>
               <dt>Expedido</dt>
               <dd>
-                {customerOrder.lines.reduce((sum, line) => sum + Number(line.shippedQuantity), 0)}
+                {formatQuantity(
+                  customerOrder.lines.reduce((soma, line) => soma.plus(line.shippedQuantity ?? 0), new Decimal(0)).toFixed(),
+                )}
               </dd>
               <dt>Faturado</dt>
               <dd>
-                {customerOrder.lines.reduce((sum, line) => sum + Number(line.billedQuantity), 0)}
+                {formatQuantity(
+                  customerOrder.lines.reduce((soma, line) => soma.plus(line.billedQuantity ?? 0), new Decimal(0)).toFixed(),
+                )}
               </dd>
               <dt>A faturar (expedido)</dt>
               <dd>
-                {customerOrder.lines.reduce((sum, line) => sum + Number(line.unbilledShippedQuantity), 0)}
+                {formatQuantity(
+                  customerOrder.lines.reduce((soma, line) => soma.plus(line.unbilledShippedQuantity ?? 0), new Decimal(0)).toFixed(),
+                )}
               </dd>
               <dt>Situação</dt>
               <dd>
@@ -2655,13 +2666,13 @@ options={customerOptions.map((customer) => ({
                     >
                       <td className="is-code">{po.code}</td>
                       <td>{po.supplierName}</td>
-                      <td className="is-numeric">{po.lineCount}</td>
+                      <td className="is-numeric">{formatIntegerPtBr(po.lineCount)}</td>
                       <td>
                         <span className="badge badge--neutral">
                           {PURCHASE_ORDER_STATUS_LABELS[po.status as keyof typeof PURCHASE_ORDER_STATUS_LABELS] ?? po.status}
                         </span>
                       </td>
-                      <td className="is-numeric">{po.orderTotal ?? "—"}</td>
+                      <td className="is-numeric">{formatBRL(po.orderTotal)}</td>
                       <td onClick={(event) => event.stopPropagation()}>
                         <Link className="btn btn--ghost btn--sm" to={`/compras/ordens/${po.id}`}>
                           Abrir
@@ -2727,7 +2738,7 @@ options={customerOptions.map((customer) => ({
                               {formatQuantity(line.quantity)} {line.unitCode}
                             </td>
                             <td>{formatQuantity(line.shippedQuantity)}</td>
-                            <td>{line.reservedRemaining}</td>
+                            <td>{formatQuantity(line.reservedRemaining)}</td>
                             <td>
                               {isReleased ? (
                                 <span className="badge badge--neutral">Realocada</span>

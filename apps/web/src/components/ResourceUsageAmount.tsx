@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../lib/numeric-ptbr";
 import type { IndustrialRateUom, IndustrialResourceType } from "@veridi/shared";
 import { INDUSTRIAL_RATE_UOM_LABELS, acceptsResourceCount } from "@veridi/shared";
 import { lerInteiroOpcional, mensagemInteiroInvalido } from "../lib/integer-input";
@@ -34,7 +35,7 @@ function comUnidade(quantidade: string, unidade: IndustrialRateUom | undefined):
 /** "2 × 2 hora" com mais de um recurso; "4 hora", como sempre foi, com um. */
 export function descreverUsoDeRecurso(uso: UsoDeRecurso): string {
   const quantidade = comUnidade(uso.usageQuantity, uso.usageUom);
-  return (uso.resourceCount ?? 1) > 1 ? `${uso.resourceCount} × ${quantidade}` : quantidade;
+  return (uso.resourceCount ?? 1) > 1 ? `${formatIntegerPtBr(uso.resourceCount)} × ${quantidade}` : quantidade;
 }
 
 /** "Total: 4 hora" — só com mais de um recurso, e sempre o total do servidor. */

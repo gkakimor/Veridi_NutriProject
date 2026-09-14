@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -456,7 +457,7 @@ export function ProductionOrdersPage() {
         </table>
         {consulta.data && (
           <div className="table-foot">
-            {total} {total === 1 ? "ordem de produção" : "ordens de produção"}
+            {formatIntegerPtBr(total)} {total === 1 ? "ordem de produção" : "ordens de produção"}
           </div>
         )}
       </div>

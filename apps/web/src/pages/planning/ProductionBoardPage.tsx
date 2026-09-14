@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import type { ProductionBoardOrderDTO, ProductionBoardView } from "@veridi/shared";
@@ -500,7 +501,7 @@ export function ProductionBoardPage() {
             </div>
             {quadro.pendenciesTotal > quadro.pendencies.length && (
               <p className="field__hint">
-                Mostrando {quadro.pendencies.length} de {quadro.pendenciesTotal}.{" "}
+                Mostrando {formatIntegerPtBr(quadro.pendencies.length)} de {formatIntegerPtBr(quadro.pendenciesTotal)}.{" "}
                 <Link to="/producao/ordens?semRoteiro=1">Ver todas na lista de ordens de produção</Link>
               </p>
             )}
@@ -597,7 +598,9 @@ export function ProductionBoardPage() {
                       </td>
                       <td>{recurso.resourceType === "LABOR" ? "Mão de obra" : "Equipamento"}</td>
                       <td className="is-numeric">
-                        {recurso.capacityQuantity ?? "Capacidade não cadastrada"}
+                        {recurso.capacityQuantity === null || recurso.capacityQuantity === undefined
+                  ? "Capacidade não cadastrada"
+                  : formatIntegerPtBr(recurso.capacityQuantity)}
                       </td>
                       <td className="is-numeric">{formatMinutes(recurso.plannedMinutes)}</td>
                       <td className="is-numeric">
@@ -639,7 +642,7 @@ export function ProductionBoardPage() {
                 {quadro.conflicts.map((conflito, indice) => (
                   <li key={`${conflito.industrialResourceId}-${indice}`}>
                     <span className="badge badge--warn">Sobrecarga</span> {conflito.resourceName}:{" "}
-                    {conflito.demanda} em uso para capacidade {conflito.capacityQuantity}, de{" "}
+                    {formatIntegerPtBr(conflito.demanda)} em uso para capacidade {formatIntegerPtBr(conflito.capacityQuantity)}, de{" "}
                     {formatDateTime(conflito.startAt)} a {formatDateTime(conflito.endAt)} —{" "}
                     {conflito.ordens.map((o) => o.productionOrderCode).join(", ")}
                   </li>

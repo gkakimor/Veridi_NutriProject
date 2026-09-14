@@ -36,6 +36,7 @@ import {
   PRODUCTION_ORDER_ORIGIN_LABELS,
   PRODUCTION_ORDER_STATUS_LABELS,
   SUPPLY_RESPONSIBILITY_LABELS,
+  Decimal,
 } from "@veridi/shared";
 import { getProductionOrderMaterialCost } from "../../lib/costs-api";
 import { formatBRL } from "../../lib/currency";
@@ -1430,11 +1431,12 @@ export function ProductionOrderPage() {
                               <br />
                               <span className="field__hint">
                                 Há{" "}
-                                {(
-                                  Number(requirement.onHand) -
-                                  Number(requirement.reserved) -
-                                  Number(requirement.available)
-                                ).toLocaleString("pt-BR")}{" "}
+                                {formatQuantity(
+                                  new Decimal(requirement.onHand)
+                                    .minus(requirement.reserved)
+                                    .minus(requirement.available)
+                                    .toFixed(),
+                                )}{" "}
                                 {requirement.stockUnitCode} em estoque físico ainda não liberado
                                 pela Qualidade.{" "}
                                 <Link to={`/estoque/${requirement.itemId}`}>Ver lotes do item</Link>

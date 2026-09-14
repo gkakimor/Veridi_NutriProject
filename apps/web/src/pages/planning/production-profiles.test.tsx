@@ -254,8 +254,8 @@ describe("Roteiros de Produção — lista", () => {
     );
 
     expect(await screen.findByText("Pesagem → Mistura → Encapsulamento")).toBeInTheDocument();
-    // Quantidade sem separador de milhar — é o que a pessoa copia de volta num campo.
-    expect(screen.getByText("1000 un")).toBeInTheDocument();
+    // Quantidade com milhar, como o campo fora do foco (PTBR-NUMERIC-DISPLAY-AUDIT-01).
+    expect(screen.getByText("1.000 un")).toBeInTheDocument();
     expect(screen.getByText("Rascunho em edição")).toBeInTheDocument();
   });
 });

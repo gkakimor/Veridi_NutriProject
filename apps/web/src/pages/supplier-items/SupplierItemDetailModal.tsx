@@ -1,3 +1,4 @@
+import { formatDecimalPtBr, formatMoneyPtBr } from "../../lib/numeric-ptbr";
 import { useCallback, useEffect, useState } from "react";
 import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import { decimalComparavel, textoComparavel } from "../../lib/dirty-fields";
@@ -34,6 +35,7 @@ import {
   CASAS_QUANTIDADE,
   OPCOES_PRECO_UNITARIO,
   OPCOES_QUANTIDADE,
+  OPCOES_CUSTO_UNITARIO,
 } from "../../lib/numeric-scales";
 import { DecimalField, MoneyField } from "../../components/NumericField";
 import { formatQuantity } from "../../lib/quantity";
@@ -249,7 +251,7 @@ export function SupplierItemDetailModal({
               <>
                 {" · "}
                 <span className="is-numeric">
-                  R$ {supplierItem.costSourceToday.unitCost}
+                  {formatMoneyPtBr(supplierItem.costSourceToday.unitCost, OPCOES_CUSTO_UNITARIO)}
                 </span>
                 {` / ${supplierItem.costSourceToday.unitCode}`}
               </>
@@ -519,7 +521,7 @@ export function SupplierItemDetailModal({
             <tbody>
               {supplierItem.offers.map((offer) => (
                 <tr key={offer.id}>
-                  <td className="is-numeric">{offer.unitPrice}</td>
+                  <td className="is-numeric">{formatDecimalPtBr(offer.unitPrice, { ...OPCOES_PRECO_UNITARIO, minFractionDigits: 2 })}</td>
                   <td className="is-code">{offer.currencyCode}</td>
                   <td className="is-code">{offer.priceUomCode}</td>
                   <td>
