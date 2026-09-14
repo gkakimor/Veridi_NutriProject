@@ -8,7 +8,6 @@ import type {
 import { useOptionalAuth } from "../../app/AuthProvider";
 import { PdfScreen } from "../../pdf/PdfScreen";
 import { getInventoryPositionReport } from "../../lib/reports-api";
-import { loadAllPages } from "../../lib/all-pages";
 import { listQualityQueue } from "../../lib/attachments-api";
 import { getProductionOrder } from "../../lib/production-orders-api";
 import { getShipment } from "../../lib/shipments-api";
@@ -20,8 +19,8 @@ import { getShipment } from "../../lib/shipments-api";
  * navegador (`PdfScreen`): o arquivo é o papel, sem URL, data ou margem do
  * navegador. Todas seguem as mesmas três regras:
  * 1. rota FORA do AppShell — o papel nunca leva sidebar, filtros ou botão;
- * 2. o documento traz o RESULTADO FILTRADO COMPLETO (`all=true`, ou todas as
- *    páginas quando a rota não tem — FO-03), nunca só a página aberta na tela;
+ * 2. o documento traz o RESULTADO FILTRADO COMPLETO (`all=true`, numa leitura
+ *    só), nunca só a página aberta na tela;
  * 3. campos de anotação são de papel: contagem, conferência e assinatura
  *    não viram dado — quem registra é o ERP, depois.
  *
@@ -124,9 +123,6 @@ export function InventoryPositionSheetPage() {
 
 /* ─────────────── FO-03 — Pendências de qualidade ─────────────── */
 
-/** Teto do `pageSize` da fila no servidor: menos voltas, nunca uma por linha. */
-const PAGINA_DA_FILA = 100;
-
 /**
  * Lista de pendências para tratar fisicamente. A coluna "Tratado /
  * observação" é papel: aprovar ou rejeitar CoA continua sendo ato da
@@ -135,21 +131,27 @@ const PAGINA_DA_FILA = 100;
  * Pendência é o recorte "Pendências" de Qualidade → Documentos / CoA, e quem
  * decide o que entra é o servidor, por `onlyPending` (laudo pendente,
  * aguardando análise ou rejeitado) — sem ele a folha trazia lote aprovado e
- * lote que nem exige laudo. A fila não tem `all=true`: a folha lê todas as
- * páginas até o `total`. Antes lia só a primeira, de 100, e da 101ª pendência
- * em diante o lote sumia do papel sem aviso.
+ * lote que nem exige laudo.
+ *
+ * O conjunto vem de UMA leitura (`all=true`), num retrato só do banco e com
+ * teto (PAGED-DOCUMENT-SNAPSHOT-01). A folha lia página por página por
+ * deslocamento: uma pendência saindo da fila e outra entrando entre duas
+ * páginas mantinham o total e escondiam um lote. Acima do teto o servidor
+ * recusa com a frase dele, e nenhuma folha sai.
  */
 export function QualityPendingSheetPage() {
   const geradoPor = useGeradoPor();
 
   return (
     <PdfScreen<QualityQueueRowDTO[]>
-      load={() =>
-        loadAllPages((pagina) => listQualityQueue({ onlyPending: true, ...pagina }), {
-          pageSize: PAGINA_DA_FILA,
-          chave: (row) => row.lotId,
-        })
-      }
+      load={async () => {
+        const { rows, total } = await listQualityQueue({ onlyPending: true, all: true });
+        // A resposta inteira fecha com o próprio total, ou não vira folha.
+        if (rows.length !== total) {
+          throw new Error("A fila não fechou com o total informado. O documento não foi gerado para não sair incompleto.");
+        }
+        return rows;
+      }}
       build={async (rows) => {
         const { QualityPendingPdf, qualityPendingPdfFileName } = await import(
           "../../pdf/documents/OperationalSheetsPdf"

@@ -29,6 +29,19 @@ export class CoaAlreadyApprovedError extends Error {
   }
 }
 
+/**
+ * O recorte inteiro da fila (`all=true`) passa do teto: recusa, nunca os
+ * primeiros N (PAGED-DOCUMENT-SNAPSHOT-01).
+ */
+export class QualityQueueTooLargeError extends Error {
+  constructor(readonly limit: number) {
+    super(
+      `A fila tem mais de ${new Intl.NumberFormat("pt-BR").format(limit)} lotes neste recorte — acima do limite de um documento. Trate parte das pendências em Qualidade → Documentos / CoA e gere de novo.`,
+    );
+    this.name = "QualityQueueTooLargeError";
+  }
+}
+
 /** Liberação da Qualidade barrada por pendência documental. */
 export class CoaNotApprovedError extends Error {
   constructor() {

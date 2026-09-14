@@ -8,6 +8,7 @@ import {
   CoaNotRequiredError,
   MissingCoaDocumentError,
   MissingRejectionReasonError,
+  QualityQueueTooLargeError,
 } from "./quality.errors.js";
 import {
   approveCoaSchema,
@@ -41,6 +42,9 @@ function mapDomainError(
   if (error instanceof CoaAlreadyApprovedError) {
     return { status: 409, body: { error: "coa_already_approved", message: error.message } };
   }
+  if (error instanceof QualityQueueTooLargeError) {
+    return { status: 400, body: { error: "quality_queue_too_large", message: error.message } };
+  }
   return null;
 }
 
@@ -58,7 +62,13 @@ export const qualityRoutes: FastifyPluginAsync = async (app) => {
         .status(400)
         .send({ error: "validation_error", issues: formatZodError(parsed.error) });
     }
-    return reply.send(await listQualityQueue(parsed.data));
+    try {
+      return reply.send(await listQualityQueue(parsed.data));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
   });
 
   app.post("/lots/:id/coa/approve", async (request, reply) => {

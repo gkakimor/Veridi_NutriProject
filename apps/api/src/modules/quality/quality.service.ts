@@ -1,16 +1,17 @@
 import { Prisma } from "@prisma/client";
-import type { User } from "@prisma/client";
+import type { PrismaClient, User } from "@prisma/client";
 import type { CoaReviewResultDTO, QualityQueueResponse, QualityQueueRowDTO } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { getOnHandByLots, isLotExpired, lotIdsComSaldoPositivo } from "../../lib/inventory-ledger.js";
 import type { Pagination } from "../../lib/pagination.js";
-import { pageArgs, pageMeta } from "../../lib/pagination.js";
+import { ALL_ROWS, pageArgs, pageMeta } from "../../lib/pagination.js";
 import { LotNotFoundError } from "../lots/lots.errors.js";
 import {
   CoaAlreadyApprovedError,
   CoaNotRequiredError,
   MissingCoaDocumentError,
   MissingRejectionReasonError,
+  QualityQueueTooLargeError,
 } from "./quality.errors.js";
 import type { ListQualityQueueQuery } from "./quality.schemas.js";
 
@@ -185,54 +186,101 @@ export async function listQualityQueue(
   query: ListQualityQueueQuery,
   pagination: Pagination = query,
 ): Promise<QualityQueueResponse> {
-  const prisma = getPrisma();
+  if (query.all) return filaInteiraNumRetrato(query);
 
-  const base = filaDaQualidadeWhere(query);
-  const where: Prisma.LotWhereInput = query.onlyWithBalance
-    ? { ...base, id: { in: await lotIdsComSaldoPositivo(prisma, base) } }
-    : base;
+  const prisma = getPrisma();
+  const where = await whereComSaldo(prisma, query);
 
   const [lots, total] = await Promise.all([
-    prisma.lot.findMany({
-      where,
-      include: { item: true, supplier: true, ownerCustomer: true, receiptLine: { include: { receipt: true } } },
-      // Pendência documental primeiro; depois o lote mais antigo.
-      orderBy: [{ coaStatus: "asc" }, { code: "asc" }],
-      ...pageArgs(pagination),
-    }),
+    lotesDaFila(prisma, where, pageArgs(pagination)),
     prisma.lot.count({ where }),
   ]);
 
   const onHandByLot = await getOnHandByLots(prisma, lots.map((lot) => lot.id));
+  return { rows: lots.map((lot) => linhaDaFila(lot, onHandByLot)), ...pageMeta(pagination, total) };
+}
 
-  const rows: QualityQueueRowDTO[] = [];
-  for (const lot of lots) {
-    const onHand = onHandByLot.get(lot.id) ?? new Prisma.Decimal(0);
+/**
+ * Teto do recorte inteiro (`all=true`) — PAGED-DOCUMENT-SNAPSHOT-01.
+ *
+ * Quem pede tudo é documento: a folha FO-03 é papel para tratar pendência à
+ * mão, e mil lotes já são dezenas de folhas. Acima disso a leitura recusa em
+ * vez de devolver os primeiros mil com cara de todos.
+ */
+export const QUALITY_QUEUE_ALL_ROWS_LIMIT = 1000;
 
-    rows.push({
-      lotId: lot.id,
-      lotCode: lot.code,
-      itemId: lot.itemId,
-      itemCode: lot.item.code,
-      itemName: lot.item.name,
-      sourceName: lot.item.sourceName,
-      declaredNutrient: lot.item.declaredNutrient,
-      lotOrigin: lot.origin,
-      supplierName: lot.supplier ? lot.supplier.legalName : null,
-      ownerType: lot.ownerType,
-      ownerCustomerName: lot.ownerCustomer ? lot.ownerCustomer.legalName : null,
-      receivedAt: lot.receiptLine?.receipt.receivedAt.toISOString() ?? lot.createdAt.toISOString(),
-      expiryDate: lot.expiryDate ? lot.expiryDate.toISOString() : null,
-      isExpired: isLotExpired(lot),
-      requiresCoa: lot.requiresCoaSnapshot,
-      coaStatus: lot.coaStatus,
-      coaReviewedByName: lot.coaReviewedByNameSnapshot,
-      coaReviewNote: lot.coaReviewNote,
-      lotStatus: lot.status,
-      onHand: onHand.toString(),
-      unitCode: lot.item.unitCode,
-    });
-  }
+/**
+ * O recorte INTEIRO num retrato só do banco (PAGED-DOCUMENT-SNAPSHOT-01).
+ *
+ * A folha FO-03 lia página por página por deslocamento: uma pendência que
+ * saía da fila antes do deslocamento, somada a outra que entrava depois dele,
+ * mantinha o `total` e escondia um lote sem aviso. Aqui o conjunto sai de UMA
+ * leitura, dentro de uma transação `RepeatableRead`: o saldo dos lotes e o
+ * "somente com saldo" enxergam o mesmo instante que a lista.
+ *
+ * Um a mais que o teto: passar dele se sabe sem contar a fila inteira, e
+ * passar dele recusa — nunca os primeiros N.
+ */
+async function filaInteiraNumRetrato(query: ListQualityQueueQuery): Promise<QualityQueueResponse> {
+  const { lots, onHandByLot } = await getPrisma().$transaction(
+    async (tx) => {
+      const where = await whereComSaldo(tx, query);
+      const lotes = await lotesDaFila(tx, where, { take: QUALITY_QUEUE_ALL_ROWS_LIMIT + 1 });
+      if (lotes.length > QUALITY_QUEUE_ALL_ROWS_LIMIT) {
+        throw new QualityQueueTooLargeError(QUALITY_QUEUE_ALL_ROWS_LIMIT);
+      }
+      return { lots: lotes, onHandByLot: await getOnHandByLots(tx, lotes.map((lot) => lot.id)) };
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 15_000 },
+  );
 
-  return { rows, ...pageMeta(pagination, total) };
+  return { rows: lots.map((lot) => linhaDaFila(lot, onHandByLot)), ...pageMeta(ALL_ROWS, lots.length) };
+}
+
+type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
+
+/** O `where` da fila, com "somente com saldo" resolvido pelo banco na mesma conexão. */
+async function whereComSaldo(prisma: PrismaOrTx, query: ListQualityQueueQuery): Promise<Prisma.LotWhereInput> {
+  const base = filaDaQualidadeWhere(query);
+  return query.onlyWithBalance ? { ...base, id: { in: await lotIdsComSaldoPositivo(prisma, base) } } : base;
+}
+
+function lotesDaFila(prisma: PrismaOrTx, where: Prisma.LotWhereInput, corte: { skip?: number; take?: number }) {
+  return prisma.lot.findMany({
+    where,
+    include: { item: true, supplier: true, ownerCustomer: true, receiptLine: { include: { receipt: true } } },
+    // Pendência documental primeiro; depois o lote mais antigo.
+    orderBy: [{ coaStatus: "asc" }, { code: "asc" }],
+    ...corte,
+  });
+}
+
+function linhaDaFila(
+  lot: Awaited<ReturnType<typeof lotesDaFila>>[number],
+  onHandByLot: Map<string, Prisma.Decimal>,
+): QualityQueueRowDTO {
+  const onHand = onHandByLot.get(lot.id) ?? new Prisma.Decimal(0);
+  return {
+    lotId: lot.id,
+    lotCode: lot.code,
+    itemId: lot.itemId,
+    itemCode: lot.item.code,
+    itemName: lot.item.name,
+    sourceName: lot.item.sourceName,
+    declaredNutrient: lot.item.declaredNutrient,
+    lotOrigin: lot.origin,
+    supplierName: lot.supplier ? lot.supplier.legalName : null,
+    ownerType: lot.ownerType,
+    ownerCustomerName: lot.ownerCustomer ? lot.ownerCustomer.legalName : null,
+    receivedAt: lot.receiptLine?.receipt.receivedAt.toISOString() ?? lot.createdAt.toISOString(),
+    expiryDate: lot.expiryDate ? lot.expiryDate.toISOString() : null,
+    isExpired: isLotExpired(lot),
+    requiresCoa: lot.requiresCoaSnapshot,
+    coaStatus: lot.coaStatus,
+    coaReviewedByName: lot.coaReviewedByNameSnapshot,
+    coaReviewNote: lot.coaReviewNote,
+    lotStatus: lot.status,
+    onHand: onHand.toString(),
+    unitCode: lot.item.unitCode,
+  };
 }

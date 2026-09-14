@@ -1,7 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import type { ProductCmvResponse } from "@veridi/shared";
+import type { PricingModelConfig, ProductCmvResponse } from "@veridi/shared";
+import { DEFAULT_PRICING_MODEL } from "@veridi/shared";
 import { ProductCmvPage } from "./ProductCmvPage";
 
 /**
@@ -463,6 +464,97 @@ describe("Tela de CMV", () => {
     // Preço completo ao lado de custo completo passaria uma confiança que a
     // faixa — fechada sobre custo parcial — não tem.
     await screen.findByText(/Esta faixa foi definida sobre um custo industrial parcial/);
+  });
+
+  describe("Precificação vigente conta o Modelo (PRICING-MODEL-VIEW-REPORTS-01)", () => {
+    function precificacaoAtiva(pricingModel: PricingModelConfig | undefined, pricingCostPerUnit: string | undefined) {
+      vi.mocked(getProductPricing).mockResolvedValue({
+        productId: "prod-1",
+        productCode: "PROD-000003",
+        productName: "Whey Protein DEMO",
+        draft: null,
+        current: {
+          id: "prec-1",
+          ...(pricingModel ? { pricingModel } : {}),
+          tiers: [
+            {
+              id: "tier-1000",
+              quantity: "1000",
+              uomCode: "un",
+              costQuality: "COMPLETE_REAL_REFERENCE",
+              industrialCostPerUnit: "12.043600000000",
+              ...(pricingCostPerUnit !== undefined ? { pricingCostPerUnit } : {}),
+              commissionPercent: "5",
+              commissionPerUnit: "1.945",
+              contributionPerUnit: "14.3",
+              contributionMarginPercent: "36.7",
+              markupPercent: "58",
+            },
+          ],
+        },
+        versions: [],
+      } as never);
+      vi.mocked(getProductCmv).mockResolvedValue(
+        cmv({
+          pricing: {
+            pricingVersionId: "prec-1",
+            pricingVersionLabel: "PREC-000001 · V1",
+            tierId: "tier-1000",
+            tierQuantity: "1000",
+            unitPrice: "38.9000",
+            availableQuantities: ["1000"],
+          },
+        }),
+      );
+    }
+
+    /** O valor de um termo da lista da seção. */
+    async function definicao(termo: string) {
+      const dt = await screen.findByText(termo, { selector: "dt" });
+      return dt.nextElementSibling?.textContent ?? "";
+    }
+
+    it("Modelo padrão: diz Padrão, e a margem continua ao lado do CMV por unidade", async () => {
+      precificacaoAtiva({ ...DEFAULT_PRICING_MODEL }, "12.043600000000");
+      renderPage("/produtos/prod-1/cmv?quantity=1000");
+
+      expect(await definicao("Modelo de Precificação")).toBe("Padrão");
+      expect(screen.queryByText("Custo p/ preço/un", { selector: "dt" })).not.toBeInTheDocument();
+      expect(screen.queryByText(/Custo p\/ preço: o custo considerado/)).not.toBeInTheDocument();
+    });
+
+    it("precificação sem Modelo na resposta (anterior ao Modelo flexível) é o padrão", async () => {
+      precificacaoAtiva(undefined, undefined);
+      renderPage("/produtos/prod-1/cmv?quantity=1000");
+
+      expect(await definicao("Modelo de Precificação")).toBe("Padrão");
+      expect(screen.queryByText("Custo p/ preço/un", { selector: "dt" })).not.toBeInTheDocument();
+    });
+
+    it("IGNORE: o Modelo por escrito e o custo p/ preço que formou a margem, diferente do CMV", async () => {
+      precificacaoAtiva({ ...DEFAULT_PRICING_MODEL, industrialCostMode: "IGNORE" }, "10.500000000000");
+      renderPage("/produtos/prod-1/cmv?quantity=1000");
+
+      expect(await definicao("Modelo de Precificação")).toBe(
+        "Custo industrial no preço: Não considerado · Impostos estimados: Não considerados",
+      );
+      expect(await definicao("Custo p/ preço/un")).toMatch(/^R\$\s10,50$/);
+      expect(await definicao("CMV por unidade")).toMatch(/12,04/);
+      expect(screen.getByText(/margem, comissão e markup saíram dele, não do CMV por unidade simulado/)).toBeInTheDocument();
+    });
+
+    it("PER_UNIT: a base dita no Modelo", async () => {
+      precificacaoAtiva(
+        { ...DEFAULT_PRICING_MODEL, industrialCostMode: "PER_UNIT", industrialCostAmountPerUnit: "0.85" },
+        "11.200000000000",
+      );
+      renderPage("/produtos/prod-1/cmv?quantity=1000");
+
+      expect(await definicao("Modelo de Precificação")).toMatch(
+        /^Custo industrial no preço: R\$\s0,85 por unidade · Impostos estimados: Não considerados$/,
+      );
+      expect(await definicao("Custo p/ preço/un")).toMatch(/^R\$\s11,20$/);
+    });
   });
 
   it("sem base de custo a tela explica em vez de mostrar número", async () => {

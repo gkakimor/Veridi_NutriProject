@@ -153,14 +153,16 @@ const CABECALHOS: Record<string, string[]> = {
     "Custo/unidade", COST_PER_1000_LABEL,
   ],
   "R-19": [
-    "Produto", "Nome", "Cliente", "Precificação", "Quantidade", "Unidade", "Modo de preço", "Cálculo de custo",
-    "Data do custo", "Qualidade do custo", "Custo/unidade", "Comissão (%)", "Preço", "Margem de contribuição (%)",
+    "Produto", "Nome", "Cliente", "Precificação", "Quantidade", "Unidade", "Modo de preço", "Modelo de Precificação",
+    "Cálculo de custo", "Data do custo", "Qualidade do custo do cálculo", "Custo do cálculo/un",
+    "Qualidade do custo p/ preço", "Custo p/ preço/un", "Comissão (%)", "Preço", "Margem de contribuição (%)",
     "Markup (%)", "Contribuição/unidade", "Ativada em",
   ],
   "R-20": [
     "Orçamento", "Projeto", "Nome do projeto", "Cliente", "Produto", "Status", "Quantidade", "Unidade",
-    "Preço unitário", "Total", "Origem do preço", "Precificação", "Faixa", "Cálculo", "Qualidade do custo",
-    "Custo industrial/un", "Margem de contribuição (%)", "Enviado em", "Aceito em",
+    "Preço unitário", "Total", "Origem do preço", "Precificação", "Faixa", "Cálculo", "Modelo de Precificação",
+    "Qualidade do custo do cálculo", "Custo do cálculo/un", "Custo p/ preço/un", "Margem de contribuição (%)",
+    "Enviado em", "Aceito em",
   ],
 };
 
@@ -280,6 +282,14 @@ function amostra(codigo: string, coluna: string, indice: number): string {
     case "Qualidade do custo":
       // R-05/R-09: o rótulo da tela que a API escreve desde REPORTS-PRESENTATION-WAVE-02.
       return codigo === "R-05" || codigo === "R-09" ? "Sem custo" : "Completo — referências reais de compra";
+    case "Qualidade do custo do cálculo":
+    case "Qualidade do custo p/ preço":
+      return desconhecido ? "" : "Completo — referências reais de compra";
+    case "Modelo de Precificação":
+      // O pior caso: Modelo flexível por extenso, com as duas bases ditas.
+      return indice % 2 === 0
+        ? "Padrão"
+        : "Custo industrial no preço: R$ 0,4321 por unidade · Impostos estimados: 9,25% sobre preço de venda";
     case "CoA":
       return "Pendente de documento";
     case "Origem":
@@ -334,7 +344,8 @@ function amostra(codigo: string, coluna: string, indice: number): string {
     case "Contribuição/unidade":
     case "Preço unitário":
     case "Total":
-    case "Custo industrial/un":
+    case "Custo do cálculo/un":
+    case "Custo p/ preço/un":
     case COST_PER_1000_LABEL:
       return desconhecido ? "" : "1234567,89";
     default:

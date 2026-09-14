@@ -7,6 +7,7 @@ import type {
   CmvGroup,
   IndustrialMaterialCostSource,
   PricingTierDTO,
+  PricingVersionDTO,
   ProductCmvResponse,
   ProductIndustrialCostResponse,
 } from "@veridi/shared";
@@ -22,7 +23,10 @@ import {
   INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS,
   INDUSTRIAL_RATE_UOM_LABELS,
   INDUSTRIAL_RESOURCE_TYPE_LABELS,
+  MODELO_DE_PRECIFICACAO_PADRAO,
 } from "@veridi/shared";
+import { formatUnitCost } from "../../components/CostBreakdown";
+import { custoQueFormaPreco, resumoDoModelo, usaModeloFlexivel } from "../../lib/pricing-cost";
 import { FormSection } from "../../components/FormSection";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
@@ -152,6 +156,8 @@ export function ProductCmvPage() {
   const [referenceDate, setReferenceDate] = useState(params.get("referenceDate") ?? hojeISO());
   const [data, setData] = useState<ProductCmvResponse | null>(null);
   const [tier, setTier] = useState<PricingTierDTO | null>(null);
+  /** A precificação ativa dona da faixa — o Modelo diz sobre qual custo a margem se formou. */
+  const [versaoDaFaixa, setVersaoDaFaixa] = useState<PricingVersionDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [detalhe, setDetalhe] = useState<"frozen" | "live">("frozen");
@@ -203,12 +209,14 @@ export function ProductCmvPage() {
          * criaria uma segunda verdade econômica sobre o mesmo preço.
          */
         setTier(null);
+        setVersaoDaFaixa(null);
         if (result.pricing?.tierId) {
           const pricing = await getProductPricing(productId).catch(() => null);
           const encontrada = pricing?.current?.tiers.find(
             (candidata) => candidata.id === result.pricing?.tierId,
           );
           setTier(encontrada ?? null);
+          setVersaoDaFaixa(encontrada && pricing?.current ? pricing.current : null);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Falha ao calcular o CMV");
@@ -242,6 +250,7 @@ export function ProductCmvPage() {
     componentesVisiveis.filter((component) => component.group === group);
 
   const semTotal = simulation !== null && simulation.totalCost === null;
+  const modeloFlexivelDaFaixa = tier !== null && versaoDaFaixa !== null && usaModeloFlexivel(versaoDaFaixa);
   const live = data?.live ?? null;
   /*
    * Qual composição a tabela detalha. O RESUMO dos dois nunca some da tela —
@@ -615,6 +624,20 @@ export function ProductCmvPage() {
                   <dd>{simulation?.costPerUnit ? formatBRL(simulation.costPerUnit) : "—"}</dd>
                   {tier && (
                     <>
+                      {/* A margem ao lado se formou sobre o custo que o Modelo manda
+                          considerar — fora do padrão, não é o CMV acima (§84). */}
+                      <dt>Modelo de Precificação</dt>
+                      <dd>
+                        {versaoDaFaixa?.pricingModel
+                          ? resumoDoModelo(versaoDaFaixa.pricingModel)
+                          : MODELO_DE_PRECIFICACAO_PADRAO}
+                      </dd>
+                      {modeloFlexivelDaFaixa && (
+                        <>
+                          <dt>Custo p/ preço/un</dt>
+                          <dd>{formatUnitCost(custoQueFormaPreco(tier))}</dd>
+                        </>
+                      )}
                       <dt>Margem de contribuição</dt>
                       <dd>
                         {tier.contributionPerUnit ? formatBRL(tier.contributionPerUnit) : "—"}
@@ -636,6 +659,13 @@ export function ProductCmvPage() {
                   Margem, comissão e markup vêm calculados da Precificação — esta tela não refaz a
                   conta.
                 </p>
+                {modeloFlexivelDaFaixa && (
+                  <p className="field__hint">
+                    Custo p/ preço: o custo considerado na formação do preço desta faixa — margem,
+                    comissão e markup saíram dele, não do CMV por unidade simulado. Os dois não
+                    precisam ser iguais.
+                  </p>
+                )}
                 {/* O preço vigente foi fechado sobre o cálculo daquele momento.
                     Se aquela base era incompleta, a margem exibida ao lado de um
                     CMV completo passa confiança que ela não tem. */}

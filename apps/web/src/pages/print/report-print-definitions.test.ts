@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { REPORT_FILTER_CONTRACTS } from "@veridi/shared";
 import { REPORT_PRINT_DEFINITIONS, reportAppliedFilters } from "./ReportPrintPage";
 
 /**
@@ -79,5 +80,23 @@ describe("filtros aplicados no PDF: só o contrato de cada relatório", () => {
 
   it("chave do protótipo não passa por aceita", () => {
     expect(filtros("R-02", "constructor=x&toString=y&hasOwnProperty=z")).toEqual([]);
+  });
+});
+
+/**
+ * REPORTS-PRINT-FILTER-KEYS-DRIFT-01: a lista de chaves não mora mais aqui. Ela
+ * vem de `REPORT_FILTER_CONTRACTS` (shared), que o teste de contrato da API
+ * compara com o schema de cada rota. Este lado garante que a web lê o contrato
+ * e não o reescreve — a cópia à mão era o que ficava desatualizada em silêncio.
+ */
+describe("filtros do PDF saem do contrato compartilhado", () => {
+  it("todo relatório impresso tem contrato, e todo contrato tem relatório impresso", () => {
+    expect(Object.keys(REPORT_PRINT_DEFINITIONS).sort()).toEqual(Object.keys(REPORT_FILTER_CONTRACTS).sort());
+  });
+
+  it.each(Object.entries(REPORT_FILTER_CONTRACTS))("%s: chaves e rota são as do contrato, sem cópia", (codigo, contrato) => {
+    // Mesma referência: a lista não foi reescrita na web.
+    expect(definicao(codigo).filterKeys).toBe(contrato.filterKeys);
+    expect(definicao(codigo).csvPath).toBe(contrato.csvPath);
   });
 });

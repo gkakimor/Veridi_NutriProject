@@ -105,6 +105,8 @@ const FORMATO_DA_COLUNA: Record<string, Formato> = {
   "Status da OP": { width: 58 },
   Qualidade: { width: 70 },
   "Qualidade do custo": { width: 70 },
+  "Qualidade do custo do cálculo": { width: 70 },
+  "Qualidade do custo p/ preço": { width: 70 },
   CoA: { width: 62 },
   Origem: { width: 56 },
   Situação: { width: 56 },
@@ -185,7 +187,8 @@ const FORMATO_DA_COLUNA: Record<string, Formato> = {
   "Contribuição/unidade": { width: 96, align: "right" },
   "Preço unitário": DINHEIRO,
   Total: { width: 64, align: "right" },
-  "Custo industrial/un": DINHEIRO,
+  "Custo do cálculo/un": DINHEIRO,
+  "Custo p/ preço/un": DINHEIRO,
 
   // Percentuais.
   "Rendimento (%)": { width: 54, align: "right" },
@@ -200,6 +203,7 @@ const FORMATO_DA_COLUNA: Record<string, Formato> = {
   Cliente: { flex: 1.5 },
   Fornecedor: { flex: 1.5 },
   "Nome do projeto": { flex: 1.5 },
+  "Modelo de Precificação": { flex: 2 },
   Motivo: { flex: 1.5 },
   Produtos: { flex: 1.5 },
   Usuário: { flex: 1 },

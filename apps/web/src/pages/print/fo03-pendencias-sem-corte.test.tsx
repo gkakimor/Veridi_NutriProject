@@ -9,17 +9,19 @@ import type { QualityQueueParams } from "../../lib/attachments-api";
 import { listQualityQueue } from "../../lib/attachments-api";
 
 /**
- * FO-03 — Pendências de qualidade, sem corte (FO03-PENDING-CUTOFF-01).
+ * FO-03 — Pendências de qualidade: todas, num retrato só
+ * (FO03-PENDING-CUTOFF-01, PAGED-DOCUMENT-SNAPSHOT-01).
  *
- * A folha pedia `listQualityQueue({ pageSize: 100 })`: sem `onlyPending`, a
- * primeira página era de TODOS os lotes — aprovado e sem exigência de laudo
- * vinham antes das pendências —, e da 101ª linha em diante nada entrava. O
- * papel omitia pendência sem avisar e contava as que sobraram como todas.
+ * A folha imprimia só a primeira página de 100; depois passou a ler todas as
+ * páginas por deslocamento, e uma pendência saindo da fila com outra entrando
+ * entre duas páginas mantinha o `total` e escondia um lote sem aviso. Agora a
+ * folha faz UMA leitura `all=true`: o servidor devolve o recorte inteiro de um
+ * retrato do banco, ou recusa acima do teto.
  *
  * O servidor falso responde como `quality.service.ts`: `onlyPending` é
  * `coaStatus` em PENDING/RECEIVED/REJECTED, a ordem é `coaStatus` (ordem do
- * enum no Postgres) e depois `code`, `total` sai do mesmo recorte e
- * `pageSize` acima de 100 é recusado, como no schema da rota.
+ * enum no Postgres) e depois `code`, `all` devolve o recorte inteiro com
+ * `total` igual às linhas e, acima do teto, recusa com a frase da API.
  */
 
 vi.mock("@react-pdf/renderer", async () => ({ ...(await import("../../pdf/testing/react-pdf-dom")) }));
@@ -38,6 +40,11 @@ beforeEach(() => {
   URL.createObjectURL = vi.fn(() => "blob:veridi/fo-03");
   URL.revokeObjectURL = vi.fn();
 });
+
+/** O teto de `QUALITY_QUEUE_ALL_ROWS_LIMIT` e a frase de `QualityQueueTooLargeError`. */
+const TETO = 1000;
+const FRASE_DO_TETO =
+  "A fila tem mais de 1.000 lotes neste recorte — acima do limite de um documento. Trate parte das pendências em Qualidade → Documentos / CoA e gere de novo.";
 
 /** O recorte de `onlyPending` no servidor. */
 const PENDENCIAS: readonly CoaStatus[] = ["PENDING", "RECEIVED", "REJECTED"];
@@ -98,12 +105,16 @@ function recorte(lotes: QualityQueueRowDTO[], params: QualityQueueParams): Quali
     .sort(ordemDoServidor);
 }
 
-function servidorDaFila(lotes: QualityQueueRowDTO[]) {
+/** A fila como o servidor a lê em cada chamada — `fila()` é o banco daquele instante. */
+function servidorDaFila(fila: () => QualityQueueRowDTO[]) {
   vi.mocked(listQualityQueue).mockImplementation(async (params = {}) => {
+    const linhas = recorte(fila(), params);
+    if (params.all) {
+      if (linhas.length > TETO) throw new Error(FRASE_DO_TETO);
+      return { rows: linhas, page: 1, pageSize: linhas.length, total: linhas.length };
+    }
     const page = params.page ?? 1;
     const pageSize = params.pageSize ?? 20;
-    if (pageSize > 100) throw new Error("Erro de validação");
-    const linhas = recorte(lotes, params);
     return { rows: linhas.slice((page - 1) * pageSize, page * pageSize), page, pageSize, total: linhas.length };
   });
 }
@@ -138,19 +149,19 @@ function pedidos() {
   return vi.mocked(listQualityQueue).mock.calls.map(([params]) => params);
 }
 
-describe("FO-03 — todas as pendências, e só elas", () => {
-  it.each([0, 1, 100, 101, 125])(
+describe("FO-03 — todas as pendências, e só elas, numa leitura", () => {
+  it.each([0, 1, 100, 101, 500])(
     "%i pendência(s) entre 40 lotes fora do recorte: a folha traz todas, na ordem do servidor",
     async (quantidade) => {
       const lotes = massa(quantidade, 40);
-      servidorDaFila(lotes);
+      servidorDaFila(() => lotes);
       const esperadas = recorte(lotes, { onlyPending: true });
       expect(esperadas).toHaveLength(quantidade);
 
       const container = await folhaGerada();
       const folha = within(container);
 
-      // Todas, na ordem do servidor — concatenar as páginas não reordena.
+      // Todas, na ordem do servidor.
       expect(lotesNaFolha(container)).toEqual(esperadas.map((row) => row.lotCode));
       // Lote aprovado ou sem exigência de laudo não é pendência.
       const fora = lotes.filter((row) => NAO_PENDENCIAS.includes(row.coaStatus)).map((row) => row.lotCode);
@@ -158,7 +169,7 @@ describe("FO-03 — todas as pendências, e só elas", () => {
       expect(folha.queryByText("Aprovado")).toBeNull();
       expect(folha.queryByText("Não exigido")).toBeNull();
 
-      // A contagem do papel é o total do servidor, não a primeira página.
+      // A contagem do papel é o total do servidor.
       const campo = [...container.querySelectorAll('[data-pdf-role="field"]')].find((el) =>
         el.textContent?.startsWith("Lotes pendentes"),
       )!;
@@ -166,26 +177,55 @@ describe("FO-03 — todas as pendências, e só elas", () => {
       if (quantidade === 0) expect(folha.getByText("Nenhuma pendência de qualidade.")).toBeTruthy();
       expect(container.querySelectorAll('[data-pdf-role="write"]')).toHaveLength(quantidade);
 
-      // Recorte no servidor e uma requisição por página, nunca uma por linha.
-      const paginas = Math.max(1, Math.ceil(quantidade / 100));
-      expect(pedidos()).toEqual(
-        Array.from({ length: paginas }, (_, i) => ({ onlyPending: true, page: i + 1, pageSize: 100 })),
-      );
+      // Uma leitura só, do recorte inteiro: nenhuma página, nenhum deslocamento.
+      expect(pedidos()).toEqual([{ onlyPending: true, all: true }]);
     },
   );
 });
 
-describe("FO-03 — leitura incompleta não vira folha", () => {
-  it("a segunda página falha: nenhum PDF, e a tela diz que não gerou", async () => {
-    const lotes = massa(125, 40);
-    servidorDaFila(lotes);
-    const servidor = vi.mocked(listQualityQueue).getMockImplementation()!;
-    vi.mocked(listQualityQueue).mockImplementation(async (params = {}) => {
-      if (params.page === 2) {
-        throw new Error("Erro interno do servidor (500). Tente novamente ou avise o suporte.");
-      }
-      return servidor(params);
+describe("FO-03 — a fila mudando não vira folha misturada", () => {
+  it("uma pendência sai e outra entra logo depois da leitura: a folha é o retrato da leitura, inteiro", async () => {
+    // O cenário que escapava da leitura por páginas: 125 pendências, uma sai
+    // antes do deslocamento e outra entra depois dele — total igual, nenhuma
+    // chave repetida, um lote fora do papel.
+    let lotes = massa(125, 40);
+    const retrato = recorte(lotes, { onlyPending: true });
+    const sai = retrato[0]!;
+    const entra = lote(9999, "PENDING");
+    servidorDaFila(() => {
+      const agora = lotes;
+      lotes = [...lotes.map((row) => (row === sai ? { ...row, coaStatus: "APPROVED" as const } : row)), entra];
+      return agora;
     });
+
+    const container = await folhaGerada();
+
+    expect(lotesNaFolha(container)).toEqual(retrato.map((row) => row.lotCode));
+    expect(lotesNaFolha(container)).toContain(sai.lotCode);
+    expect(lotesNaFolha(container)).not.toContain(entra.lotCode);
+    expect(pedidos()).toHaveLength(1);
+  });
+});
+
+describe("FO-03 — leitura recusada ou incompleta não vira folha", () => {
+  it("acima do teto: a frase do servidor na tela, nenhum PDF e nenhuma segunda leitura", async () => {
+    const lotes = massa(TETO + 1, 40);
+    servidorDaFila(() => lotes);
+
+    abrirTela();
+
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent(`Não foi possível gerar o documento: ${FRASE_DO_TETO}`);
+    expect(renderPdfBlob).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Baixar PDF" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Imprimir" })).toBeDisabled();
+    expect(pedidos()).toEqual([{ onlyPending: true, all: true }]);
+  });
+
+  it("a leitura falha: nenhum PDF, e a tela diz que não gerou", async () => {
+    vi.mocked(listQualityQueue).mockRejectedValue(
+      new Error("Erro interno do servidor (500). Tente novamente ou avise o suporte."),
+    );
 
     abrirTela();
 
@@ -195,25 +235,15 @@ describe("FO-03 — leitura incompleta não vira folha", () => {
     );
     expect(renderPdfBlob).not.toHaveBeenCalled();
     expect(screen.queryByTitle(/^Documento /)).toBeNull();
-    expect(screen.getByRole("button", { name: "Baixar PDF" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Imprimir" })).toBeDisabled();
-    expect(pedidos().map((params) => params?.page)).toEqual([1, 2]);
   });
 
-  it("uma pendência sai da fila entre as páginas: o total muda, e nenhum PDF sai", async () => {
-    const lotes = massa(125, 40);
-    const aprovadoNoMeio = recorte(lotes, { onlyPending: true })[0]!;
-    const depois = lotes.map((row) => (row === aprovadoNoMeio ? { ...row, coaStatus: "APPROVED" as const } : row));
-    vi.mocked(listQualityQueue).mockImplementation(async (params = {}) => {
-      const page = params.page ?? 1;
-      const pageSize = params.pageSize ?? 20;
-      const linhas = recorte(page === 1 ? lotes : depois, params);
-      return { rows: linhas.slice((page - 1) * pageSize, page * pageSize), page, pageSize, total: linhas.length };
-    });
+  it("resposta que não fecha com o próprio total: nenhum PDF", async () => {
+    const linhas = recorte(massa(3, 0), { onlyPending: true });
+    vi.mocked(listQualityQueue).mockResolvedValue({ rows: linhas, page: 1, pageSize: 4, total: 4 });
 
     abrirTela();
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("A lista mudou enquanto era lida.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("A fila não fechou com o total informado.");
     expect(renderPdfBlob).not.toHaveBeenCalled();
   });
 });

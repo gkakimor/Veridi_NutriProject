@@ -271,6 +271,72 @@ export function isDefaultPricingModel(model: PricingModelConfig): boolean {
   );
 }
 
+// ───────────────────────────────────────────────────────── o Modelo por escrito
+
+/**
+ * Como cada saída escreve os valores do Modelo: a tela e o PDF com os
+ * formatadores deles, o CSV com os da API. As palavras são daqui — o PDF de
+ * Precificação, o R-19, o R-20 e o CMV contam o Modelo com as mesmas
+ * (PRICING-MODEL-VIEW-REPORTS-01).
+ */
+export interface FormatosDoModelo {
+  /** Percentual guardado (12 = 12%) → "12%". */
+  percentual: (valor: string | null) => string;
+  /** R$ por unidade → "R$ 0,85". */
+  porUnidade: (valor: string | null) => string;
+  /** R$ uma vez na faixa → "R$ 300,00". */
+  total: (valor: string | null) => string;
+}
+
+/** O Modelo padrão numa palavra: o preço se forma sobre o custo do cálculo. */
+export const MODELO_DE_PRECIFICACAO_PADRAO = "Padrão";
+
+/**
+ * O custo industrial que entra no custo p/ preço, com a base dita. Modo
+ * desligado não leva valor: o valor guardado de outro modo — ou debaixo da
+ * gestão externa — não entra na conta, e escrito pareceria entrar.
+ */
+export function textoDoCustoIndustrialNoPreco(modelo: PricingModelConfig, formatos: FormatosDoModelo): string {
+  if (modelo.externalAdditionalCosts) return "Fora da conta — administrado externamente";
+  switch (modelo.industrialCostMode) {
+    case "CALCULATED":
+      return PRICING_INDUSTRIAL_COST_MODE_LABELS.CALCULATED;
+    case "IGNORE":
+      return "Não considerado";
+    case "PERCENT_MATERIAL_COST":
+      return `${formatos.percentual(modelo.industrialCostPercentOfMaterials)} sobre custo de materiais`;
+    case "PER_UNIT":
+      return `${formatos.porUnidade(modelo.industrialCostAmountPerUnit)} por unidade`;
+    case "TOTAL":
+      return `${formatos.total(modelo.industrialCostAmountTotal)} uma vez em cada faixa`;
+  }
+}
+
+/** Os impostos estimados do Modelo, com a base dita — a mesma regra do custo industrial. */
+export function textoDosImpostosNoPreco(modelo: PricingModelConfig, formatos: FormatosDoModelo): string {
+  if (modelo.externalAdditionalCosts) return "Fora da conta — administrados externamente";
+  switch (modelo.estimatedTaxMode) {
+    case "IGNORE":
+      return "Não considerados";
+    case "PERCENT_SALE_PRICE":
+      return `${formatos.percentual(modelo.estimatedTaxPercentOfSalePrice)} sobre preço de venda`;
+    case "PER_UNIT":
+      return `${formatos.porUnidade(modelo.estimatedTaxAmountPerUnit)} por unidade`;
+    case "TOTAL":
+      return `${formatos.total(modelo.estimatedTaxAmountTotal)} uma vez em cada faixa`;
+  }
+}
+
+/**
+ * O Modelo numa linha, para quem lê várias precificações lado a lado (R-19,
+ * R-20, CMV): "Padrão", ou o custo industrial e os impostos que entraram no
+ * custo p/ preço.
+ */
+export function resumoDoModeloDePrecificacao(modelo: PricingModelConfig, formatos: FormatosDoModelo): string {
+  if (isDefaultPricingModel(modelo)) return MODELO_DE_PRECIFICACAO_PADRAO;
+  return `Custo industrial no preço: ${textoDoCustoIndustrialNoPreco(modelo, formatos)} · Impostos estimados: ${textoDosImpostosNoPreco(modelo, formatos)}`;
+}
+
 // ───────────────────────────────────────────────────────── efeito na faixa
 
 export interface PricingModelEffectInput {

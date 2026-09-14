@@ -293,9 +293,9 @@ describe("Folhas operacionais — a rota gera o PDF da folha", () => {
       <QualityPendingSheetPage />,
     );
 
-    // O recorte é do servidor; a leitura de todas as páginas está em
-    // `fo03-pendencias-sem-corte.test.tsx`.
-    expect(listQualityQueue).toHaveBeenCalledWith({ onlyPending: true, page: 1, pageSize: 100 });
+    // O recorte e o retrato são do servidor, numa leitura só; tamanho, teto e
+    // fila mudando estão em `fo03-pendencias-sem-corte.test.tsx`.
+    expect(listQualityQueue).toHaveBeenCalledWith({ onlyPending: true, all: true });
     const linha = (lote: string) => celulas(folha.getByText(lote).closest('[data-pdf-role="row"]')!);
     // Colunas: Lote, Item, Fornecedor / proprietário, CoA, Qualidade, …, Pendência.
     // Pendência documental com os rótulos da tela Documentos / CoA (FO03-ROW-SITUATION-01).
