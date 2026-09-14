@@ -42,6 +42,8 @@ const ROTAS_ANTES_DA_MIGRACAO = [
   // QUOTE-WORKSPACE-NAVIGATION-01: a versão de orçamento ganhou página própria.
   "/comercial/orcamentos/:id",
   "/comercial/orcamentos/:id/imprimir",
+  // QUOTES-HUB-01: a lista geral das versões, que navega para a rota acima.
+  "/comercial/orcamentos",
   "/comercial/pedidos",
   "/comercial/pedidos/:id",
   "/comercial/pedidos/:id/imprimir",

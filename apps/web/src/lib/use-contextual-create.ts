@@ -208,6 +208,8 @@ export function rotuloDaOrigem(rota: string): string {
     [/^\/planejamento\/perfis-producao/, "Roteiro de produção"],
     [/^\/comercial\/pedidos/, "Pedido"],
     [/^\/comercial\/projetos/, "Projeto"],
+    // A lista geral (QUOTES-HUB-01) antes da página de uma versão.
+    [/^\/comercial\/orcamentos\/?$/, "Orçamentos"],
     [/^\/comercial\/orcamentos/, "Orçamento"],
     [/^\/comercial\/amostras/, "Amostra"],
     [/^\/comercial\/expedicoes/, "Expedição"],

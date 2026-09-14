@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import type { ProjectDTO, QuoteVersionDTO } from "@veridi/shared";
 import { QUOTE_STATUS_LABELS } from "@veridi/shared";
 import { useAuth } from "../../app/AuthProvider";
+import { useTituloDaTela } from "../../app/titulo-da-tela";
 import { EntityLink, entityHref } from "../../components/EntityLink";
 import { FlowContext } from "../../components/FlowContext";
 import { FormSection } from "../../components/FormSection";
@@ -100,6 +101,9 @@ function QuoteVersionDocument({ id }: { id: string }) {
     load();
   }, [load]);
 
+  /* A aba diz QUAL orçamento — duas propostas abertas não se confundem. */
+  useTituloDaTela(dados ? dados.quote.versionLabel : notFound ? "Orçamento não encontrado" : null);
+
   if (loading && !dados) {
     return (
       <div className="page__header">
@@ -129,8 +133,9 @@ function QuoteVersionDocument({ id }: { id: string }) {
               </button>
             </p>
           )}
-          <Link className="btn btn--ghost" to={voltar ?? "/comercial/projetos"}>
-            {voltar ? `← Voltar para ${rotuloDaOrigem(voltar)}` : "← Voltar para Projetos"}
+          {/* Sem origem na URL, a lista geral de Orçamentos (QUOTES-HUB-01). */}
+          <Link className="btn btn--ghost" to={voltar ?? "/comercial/orcamentos"}>
+            {voltar ? `← Voltar para ${rotuloDaOrigem(voltar)}` : "← Voltar para Orçamentos"}
           </Link>
         </div>
       </div>

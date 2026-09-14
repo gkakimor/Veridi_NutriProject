@@ -697,11 +697,20 @@ describe("Página do Orçamento — endereço", () => {
 
     expect(await screen.findByRole("heading", { name: "Orçamento não encontrado" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Tentar novamente" })).toBeNull();
-    expect(screen.getByRole("link", { name: "← Voltar para Projetos" })).toHaveAttribute(
+    // Sem origem na URL, a volta é a lista geral de Orçamentos (QUOTES-HUB-01).
+    expect(screen.getByRole("link", { name: "← Voltar para Orçamentos" })).toHaveAttribute(
       "href",
-      "/comercial/projetos",
+      "/comercial/orcamentos",
     );
     expect(getProject).not.toHaveBeenCalled();
+    expect(document.title).toBe("Orçamento não encontrado · Veridi Nutrition");
+  });
+
+  it("a aba diz qual orçamento está aberto (QUOTE-PAGE-NAV-ACTIVE-01)", async () => {
+    servir([V1, V2]);
+    abrirApp(`/comercial/orcamentos/q2${COM_VOLTA}`);
+    expect(await titulo("ORC-000445 · V2")).toBeInTheDocument();
+    await waitFor(() => expect(document.title).toBe("ORC-000445 · V2 · Veridi Nutrition"));
   });
 
   it.each([
