@@ -707,7 +707,7 @@ describe("Trocar o roteiro em rascunho", () => {
 
 describe("Mudar a quantidade com programação gravada — OP-SCHEDULE-STALE-ON-QUANTITY-01", () => {
   const RECUSA =
-    "Alterar a quantidade removerá a programação atual desta ordem, pois os tempos e recursos precisam ser recalculados. Confirme para continuar.";
+    "Alterar a quantidade removerá a programação atual desta ordem, pois a duração da produção pode mudar. Confirme para continuar.";
 
   const alterar = (id: string, payload: Record<string, unknown>) =>
     app.inject({ method: "PATCH", url: `/production-orders/${id}`, payload });
@@ -824,6 +824,7 @@ describe("Mudar a quantidade com programação gravada — OP-SCHEDULE-STALE-ON-
 
     for (const payload of [
       { plannedQuantity: "1000" },
+      { plannedQuantity: "1000.0" },
       { plannedQuantity: "1000.000" },
       { plannedQuantity: "1000,0" },
       { plannedQuantity: "1000", confirmScheduleRemoval: true },

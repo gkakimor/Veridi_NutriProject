@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   Link,
@@ -108,7 +108,7 @@ const getProductionOrderScheduleMock = vi.mocked(getProductionOrderSchedule);
 // ─────────────────────────────────────────────────────────────── fixtures
 
 const PERGUNTA =
-  "Alterar a quantidade removerá a programação atual desta ordem, pois os tempos e recursos precisam ser recalculados.";
+  "Alterar a quantidade removerá a programação atual desta ordem, pois a duração da produção pode mudar.";
 const REMOVIDA = "Quantidade atualizada. A programação anterior foi removida e precisa ser refeita.";
 const ATUALIZADA = "Ordem de produção atualizada.";
 const CONFIRMAR = "Alterar quantidade e remover programação";
@@ -436,9 +436,15 @@ describe("OP em rascunho — quando NÃO se pergunta", () => {
       ordem({ notes: "Conferir embalagem", updatedAt: "2026-09-12T13:00:00.000Z" }),
     );
 
-    fireEvent.change(quantidade(), { target: { value: "1000,000" } });
-    // O mesmo número: nada a gravar.
-    expect(screen.getByRole("button", { name: "Salvar rascunho" })).toBeDisabled();
+    // Com foco o campo mostra o texto digitado — fora dele, o formatado ("1.000") esconderia a leitura.
+    act(() => quantidade().focus());
+    for (const mesma of ["1000,000", "1000.0", "1000.000"]) {
+      fireEvent.change(quantidade(), { target: { value: mesma } });
+      expect(quantidade(), mesma).toHaveValue(mesma);
+      // O mesmo número: nada a gravar.
+      expect(screen.getByRole("button", { name: "Salvar rascunho" }), mesma).toBeDisabled();
+    }
+    act(() => quantidade().blur());
 
     fireEvent.change(observacoes(), { target: { value: "Conferir embalagem" } });
     salvar();

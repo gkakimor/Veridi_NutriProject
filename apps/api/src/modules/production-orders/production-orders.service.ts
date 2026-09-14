@@ -1020,7 +1020,7 @@ export async function updateProductionOrder(
     const removerProgramacao = quantidadeMudou && travada.schedule !== null;
     if (removerProgramacao && input.confirmScheduleRemoval !== true) {
       throw new ScheduleRemovalNeedsConfirmationError(
-        "Alterar a quantidade removerá a programação atual desta ordem, pois os tempos e recursos precisam ser recalculados. Confirme para continuar.",
+        "Alterar a quantidade removerá a programação atual desta ordem, pois a duração da produção pode mudar. Confirme para continuar.",
       );
     }
 

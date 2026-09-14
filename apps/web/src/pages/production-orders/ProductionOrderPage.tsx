@@ -2436,8 +2436,8 @@ export function ProductionOrderPage() {
         title="Alterar a quantidade planejada?"
         message={
           <p className="schedule-reset-confirm">
-            Alterar a quantidade removerá a programação atual desta ordem, pois os tempos e recursos
-            precisam ser recalculados.
+            Alterar a quantidade removerá a programação atual desta ordem, pois a duração da produção
+            pode mudar.
           </p>
         }
         cancelLabel="Cancelar"
