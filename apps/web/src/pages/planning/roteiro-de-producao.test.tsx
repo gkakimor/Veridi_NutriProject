@@ -819,6 +819,91 @@ describe("Salvar identificação não apaga o rascunho pendente", () => {
   });
 });
 
+/**
+ * EDITING-INTEGRITY-WAVE-01 — o que se digita DEPOIS de clicar "Salvar rascunho".
+ *
+ * A releitura que volta com a gravação trocava pelo gravado o que a pessoa
+ * digitou enquanto a requisição estava no ar: salvou 500, digitou 700, a
+ * resposta devolvia 500 e a pendência sumia. Os campos seguem editáveis; o que
+ * mudou depois do clique fica, pendente contra o que o servidor gravou.
+ */
+describe("Edição durante a gravação do rascunho", () => {
+  it("salvou 500, digitou 700 no ar: fica 700, pendente contra o gravado, com a guarda", async () => {
+    const user = userEvent.setup();
+    let responder: () => void = () => {};
+    updateProductionProfileVersion.mockImplementation(
+      () => new Promise<void>((resolve) => (responder = () => resolve())),
+    );
+    await abrirComGuarda(perfil({ draftVersion: versao({ steps: [etapaCompleta()] }) }));
+
+    fireEvent.change(campo("Quantidade de referência"), { target: { value: "500" } });
+    fireEvent.click(botao("Salvar rascunho"));
+    expect(await screen.findByRole("button", { name: "Salvando…" })).toBeDisabled();
+    expect(updateProductionProfileVersion).toHaveBeenCalledWith(
+      "ppv-1",
+      expect.objectContaining({ referenceQuantity: "500" }),
+    );
+
+    // Nada é bloqueado durante a gravação: a pessoa continua digitando.
+    expect(campo("Quantidade de referência")).toBeEnabled();
+    expect(campo("Nome da etapa")).toBeEnabled();
+    fireEvent.change(campo("Quantidade de referência"), { target: { value: "700" } });
+    fireEvent.change(campo("Nome da etapa"), { target: { value: "Mistura Nova" } });
+
+    getProductionProfile.mockResolvedValue(
+      perfil({ draftVersion: versao({ referenceQuantity: "500", steps: [etapaCompleta()] }) }),
+    );
+    await act(async () => responder());
+    await waitFor(() => expect(getProductionProfile).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Salvando…" })).toBeNull());
+
+    expect(campo("Quantidade de referência")).toHaveValue("700");
+    expect(campo("Nome da etapa")).toHaveValue("Mistura Nova");
+    expect(pendencias()).toHaveLength(1);
+    expect(screen.queryByText("Rascunho salvo.")).toBeNull();
+    expect(botao("Salvar rascunho")).toBeEnabled();
+    expect(botao("Ativar versão")).toBeDisabled();
+
+    await tentarSair(user);
+    expect(await screen.findByText("Sair sem salvar?")).toBeInTheDocument();
+    await user.click(botao("Continuar editando"));
+    await waitFor(() => expect(screen.queryByText("Sair sem salvar?")).toBeNull());
+    expect(campo("Quantidade de referência")).toHaveValue("700");
+
+    // A pendência é contra o GRAVADO (500, Encapsulamento), não contra a leitura de antes (1.000).
+    fireEvent.change(campo("Quantidade de referência"), { target: { value: "500" } });
+    fireEvent.change(campo("Nome da etapa"), { target: { value: "Encapsulamento" } });
+    await waitFor(() => expect(pendencias()).toHaveLength(0));
+    expect(screen.getByText("Rascunho salvo.")).toBeInTheDocument();
+    expect(botao("Ativar versão")).toBeEnabled();
+  });
+
+  it("digitar durante a gravação e voltar ao que foi enviado: vale o normalizado do servidor", async () => {
+    let responder: () => void = () => {};
+    updateProductionProfileVersion.mockImplementation(
+      () => new Promise<void>((resolve) => (responder = () => resolve())),
+    );
+    await abrirComGuarda(perfil({ draftVersion: versao({ steps: [etapaCompleta()] }) }));
+
+    fireEvent.change(campo("Nome da etapa"), { target: { value: "  Mistura Nova  " } });
+    fireEvent.click(botao("Salvar rascunho"));
+    expect(await screen.findByRole("button", { name: "Salvando…" })).toBeDisabled();
+
+    // Mexeu e desfez no ar: a tela da resposta é a do clique.
+    fireEvent.change(campo("Nome da etapa"), { target: { value: "Outra" } });
+    fireEvent.change(campo("Nome da etapa"), { target: { value: "  Mistura Nova  " } });
+
+    getProductionProfile.mockResolvedValue(
+      perfil({ draftVersion: versao({ steps: [{ ...etapaCompleta(), name: "Mistura Nova" }] }) }),
+    );
+    await act(async () => responder());
+
+    await waitFor(() => expect(campo("Nome da etapa")).toHaveValue("Mistura Nova"));
+    expect(pendencias()).toHaveLength(0);
+    expect(await screen.findByText("Rascunho salvo.")).toBeInTheDocument();
+  });
+});
+
 describe("Tela estreita", () => {
   it("resumo vira dois pares e a ação do estado vazio ocupa a linha", () => {
     const folha = css();

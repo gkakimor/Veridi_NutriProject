@@ -261,6 +261,24 @@ export function PurchaseOrderPage() {
   const [feito, setFeito] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  /*
+   * Erro de AÇÃO leva a pessoa até o alerta. Ele mora no topo do documento e
+   * salvar, confirmar e cancelar ficam lá embaixo: em 390px a recusa aparecia
+   * fora da vista e o clique parecia não ter efeito. Um alerta só, trazido à
+   * vista e com foco; erro de CARGA não rola a tela de ninguém.
+   */
+  const alertaRef = useRef<HTMLParagraphElement>(null);
+  const [errosDeAcao, setErrosDeAcao] = useState(0);
+  function avisarErro(mensagem: string) {
+    setError(mensagem);
+    setErrosDeAcao((total) => total + 1);
+  }
+  useEffect(() => {
+    if (errosDeAcao === 0) return;
+    // jsdom não implementa `scrollIntoView`; no navegador ele existe sempre.
+    alertaRef.current?.scrollIntoView?.({ block: "center" });
+    alertaRef.current?.focus();
+  }, [errosDeAcao]);
 
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
@@ -698,16 +716,16 @@ export function PurchaseOrderPage() {
         nextFieldErrors[issue.path] = issue.message;
       }
       setFieldErrors(nextFieldErrors);
-      setError("Corrija os campos destacados.");
+      avisarErro("Corrija os campos destacados.");
     } else {
-      setError(apiErrorMessage(err, "Falha ao salvar ordem de compra"));
+      avisarErro(apiErrorMessage(err, "Falha ao salvar ordem de compra"));
     }
   }
 
   async function handleSaveDraft() {
     setFeito(null);
     if (!supplierId) {
-      setError("Selecione um fornecedor.");
+      avisarErro("Selecione um fornecedor.");
       return;
     }
 
@@ -756,7 +774,7 @@ export function PurchaseOrderPage() {
       syncFormFromServer(updated);
       setFeito("Previsão e observações salvas.");
     } catch (err) {
-      setError(apiErrorMessage(err, "Falha ao salvar"));
+      avisarErro(apiErrorMessage(err, "Falha ao salvar"));
     } finally {
       setAcaoEmCurso(null);
     }
@@ -776,7 +794,7 @@ export function PurchaseOrderPage() {
      */
     if (alteracaoPendente) {
       if (!supplierId) {
-        setError("Selecione um fornecedor.");
+        avisarErro("Selecione um fornecedor.");
         return;
       }
       setAcaoEmCurso("salvar-para-confirmar");
@@ -800,7 +818,7 @@ export function PurchaseOrderPage() {
       setPurchaseOrder(updated);
       syncFormFromServer(updated);
     } catch (err) {
-      setError(apiErrorMessage(err, "Falha ao confirmar pedido"));
+      avisarErro(apiErrorMessage(err, "Falha ao confirmar pedido"));
     } finally {
       setAcaoEmCurso(null);
     }
@@ -818,7 +836,7 @@ export function PurchaseOrderPage() {
       setPurchaseOrder(updated);
       syncFormFromServer(updated);
     } catch (err) {
-      setError(apiErrorMessage(err, "Falha ao cancelar ordem de compra"));
+      avisarErro(apiErrorMessage(err, "Falha ao cancelar ordem de compra"));
     } finally {
       setAcaoEmCurso(null);
     }
@@ -883,7 +901,12 @@ export function PurchaseOrderPage() {
             documento e joga o saldo em aberto para Em Compra. */}
         <ContextHelp topic={helpTopics["compras.ordens"]} />
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {/* Com o diálogo de cancelamento aberto, o erro mora nele: aqui ficaria atrás. */}
+      {error && !cancelDialogOpen && (
+        <p className="form-alert" role="alert" ref={alertaRef} tabIndex={-1}>
+          {error}
+        </p>
+      )}
 
       {purchaseOrder && purchaseOrder.origin === "CUSTOMER_ORDER" && (
         <FormSection title="Origem">
@@ -1252,7 +1275,10 @@ options={supplierOptions.map((supplier) => ({
             type="button"
             className="btn btn--danger"
             disabled={saving}
-            onClick={() => setCancelDialogOpen(true)}
+            onClick={() => {
+              setError(null);
+              setCancelDialogOpen(true);
+            }}
           >
             Cancelar OC
           </button>
@@ -1351,6 +1377,11 @@ options={supplierOptions.map((supplier) => ({
                 onChange={(event) => setCancelReason(event.target.value)}
               />
             </div>
+            {error && (
+              <p className="form-alert" role="alert" ref={alertaRef} tabIndex={-1}>
+                {error}
+              </p>
+            )}
             <div className="confirm-dialog__actions">
               <button
                 type="button"

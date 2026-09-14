@@ -625,7 +625,18 @@ export function ProductionProfileDetailPage() {
    */
   const rascunhoPendente = useRef(false);
 
-  const load = useCallback((recarga: { manterRascunhoPendente?: boolean } = {}) => {
+  /**
+   * A assinatura do rascunho no último render.
+   *
+   * "Salvar rascunho" recarrega o roteiro, e a leitura trocava pelo gravado o que
+   * se digitou DEPOIS do clique: salvou 500, digitou 700 durante a gravação, a
+   * resposta devolvia 500 e a pendência sumia. A ação que grava o rascunho guarda
+   * a tela do clique; na resposta, tela igual à do clique recebe o servidor
+   * (normalizado), tela diferente fica como está — e pendente contra o gravado.
+   */
+  const assinaturaNaTela = useRef("");
+
+  const load = useCallback((recarga: { manterRascunhoPendente?: boolean; telaNoClique?: string } = {}) => {
     if (!profileId) return;
     const cargaInicial = lido.current === null;
     getProductionProfile(profileId)
@@ -645,7 +656,10 @@ export function ProductionProfileDetailPage() {
         if (rascunho) {
           const lidas = etapasDoDTO(rascunho);
           // `salvo` continua sendo o servidor: o que ficou na tela segue pendente.
-          const manterPendente = recarga.manterRascunhoPendente === true && rascunhoPendente.current;
+          const manterPendente =
+            recarga.manterRascunhoPendente === true
+              ? rascunhoPendente.current
+              : recarga.telaNoClique !== undefined && assinaturaNaTela.current !== recarga.telaNoClique;
           if (!manterRestaurado && !manterPendente) {
             setBase(toPtBrEditText(rascunho.referenceQuantity, OPCOES_QUANTIDADE));
             setUnidade(rascunho.referenceUomCode);
@@ -737,6 +751,7 @@ export function ProductionProfileDetailPage() {
   const alteradoNaTela =
     profile?.draftVersion != null && assinatura(base, unidade, etapas) !== salvo;
   rascunhoPendente.current = alteradoNaTela;
+  assinaturaNaTela.current = assinatura(base, unidade, etapas);
   /*
    * Identificação grava separado do rascunho, e por isso tem pendência
    * própria. É a MESMA guarda — nenhum `dirty` paralelo —, só somando o
@@ -853,12 +868,18 @@ export function ProductionProfileDetailPage() {
     action: () => Promise<unknown>,
     sucesso?: { bloco: string; texto: string },
   ) {
+    // A tela que a ação levou: o que mudar depois disto é da pessoa, não do servidor.
+    const telaNoClique = assinaturaNaTela.current;
     setAcaoEmCurso(acao);
     setError(null);
     setFeito(null);
     try {
       await action();
-      load({ manterRascunhoPendente: !ACOES_QUE_GRAVAM_O_RASCUNHO.has(acao) });
+      load(
+        ACOES_QUE_GRAVAM_O_RASCUNHO.has(acao)
+          ? { telaNoClique }
+          : { manterRascunhoPendente: true },
+      );
       // Só depois de a ação passar: erro que caísse aqui deixaria a tela
       // dizendo "salvo" sobre o que não foi gravado.
       if (sucesso) setFeito(sucesso);
