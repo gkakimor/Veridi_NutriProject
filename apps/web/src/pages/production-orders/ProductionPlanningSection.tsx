@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ProductionOrderDTO,
@@ -464,7 +465,7 @@ export function ProductionPlanningSection({
                         <ul className="profile-preview__resources">
                           {etapa.resources.map((recurso) => (
                             <li key={recurso.industrialResourceId}>
-                              {recurso.resourceQuantity} × {recurso.resourceName}:{" "}
+                              {formatIntegerPtBr(recurso.resourceQuantity)} × {recurso.resourceName}:{" "}
                               {formatMinutes(recurso.demandMinutes)} de recurso
                             </li>
                           ))}

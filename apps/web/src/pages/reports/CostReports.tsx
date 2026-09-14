@@ -1,4 +1,5 @@
-import { formatQuantity } from "../../lib/quantity";
+import { formatPercent } from "../../lib/percent";
+import { formatQuantity, formatQuantityWithUnit } from "../../lib/quantity";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -214,12 +215,12 @@ function PricingByProductReport() {
             <td className="is-code">{row.calculationCode}</td>
             <td>{INDUSTRIAL_COST_QUALITY_LABELS[row.costQuality]}</td>
             <td>{formatUnitCost(row.costPerUnit)}</td>
-            <td>{row.commissionPercent}%</td>
+            <td>{formatPercent(row.commissionPercent)}</td>
             <td>{formatUnitCost(row.unitPrice)}</td>
             <td>
-              {row.contributionMarginPercent === null ? "—" : `${row.contributionMarginPercent}%`}
+              {formatPercent(row.contributionMarginPercent)}
             </td>
-            <td>{row.markupPercent === null ? "—" : `${row.markupPercent}%`}</td>
+            <td>{formatPercent(row.markupPercent)}</td>
             <td>{formatUnitCost(row.contributionPerUnit)}</td>
             <td>
               {formatDate(row.activatedAt)}
@@ -365,7 +366,7 @@ function QuotePricingAuditReport() {
             <td className="is-code">{row.productCode ?? "—"}</td>
             <td>{QUOTE_STATUS_LABELS[row.status]}</td>
             <td>
-              {row.quotedQuantity ?? "—"} {row.uomCode ?? ""}
+              {formatQuantityWithUnit(row.quotedQuantity, row.uomCode)}
             </td>
             <td>{row.unitPrice ? formatUnitPriceBRL(row.unitPrice) : "—"}</td>
             <td>{row.total ? formatBRL(row.total) : "—"}</td>
@@ -375,9 +376,7 @@ function QuotePricingAuditReport() {
             <td>{row.costQuality ? INDUSTRIAL_COST_QUALITY_LABELS[row.costQuality] : "—"}</td>
             <td>{formatUnitCost(row.industrialCostPerUnit)}</td>
             <td>
-              {row.contributionMarginPercent === null
-                ? "—"
-                : `${row.contributionMarginPercent}%`}
+              {formatPercent(row.contributionMarginPercent)}
             </td>
             <td>{formatDate(row.sentAt)}</td>
             <td>{formatDate(row.acceptedAt)}</td>

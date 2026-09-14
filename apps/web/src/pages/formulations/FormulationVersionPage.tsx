@@ -30,7 +30,7 @@ import { CalcHint } from "../../components/help/CalcHint";
 import { DecimalField, IntegerField } from "../../components/NumericField";
 import { decimalDaApiComparavel } from "../../lib/dirty-fields";
 import { lerInteiroOpcional } from "../../lib/integer-input";
-import { numericInvalidMessage, parsePtBrNumber, toPtBrEditText } from "../../lib/numeric-ptbr";
+import { numericInvalidMessage, parsePtBrNumber, toPtBrEditText, formatIntegerPtBr, formatPercentPtBr } from "../../lib/numeric-ptbr";
 import {
   CASAS_QUANTIDADE,
   OPCOES_PERCENTUAL_TECNICO,
@@ -446,7 +446,7 @@ function operandosDoFisico(
     }
   } else if (row.basis === "PER_DOSE" && dosesPerPackage) {
     operandos.push({
-      valor: String(dosesPerPackage),
+      valor: formatIntegerPtBr(dosesPerPackage),
       papel: "doses por embalagem",
       numero: dosesPerPackage,
     });
@@ -458,7 +458,7 @@ function operandosDoFisico(
   if (de && para && de.code !== para.code && Number(para.toBaseFactor) !== 0) {
     const fator = Number(de.toBaseFactor) / Number(para.toBaseFactor);
     operandos.push({
-      valor: String(fator),
+      valor: formatQuantity(String(fator)),
       papel: `${de.code} para ${para.code}`,
       numero: fator,
     });
@@ -468,7 +468,10 @@ function operandosDoFisico(
     const pureza = Number(decimalLegivel(row.purityPercentApplied, OPCOES_PERCENTUAL_TECNICO));
     if (pureza > 0) {
       operandos.push({
-        valor: `${row.purityPercentApplied}%`,
+        valor: formatPercentPtBr(
+          decimalLegivel(row.purityPercentApplied, OPCOES_PERCENTUAL_TECNICO),
+          OPCOES_PERCENTUAL_TECNICO,
+        ),
         papel: "pureza",
         operador: "÷",
         numero: pureza / 100,
@@ -479,7 +482,7 @@ function operandosDoFisico(
     const overage = Number(decimalLegivel(row.overagePercent, OPCOES_PERCENTUAL_TECNICO));
     if (overage >= 0) {
       operandos.push({
-        valor: `(1 + ${row.overagePercent}%)`,
+        valor: `(1 + ${formatPercentPtBr(decimalLegivel(row.overagePercent, OPCOES_PERCENTUAL_TECNICO), OPCOES_PERCENTUAL_TECNICO)})`,
         papel: "overage",
         numero: 1 + overage / 100,
       });
@@ -1502,7 +1505,7 @@ export function FormulationVersionPage() {
                     : {})}
                 />
               ) : (
-                <p className="field-readonly-value">{version.dosesPerPackage ?? "—"}</p>
+                <p className="field-readonly-value">{formatIntegerPtBr(version.dosesPerPackage)}</p>
               )}
               <p className="field__hint">
                 Usado para calcular a quantidade total de componentes definidos por dose.
@@ -1724,7 +1727,7 @@ export function FormulationVersionPage() {
                           {mensagemDeErro("unitCode")}
                         </>
                       ) : (
-                        `${row.quantity} ${row.unitCode}`
+                        `${formatQuantity(decimalLegivel(row.quantity, OPCOES_QUANTIDADE) ?? row.quantity)} ${row.unitCode}`
                       )}
                     </td>
                     {/*

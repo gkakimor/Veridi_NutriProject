@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { formatQuantity } from "../../lib/quantity";
 import { useMemo, useState } from "react";
 import type { PurchaseOrderStatus } from "@veridi/shared";
@@ -151,14 +152,14 @@ export function PurchaseOrdersReportPage() {
             <td>{PURCHASE_ORDER_STATUS_LABELS[row.status]}</td>
             <td>{formatDate(row.orderDate)}</td>
             <td>{formatDate(row.expectedDeliveryDate)}</td>
-            <td className="is-number">{row.itemCount}</td>
+            <td className="is-number">{formatIntegerPtBr(row.itemCount)}</td>
             {/* Sem preço em todas as linhas não existe total da OC. */}
             <td className="is-number">
               {row.expectedAmount
                 ? formatBRL(row.expectedAmount)
                 : `Preço incompleto (${row.linesWithPrice}/${row.itemCount})`}
             </td>
-            <td className="is-number">{row.receiptCount}</td>
+            <td className="is-number">{formatIntegerPtBr(row.receiptCount)}</td>
           </tr>
         ))}
       />

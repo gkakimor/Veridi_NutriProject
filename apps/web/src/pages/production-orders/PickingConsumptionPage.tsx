@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { EntityLink } from "../../components/EntityLink";
@@ -282,7 +283,7 @@ export function PickingConsumptionPage() {
             "N ordens" contando as linhas que tinha em mão. */}
         {consulta.data && (
           <div className="table-foot">
-            {total} {total === 1 ? "ordem" : "ordens"}
+            {formatIntegerPtBr(total)} {total === 1 ? "ordem" : "ordens"}
           </div>
         )}
       </div>

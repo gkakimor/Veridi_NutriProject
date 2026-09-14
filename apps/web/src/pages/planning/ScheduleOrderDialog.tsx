@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { useState } from "react";
 import type { ProductionOrderScheduleDTO, ProductionSchedulePreviewDTO } from "@veridi/shared";
 import {
@@ -265,7 +266,7 @@ export function ScheduleOrderDialog({
                       {etapa.resources.length === 0
                         ? "—"
                         : etapa.resources
-                            .map((r) => `${r.resourceQuantity} × ${r.resourceName}`)
+                            .map((r) => `${formatIntegerPtBr(r.resourceQuantity)} × ${r.resourceName}`)
                             .join(" · ")}
                     </dd>
                   </div>

@@ -164,7 +164,7 @@ describe("os formatters da tela, com o contrato de sempre", () => {
   it.each([
     ["seis casas é o teto", "0.0061224489795918367347", "0,006122"],
     ["zeros à direita saem", "2.500000", "2,5"],
-    ["sem separador de milhar — quantidade é copiada", "1000", "1000"],
+    ["com separador de milhar, como o campo fora do foco", "1000", "1.000"],
     ["abaixo de 10^-6 a quantidade diz ≈ 0", "0.000000048", "≈ 0"],
     ["negativo", "-0.5", "-0,5"],
     ["zero", "0", "0"],

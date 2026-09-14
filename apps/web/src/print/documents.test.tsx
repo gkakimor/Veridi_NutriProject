@@ -494,8 +494,8 @@ describe("Ordem de Produção impressa — rateio por parte (#21)", () => {
         generatedAt={GERADO_EM}
       />,
     );
-    expect(celulaPorParte(container)).toBe("333333333333 × 2 + 333333333333");
-    expect(container.textContent).toContain("999999999999");
+    expect(celulaPorParte(container)).toBe("333.333.333.333 × 2 + 333.333.333.333");
+    expect(container.textContent).toContain("999.999.999.999");
   });
 
   it("nenhum NaN, Infinity ou [object Object] no documento", () => {

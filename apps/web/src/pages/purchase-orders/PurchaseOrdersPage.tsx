@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { useEffect, useMemo, useState } from "react";
 import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
@@ -354,7 +355,7 @@ export function PurchaseOrdersPage() {
         </table>
         {consulta.data && (
           <div className="table-foot">
-            {total} {total === 1 ? "ordem de compra" : "ordens de compra"}
+            {formatIntegerPtBr(total)} {total === 1 ? "ordem de compra" : "ordens de compra"}
           </div>
         )}
       </div>

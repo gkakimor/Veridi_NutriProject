@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { formatQuantity } from "../../lib/quantity";
 import { useMemo, useState } from "react";
 import type { CustomerOrderStatus } from "@veridi/shared";
@@ -99,7 +100,7 @@ export function BillingPeriodReportPage() {
             <ReportSummaryItem label="Documentos emitidos" value={data.summary.billingCount} />
             <ReportSummaryItem
               label="Com preço completo"
-              value={`${data.summary.billingsWithCompletePricing} de ${data.summary.billingCount}`}
+              value={`${formatIntegerPtBr(data.summary.billingsWithCompletePricing)} de ${formatIntegerPtBr(data.summary.billingCount)}`}
             />
             {/* Total só existe quando TODOS os documentos têm preço completo. */}
             <ReportSummaryItem
@@ -161,7 +162,7 @@ export function BillingPeriodReportPage() {
               <DocLink code={row.shipmentCode} to={`/comercial/expedicoes/${row.shipmentId}`} />
             </td>
             <td>{row.customerName ?? "—"}</td>
-            <td className="is-number">{row.lineCount}</td>
+            <td className="is-number">{formatIntegerPtBr(row.lineCount)}</td>
             <td className="is-number">{row.totalAmount ? formatBRL(row.totalAmount) : "—"}</td>
             <td>{row.hasCompletePricing ? "Completa" : "Incompleta"}</td>
             <td>{row.externalReference ?? "—"}</td>

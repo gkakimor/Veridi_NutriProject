@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useMemo, useState } from "react";
 import type {
@@ -137,7 +138,7 @@ export function UseTemplateDialog({ onCancel, onApply, saving }: Props) {
                         </td>
                         <td>{template.name}</td>
                         <td>V{template.activeVersionNumber}</td>
-                        <td className="is-numeric">{template.componentCount}</td>
+                        <td className="is-numeric">{formatIntegerPtBr(template.componentCount)}</td>
                         <td>
                           <button
                             type="button"
@@ -194,7 +195,7 @@ export function UseTemplateDialog({ onCancel, onApply, saving }: Props) {
                 {versaoAtiva.dosesPerPackage !== null && (
                   <>
                     <dt>Doses por embalagem</dt>
-                    <dd>{versaoAtiva.dosesPerPackage}</dd>
+                    <dd>{formatIntegerPtBr(versaoAtiva.dosesPerPackage)}</dd>
                   </>
                 )}
                 <dt>Componentes</dt>

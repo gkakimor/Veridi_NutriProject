@@ -35,7 +35,7 @@ import { TemplateDiff } from "./TemplateDiff";
 import { formatDateTime } from "../../lib/dates";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
-import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import { toPtBrEditText, formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import {
   CASAS_QUANTIDADE,
   OPCOES_PERCENTUAL_TECNICO,
@@ -1206,7 +1206,7 @@ export function FormulationTemplateDetailPage() {
                         : "—"}
                     </td>
                     <td className="is-numeric">{version.components.length}</td>
-                    <td className="is-numeric">{version.usageCount}</td>
+                    <td className="is-numeric">{formatIntegerPtBr(version.usageCount)}</td>
                     <td>{formatDateTime(version.createdAt)}</td>
                     <td>
                       {version.sourceVersionId && (

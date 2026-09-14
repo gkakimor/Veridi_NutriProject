@@ -61,10 +61,11 @@ export function resolverQuantidadeContraLimite(
   const valor = new Decimal(normalizado);
   const limite = new Decimal(limiteCanonico);
 
-  // O teto tal como a tela o escreveu. `formatQuantity` devolve vírgula e
-  // nunca separador de milhar — de propósito, justamente para poder ser
-  // copiado de volta —, então o mesmo parser de entrada o entende.
-  const exibido = parsePtBrNumber(formatQuantity(limiteCanonico), OPCOES_QUANTIDADE);
+  // O teto tal como a tela o escreveu. `formatQuantity` agrupa milhar com
+  // ponto e usa vírgula decimal: todo ponto do texto é milhar e sai antes da
+  // leitura — senão um teto exibido `1.234` cairia na recusa de ambíguo e o
+  // round-trip se perderia.
+  const exibido = parsePtBrNumber(formatQuantity(limiteCanonico).replaceAll(".", ""), OPCOES_QUANTIDADE);
   const limiteExibido = exibido.tipo === "valido" ? exibido.valor : null;
   if (limiteExibido !== null && valor.equals(new Decimal(limiteExibido))) {
     /* `toFixed()` e não `toString()`: teto pequeno o bastante volta da API

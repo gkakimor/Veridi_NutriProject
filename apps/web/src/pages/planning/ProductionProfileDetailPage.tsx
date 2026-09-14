@@ -37,7 +37,7 @@ import { apiErrorMessage } from "../../lib/api-errors";
 import { decimalComparavel, inteiroComparavel, textoComparavel } from "../../lib/dirty-fields";
 import { decimalLegivel, exigirDecimal } from "../../lib/decimal-field";
 import { lerInteiroOpcional } from "../../lib/integer-input";
-import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import { toPtBrEditText, formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
 import { DecimalField, IntegerField } from "../../components/NumericField";
 import { formatQuantity } from "../../lib/quantity";
@@ -404,7 +404,7 @@ function ProfilePreview({
                     <ul className="profile-preview__resources">
                       {etapa.resources.map((recurso) => (
                         <li key={recurso.industrialResourceId}>
-                          {recurso.resourceQuantity} × {recurso.resourceName}:{" "}
+                          {formatIntegerPtBr(recurso.resourceQuantity)} × {recurso.resourceName}:{" "}
                           {formatMinutes(recurso.demandMinutes)} de recurso{" "}
                           <CalcHint
                             label={`Horas-recurso — ${recurso.resourceName} em ${etapa.name}`}
@@ -415,7 +415,7 @@ function ProfilePreview({
                                 numero: Number(etapa.durationMinutes),
                               },
                               {
-                                valor: String(recurso.resourceQuantity),
+                                valor: formatIntegerPtBr(recurso.resourceQuantity),
                                 papel: "recursos ao mesmo tempo",
                                 operador: "×",
                                 numero: recurso.resourceQuantity,
@@ -552,7 +552,7 @@ function StepsReadOnly({ version }: { version: ProductionProfileVersionDTO }) {
                 {step.resources.length === 0
                   ? "—"
                   : step.resources
-                      .map((recurso) => `${recurso.resourceQuantity} × ${recurso.resourceName}`)
+                      .map((recurso) => `${formatIntegerPtBr(recurso.resourceQuantity)} × ${recurso.resourceName}`)
                       .join(" · ")}
               </dd>
             </div>

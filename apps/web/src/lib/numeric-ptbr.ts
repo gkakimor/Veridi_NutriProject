@@ -245,7 +245,11 @@ export interface DisplayOptions {
   readonly minFractionDigits?: number;
 }
 
-function corpoPtBr(valor: string | null | undefined, scale: number, minimo: number): string | null {
+function corpoPtBr(
+  valor: string | number | null | undefined,
+  scale: number,
+  minimo: number,
+): string | null {
   conferirScale(scale);
   if (valor === null || valor === undefined) return null;
   const texto = String(valor).trim();
@@ -253,8 +257,14 @@ function corpoPtBr(valor: string | null | undefined, scale: number, minimo: numb
   return formatarDecimalTexto(texto, { minimo: Math.min(minimo, scale), maximo: scale });
 }
 
-/** Inteiro para leitura: `"1234"` → `"1.234"`. Vazio ou ilegível → `"—"`. */
-export function formatIntegerPtBr(valor: string | null | undefined): string {
+/**
+ * Inteiro para leitura: `"1234"` → `"1.234"`. Vazio ou ilegível → `"—"`.
+ *
+ * Aceita `number` para CONTAGEM — linhas, registros, recursos, lotes —, que já
+ * chega da API como inteiro JavaScript e não perde nada em `String`. Decimal de
+ * domínio continua string: `formatDecimalPtBr`.
+ */
+export function formatIntegerPtBr(valor: string | number | null | undefined): string {
   return corpoPtBr(valor, 0, 0) ?? "—";
 }
 

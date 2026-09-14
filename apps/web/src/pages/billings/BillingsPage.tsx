@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -489,7 +490,7 @@ export function BillingsPage() {
             anterior, debaixo do novo, contavam outra coisa. */}
         {consulta.data && (
           <div className="table-foot">
-            {total} {total === 1 ? "faturamento" : "faturamentos"}
+            {formatIntegerPtBr(total)} {total === 1 ? "faturamento" : "faturamentos"}
           </div>
         )}
       </div>

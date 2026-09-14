@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { formatQuantity } from "../../lib/quantity";
 import { useCallback } from "react";
 import { NavLink, Outlet } from "react-router-dom";
@@ -112,7 +113,7 @@ export function FinishedGoodsTab() {
                 <td className="col-tight">
                   {formatQuantity(row.available)} {row.unitCode}
                 </td>
-                <td className="col-tight">{row.lotCount}</td>
+                <td className="col-tight">{formatIntegerPtBr(row.lotCount)}</td>
                 <td className="col-tight">
                   {row.awaitingQualityLots > 0 ? (
                     <span className="badge badge--warn">

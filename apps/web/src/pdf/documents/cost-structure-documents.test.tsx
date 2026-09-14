@@ -118,7 +118,7 @@ describe("gerador de PDF — CMV", () => {
       const energia = linhaCom(pdf, "Energia elétrica");
       expect(energia).toContain("50 kWh");
       expect(energia).not.toContain("×");
-      expect(pdf.paginas.join("\n")).toContain("CMV total para 3000 un");
+      expect(pdf.paginas.join("\n")).toContain("CMV total para 3.000 un");
     },
     PRAZO,
   );

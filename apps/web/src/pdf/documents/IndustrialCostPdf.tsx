@@ -28,7 +28,7 @@ import {
   PdfTr,
   type PdfColumn,
 } from "../components";
-import { formatPdfDateTime, formatPercent, formatQuantity, orDash, pdfFileName } from "../format";
+import { formatPdfDateTime, formatPercent, formatQuantity, orDash, pdfFileName, formatIntegerPtBr } from "../format";
 import { PdfResourceUsage } from "./resource-usage";
 
 /**
@@ -144,7 +144,7 @@ export function IndustrialCostPdf({
             },
             {
               label: "Unidades por caixa",
-              value: version.unitsPerShippingBox === null ? "—" : String(version.unitsPerShippingBox),
+              value: formatIntegerPtBr(version.unitsPerShippingBox),
               span: 4,
             },
             { label: "Situação", value: version.complete ? "Completa" : "Com pendências", span: 4 },

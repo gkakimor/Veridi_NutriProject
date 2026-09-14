@@ -1,3 +1,4 @@
+import { formatDecimalPtBr } from "../lib/numeric-ptbr";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AttachmentDTO, AttachmentType } from "@veridi/shared";
 import { ATTACHMENT_TYPE_LABELS, MAX_ATTACHMENT_SIZE_BYTES } from "@veridi/shared";
@@ -14,7 +15,7 @@ import { formatDateTime } from "../lib/dates";
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${formatDecimalPtBr((bytes / (1024 * 1024)).toFixed(1), { scale: 1, minFractionDigits: 1 })} MB`;
 }
 
 /**

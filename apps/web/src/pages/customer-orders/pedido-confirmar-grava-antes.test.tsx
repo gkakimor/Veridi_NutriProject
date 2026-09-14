@@ -367,9 +367,11 @@ describe("com alteração pendente — gravar antes de agir", () => {
     expect(congelado?.status).toBe("CONFIRMED");
     expect(congelado?.lines[0]?.orderedQuantity).toBe("12.000000");
     expect(congelado?.notes).toBe("Entregar em caixas fechadas");
-    // A tela mostra o confirmado com o que a pessoa digitou, sem pendência.
-    expect(screen.getAllByText("12.000000").length).toBeGreaterThan(0);
-    expect(screen.queryByText("10.000000")).toBeNull();
+    // A tela mostra o confirmado com o que a pessoa digitou, sem pendência — em
+    // leitura pt-BR, nunca o decimal cru da API (PTBR-NUMERIC-DISPLAY-AUDIT-01).
+    expect(screen.getAllByText("12").length).toBeGreaterThan(0);
+    expect(screen.queryByText("12.000000")).toBeNull();
+    expect(screen.queryByText("10")).toBeNull();
     expect(observacoes()).toHaveValue("Entregar em caixas fechadas");
     expect(screen.queryByText("Alterações não salvas")).toBeNull();
   });

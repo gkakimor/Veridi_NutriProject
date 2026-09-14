@@ -1,3 +1,5 @@
+import { OPCOES_VALOR_INDUSTRIAL } from "../../lib/numeric-scales";
+import { formatDecimalPtBr, formatIntegerPtBr, formatMoneyPtBr } from "../../lib/numeric-ptbr";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { EntityLink } from "../../components/EntityLink";
@@ -193,13 +195,13 @@ export function IndustrialResourcesPage() {
                 <td className="col-flex">{resource.name}</td>
                 <td className="col-tight">{INDUSTRIAL_RESOURCE_TYPE_LABELS[resource.type]}</td>
                 {/* Potência desconhecida fica em branco — não vira zero. */}
-                <td className="col-tight">{resource.powerKw ?? "—"}</td>
+                <td className="col-tight">{formatDecimalPtBr(resource.powerKw, OPCOES_VALOR_INDUSTRIAL)}</td>
                 <td className="col-tight">
                   {resource.currentRate
-                    ? `R$ ${resource.currentRate.rateValue} / ${INDUSTRIAL_RATE_UOM_LABELS[resource.currentRate.rateUom]}`
+                    ? `${formatMoneyPtBr(resource.currentRate.rateValue, OPCOES_VALOR_INDUSTRIAL)} / ${INDUSTRIAL_RATE_UOM_LABELS[resource.currentRate.rateUom]}`
                     : "Não informada"}
                 </td>
-                <td className="col-tight">{resource.rateCount}</td>
+                <td className="col-tight">{formatIntegerPtBr(resource.rateCount)}</td>
                 <td className="col-tight">
                   <span className={resource.active ? "badge badge--active" : "badge badge--inactive"}>
                     {resource.active ? "Ativo" : "Inativo"}
@@ -215,7 +217,7 @@ export function IndustrialResourcesPage() {
         </table>
         {consulta.data && (
           <div className="table-foot">
-            {total} {total === 1 ? "recurso" : "recursos"}
+            {formatIntegerPtBr(total)} {total === 1 ? "recurso" : "recursos"}
           </div>
         )}
       </div>

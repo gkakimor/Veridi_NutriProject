@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { ListStatusRow } from "../../components/ListStatusRow";
@@ -141,7 +142,7 @@ export function FormulationsPage() {
         </table>
         {consulta.data && (
           <div className="table-foot">
-            {total} {total === 1 ? "produto" : "produtos"}
+            {formatIntegerPtBr(total)} {total === 1 ? "produto" : "produtos"}
           </div>
         )}
       </div>

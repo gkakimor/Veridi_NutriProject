@@ -9,7 +9,7 @@ import {
 import { Document, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 // Marca oficial embutida no arquivo: o PDF não busca nada na rede.
 import logoPng from "../assets/brand/veridi-logo.png?inline";
-import { formatPdfDateTime, pdfSafe } from "./format";
+import { formatPdfDateTime, pdfSafe, formatIntegerPtBr } from "./format";
 import { PDF_COLOR, PDF_FONT, PDF_PAGE, PDF_SPACE } from "./theme";
 
 /**
@@ -544,7 +544,13 @@ export function PdfDataGrid({ fields }: { fields: (PdfField | false | null | und
           {isBlank(field.value) ? (
             <Text style={s.fieldValue}>—</Text>
           ) : typeof field.value === "string" || typeof field.value === "number" ? (
-            <Text style={s.fieldValue}>{pdfSafe(String(field.value))}</Text>
+            <Text style={s.fieldValue}>
+              {pdfSafe(
+                typeof field.value === "number" && Number.isInteger(field.value)
+                  ? formatIntegerPtBr(field.value)
+                  : String(field.value),
+              )}
+            </Text>
           ) : (
             field.value
           )}

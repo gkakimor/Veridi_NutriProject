@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useMemo, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
@@ -430,7 +431,7 @@ export function FinishedGoodsPage() {
         </table>
         {consulta.data && (
           <div className="table-foot">
-            {total} {total === 1 ? "lote produzido" : "lotes produzidos"}
+            {formatIntegerPtBr(total)} {total === 1 ? "lote produzido" : "lotes produzidos"}
           </div>
         )}
       </div>

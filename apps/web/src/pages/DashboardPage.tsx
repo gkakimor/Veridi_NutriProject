@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../lib/numeric-ptbr";
 import { formatQuantity } from "../lib/quantity";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -156,7 +157,7 @@ function StateLine({ label, value, to }: { label: string; value: number; to?: st
     <div className="dash-state__line">
       {/* Com destino, a linha leva à lista que resolve — o número é só o começo. */}
       {to ? <Link to={to}>{label}</Link> : <span>{label}</span>}
-      <b>{value}</b>
+      <b>{formatIntegerPtBr(value)}</b>
     </div>
   );
 }

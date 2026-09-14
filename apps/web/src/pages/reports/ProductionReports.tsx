@@ -1,3 +1,4 @@
+import { formatPercent } from "../../lib/percent";
 import { formatQuantity } from "../../lib/quantity";
 import { useMemo, useState } from "react";
 import type {
@@ -223,8 +224,8 @@ export function PlannedActualReportPage() {
               {formatQuantity(row.plannedQuantity)} {row.unitCode}
             </td>
             <td className="is-number">{formatQuantity(row.producedQuantity)}</td>
-            <td className="is-number">{row.variance}</td>
-            <td className="is-number">{row.yieldPercent ? `${row.yieldPercent}%` : "—"}</td>
+            <td className="is-number">{formatQuantity(row.variance)}</td>
+            <td className="is-number">{formatPercent(row.yieldPercent)}</td>
             <td>{formatDate(row.startedAt)}</td>
             <td>{formatDate(row.completedAt)}</td>
             <td>{PRODUCTION_ORDER_STATUS_LABELS[row.status]}</td>

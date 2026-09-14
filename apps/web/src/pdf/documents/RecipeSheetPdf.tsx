@@ -17,7 +17,7 @@ import {
   PdfTr,
   type PdfColumn,
 } from "../components";
-import { formatPdfDateTime, formatQuantity, formatQuantityWithUnit, orDash, pdfFileName } from "../format";
+import { formatPdfDateTime, formatQuantity, formatQuantityWithUnit, orDash, pdfFileName, formatIntegerPtBr } from "../format";
 import { ControlledRevisionSection } from "./controlled-revision";
 
 /**
@@ -100,7 +100,7 @@ export function RecipeSheetPdf({ sheet, generatedAt }: { sheet: RecipeSheetDTO; 
               value: formatQuantityWithUnit(sheet.plannedQuantity, sheet.outputUnitCode),
               span: 2,
             },
-            { label: "Partes", value: String(sheet.numberOfParts), span: 2 },
+            { label: "Partes", value: formatIntegerPtBr(sheet.numberOfParts), span: 2 },
           ]}
         />
       </PdfSection>

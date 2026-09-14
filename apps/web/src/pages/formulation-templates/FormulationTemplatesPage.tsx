@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -209,7 +210,7 @@ export function FormulationTemplatesPage() {
                     </span>
                   )}
                 </td>
-                <td className="is-numeric">{template.componentCount}</td>
+                <td className="is-numeric">{formatIntegerPtBr(template.componentCount)}</td>
                 <td>{formatDate(template.updatedAt)}</td>
                 <td>{situacao(template)}</td>
                 <td>

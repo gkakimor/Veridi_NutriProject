@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { useEffect, useMemo, useState } from "react";
 import {
   BulkSelectionBar,
@@ -399,7 +400,7 @@ export function CustomerOrdersPage() {
         </table>
         {consulta.data && (
           <div className="table-foot">
-            {total} {total === 1 ? "pedido" : "pedidos"}
+            {formatIntegerPtBr(total)} {total === 1 ? "pedido" : "pedidos"}
           </div>
         )}
       </div>

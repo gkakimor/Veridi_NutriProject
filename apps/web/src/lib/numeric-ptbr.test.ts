@@ -305,6 +305,24 @@ describe("formatadores de leitura", () => {
     expect(formatIntegerPtBr("abc")).toBe("—");
   });
 
+  it("contagem em number agrupa milhar, sem notação científica", () => {
+    // PTBR-NUMERIC-DISPLAY-AUDIT-01: total de lista, linhas, recursos.
+    expect(formatIntegerPtBr(0)).toBe("0");
+    expect(formatIntegerPtBr(1234)).toBe("1.234");
+    expect(formatIntegerPtBr(12345678)).toBe("12.345.678");
+    expect(formatIntegerPtBr(1e21)).toBe("1.000.000.000.000.000.000.000");
+    expect(formatIntegerPtBr(undefined)).toBe("—");
+    expect(formatIntegerPtBr(Number.NaN)).toBe("—");
+  });
+
+  it("acima de um milhão: dinheiro, percentual e decimal mantêm o milhar", () => {
+    expect(formatMoneyPtBr("1234567.891", DUAS)).toBe(`R$${ESPACO_MOEDA}1.234.567,89`);
+    expect(formatMoneyPtBr("1234567.1234", { scale: 4 })).toBe(`R$${ESPACO_MOEDA}1.234.567,1234`);
+    expect(formatPercentPtBr("1234567.5", DUAS)).toBe("1.234.567,5%");
+    expect(formatDecimalPtBr("0", { scale: 4 })).toBe("0");
+    expect(formatDecimalPtBr("1e-10", { scale: 12 })).toBe("0,0000000001");
+  });
+
   it("decimal com scale e mínimo configuráveis", () => {
     expect(formatDecimalPtBr("1234.56", DUAS)).toBe("1.234,56");
     expect(formatDecimalPtBr("1234.5", { scale: 2, minFractionDigits: 2 })).toBe("1.234,50");

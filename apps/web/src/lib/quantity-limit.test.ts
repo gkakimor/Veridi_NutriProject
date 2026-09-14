@@ -99,6 +99,18 @@ describe("resolverQuantidadeContraLimite — round-trip do valor exibido", () =>
     expect(resolverQuantidadeContraLimite("1.234,5", RESERVA)).toEqual({ status: "acima" });
   });
 
+  it("teto exibido com milhar e sem casa decimal mantém o round-trip (PTBR-NUMERIC-DISPLAY-AUDIT-01)", () => {
+    // `1233,9999999` é exibido `1.234` — que, lido sozinho, seria ambíguo.
+    const TETO = "1233.9999999";
+    expect(formatQuantity(TETO)).toBe("1.234");
+    expect(resolverQuantidadeContraLimite("1234", TETO)).toEqual({
+      status: "ok",
+      valorCanonico: TETO,
+      usouTodoOLimite: true,
+    });
+    expect(resolverQuantidadeContraLimite("1.234,5", "1234.5")).toMatchObject({ status: "ok", usouTodoOLimite: true });
+  });
+
   it("zero é quantidade válida — quem decide se serve é a tela", () => {
     expect(resolverQuantidadeContraLimite("0", RESERVA)).toMatchObject({
       status: "ok",

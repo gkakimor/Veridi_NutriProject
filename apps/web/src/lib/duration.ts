@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "./numeric-ptbr";
 import { Decimal } from "@veridi/shared";
 import type { DecimalInstance } from "@veridi/shared";
 import { formatQuantity } from "./quantity";
@@ -22,8 +23,8 @@ function ler(valor: string | number | null | undefined): DecimalInstance | null 
   }
 }
 
-/** Sem separador de milhar, como `formatQuantity`: "1000 h", nunca "1.000 h". */
-const inteiro = (numero: DecimalInstance) => numero.toFixed(0);
+/** Horas inteiras com milhar, como `formatQuantity`: "1.000 h". */
+const inteiro = (numero: DecimalInstance) => formatIntegerPtBr(numero.toFixed(0));
 const minutosComVirgula = (numero: DecimalInstance) => numero.toFixed().replace(".", ",");
 
 export function formatMinutes(valor: string | number | null | undefined): string {

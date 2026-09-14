@@ -200,7 +200,7 @@ describe("Biblioteca de estruturas de custo", () => {
     expect(await screen.findByText("TEC-000004")).toBeInTheDocument();
     expect(screen.getByText("Cápsulas — Linha padrão")).toBeInTheDocument();
     expect(screen.getByText("V2")).toBeInTheDocument();
-    expect(screen.getByText("1000 un")).toBeInTheDocument();
+    expect(screen.getByText("1.000 un")).toBeInTheDocument();
   });
 
   it("busca também pelo recurso configurado", async () => {
@@ -289,7 +289,9 @@ describe("Usar template numa estrutura de custos", () => {
     expect(
       screen.getByText(/As tarifas — valor da hora, da energia — vêm do cadastro na data/),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/R\$/)).toBeNull();
+    // A premissa é valor fixo em reais e aparece formatado; tarifa de recurso, não.
+    expect(screen.getAllByText(/R\$/)).toHaveLength(1);
+    expect(screen.getByText(/R\$/).textContent).toMatch(/^R\$\s180,00$/);
   });
 
   it("aplicar entrega a versão escolhida, e não o template", async () => {

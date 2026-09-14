@@ -19,12 +19,25 @@ describe("quantidade para leitura humana", () => {
     expect(formatQuantity("10.000000")).toBe("10");
   });
 
-  it("usa vírgula, e NÃO agrupa milhar", () => {
-    // Agrupar seria o português correto de ler e o veneno de copiar: o campo
-    // decimal trata um separador único como casa decimal, então "1.234,5"
-    // colado de volta viraria outro número.
-    expect(formatQuantity("1234.5")).toBe("1234,5");
-    expect(formatQuantity("1000")).toBe("1000");
+  it("usa vírgula decimal e ponto de milhar, como o campo fora do foco", () => {
+    // PTBR-NUMERIC-DISPLAY-AUDIT-01: a leitura ao lado de um campo que mostra
+    // "1.234,5" não pode mostrar "1234,5".
+    expect(formatQuantity("1234.5")).toBe("1.234,5");
+    expect(formatQuantity("1000")).toBe("1.000");
+    expect(formatQuantity("999")).toBe("999");
+    expect(formatQuantity(1234)).toBe("1.234");
+  });
+
+  it("valor grande, acima de um milhão, sem float e sem notação científica", () => {
+    expect(formatQuantity("1234567.891")).toBe("1.234.567,891");
+    expect(formatQuantity("9007199254740993.123456")).toBe("9.007.199.254.740.993,123456");
+    expect(formatQuantity("1e21")).toBe("1.000.000.000.000.000.000.000");
+    expect(formatQuantity("1.5e-3")).toBe("0,0015");
+    expect(formatQuantity("-1234.5")).toBe("-1.234,5");
+  });
+
+  it("alta precisão: a leitura corta em seis casas, o milhar continua", () => {
+    expect(formatQuantity("12345.123456789012")).toBe("12.345,123457");
   });
 
   it("valor abaixo da precisão vira aproximação, nunca zero", () => {

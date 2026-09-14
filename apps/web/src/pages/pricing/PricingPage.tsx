@@ -1,3 +1,4 @@
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -382,7 +383,7 @@ export function PricingPage() {
               {formatQuantity(pricing.referenceOutputQuantity)} {pricing.referenceOutputUomCode}
             </dd>
             <dt>Lote mínimo do produto</dt>
-            <dd>{pricing.minimumBatchQuantity ?? "—"}</dd>
+            <dd>{formatQuantity(pricing.minimumBatchQuantity)}</dd>
           </dl>
 
           <PricingPolicyOrigin version={pricing} canEdit={canEdit} onChanged={load} />
@@ -495,7 +496,7 @@ export function PricingPage() {
                     <td className="is-numeric">
                       {formatQuantity(tier.quantity)} {tier.uomCode}
                     </td>
-                    <td>{tier.batchCount}</td>
+                    <td>{formatIntegerPtBr(tier.batchCount)}</td>
                     <td className="is-numeric">
                       {tier.industrialCostTotal === null
                         ? `${formatBRL(tier.knownSubtotal)} (subtotal conhecido)`
@@ -690,7 +691,7 @@ export function PricingPage() {
                           <span className="field__hint"> — subtotal conhecido {formatBRL(custoDaPrevia.knownSubtotal)}</span>
                         )}
                         <span className="field__hint">
-                          {" "}· {custoDaPrevia.batchCount}{" "}
+                          {" "}· {formatIntegerPtBr(custoDaPrevia.batchCount)}{" "}
                           {custoDaPrevia.batchCount === "1" ? "lote" : "lotes"} ·{" "}
                           {INDUSTRIAL_COST_QUALITY_LABELS[custoDaPrevia.costQuality]}
                         </span>

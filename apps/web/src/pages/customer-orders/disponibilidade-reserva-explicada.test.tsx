@@ -190,9 +190,9 @@ describe("F-09-1 — indisponibilidade explicada na Reserva de Produto Acabado",
     // O motivo autoritativo, com a mesma palavra que a Posição de Estoque usa.
     expect(await screen.findAllByText(/aguardando liberação da Qualidade/i)).not.toHaveLength(0);
     // A quantidade retida, formatada — nunca o decimal cru.
-    expect(screen.getAllByText(/1000 un aguardando liberação da Qualidade/i)).not.toHaveLength(0);
+    expect(screen.getAllByText(/1\.000 un aguardando liberação da Qualidade/i)).not.toHaveLength(0);
     // Quanto falta para reservar tudo, dito pelo servidor.
-    expect(screen.getByText(/faltam 1000 un de 1000 un/i)).toBeTruthy();
+    expect(screen.getByText(/faltam 1\.000 un de 1\.000 un/i)).toBeTruthy();
 
     // E continua bloqueada: a correção não libera nada.
     expect(botaoReservar().disabled).toBe(true);
@@ -247,7 +247,7 @@ describe("F-09-1 — indisponibilidade explicada na Reserva de Produto Acabado",
 
     renderPedido();
 
-    expect(await screen.findByText(/faltam 600 un de 1000 un/i)).toBeTruthy();
+    expect(await screen.findByText(/faltam 600 un de 1\.000 un/i)).toBeTruthy();
     expect(screen.getAllByText(/600 un reservado/i)).not.toHaveLength(0);
     // O que dá para reservar continua reservável — parcial não é bloqueio.
     await waitFor(() => expect(botaoReservar().disabled).toBe(false));
@@ -286,7 +286,7 @@ describe("F-09-1 — indisponibilidade explicada na Reserva de Produto Acabado",
     const bloco = aviso.closest(".callout")!;
     expect(bloco.textContent).toContain("PROD-000216");
     expect(bloco.textContent).not.toContain("PROD-000215");
-    expect(bloco.textContent).toMatch(/1000 un vencido/i);
+    expect(bloco.textContent).toMatch(/1\.000 un vencido/i);
   });
 
   it("sem retenção nenhuma, a falta é dita como falta — não como lote preso", async () => {

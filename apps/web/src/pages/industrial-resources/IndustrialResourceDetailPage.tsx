@@ -19,8 +19,8 @@ import { formatDate } from "../../lib/dates";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
 import { exigirInteiroOpcional } from "../../lib/integer-input";
-import { toPtBrEditText } from "../../lib/numeric-ptbr";
-import { CASAS_VALOR_INDUSTRIAL } from "../../lib/numeric-scales";
+import { toPtBrEditText, formatDecimalPtBr, formatIntegerPtBr, formatMoneyPtBr } from "../../lib/numeric-ptbr";
+import { CASAS_VALOR_INDUSTRIAL, OPCOES_VALOR_INDUSTRIAL } from "../../lib/numeric-scales";
 import { DecimalField, IntegerField, MoneyField } from "../../components/NumericField";
 import { ContextHelp } from "../../components/help";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
@@ -160,19 +160,27 @@ export function IndustrialResourceDetailPage() {
             <dt>Unidade de consumo</dt>
             <dd>{rateUomLabel}</dd>
             <dt>Potência</dt>
-            <dd>{resource.powerKw ? `${resource.powerKw} kW` : "Não informada"}</dd>
+            <dd>
+              {resource.powerKw
+                ? `${formatDecimalPtBr(resource.powerKw, OPCOES_VALOR_INDUSTRIAL)} kW`
+                : "Não informada"}
+            </dd>
             {isCapacityResourceType(resource.type) && (
               <>
                 <dt>Quantidade disponível para planejamento</dt>
                 {/* "Não cadastrada" NUNCA vira "nenhum": a primeira é lacuna de
                     cadastro, a segunda seria afirmação sobre a fábrica. */}
-                <dd>{resource.capacityQuantity ?? "Não cadastrada"}</dd>
+                <dd>
+                  {resource.capacityQuantity === null || resource.capacityQuantity === undefined
+                    ? "Não cadastrada"
+                    : formatIntegerPtBr(resource.capacityQuantity)}
+                </dd>
               </>
             )}
             <dt>Tarifa vigente</dt>
             <dd>
               {resource.currentRate
-                ? `R$ ${resource.currentRate.rateValue} / ${INDUSTRIAL_RATE_UOM_LABELS[resource.currentRate.rateUom]} (desde ${formatDate(resource.currentRate.effectiveAt)})`
+                ? `${formatMoneyPtBr(resource.currentRate.rateValue, OPCOES_VALOR_INDUSTRIAL)} / ${INDUSTRIAL_RATE_UOM_LABELS[resource.currentRate.rateUom]} (desde ${formatDate(resource.currentRate.effectiveAt)})`
                 : "Não informada"}
             </dd>
             <dt>Cadastrado por</dt>
@@ -294,7 +302,9 @@ export function IndustrialResourceDetailPage() {
                 {resource.rates.map((rate) => (
                   <tr key={rate.id}>
                     <td className="is-numeric">
-                      {rate.currencyCode} {rate.rateValue}
+                      {rate.currencyCode === "BRL"
+                        ? formatMoneyPtBr(rate.rateValue, OPCOES_VALOR_INDUSTRIAL)
+                        : `${rate.currencyCode} ${formatDecimalPtBr(rate.rateValue, { ...OPCOES_VALOR_INDUSTRIAL, minFractionDigits: 2 })}`}
                     </td>
                     <td>{INDUSTRIAL_RATE_UOM_LABELS[rate.rateUom]}</td>
                     <td>{formatDate(rate.effectiveAt)}</td>

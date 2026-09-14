@@ -21,7 +21,7 @@ import {
   PdfTr,
   type PdfColumn,
 } from "../components";
-import { formatBRL, formatDate, formatPercent, formatQuantity, pdfFileName } from "../format";
+import { formatBRL, formatDate, formatPercent, formatQuantity, pdfFileName, formatIntegerPtBr } from "../format";
 
 /**
  * Simulação de preço e margem — documento INTERNO de precificação.
@@ -189,7 +189,7 @@ export function PricingPdf({
                 <PdfTd>
                   {formatQuantity(tier.quantity)} {tier.uomCode}
                 </PdfTd>
-                <PdfTd>{tier.batchCount}</PdfTd>
+                <PdfTd>{formatIntegerPtBr(tier.batchCount)}</PdfTd>
                 <PdfTd>
                   {tier.industrialCostTotal === null
                     ? `${formatBRL(tier.knownSubtotal)} (subtotal conhecido)`

@@ -950,7 +950,7 @@ export function QuoteVersionsSection({
                           )}
                         </>
                       ) : (
-                        (line.quotedQuantity ?? "—")
+                        formatQuantity(line.quotedQuantity)
                       )}
                     </td>
                     <td>

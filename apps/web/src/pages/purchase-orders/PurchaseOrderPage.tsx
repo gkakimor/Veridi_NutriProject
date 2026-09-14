@@ -36,7 +36,7 @@ import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
 import { decimalLegivel, exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
-import { toPtBrEditText } from "../../lib/numeric-ptbr";
+import { toPtBrEditText, formatDecimalPtBr, formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import {
   CASAS_PRECO_UNITARIO,
   CASAS_QUANTIDADE,
@@ -1101,7 +1101,7 @@ options={supplierOptions.map((supplier) => ({
                             {SUPPLIER_ITEM_QUALIFICATION_LABELS[relation.qualificationStatus]}
                             {relation.preferred ? " · preferencial" : ""}
                             {offer
-                              ? ` · referência ${offer.unitPrice} ${offer.currencyCode}/${offer.priceUomCode}`
+                              ? ` · referência ${formatDecimalPtBr(offer.unitPrice, { ...OPCOES_PRECO_UNITARIO, minFractionDigits: 2 })} ${offer.currencyCode}/${offer.priceUomCode}`
                               : relation.latestLegacyOffer
                                 ? " · só referência histórica de preço"
                                 : ""}
@@ -1244,9 +1244,9 @@ options={supplierOptions.map((supplier) => ({
                     </td>
                     <td>{formatDate(receipt.receivedAt)}</td>
                     <td>{receipt.invoiceNumber ?? "—"}</td>
-                    <td className="is-numeric">{receipt.lineCount}</td>
+                    <td className="is-numeric">{formatIntegerPtBr(receipt.lineCount)}</td>
                     <td className="is-numeric">{formatQuantity(receipt.receivedQuantity)}</td>
-                    <td className="is-numeric">{receipt.lotCount}</td>
+                    <td className="is-numeric">{formatIntegerPtBr(receipt.lotCount)}</td>
                   </tr>
                 ))}
               </tbody>
