@@ -4676,6 +4676,38 @@ escapava da rolagem do quadro da tendência, que passou a ser `position: relativ
 frase em vez de um quadro de barras zeradas. Abertos, sem posição: G2 (preço acordado em Pedido direto), G5 (encerrar
 saldo de OC recebida em parte) e o G4 residual.
 
+## Situação cadastral do Cliente (CUSTOMER-STATUS-LIFECYCLE-01, 2026-09-15)
+
+**Regra durável: §95.** O cadastro passou a responder "posso vender para este cliente?" com três situações — Ativo ·
+Bloqueado · Inativo —, derivadas de dois fatos persistidos: `active` (arquivado ou não, que já existia) e `blocked`
+(novo). A situação comercial (§86) continua intocada e ao lado: coluna própria, filtro próprio, padrão próprio.
+
+**Quatro ações, todas com motivo obrigatório** (`POST /customers/:id/block|unblock|deactivate|activate`), cada uma
+numa transação com a linha do Cliente travada (`FOR UPDATE`), gravando um evento append-only em
+`customer_status_history` (situação anterior, nova, motivo, usuário, data/hora). Desbloquear não apaga o motivo do
+bloqueio; inativar não desbloqueia — o bloqueio fica latente e volta na reativação. Transição que não parte da
+situação atual é 409. `GET /customers/:id/status-history` devolve o histórico, que a Visão do Cliente mostra junto do
+motivo em vigor.
+
+**Guardas de venda** (bloqueado e inativo recusam, com frase de negócio e o motivo): Projeto novo e troca de cliente
+do Projeto, versão nova de Orçamento (criar e duplicar), envio, aceite, geração do Pedido da proposta aceita, Pedido
+novo, troca de cliente do rascunho e confirmação do Pedido. Produto novo e material do cliente seguem recusando só o
+inativo — não são venda. Documento existente não é tocado: nada é cancelado por mudança de situação.
+
+**Tela.** Clientes abre no filtro "Ativos" (Bloqueados · Inativos · Todos, ao lado do filtro comercial), a coluna
+"Situação cadastral" leva o motivo do bloqueio no rótulo, e cada linha só oferece as ações da própria situação, sempre
+por um diálogo que exige motivo. Seletores de Pedido e de Projeto pedem `status=ACTIVE`. O CSV troca "Ativo" por
+"Situação cadastral" + "Motivo do bloqueio".
+
+**Migration aditiva** `20260925093027_customer_status_lifecycle`: coluna `blocked` (default false), enum
+`CustomerStatus` e a tabela do histórico. Sem backfill de evento: cliente inativado antes desta capacidade continua
+inativo, e o histórico dele começa vazio — inventar autor e motivo seria pior.
+
+**Validação.** API: 74 na faixa de Clientes (10 casos novos, incluindo a corrida provada por `pg_stat_activity`
+esperando na trava) e a faixa dos módulos afetados (Clientes, Pedidos, Consulta, Projetos, Exportações, Produtos,
+Recebimento); web dos módulos afetados; typecheck dos três pacotes. Sem `pnpm test` global, E2E, build ou fresh (FAST).
+`web pages/projects/envio-com-linha-nao-salva.test.tsx` seguiu instável, como já era na `main`.
+
 ## Próxima prioridade
 
 **A ordem vive na fila viva do [`BACKLOG.md`](BACKLOG.md)**, reconciliada em 2026-09-15: WAVE 4; Inventário Físico em

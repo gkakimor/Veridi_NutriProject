@@ -25,6 +25,7 @@ zero BLOCKER. O MVP foi entregue; o que está aqui é evolução do produto.
 | 5 | P1 | Decisões de **PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01** → PRODUCTION-PERMISSION-HARDENING-01 | Discovery `EM_ANALISE` · P1 e P6 bloqueiam | PO fecha P1 e P6 (e confirma P2–P5, P7, P8); implementar | — |
 | 6 | P1 | Decisões de **WAVE-05-GOLDEN-PATH-DISCOVERY-01** → E2E-BASELINE-REDESIGN-WAVE-05 (golden path) | Discovery `EM_ANALISE` · Q3 bloqueia | PO fecha Q3 e as demais; passos 1–2 do plano não dependem de decisão | WAVE 4 entregue |
 | 7 | P2 | **Estabilização final ampla do produto** | Sem ID e sem escopo | Abrir ID e escopo quando 1–6 fecharem | WAVE 4, permissões e WAVE 5 |
+| 8 | P1 | ~~**CUSTOMER-STATUS-LIFECYCLE-01**~~ — situação cadastral do Cliente (Ativo · Bloqueado · Inativo), histórico auditável e guardas de venda | **FECHADO em 2026-09-15** · feedback direto da Veridi · migration aditiva (`blocked` + `customer_status_history`) | — (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §95, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md)) | — |
 
 **P3** — LOW e UX realmente abertos, sem posição: tabelas da seção A (a partir de "LOW e UX da triagem"), seção D e
 watchlist (E). A estabilização final (7) é o lugar natural para varrê-los.
@@ -38,6 +39,7 @@ watchlist (E). A estabilização final (7) é o lugar natural para varrê-los.
 | #8E, #8F, #8G · PLAN-DATE-01 · UX-HELP-03 | Melhorias aguardando autorização | B, E |
 | #7, #11 | Gate com a Veridi | C |
 | SUPPLIER-OFFER-OVERLAP-01 · COM-CONTRACT-01 · SUPPLIER-MODE-01 · ASSET-01 | Discovery sem pergunta decidida | G |
+| CUSTOMER-STATUS-PERMISSIONS-01 · CUSTOMER-STATUS-DRAFT-WARNING-01 | Follow-ups de CUSTOMER-STATUS-LIFECYCLE-01 (§95), sem posição: quem pode bloquear, desbloquear, inativar e reativar (hoje qualquer sessão autenticada, o mesmo da inativação de antes) e o aviso na tela do rascunho cujo cliente foi bloqueado depois da abertura (hoje a recusa aparece no enviar/confirmar) | — |
 
 ---
 
