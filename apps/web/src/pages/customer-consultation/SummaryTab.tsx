@@ -13,9 +13,11 @@ import { ConsultationTrail, consultationPath, useConsultationContext } from "./C
  *
  * Só contadores que o banco sabe responder com `count`, e cada um leva à aba
  * onde o detalhe vive. Nada de KPI que exigiria um motor novo: valor faturado
- * não aparece aqui de propósito — o total do Faturamento nasce linha a linha
- * (`quantidade × preço`) e não é persistido, então somá-lo aqui seria uma
- * segunda matemática de dinheiro correndo em paralelo à do módulo.
+ * não aparece aqui de propósito. O valor de cada Faturamento é o do documento —
+ * `totalAmount`, congelado na emissão com o desconto e o ajuste de fechamento —
+ * e o total de um recorte tem conta única no servidor (`resumirValorFaturado`,
+ * BILLED-VALUE-CANONICAL-01); somá-lo aqui seria uma segunda matemática de
+ * dinheiro correndo em paralelo à do módulo.
  */
 export function SummaryTab() {
   const { customerId, summary } = useConsultationContext();

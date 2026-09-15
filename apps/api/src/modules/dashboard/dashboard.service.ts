@@ -14,6 +14,7 @@ import type {
 import { FUSO_COMERCIAL, ROUTE_PENDING_STATUSES, diaCivil } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { marcadorDeHojeComercial } from "../../lib/business-day.js";
+import { resumirValorFaturado } from "../billings/billed-value.js";
 import { buildAttentionList } from "./attention.service.js";
 import type { ConjuntosDoRetrato } from "./dashboard.queries.js";
 import { carregarConjuntosDoRetrato, getOpenPurchaseOrderState, lotsWithBalance } from "./dashboard.queries.js";
@@ -39,7 +40,7 @@ const DASHBOARD_SNAPSHOT_TIMEOUT_MS = 30_000;
  * `updatedAt`.
  */
 async function buildPeriod(prisma: PrismaOrTx, from: Date, to: Date): Promise<DashboardPeriodDTO> {
-  const [customerOrdersCreated, receiptsCompleted, productionOrdersCompleted, shipmentsConfirmed, issuedBillings] =
+  const [customerOrdersCreated, receiptsCompleted, productionOrdersCompleted, shipmentsConfirmed, faturado] =
     await Promise.all([
       prisma.customerOrder.count({ where: { createdAt: { gte: from, lte: to } } }),
       // Um Receipt com cinco linhas continua sendo UM recebimento — nunca
@@ -51,26 +52,16 @@ async function buildPeriod(prisma: PrismaOrTx, from: Date, to: Date): Promise<Da
       prisma.shipment.count({
         where: { status: "CONFIRMED", confirmedAt: { gte: from, lte: to } },
       }),
-      prisma.billing.findMany({
-        where: { status: "ISSUED", issuedAt: { gte: from, lte: to } },
-        include: { lines: true },
-      }),
+      /*
+       * Valor faturado e a soma do valor de cada DOCUMENTO emitido no periodo —
+       * `Billing.totalAmount`, com o desconto apropriado e o ajuste de
+       * fechamento —, a mesma conta do total do R-15 (BILLED-VALUE-CANONICAL-01).
+       * Somar `quantidade x preco` das linhas ignorava os dois e nao arredondava
+       * a linha. So existe quando TODOS os documentos do periodo tem valor:
+       * somar so os completos e apresentar como total seria enganoso.
+       */
+      resumirValorFaturado(prisma, { issuedAt: { gte: from, lte: to } }),
     ]);
-
-  // Valor faturado so existe quando TODOS os documentos do periodo tem
-  // precificacao completa — somar so os completos e apresentar como total
-  // seria enganoso.
-  let billingsWithCompletePricing = 0;
-  let total = new Prisma.Decimal(0);
-  for (const billing of issuedBillings) {
-    const complete = billing.lines.length > 0 && billing.lines.every((line) => line.unitPrice !== null);
-    if (!complete) continue;
-    billingsWithCompletePricing += 1;
-    for (const line of billing.lines) {
-      total = total.plus(line.quantity.times(line.unitPrice!));
-    }
-  }
-  const allComplete = issuedBillings.length > 0 && billingsWithCompletePricing === issuedBillings.length;
 
   return {
     from: from.toISOString(),
@@ -79,9 +70,9 @@ async function buildPeriod(prisma: PrismaOrTx, from: Date, to: Date): Promise<Da
     receiptsCompleted,
     productionOrdersCompleted,
     shipmentsConfirmed,
-    billingsIssued: issuedBillings.length,
-    billedAmount: allComplete ? total.toFixed(2) : null,
-    billingsWithCompletePricing,
+    billingsIssued: faturado.billingCount,
+    billedAmount: faturado.totalAmount,
+    billingsWithCompletePricing: faturado.billingsWithCompletePricing,
   };
 }
 
