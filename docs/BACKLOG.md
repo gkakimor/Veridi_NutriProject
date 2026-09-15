@@ -120,7 +120,8 @@ do painel é decisão de conteúdo da Formulação, fora da passada de nomes.
 Discovery sem posição na fila: SUPPLIER-OFFER-OVERLAP-01 — que desde
 2026-09-09 carrega junto a sobreposição de `IndustrialResourceRate`, mesma
 pergunta nos dois lados do custo, uma resposta só —, SUPPLIER-MODE-01,
-ASSET-01, COM-CONTRACT-01 (seção G). Brainstorm: tributos e custo de aquisição
+ASSET-01, COM-CONTRACT-01 e INVENTORY-PHYSICAL-COUNT-PO-BASELINE-01 — este com a
+intenção do PO já aprovada (seção G). Brainstorm: tributos e custo de aquisição
 (seção F).
 
 ---
@@ -1539,6 +1540,119 @@ existe em todo cadastro.
 Se for imobilizado com depreciação, é capability de custeio e encosta em
 CMV-TAX/landed cost. Se for qualquer um dos outros três, provavelmente não há
 trabalho.
+
+### INVENTORY-PHYSICAL-COUNT-PO-BASELINE-01 — redesenho do Inventário Físico
+
+Registrado em 2026-09-15, só em documento. **Status: PO BASELINE / INTENÇÃO
+APROVADA — não é especificação técnica final.** Diferente dos outros itens desta
+seção, os objetivos já foram aprovados pelo PO: o discovery responde o que está
+aberto e desenha a solução, e pode mudar detalhe, mas não pode perder objetivo
+aprovado. Sem posição na fila e sem implementação autorizada — nenhum schema,
+migration, tela ou API nasce deste registro.
+
+**Ponto de partida.** O Inventário Físico de hoje (`StockCountPage`) conta UMA
+posição por vez — item, lote quando o item controla lote, contagem e motivo — e,
+havendo diferença, cria o ajuste rastreável sem sair da tela. A FO-01 (folha de
+contagem física) já tem modo cego (`?cega=1`, sem a coluna de saldo), mas não há
+sessão a que ela se vincule. As regras duráveis de
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §16 continuam valendo; nada aqui as altera.
+
+#### PO BASELINE — objetivos aprovados
+
+**Módulo.** O Inventário Físico deixa de ser somente o formulário 1-a-1 e evolui
+para **sessões de inventário em lote**. A função atual fica, como **Contagem
+rápida** ou equivalente.
+
+**Entrada.** Lista de inventários: em andamento; concluídos; progresso;
+divergências; ações para retomar. Ações principais: **Novo inventário**,
+**Contagem rápida** e **Folha de contagem**.
+
+**Novo inventário.** Montador de escopo, com os filtros desejados:
+
+- **Tipo:** matéria-prima; embalagem; produto acabado; todos.
+- **Saldo:** somente com saldo; com ou sem saldo.
+- **Última contagem:** nunca contado; sem contagem há X dias; período.
+- **Movimentação:** movimentado nos últimos X dias; sem movimentação há X dias;
+  recebido recentemente; consumido em produção recentemente; expedido
+  recentemente; ajustado recentemente.
+- **Lote:** ativos; aguardando liberação; bloqueados; vencidos; próximos do
+  vencimento; lote específico.
+- **Histórico:** com divergência anterior.
+- **Propriedade:** Veridi; material de cliente; cliente específico.
+- **Seleção:** manual.
+
+Antes de iniciar, mostrar a quantidade de itens e a quantidade de lotes/posições.
+
+**Unidade operacional.** Item sem controle de lote: posição por item. Item com
+controle de lote: posição por item + lote. Localização física fica para o
+discovery.
+
+**Tela de contagem.** Preferência: grade operacional, com as colunas conceituais
+Código, Item, Lote, Unidade, Contagem e Situação. A contagem assistida pode
+mostrar saldo e diferença. **A contagem cega não mostra saldo nem diferença
+durante a primeira contagem.**
+
+**Busca / autocomplete.** Campo "Item, código ou lote", que encontra por código
+do sistema, nome, trecho do nome e código do lote. Ao escolher item com lote,
+sugere os lotes daquele item. A UX deve ser compatível com scanner no futuro, e
+o Enter deve favorecer a contagem sequencial rápida.
+
+**Adição durante a contagem.** Avaliar "Adicionar item ou lote" para o que o
+operador encontra fora do escopo inicial, com registro de auditoria. **Nunca
+inventar lote inexistente silenciosamente.**
+
+**Progresso.** Algo como "51 / 91 posições · 56%". Permitir interromper e
+retomar.
+
+**Divergências e recontagem.** Fluxo: contar → revelar divergências → recontar →
+revisar → confirmar ajustes. A recontagem das posições divergentes é suportada.
+
+**Estoque — regra do PO.** O inventário **nunca sobrescreve saldo
+diretamente**. Ao finalizar, gera movimentos/ajustes rastreáveis ligados à
+sessão de inventário.
+
+**FO-01.** A folha de contagem é vinculada à sessão. Em inventário cego, **não
+imprime o saldo do sistema**. Conteúdo conceitual: identificador; código; item;
+lote; unidade; campo para contagem; data/responsável.
+
+**CSV.** Exportar o CSV da sessão. Importar CSV **preenche contagens e nunca
+ajusta estoque**. Fluxo: upload → validação → preview → erros/avisos →
+confirmação. Protege contra: arquivo de outro inventário; item inexistente; lote
+inexistente; item e lote incompatíveis; duplicidade; quantidade inválida; linha
+fora do escopo; inventário encerrado. Compatível com o uso brasileiro: UTF-8,
+separador `;` e decimal pt-BR. Avaliar também o modelo simples
+`codigo_item;lote;contagem` — o discovery decide se entra no MVP.
+
+**Histórico / auditoria.** Preservar quem criou, quem contou, quem recontou,
+quem aprovou, data/hora, valores, divergências e movimentos gerados.
+
+**Modelagem aberta ao cíclico.** A modelagem deve permitir evoluir para
+sugestões automáticas: nunca contado; sem contagem há X dias; movimentação
+recente; alto giro; divergência recorrente; próximo do vencimento. As sugestões
+em si são FUTURO.
+
+#### DISCOVERY REQUIRED — nada decidido aqui
+
+**HIGH / DISCOVERY REQUIRED — concorrência / cut-off.** Saldo 10 no início; a
+produção consome 2; o operador conta 8. O sistema **não pode** interpretar isso
+automaticamente como divergência de -2. O discovery precisa comparar: bloqueio
+de movimentação; snapshot; reconciliação dos movimentos; saldo no momento da
+contagem; outra solução.
+
+Também abertas: tolerância; segundo operador; multiusuário; localização física
+futura; lote físico inexistente no ERP; lote do ERP não encontrado fisicamente;
+autosave; permissões de contar versus aprovar; política de cancelamento;
+imutabilidade após o fechamento. E as duas que a baseline já deixou ao
+discovery: se "Adicionar item ou lote" entra, e se o modelo simples de CSV entra
+no MVP.
+
+#### FUTURO — não promover para o MVP
+
+Inventário cíclico com sugestões automáticas, scanner dedicado, localizações e
+regras avançadas não entram no MVP por padrão, nem porque o discovery tocou no
+assunto: promover exige decisão explícita do PO. Os três primeiros já estão em
+[`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md), seção Armazém / WMS (Contagem
+cíclica agendada, Coletores industriais, Endereçamento avançado).
 
 ---
 

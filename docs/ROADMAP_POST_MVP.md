@@ -87,7 +87,10 @@ histórico de localização. O MVP precisa apenas de localização simples.
 **Wave picking / otimização de rota** — item de escala.
 
 **Contagem cíclica agendada** — o MVP tem inventário manual; o agendamento
-avançado permanece futuro.
+avançado permanece futuro. As sugestões automáticas de contagem já nomeadas pelo
+PO, e a exigência de que a modelagem das sessões de inventário permita essa
+evolução, estão na baseline INVENTORY-PHYSICAL-COUNT-PO-BASELINE-01
+([BACKLOG.md](BACKLOG.md), seção G).
 
 **Coletores industriais** — o MVP usa câmera de celular/tablet primeiro.
 Hardware dedicado pode vir depois.

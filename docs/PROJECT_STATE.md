@@ -46,6 +46,11 @@ reconstruído do zero, DEV e produção são a mesma estrutura, campo a campo.
 - **melhorias aprovadas, aguardando autorização do PO:** #8E, #8F, #8G;
 - **aguardando validação com a Veridi:** #7 e #11;
 - **manutenção:** #10;
+- **discovery com intenção já aprovada pelo PO:** redesenho do Inventário Físico
+  em sessões de inventário em lote, com a contagem de hoje mantida como Contagem
+  rápida — INVENTORY-PHYSICAL-COUNT-PO-BASELINE-01, seção G do
+  [`BACKLOG.md`](BACKLOG.md). É PO BASELINE, não especificação: sem posição na
+  fila, nada implementado, e concorrência/cut-off aberta como HIGH;
 - **watchlist** (observado, sem ação conhecida): W1 a W6.
 
 Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
