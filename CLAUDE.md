@@ -178,6 +178,16 @@ Keep `docs/PROJECT_STATE.md` compact. Rewrite/condense it; do not append an endl
 
 Use `/ship` for implementation work.
 
+Review skills audit and decide; they never implement:
+- `/erp-functional-reviewer` — is the business rule complete, consistent and safe?
+- `/erp-operations-reviewer` — does it work in a real physical operation?
+- `/erp-release-reviewer` — is it safe to integrate or publish?
+
+Suggested order (guidance, not an enforced workflow):
+- normal feature: `/erp-functional-reviewer` → `/ship` → validation;
+- operational feature: `/erp-functional-reviewer` → `/erp-operations-reviewer` → `/ship` → `/erp-operations-reviewer` on the delivered flow;
+- risky release: `/erp-release-reviewer` → authorized deploy.
+
 ## Session execution and finalization
 
 **Any task running past 10 minutes must be investigated** — command, background
