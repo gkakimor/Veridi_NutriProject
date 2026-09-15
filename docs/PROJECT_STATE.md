@@ -53,6 +53,9 @@ estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0
 
 Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
 
+**Fase atual: homologação/testes em fast development.** O bloco de go-live
+([`BACKLOG_CLOSURE.md`](BACKLOG_CLOSURE.md)) permanece inativo até decisão explícita do PO.
+
 ## Correções da auditoria de produto (FIX-01 a FIX-05b, 2026-09-07/08)
 
 Sete achados fechados. A regra durável de cada um está em

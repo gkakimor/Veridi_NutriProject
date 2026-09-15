@@ -680,6 +680,13 @@ cíclica agendada, Coletores industriais, Endereçamento avançado).
 
 ---
 
+## Backlog reservado para go-live
+
+Os itens deliberadamente adiados até a preparação final estão em [`BACKLOG_CLOSURE.md`](BACKLOG_CLOSURE.md).
+**Status atual: INATIVO** — fora da Fila viva; só o PO ativa.
+
+---
+
 ## F. Roadmap — fora do backlog
 
 Escopo futuro não fica aqui. Vive em
