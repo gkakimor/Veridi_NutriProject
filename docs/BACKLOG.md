@@ -20,7 +20,7 @@ zero BLOCKER. O MVP foi entregue; o que está aqui é evolução do produto.
 |---|---|---|---|---|---|
 | 1 | P1 | **BILLED-VALUE-CANONICAL-01** — "Valor faturado" do Painel, R-15 e R-14 igual ao valor do documento (seção A) | ABERTO · HIGH · sem migration | PO responde D1 do Painel Gerencial (recomendado: `Billing.totalAmount`); depois implementar | D1 |
 | 2 | P1 | **E2E-BASELINE-REDESIGN-WAVE-04** — grupo C das E2E com massa própria | Discovery `EM_ANALISE`; P1 e a espera da 4E resolvidas pelo estado posterior | PO fecha P2–P8 ([abaixo](#wave-4--decisões-ainda-reais)); 4A pode começar | — |
-| 3 | P1 | **INVENTORY-PHYSICAL-COUNT-DISCOVERY-01** — Inventário Físico em sessões de inventário | PO BASELINE APROVADA · discovery completo NÃO EXECUTADO | Executar o discovery completo | — |
+| 3 | P1 | **INVENTORY-PHYSICAL-COUNT-DISCOVERY-01** — Inventário Físico em sessões de inventário | Discovery `EM_ANALISE` · D1–D4 bloqueiam | PO fecha D1–D4 ([discovery](discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md)); depois INVENTORY-PHYSICAL-COUNT-01 | — |
 | 4 | P1 | Decisões de **FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01** → MANAGEMENT-DASHBOARD-V1-01 (Painel Gerencial) | Discovery `EM_ANALISE` · D2–D5 abertas | PO fecha D2–D5; implementar a versão 1 | BILLED-VALUE-CANONICAL-01 entregue |
 | 5 | P1 | Decisões de **PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01** → PRODUCTION-PERMISSION-HARDENING-01 | Discovery `EM_ANALISE` · P1 e P6 bloqueiam | PO fecha P1 e P6 (e confirma P2–P5, P7, P8); implementar | — |
 | 6 | P1 | Decisões de **WAVE-05-GOLDEN-PATH-DISCOVERY-01** → E2E-BASELINE-REDESIGN-WAVE-05 (golden path) | Discovery `EM_ANALISE` · Q3 bloqueia | PO fecha Q3 e as demais; passos 1–2 do plano não dependem de decisão | WAVE 4 entregue |
@@ -82,8 +82,8 @@ Absorve E2E-CORPUS-MASS-01: o que sobrava dele (grupo C e a suíte de `PROD-0002
 ### Inventário Físico — status
 
 **PO BASELINE APROVADA** (INVENTORY-PHYSICAL-COUNT-PO-BASELINE-01, seção G; `04d97ad`, merge `9b011aa`).
-**Discovery completo INVENTORY-PHYSICAL-COUNT-DISCOVERY-01: AINDA NÃO EXECUTADO** — ganha documento em
-[`discovery/`](discovery/README.md) quando rodar. Ponto estrutural que o discovery não pode perder: **concorrência +
+**Discovery completo INVENTORY-PHYSICAL-COUNT-DISCOVERY-01: `EM_ANALISE`** (executado em 2026-09-15; D1–D4 bloqueiam) — documento em
+[`discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md`](discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md), com recomendação fechada para o ponto estrutural: **concorrência +
 saldo de referência + movimentos durante a contagem** (HIGH, seção G). Inventário cíclico, scanner dedicado e
 localizações seguem FUTURO.
 
@@ -571,7 +571,7 @@ APROVADA — não é especificação técnica final.** Diferente dos outros iten
 seção, os objetivos já foram aprovados pelo PO: o discovery responde o que está
 aberto e desenha a solução, e pode mudar detalhe, mas não pode perder objetivo
 aprovado. O discovery completo (INVENTORY-PHYSICAL-COUNT-DISCOVERY-01) é a posição 3
-da fila viva e AINDA NÃO FOI EXECUTADO. Sem implementação autorizada — nenhum schema,
+da fila viva e está `EM_ANALISE` desde 2026-09-15 ([documento](discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md)). Sem implementação autorizada — nenhum schema,
 migration, tela ou API nasce deste registro.
 
 **Ponto de partida.** O Inventário Físico de hoje (`StockCountPage`) conta UMA
