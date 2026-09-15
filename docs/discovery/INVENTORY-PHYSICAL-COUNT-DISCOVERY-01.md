@@ -4,7 +4,10 @@ Redesenho do Inventário Físico em sessões de inventário em lote.
 
 ## Status
 
-`EM_ANALISE` — 2026-09-15. Análise lida sobre `origin/main` = `c63c124`.
+`DECIDIDO` — 2026-09-15. O PO fechou D1–D8 e P1–P7 no handoff INVENTORY-PHYSICAL-COUNT-01: ver "Addendum PO —
+decisões fechadas". `READY_TO_IMPLEMENT = YES`.
+
+Leitura original, mantida como histórico: `EM_ANALISE` — 2026-09-15. Análise lida sobre `origin/main` = `c63c124`.
 
 - Discovery completo executado. Nada implementado: nenhum schema, migration, tela, API ou teste.
 - Concorrência e saldo de referência têm **recomendação fechada** (seção "Concorrência e saldo de referência").
@@ -1244,6 +1247,43 @@ Não estruturais; cada uma com recomendação, decidíveis na implementação se
 - **P7** — capability futura de regularização de material encontrado sem lote no ERP (G9). Recomendado: abrir
   discovery próprio quando a operação pedir.
 
+## Addendum PO — decisões fechadas
+
+Fonte: handoff **INVENTORY-PHYSICAL-COUNT-01** (Fatia 1), 2026-09-15. Registrado antes da implementação.
+**`READY_TO_IMPLEMENT = YES`.**
+
+| # | Decisão do PO | Em relação à recomendação |
+|---|---|---|
+| D1 | Concorrência = opção F | Igual |
+| D2 | Recontagem opcional | Igual |
+| D3 | Sem tolerância na primeira entrega | Igual |
+| D4 | ADMIN, PRODUCTION e QUALITY podem contar e aprovar; a mesma pessoa pode fazer os dois, e isso fica auditável | Igual |
+| D5 | Multiusuário otimista, com conflito explícito; nunca último-write silencioso | Igual |
+| D6 | CSV controlado, na Fatia 3 | Igual |
+| D7 | Item ou lote inexistente vira ocorrência; nunca cria cadastro em silêncio | Igual |
+| D8 | Cancelado ou encerrado não reabre nem estorna | Igual |
+| P1 | Máximo inicial de 3.000 posições por sessão | Igual |
+| P2 | Unidade de dimensão COUNT não aceita quantidade fracionária | Igual |
+| P3 | Nome: "Contagem rápida" | Igual |
+| P4 | Contagem rápida gera `INV-` com `kind = QUICK` | Igual |
+| P5 | "Com ou sem saldo" inclui lotes elegíveis com saldo zero; "Somente com saldo" exclui saldo zero | Igual |
+| P6 | FO-01 genérica fica como está; FO-01 de sessão entra na Fatia 3 | **Diverge**: o discovery recomendava "somente com saldo" e sem coluna Diferença na cega |
+| P7 | Material físico sem lote cadastrado vira ocorrência; regularização é futuro | Igual |
+
+Precisões do handoff sobre a Fatia 1:
+
+- Escopo: domínio, schema, migration, service/API e compatibilidade da Contagem rápida. Sem home, grade, wizard, CSV,
+  FO-01 de sessão, scanner, inventário cíclico, painel ou relatório.
+- `StockCountImportBatch` só nasce na Fatia 3, com o CSV — nada de schema prematuro.
+- Sem `DRAFT` e sem status `RECOUNT`: recontagem é da posição e do registro.
+- A exclusividade de posição entre sessões abertas resiste a concorrência real — consultar e depois inserir não basta.
+  A Contagem rápida respeita.
+- Ajuste = diferença congelada no registro que vale, aplicada como delta no encerramento. Exemplos obrigatórios em
+  teste: saldo 10, consumo −2, contagem 8 → zero ajuste; esperado 8, contagem 7, recebimento +5 depois da contagem →
+  o encerramento aplica −1 e o saldo fica 12.
+- Contagem cega: o backend é a autoridade; na primeira rodada a API não devolve saldo esperado nem diferença.
+- Contrato HTTP da tela atual preservado; se precisar mudar, compatível até a Fatia 2.
+
 ## Modelo de dados proposto
 
 **Conceitual. Sem migration.** Nomes seguem as convenções do schema (`@@map` em snake_case, `Decimal(24,12)` para
@@ -1397,6 +1437,12 @@ READY_TO_IMPLEMENT = **NO**. Motivo: a pergunta estrutural (concorrência / sald
 clara e sem ambiguidade técnica, mas D1–D4 tocam quantidade de estoque e permissões e continuam sem resposta do PO.
 Com D1–D4 aceitas como recomendado, a primeira entrega pode ser implementada sem ambiguidade perigosa.
 
+**Atualização 2026-09-15:** READY_TO_IMPLEMENT = **YES** — D1–D8 e P1–P7 fechadas pelo PO ("Addendum PO — decisões
+fechadas"). A implementação começa pela Fatia 1 (INVENTORY-PHYSICAL-COUNT-01).
+
 ## Histórico de decisões
 
 - 2026-09-15 — Discovery executado sobre `c63c124`; status `EM_ANALISE`; D1–D8 e P1–P7 abertas.
+- 2026-09-15 — PO fecha D1–D8 e P1–P7 no handoff INVENTORY-PHYSICAL-COUNT-01; status `EM_ANALISE` → `DECIDIDO`;
+  `READY_TO_IMPLEMENT` NO → YES. P6 muda a recomendação: a FO-01 genérica fica como está (antes: "somente com saldo"
+  e sem coluna Diferença na cega); a FO-01 de sessão entra na Fatia 3.
