@@ -7,11 +7,12 @@ import { getAllocationSuggestion } from "./allocation.service.js";
 import { listCustomerMaterials } from "./customer-materials.service.js";
 import {
   createInventoryAdjustment,
-  createStockCount,
   getInventoryByItemId,
   listInventory,
   listInventoryMovements,
 } from "./inventory.service.js";
+import { mapStockCountError } from "./stock-count.routes.js";
+import { createQuickStockCount } from "./stock-count.service.js";
 import {
   CountBelowReservedError,
   InsufficientStockError,
@@ -179,6 +180,12 @@ export const inventoryRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  /*
+   * Contagem rápida. Contrato da tela atual preservado; desde
+   * INVENTORY-PHYSICAL-COUNT-01 a contagem grava o documento INV- (kind QUICK)
+   * mesmo quando confere, e respeita a exclusividade de posição dos
+   * inventários abertos.
+   */
   app.post("/stock-counts", async (request, reply) => {
     try {
       const actor = requireRole(request, ...STOCK_WRITE_ROLES);
@@ -189,10 +196,10 @@ export const inventoryRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: "validation_error", issues: formatZodError(parsed.error) });
       }
 
-      const result = await createStockCount(parsed.data, actor.name);
+      const result = await createQuickStockCount(parsed.data, actor);
       return reply.status(201).send(result);
     } catch (error) {
-      const mapped = mapDomainError(error);
+      const mapped = mapDomainError(error) ?? mapStockCountError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);
       throw error;
     }

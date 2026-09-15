@@ -75,6 +75,23 @@ export async function getOnHandByItems(
   return groupIntoMap(grouped, (row) => row.itemId);
 }
 
+/**
+ * On Hand so dos movimentos SEM lote, por item — o saldo da posicao de um item
+ * sem controle de lote (`getOnHand` com `lotId: null`, em lote).
+ */
+export async function getOnHandWithoutLotByItems(
+  prisma: PrismaOrTx,
+  itemIds: string[],
+): Promise<Map<string, Prisma.Decimal>> {
+  if (itemIds.length === 0) return new Map();
+  const grouped = await prisma.inventoryMovement.groupBy({
+    by: ["itemId", "type"],
+    where: { itemId: { in: itemIds }, lotId: null },
+    _sum: { quantity: true },
+  });
+  return groupIntoMap(grouped, (row) => row.itemId);
+}
+
 /** Versao em lote de `getOnHand` por lote — evita N+1 em listas. */
 export async function getOnHandByLots(
   prisma: PrismaOrTx,

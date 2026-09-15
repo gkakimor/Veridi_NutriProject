@@ -424,6 +424,16 @@ model User {
   updatedCustomers           Customer[]                         @relation("CustomerUpdatedBy")
   createdIndustrialRates     IndustrialResourceRate[]           @relation("IndustrialResourceRateCreatedBy")
   createdItemCostReferences  ItemCostReference[]                @relation("ItemCostReferenceCreatedBy")
+  createdStockCounts         StockCount[]                       @relation("StockCountCreatedBy")
+  firstRoundClosedStockCounts StockCount[]                      @relation("StockCountFirstRoundClosedBy")
+  completedStockCounts       StockCount[]                       @relation("StockCountCompletedBy")
+  cancelledStockCounts       StockCount[]                       @relation("StockCountCancelledBy")
+  addedStockCountPositions   StockCountPosition[]               @relation("StockCountPositionAddedBy")
+  removedStockCountPositions StockCountPosition[]               @relation("StockCountPositionRemovedBy")
+  recountRequestedPositions  StockCountPosition[]               @relation("StockCountRecountRequestedBy")
+  decidedStockCountPositions StockCountPosition[]               @relation("StockCountDecidedBy")
+  stockCountEntries          StockCountEntry[]                  @relation("StockCountEntryCountedBy")
+  stockCountFindings         StockCountFinding[]                @relation("StockCountFindingCreatedBy")
 
   @@index([active])
   @@map("users")
@@ -2091,6 +2101,8 @@ model Item {
   customerOrderReservationLines  CustomerOrderReservationLine[]
   shipmentLines                  ShipmentLine[]
   billingLines                   BillingLine[]
+  stockCountPositions            StockCountPosition[]
+  stockCountFindings             StockCountFinding[]
 
   @@index([type])
   @@index([active])
@@ -2911,6 +2923,7 @@ model Lot {
   recipeWeighings               RecipeWeighing[]
   sampleConsumptions            SampleConsumption[]
   attachments                   Attachment[]
+  stockCountPositions           StockCountPosition[]
 
   @@index([itemId])
   @@index([supplierId])
@@ -2970,6 +2983,11 @@ model InventoryMovement {
   shipmentLineId String?       @unique
   shipmentLine   ShipmentLine? @relation(fields: [shipmentLineId], references: [id], onDelete: Cascade)
 
+  /// Ajuste de inventario com documento (INV-): a posicao que o gerou. A FK
+  /// 1:1 mora na posicao (`adjustmentMovementId`); ajuste STOCK_COUNT anterior
+  /// ao documento nao tem posicao.
+  stockCountPosition StockCountPosition?
+
   /// Obrigatorio (validado no service) para ajuste/perda; sempre null em RECEIPT_IN.
   reason String?
 
@@ -2981,6 +2999,281 @@ model InventoryMovement {
   @@index([type])
   @@index([occurredAt])
   @@map("inventory_movements")
+}
+
+/// Inventario fisico — tipo do documento INV-. SESSION e o inventario em lote
+/// (contagem, revisao, encerramento); QUICK e a Contagem rapida: uma posicao,
+/// criada e encerrada na mesma transacao.
+enum StockCountKind {
+  SESSION
+  QUICK
+}
+
+/// BLIND: contagem cega — a API nao devolve saldo de referencia, saldo
+/// esperado nem diferenca enquanto a primeira rodada nao termina. ASSISTED:
+/// contagem com saldo. QUICK e sempre ASSISTED.
+enum StockCountMode {
+  BLIND
+  ASSISTED
+}
+
+/// Sem DRAFT (o preview de escopo nao e persistido) e sem RECOUNT (recontagem
+/// e da posicao). COMPLETED e CANCELLED sao finais: nao reabrem nem estornam.
+enum StockCountStatus {
+  IN_PROGRESS
+  IN_REVIEW
+  COMPLETED
+  CANCELLED
+}
+
+enum StockCountPositionOrigin {
+  /// Entrou pelo escopo no inicio do inventario.
+  SCOPE
+  /// Adicionada durante o inventario, com motivo.
+  ADDED
+}
+
+enum StockCountEntrySource {
+  /// Registro da contagem de uma sessao.
+  GRID
+  /// Contagem rapida.
+  QUICK
+}
+
+enum StockCountDecision {
+  ADJUST
+  NO_ADJUSTMENT
+}
+
+enum StockCountFindingKind {
+  /// O item existe no ERP; o lote fisico, nao.
+  UNREGISTERED_LOT
+  /// O item fisico nao existe no ERP.
+  UNREGISTERED_ITEM
+  OTHER
+}
+
+/// Documento de inventario fisico (INV-000001). Nunca escreve saldo: o
+/// encerramento so cria InventoryMovement de ajuste, no maximo um por posicao.
+/// Progresso, contadores e divergencias sao derivados das posicoes.
+model StockCount {
+  id String @id @default(uuid())
+
+  /// INV-000001 — sequence `stock_count_code_seq`; prefixo no shared.
+  code String @unique
+
+  kind   StockCountKind
+  mode   StockCountMode
+  status StockCountStatus
+
+  description String?
+
+  /// Retrato do escopo pedido no inicio: filtros, retiradas do preview e
+  /// posicoes que ficaram de fora por estarem em outro inventario aberto.
+  scopeFilters Json?
+
+  /// Instante de referencia do inicio — o das posicoes do escopo.
+  referenceAt DateTime
+
+  createdAt       DateTime @default(now())
+  createdByUserId String?
+  createdByUser   User?    @relation("StockCountCreatedBy", fields: [createdByUserId], references: [id])
+  createdByName   String
+
+  firstRoundClosedAt       DateTime?
+  firstRoundClosedByUserId String?
+  firstRoundClosedByUser   User?     @relation("StockCountFirstRoundClosedBy", fields: [firstRoundClosedByUserId], references: [id])
+  firstRoundClosedByName   String?
+
+  completedAt       DateTime?
+  completedByUserId String?
+  completedByUser   User?     @relation("StockCountCompletedBy", fields: [completedByUserId], references: [id])
+  completedByName   String?
+
+  cancelledAt       DateTime?
+  cancelledByUserId String?
+  cancelledByUser   User?     @relation("StockCountCancelledBy", fields: [cancelledByUserId], references: [id])
+  cancelledByName   String?
+  cancelReason      String?
+
+  updatedAt DateTime @updatedAt
+
+  positions StockCountPosition[]
+  findings  StockCountFinding[]
+
+  @@index([status])
+  @@index([kind])
+  @@index([createdAt])
+  @@map("stock_counts")
+}
+
+/// Posicao contada: item sem controle de lote = item; item com lote = item +
+/// lote. Retrato de cadastro e saldo de referencia congelados na entrada.
+model StockCountPosition {
+  id String @id @default(uuid())
+
+  stockCountId String
+  stockCount   StockCount @relation(fields: [stockCountId], references: [id], onDelete: Cascade)
+
+  /// Numero da posicao na sessao — o papel e o CSV usam isto, nunca UUID.
+  sequence Int
+
+  /// `itemId` ou `itemId:lotId`. Unicidade por sessao sem depender de NULL em
+  /// `lotId`: num unique composto o PostgreSQL trata NULL como distinto.
+  positionKey String
+
+  /// Igual a `positionKey` enquanto a sessao esta aberta (IN_PROGRESS ou
+  /// IN_REVIEW) e a posicao nao foi retirada; NULL no resto. O indice unico
+  /// garante no banco que uma posicao fisica esta em no maximo UM inventario
+  /// aberto, inclusive entre duas transacoes simultaneas. Encerrar, cancelar
+  /// e retirar zeram o campo na mesma transacao.
+  openPositionKey String? @unique
+
+  /// onDelete Cascade so importa para limpeza de fixture de teste — mesmo
+  /// padrao de InventoryMovement.
+  itemId String
+  item   Item    @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  lotId  String?
+  lot    Lot?    @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
+  /// Retrato de cadastro no instante em que a posicao entrou.
+  itemCode              String
+  itemName              String
+  itemType              ItemType
+  unitCode              String
+  lotCode               String?
+  ownerType             InventoryOwnerType @default(VERIDI)
+  ownerCustomerId       String?
+  ownerCustomerCode     String?
+  ownerCustomerName     String?
+  lotStatusAtReference  LotStatus?
+  expiryDateAtReference DateTime?
+  locationAtReference   String?
+
+  origin StockCountPositionOrigin
+
+  addedAt       DateTime?
+  addedByUserId String?
+  addedByUser   User?     @relation("StockCountPositionAddedBy", fields: [addedByUserId], references: [id])
+  addedByName   String?
+  addReason     String?
+
+  /// R — saldo do ledger lido quando a posicao entrou. Explica a revisao;
+  /// nunca e a base do ajuste.
+  referenceQuantity Decimal  @db.Decimal(24, 12)
+  referenceAt       DateTime
+
+  /// O registro que vale para a decisao final: sempre o ultimo registrado.
+  /// Explicito de proposito — o encerramento ajusta a diferenca DESTE registro.
+  validEntryId String?          @unique
+  validEntry   StockCountEntry? @relation("StockCountPositionValidEntry", fields: [validEntryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  recountRequestedRound    Int?
+  recountRequestedAt       DateTime?
+  recountRequestedByUserId String?
+  recountRequestedByUser   User?     @relation("StockCountRecountRequestedBy", fields: [recountRequestedByUserId], references: [id])
+  recountRequestedByName   String?
+
+  removedAt       DateTime?
+  removedByUserId String?
+  removedByUser   User?     @relation("StockCountPositionRemovedBy", fields: [removedByUserId], references: [id])
+  removedByName   String?
+  removeReason    String?
+
+  /// Decisao da revisao sobre a diferenca do registro que vale. Registro novo
+  /// ou recontagem pedida limpam a decisao: ela nunca vale para outro numero.
+  decision        StockCountDecision?
+  decisionReason  String?
+  decidedAt       DateTime?
+  decidedByUserId String?
+  decidedByUser   User?               @relation("StockCountDecidedBy", fields: [decidedByUserId], references: [id])
+  decidedByName   String?
+
+  /// Confirmacao explicita de que a movimentacao durante o inventario nao
+  /// invalida a contagem — a alternativa a recontar.
+  concurrentMovementConfirmed Boolean @default(false)
+
+  /// Ajuste gerado no encerramento — FK real 1:1: no maximo um ajuste por
+  /// posicao, e um movimento pertence a uma posicao so. A FK mora aqui, e nao
+  /// no ledger, para a migration ser so aditiva: nenhuma coluna nem indice
+  /// novo em `inventory_movements`. `sourceId` do movimento aponta a posicao.
+  adjustmentMovementId String?            @unique
+  adjustmentMovement   InventoryMovement? @relation(fields: [adjustmentMovementId], references: [id])
+
+  entries StockCountEntry[] @relation("StockCountPositionEntries")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([stockCountId, sequence])
+  @@unique([stockCountId, positionKey])
+  @@index([itemId])
+  @@index([lotId])
+  @@map("stock_count_positions")
+}
+
+/// Registro de contagem — so acrescenta. Recontagem e correcao sao registros
+/// novos; nenhum registro e editado nem apagado.
+model StockCountEntry {
+  id String @id @default(uuid())
+
+  positionId String
+  position   StockCountPosition @relation("StockCountPositionEntries", fields: [positionId], references: [id], onDelete: Cascade)
+
+  /// 1 = contagem; 2 em diante = recontagem.
+  round Int
+
+  /// C — contagem fisica.
+  countedQuantity Decimal @db.Decimal(24, 12)
+
+  /// E — saldo do ledger lido NA transacao deste registro. A diferenca do
+  /// registro e C - E; nunca C - saldo do encerramento, nunca C - referencia.
+  expectedQuantity Decimal @db.Decimal(24, 12)
+
+  countedAt       DateTime
+  countedByUserId String?
+  countedByUser   User?    @relation("StockCountEntryCountedBy", fields: [countedByUserId], references: [id])
+  countedByName   String
+
+  source StockCountEntrySource
+
+  /// Idempotencia do envio: repetir o mesmo id devolve o registro ja criado.
+  clientRequestId String? @unique
+
+  note String?
+
+  validForPosition StockCountPosition? @relation("StockCountPositionValidEntry")
+
+  @@index([positionId, round])
+  @@map("stock_count_entries")
+}
+
+/// Ocorrencia do inventario: material que nao cabe numa posicao (lote ou item
+/// sem cadastro no ERP). Nunca cria item, lote nem movimento.
+model StockCountFinding {
+  id String @id @default(uuid())
+
+  stockCountId String
+  stockCount   StockCount @relation(fields: [stockCountId], references: [id], onDelete: Cascade)
+
+  kind StockCountFindingKind
+
+  itemId String?
+  item   Item?   @relation(fields: [itemId], references: [id])
+
+  /// O que foi lido: etiqueta, lote do fornecedor, descricao.
+  identification String
+  quantity       Decimal? @db.Decimal(24, 12)
+  unitCode       String?
+  note           String?
+
+  createdAt       DateTime @default(now())
+  createdByUserId String?
+  createdByUser   User?    @relation("StockCountFindingCreatedBy", fields: [createdByUserId], references: [id])
+  createdByName   String
+
+  @@index([stockCountId])
+  @@map("stock_count_findings")
 }
 
 /// Ordem de Producao. DRAFT e livremente editavel (Product/Formulacao/

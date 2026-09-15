@@ -54,11 +54,13 @@ export const createInventoryAdjustmentSchema = z.object({
   reason: z.string().trim().min(3, "Motivo é obrigatório"),
 });
 
+/** Contagem rápida (`POST /stock-counts`) — contrato da tela atual, só acrescido. */
 export const stockCountSchema = z.object({
   itemId: z.string().trim().min(1, "Item é obrigatório"),
   lotId: z.string().trim().min(1).optional(),
   countedQuantity: quantityDecimalSchema({ allowZero: true }),
   reason: z.string().trim().min(3).optional(),
+  expectedSystemQuantity: quantityDecimalSchema({ allowZero: true }).optional(),
 });
 
 export const allocationSuggestionQuerySchema = z.object({
