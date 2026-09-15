@@ -37,6 +37,10 @@ ID: `FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01.md`,
 não é reescrita em silêncio: o documento ganha uma entrada em "Histórico de
 decisões" com a data, a decisão anterior, a nova e o motivo.
 
+**Worktree é temporário.** Discovery documental termina como arquivo nesta pasta,
+integrado à `main`. Não manter cópia do projeto (`wt-*`) como armazenamento do
+discovery; depois da integração, o worktree e a branch documental saem.
+
 **Discoveries anteriores a esta pasta ficam onde estão.** Movê-los quebraria os
 links de `PROJECT_STATE.md`, `BACKLOG.md` e `PRODUCT_RULES.md`. O índice aponta
 para eles.
@@ -73,6 +77,9 @@ YES / PARTIAL / NO e `READY_TO_IMPLEMENT` justificado.
 | ID | Tema | Status | Data | Principais decisões | Pendências PO | Implementação |
 |---|---|---|---|---|---|---|
 | [FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01](FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01.md) | Painel Gerencial: o que o ERP mostra de dinheiro com confiança | `EM_ANALISE` | 2026-09-15 | Recomendado: nome "Painel Gerencial" (não "Financeiro"), tela própria em Gestão, endpoint próprio; "Faturado" = `Billing.totalAmount` congelado; sem contas a pagar, contas a receber, caixa, margem ou imposto na versão 1 | D1 valor canônico do faturado · D2 valores incompletos · D3 nome e lugar · D4 quem vê · D5 valor de carteira e a faturar | NÃO IMPLEMENTADO. Próxima: BILLED-VALUE-CANONICAL-01, depois MANAGEMENT-DASHBOARD-V1-01 |
+| [E2E-BASELINE-REDESIGN-WAVE-04-DISCOVERY-01](E2E-BASELINE-REDESIGN-WAVE-04-DISCOVERY-01.md) | Massa operacional própria para as E2E do grupo C e a OP fora da 1ª página | `EM_ANALISE` | 2026-09-15 | Recomendado: `produzirPa` por API (subwave 4A) antes das suítes; 4E (desconto → faturamento) por último | P1–P8; P1 (escopo WAVE 3 × grupo C) vem antes de tudo; 4E depende da WAVE 3 na `main` | NÃO IMPLEMENTADO. Próxima: decisão PO de P1–P8, depois E2E-BASELINE-REDESIGN-WAVE-04 |
+| [WAVE-05-GOLDEN-PATH-DISCOVERY-01](WAVE-05-GOLDEN-PATH-DISCOVERY-01.md) | Golden path private label na fundação E2E nova | `EM_ANALISE` | 2026-09-15 | Recomendado: opção B do runner (`--run`/`--desde`, `--clone`), checkpoint como mapa de entidades, `billingStatus === "BILLED"` | Q3 e Q5 bloqueiam; B1 (trecho comercial com a WAVE 3) a combinar; Q1, Q2, Q4, Q6–Q10 | NÃO IMPLEMENTADO. Próxima: fechar Q3/Q5/B1, depois E2E-BASELINE-REDESIGN-WAVE-05 |
+| [PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01](PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01.md) | Permissões de execução da Ordem de Produção | `EM_ANALISE` | 2026-09-15 | Recomendado: execução da OP só ADMIN + PRODUCTION; cancelamento com ator real (não `SYSTEM_ACTOR`); `ForbiddenError` mapeado para 403 | P1 e P6 bloqueiam; P2–P5, P7, P8 com recomendação | NÃO IMPLEMENTADO. Próxima: fechar P1/P6, depois PRODUCTION-PERMISSION-HARDENING-01 |
 | INVENTORY-PHYSICAL-COUNT-PO-BASELINE-01 ([BACKLOG §G](../BACKLOG.md)) | Inventário Físico em sessões de inventário em lote | `EM_ANALISE` | 2026-09-15 | Objetivos aprovados pelo PO (baseline): sessões em lote, Contagem rápida mantida, inventário nunca sobrescreve saldo | Concorrência/cut-off (HIGH) e as demais abertas na baseline | NÃO IMPLEMENTADO. Baseline registrada em 04d97ad (merge 9b011aa). O discovery ganha documento próprio (`INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md`) quando a rodada acontecer |
 | [COST-VAR-01](../archive/COST-VAR-01_AUDITORIA_VARIACAO_CMV.md) | Variação de CMV e proteção de margem | `EM_ANALISE` | 2026-09-09 | Não duplicar o CMV; comparar pelo motor canônico | As 7 decisões P1–P7 (§25 do documento); COST-VAR-02 bloqueado | NÃO IMPLEMENTADO. Achados usados por COST-SOURCE-01 (merge da3bacf) |
 | [COM-CORE — spike](../archive/SPIKE_COM_NEW_QUOTES.md) | Novos ciclos comerciais no mesmo Projeto | `IMPLEMENTADO` | 2026-09-09 | Projeto aprovado continua vendendo; cada compra é um orçamento novo | — | COM-CORE, merge 1ed7aeb (2026-09-08); regras §69–§71 |

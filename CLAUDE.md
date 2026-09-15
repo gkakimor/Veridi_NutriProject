@@ -198,6 +198,9 @@ Before starting a new discovery:
 4. do not redo a discovery without a stated reason;
 5. update the index at the end.
 
+A worktree is temporary: a finished discovery lives as a file in `docs/discovery/`
+merged into `main`, never as a kept copy of the project.
+
 ## Session execution and finalization
 
 **Any task running past 10 minutes must be investigated** — command, background
