@@ -841,7 +841,12 @@ abaixo fica como histórico.
 - **CUSTOMER-LIST-DEFAULT-E2E-01 — P3.** A lista de Clientes abre em "Clientes
   ativos"; o recém-criado (Prospect) chega pelo contexto. E2E e golden path que
   procuram Cliente pela lista sem contexto podem precisar de "Todos" — não
-  verificado nesta rodada (FAST, sem E2E).
+  verificado nesta rodada (FAST, sem E2E). **Parcial em 2026-09-15
+  (E2E-BASELINE-REDESIGN-WAVE-01-02):** confirmado nas E2E —
+  `perfil-tributario-do-cliente` caía na edição; ela e `troca-de-cep-do-cliente`
+  reabrem o cliente pelo id (`?ids=`), e as três que esperavam a lista por regex
+  terminando em `/cadastros/clientes` esperam pelo caminho. Segue aberto para o
+  golden path (reescrita D).
 - **CUSTOMER-FACTS-LOAD-01 — watch.** Listagem e exportação carregam, para cada
   Cliente da página, os Projetos com o histórico de status e os Pedidos
   confirmados. Número de consultas constante; volume de linhas cresce com a
@@ -1037,7 +1042,7 @@ ficou congelada durante a rodada: posição destes itens é decisão do PO.
 | ~~CUSTOMER-MATERIALS-ONLY-WITH-BALANCE-PERMISSIVE-01~~ | **Fechado em 2026-09-14** por QUERY-BOOLEAN-STRICTNESS-WAVE-02 ([`PROJECT_STATE.md`](PROJECT_STATE.md), seção própria): reproduzido pela rota (`onlyWithBalance=1` listava o lote zerado, na lista e no CSV); `booleanoDeConsultaSchema().default(false)` — ausente segue sem filtro, o resto é 400 | — | — |
 | ~~QUERY-BOOLEAN-PERMISSIVE-REMAINING-01~~ | **Fechado em 2026-09-14** ([`PROJECT_STATE.md`](PROJECT_STATE.md), seção própria): reproduzido pela rota (`onlyPending=1` mostrava a fila inteira; `onlyWithBalance=1` trazia o lote zerado; `active=1` listava só os inativos; `archived=1` listava os não arquivados nas três bibliotecas; `includeArchived=1` escondia o anexo arquivado); os sete leem `booleanoDeConsultaSchema` com o padrão de antes, o resto é 400; anexos ganham `listAttachmentsQuerySchema`, sem leitura crua de `request.query`; a guarda não tem mais lista de dívida, só `LEGADO_EXPLICITO` (`semRoteiro`, `activeOnly`); web intocada | — | — |
 | **TEMPLATE-PURITY-LEGACY-DATA-01** | Desde INPUT-DATE-CONTRACT-WAVE-01 o Modelo recusa pureza 0 ou acima de 100. Modelo gravado antes com esses valores continua lido, mas salvar a versão em rascunho sem corrigir a linha passa a dar 400 com a mensagem da pureza. Não conferido em PROD (sem leitura de produção nesta rodada): contar `formulation_template_components` com pureza `<= 0` ou `> 100` | LOW | XS |
-| **E2E-CORPUS-MASS-01** | Sete suítes E2E procuram código fixo do corpus (`CLI-000013`, `PROD-000031`, `MP-000365`…) e três saem sem avaliar quando não há PA disponível: numa base recriada do zero não avaliam nada. Fere a regra 1 do README das suítes, onde está a lista. Desde DEV-REALDATA-BASELINE-RESET-01 (2026-09-14) há base real reproduzível (`pnpm e2e:baseline:rebuild`) e mapa por suíte em `E2E_STRATEGY.md`: das sete, quatro seguem sem a massa que leem (C), `formacao-de-preco…` e a de `PROD-000214` vão para reescrita (D) e `recebimento-validacao-viva` passa a achar a sua (B); as três de PA sairiam "SEM MASSA". Absorvido por E2E-BASELINE-REDESIGN-01 | LOW | M |
+| **E2E-CORPUS-MASS-01** | Sete suítes E2E procuram código fixo do corpus (`CLI-000013`, `PROD-000031`, `MP-000365`…) e três saem sem avaliar quando não há PA disponível: numa base recriada do zero não avaliam nada. Fere a regra 1 do README das suítes, onde está a lista. Desde DEV-REALDATA-BASELINE-RESET-01 (2026-09-14) há base real reproduzível (`pnpm e2e:baseline:rebuild`) e mapa por suíte em `E2E_STRATEGY.md`: das sete, quatro seguem sem a massa que leem (C), `formacao-de-preco…` e a de `PROD-000214` vão para reescrita (D) e `recebimento-validacao-viva` passava a achar a sua (B). **Em 2026-09-15 (E2E-BASELINE-REDESIGN-WAVE-01-02)** o recebimento ganhou massa própria por API — fornecedor e matéria-prima com lote e validade da execução — e saiu da lista; as três de PA sairiam "SEM MASSA", que o runner (`pnpm e2e:run`) agora reprova. Absorvido por E2E-BASELINE-REDESIGN-01; o resto do grupo C é da WAVE 3 em diante | LOW | M |
 | **COST-MP-EMB-SPLIT-01** | Nem a estimativa da Formulação nem o CMV mostram matéria-prima e embalagem em subtotais separados — o cálculo soma "Materiais e embalagens Veridi" numa linha (`CostBreakdown.tsx`). O total está certo; a separação sai somando pelo código MP-/ME- | UX | S |
 
 ### Encerrados na triagem, sem trabalho

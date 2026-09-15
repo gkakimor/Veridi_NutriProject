@@ -1,5 +1,5 @@
+import { criarRun } from "./fixtures/run.mjs";
 import { abrirNavegador, WEB } from "./lib/browser.mjs";
-import { obterRun } from "./lib/run-id.mjs";
 
 /**
  * A oferta do fornecedor vira — ou não vira — custo, pela interface.
@@ -32,8 +32,8 @@ import { obterRun } from "./lib/run-id.mjs";
  *   node scripts/e2e/oferta-de-fornecedor-vira-custo.mjs
  */
 
-const run = obterRun({ novo: true, dono: "custos" });
-const P = `E2E${run.runId}`;
+const run = criarRun();
+const P = run.carimbo;
 
 const PRECO_A = "300";
 const PRECO_B = "260";

@@ -1,5 +1,5 @@
+import { criarRun } from "./fixtures/run.mjs";
 import { abrirNavegador, WEB } from "./lib/browser.mjs";
-import { obterRun } from "./lib/run-id.mjs";
 
 /**
  * O Pedido só oferece produtos DO CLIENTE do Pedido.
@@ -28,8 +28,8 @@ import { obterRun } from "./lib/run-id.mjs";
  *   node scripts/e2e/produto-do-cliente-do-pedido.mjs
  */
 
-const run = obterRun({ novo: true, dono: "order-customer-product-01" });
-const P = `E2E${run.runId}`;
+const run = criarRun();
+const P = run.carimbo;
 
 const CLIENTE_A = `${P} Cliente Alfa`;
 const CLIENTE_B = `${P} Cliente Beta`;

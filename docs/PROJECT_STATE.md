@@ -4510,6 +4510,48 @@ em Painel, Clientes, Fornecedores, Itens, Produtos, Formulações, Projetos e Or
 0 erro de console. Clientes abre em 75 pelo filtro de situação comercial ativa, e Orçamentos em "em aberto" vazio —
 os 2 legados são ARCHIVED; "Ver todos" mostra os dois.
 
+## Fundação E2E nova e suítes simples (E2E-BASELINE-REDESIGN-WAVE-01-02, 2026-09-15)
+
+Decisões do PO (A–I, em [`E2E_STRATEGY.md`](E2E_STRATEGY.md)): massa de pré-condição por API nas quatro condições —
+não é o que se prova, economiza muito tempo, contrato da rota coberto, não pula a pré-condição —, GET livre,
+Prisma/SQL proibido; clone por TEMPLATE só local; ADMIN próprio da execução; pronto por wave = clone novo verde +
+mesma bateria no clone sujo + console limpo + nenhum "SEM MASSA". PROD, Railway PROD e `release/prod` intocados.
+
+**Fundação.** `scripts/e2e/fixtures/`: `run.mjs` (runId de 6 base36 em memória — `handoff/e2e-run.json` saiu do
+fluxo; `lib/run-id.mjs` ficou como compatibilidade sem arquivo e o golden path exige `--run` junto de `--desde`),
+`api.mjs` (`exigir` falha com método, rota, status e corpo sem segredo; origem só `http://127.0.0.1`), `ui.mjs`
+(`esperarRota` pelo pathname, `escolherOpcao` sem "+ Novo"), `datas.mjs`, `cadastros.mjs` e `producao.mjs`.
+`lib/browser.mjs` abre em America/Sao_Paulo e pt-BR e junta em `erros` console, `pageerror` e 4xx/5xx da API não
+declarados (`esperarErroHttp`). `lib/pdf.mjs`: espera de 90 s, `blob:` com `%PDF-`, NBSP como espaço, paridade com o
+leitor da web.
+
+**Runner.** `pnpm e2e:run` (`scripts/e2e-run.mjs`): recusa template montada com outras migrations (`baseline.json`
+guarda total, última e assinatura de nome e conteúdo; rebuild nunca automático), clona por `CREATE DATABASE …
+TEMPLATE` (`<template>_run_<runid>`, nunca a template nem o banco da `.env`, template sem conexão), cria o ADMIN da
+execução, sobe API e Web em 127.0.0.1 contra o clone, roda em série (exit ≠ 0, estouro e "SEM MASSA" reprovam; 5xx
+contados no log da API), encerra a árvore de processos e remove o clone (`--manter-clone`, `--clone=<nome>`).
+`veridi_e2e_baseline` foi reconstruída uma vez para gravar o registro (74 migrations, 18 s).
+
+**Provas.** `leitor-de-pdf-da-tela`: OC de massa por API; PDF real no iframe `.pdf-screen__frame` como `blob:`, texto
+com o código da OC, o fornecedor carimbado e o item, 3 NBSP normalizados, gerado e lido em 1,9 s.
+`roteiro-aplicado-planeja-ordem`: OP em rascunho sem roteiro é recusada ao planejar (400 `route_required`); com o
+roteiro da fixture aplicado, fica PLANNED.
+
+**Suítes.** As 11 da bateria `wave-01-02` (10 do grupo A + recebimento) usam `criarRun()`. Três esperavam a lista de
+Clientes por regex terminando em `/cadastros/clientes` e agora esperam pelo caminho; `perfil-tributario` e
+`troca-de-cep` reabrem o cliente pelo id (`?ids=`). O recebimento cria fornecedor e matéria-prima com lote e validade
+por API — OC e recebimentos pela tela, sem estoque em item da carga real. Achado da primeira bateria (9/11): duas A
+estavam velhas desde PTBR-NUMERIC-INPUT-ROLLOUT-01 — `modelo-aplicado-preserva-base` comparava a base com `1000` (a
+tela mostra `1.000`) e `projeto-inteiro-invalido-nao-apaga` digitava `abc` num `IntegerField` que não deixa letra
+entrar. As duas seguem o contrato de `projeto-inteiros.test.tsx` (letra não entra; zero entra e é recusado), e
+`modelo-aplicado` declara o 409 provocado. A leitura estática do discovery dava as dez A como "passam como estão".
+
+**Validação.** Clone novo: 11/11 em 3m03s (suítes 2m55s), SEM MASSA 0, console limpo, 5xx 0 (API: 941 × 200, 53 ×
+201, 52 × 204 e o 409 declarado). Clone sujo — o mesmo, sem recriar, runIds novos, cada suíte sobre a massa das 11 da rodada anterior: 11/11 em
+3m02s (suítes 2m54s), mesmas verificações por suíte, SEM MASSA 0, console limpo, 5xx 0; clone removido no fim. Focados: `e2e-run.test.ts`,
+`fixtures.test.ts`, `pdf.test.ts` e `e2e-baseline-rebuild.test.ts` (77); `pnpm typecheck`. Sem `pnpm test` global,
+full web/API, fresh nem golden path (FAST).
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
@@ -4525,6 +4567,10 @@ pede decisão de schema, sem posição na fila.
 **QUOTES-HUB-01 fechado em 2026-09-14** (§93), com QUOTE-PAGE-NAV-ACTIVE-01: Comercial → Orçamentos, a lista geral
 que só navega para a mesma rota. Do assunto sobra **E2E-QUOTE-PAGE-FLOW-01 (P2)**, a próxima onda, já contra a
 navegação final.
+
+**E2E-BASELINE-REDESIGN-WAVE-01-02 fechado em 2026-09-15**: fundação nova das E2E (`pnpm e2e:run`, fixtures, runId
+em memória) e as 11 suítes simples verdes em clone novo e sujo. Próxima: **WAVE 3** — grupo C com massa própria e,
+depois, o fluxo do Orçamento (E2E-QUOTE-PAGE-FLOW-01).
 
 **Nenhum módulo é ocultado** — decisão da Veridi em 2026-09-10: Precificação,
 Orçamento e Faturamento continuam disponíveis. Nenhum item do backlog propunha

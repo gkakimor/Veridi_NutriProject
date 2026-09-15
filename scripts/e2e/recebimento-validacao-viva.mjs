@@ -1,5 +1,7 @@
+import { criarFornecedor, criarItem } from "./fixtures/cadastros.mjs";
+import { criarRun } from "./fixtures/run.mjs";
+import { escolherOpcao } from "./fixtures/ui.mjs";
 import { abrirNavegador, WEB } from "./lib/browser.mjs";
-import { obterRun } from "./lib/run-id.mjs";
 
 /**
  * O Recebimento avisa antes de enviar, e o aviso responde à correção.
@@ -12,11 +14,14 @@ import { obterRun } from "./lib/run-id.mjs";
  * alerta, que ficava na tela contando uma história que já não era verdade
  * (F-06-2).
  *
- * Massa: a suíte CRIA a própria ordem de compra, clicando, carimbada com o
- * `runId` nas observações. Fornecedor e item são catálogo real — a suíte não
- * depende da identidade deles, só precisa de algum fornecedor e alguma matéria
- * -prima que controle lote e validade, porque é o formulário completo de
- * recebimento que interessa.
+ * Massa: fornecedor e matéria-prima que controla lote e validade nascem por API
+ * nesta execução, carimbados com o `runId` (E2E-BASELINE-REDESIGN-WAVE-01-02).
+ * Antes a suíte digitava o código do primeiro fornecedor e da primeira
+ * matéria-prima da sequência como "algum fornecedor e alguma matéria-prima" —
+ * na base real os dois são da Veridi, e a suíte gravava recebimento e lote na
+ * matéria-prima de verdade. Cadastro não é o que se prova
+ * aqui: a ordem de compra e os recebimentos continuam nascendo pela interface,
+ * clicando, e a OC leva o `runId` nas observações.
  *
  * A quantidade tem casa decimal de propósito: 12,5 pedidos, 4,25 recebidos,
  * 8,25 de saldo. Recebimento parcial e saldo exato num número que não é
@@ -29,14 +34,12 @@ import { obterRun } from "./lib/run-id.mjs";
  *   node scripts/e2e/recebimento-validacao-viva.mjs
  */
 
-const FORNECEDOR = "FOR-000001";
-const ITEM = "MP-000001";
 const UNIDADE = "kg";
 const PEDIDO = "12,5";
 const PARCIAL = "4,25";
 const SALDO_DEPOIS = "8,25";
 
-const run = obterRun({ novo: true, dono: "fix-04" });
+const run = criarRun();
 
 const falhas = [];
 function afirmar(descricao, condicao, detalhe = "") {
@@ -47,17 +50,6 @@ function afirmar(descricao, condicao, detalhe = "") {
   falhas.push(`${descricao}${detalhe ? ` — ${detalhe}` : ""}`);
   console.log(`  FALHA ${descricao}${detalhe ? ` — ${detalhe}` : ""}`);
   return false;
-}
-
-/** Escolhe uma opção de um campo de busca de entidade, digitando. */
-async function escolher(pagina, campoId, termo) {
-  const campo = pagina.locator(`#${campoId}`);
-  await campo.click();
-  await campo.fill("");
-  await campo.type(termo, { delay: 20 });
-  const opcao = pagina.locator('[role="option"]', { hasText: termo }).first();
-  await opcao.waitFor({ state: "visible", timeout: 15000 });
-  await opcao.click();
 }
 
 const campoReceber = (pagina) => pagina.getByLabel(/Receber agora/).first();
@@ -96,7 +88,7 @@ async function cancelarOrdemSeAindaDer(pagina) {
 }
 
 async function main() {
-  const { pagina, erros, fechar } = await abrirNavegador();
+  const { pagina, api, erros, fechar } = await abrirNavegador();
 
   /*
    * A rede é a prova de que a recusa foi da TELA: a tentativa inválida não
@@ -113,15 +105,25 @@ async function main() {
   try {
     console.log(`\nFIX-04 — validação viva no Recebimento (run ${run.runId})\n`);
 
-    console.log("1. criar a OC desta execução, pela interface");
+    console.log("0. fornecedor e matéria-prima desta execução, por API");
+    const fornecedor = await criarFornecedor(api, run);
+    const item = await criarItem(api, run, {
+      tipo: "RAW_MATERIAL",
+      unidade: UNIDADE,
+      controlaLote: true,
+      controlaValidade: true,
+    });
+    afirmar(
+      `matéria-prima ${item.codigo} da execução controla lote e validade`,
+      item.controlaLote === true && item.controlaValidade === true,
+    );
+
+    console.log("\n1. criar a OC desta execução, pela interface");
     await pagina.goto(`${WEB}/compras/ordens/nova`, { waitUntil: "networkidle" });
-    await escolher(pagina, "po-supplier", FORNECEDOR);
+    await escolherOpcao(pagina, "#po-supplier", fornecedor.nome);
     await pagina.getByRole("button", { name: "+ Adicionar item" }).click();
-    const seletorDeItem = pagina.locator('[id^="po-line-item-"]').first();
-    await seletorDeItem.click();
-    await seletorDeItem.type(ITEM, { delay: 20 });
-    await pagina.locator('[role="option"]', { hasText: ITEM }).first().click();
-    await pagina.getByLabel(new RegExp(`Quantidade de ${ITEM}`)).fill(PEDIDO);
+    await escolherOpcao(pagina, pagina.locator('[id^="po-line-item-"]').first(), item.codigo);
+    await pagina.getByLabel(new RegExp(`Quantidade de ${item.codigo}`)).fill(PEDIDO);
     await pagina.locator("#po-notes").fill(`E2E ${run.runId} — FIX-04`);
     await pagina.getByRole("button", { name: "Salvar rascunho" }).click();
     await pagina.waitForURL(/\/compras\/ordens\/[0-9a-f-]{36}$/, { timeout: 20000 });
@@ -144,7 +146,7 @@ async function main() {
     await campoReceber(pagina).waitFor({ timeout: 20000 });
     afirmar(
       `a tela declara o saldo aberto: ${PEDIDO} ${UNIDADE}`,
-      (await pagina.getByText(new RegExp(`Aberto: ${PEDIDO.replace(",", ",")} ${UNIDADE}`)).count()) > 0,
+      (await pagina.getByText(new RegExp(`Aberto: ${PEDIDO} ${UNIDADE}`)).count()) > 0,
     );
 
     await campoReceber(pagina).fill("30");

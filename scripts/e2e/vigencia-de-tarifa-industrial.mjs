@@ -1,5 +1,5 @@
+import { criarRun } from "./fixtures/run.mjs";
 import { abrirNavegador, WEB } from "./lib/browser.mjs";
-import { obterRun } from "./lib/run-id.mjs";
 
 /**
  * A tarifa registrada hoje vale HOJE — INDUSTRIAL-RATE-VALIDITY-01.
@@ -34,8 +34,8 @@ import { obterRun } from "./lib/run-id.mjs";
  *   node scripts/e2e/vigencia-de-tarifa-industrial.mjs
  */
 
-const run = obterRun({ novo: true, dono: "custos" });
-const P = `E2E${run.runId}`;
+const run = criarRun();
+const P = run.carimbo;
 
 const TARIFA_INICIAL = "30";
 const TARIFA_REAJUSTADA = "42";

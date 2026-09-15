@@ -1,5 +1,6 @@
+import { criarRun } from "./fixtures/run.mjs";
+import { esperarRota } from "./fixtures/ui.mjs";
 import { abrirNavegador, WEB } from "./lib/browser.mjs";
-import { obterRun } from "./lib/run-id.mjs";
 
 /**
  * A tela diz para QUAL quantidade ela calculou — COST-BASIS-UX-01.
@@ -35,8 +36,8 @@ import { obterRun } from "./lib/run-id.mjs";
  *   node scripts/e2e/base-calculada-e-equivalente-por-mil.mjs
  */
 
-const run = obterRun({ novo: true, dono: "custos" });
-const P = `E2E${run.runId}`;
+const run = criarRun();
+const P = run.carimbo;
 
 /** Base de produção do walkthrough. */
 const BASE = "300";
@@ -126,7 +127,8 @@ async function main() {
     await pagina.goto(`${WEB}/cadastros/clientes/novo`);
     await preencher("customer-legal-name", `Cliente ${P}`);
     await clicar("Criar cliente");
-    await pagina.waitForURL(/\/cadastros\/clientes$/, { timeout: 25000 });
+    // O cadastro volta para `/cadastros/clientes?ids=<id>`: espera pelo caminho.
+    await esperarRota(pagina, "/cadastros/clientes");
 
     await pagina.goto(`${WEB}/cadastros/itens/novo`);
     await escolher("item-type", "RAW_MATERIAL");
@@ -135,7 +137,7 @@ async function main() {
     // Custo de referência declarado: o CMV existe antes da primeira compra.
     await preencher("item-initial-cost-reference", CUSTO_MATERIAL_KG);
     await clicar("Criar item");
-    await pagina.waitForURL(/\/cadastros\/itens$/, { timeout: 25000 });
+    await esperarRota(pagina, "/cadastros/itens");
     await buscar("items-search", `Insumo ${P}`);
     await esperarTexto(`Insumo ${P}`);
 
@@ -145,7 +147,7 @@ async function main() {
     await escolher("product-finished-unit", "un");
     await preencher("product-units-per-box", UNIDADES_POR_CAIXA);
     await clicar("Criar produto");
-    await pagina.waitForURL(/\/cadastros\/produtos$/, { timeout: 25000 });
+    await esperarRota(pagina, "/cadastros/produtos");
     await buscar("products-search", `Produto ${P}`);
     await esperarTexto(`Produto ${P}`);
     /*
