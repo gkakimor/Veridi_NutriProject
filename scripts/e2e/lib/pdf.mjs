@@ -3,29 +3,57 @@ import { inflateSync } from "node:zlib";
 /**
  * Texto do PDF gerado pela tela do documento — para as suítes E2E.
  *
- * O impresso deixou de ser página HTML: a rota `/…/imprimir` gera um PDF real
- * no navegador e o mostra num iframe. A suíte lê o PRÓPRIO arquivo — os mesmos
+ * O impresso é PDF real gerado no navegador: a rota `/…/imprimir` monta o
+ * arquivo, cria um `blob:` e o mostra no iframe `.pdf-screen__frame`
+ * (`apps/web/src/pdf/PdfScreen.tsx`). A suíte lê o PRÓPRIO arquivo — os mesmos
  * bytes que "Baixar PDF" salva — e procura o texto nele:
  *
  *   const texto = await textoDoPdfDaTela(pagina);
  *   afirmar("o impresso traz a validade nova", texto.includes("31/10/2099"));
  *
- * Gêmeo de `apps/web/src/pdf/testing/pdf-text.ts` (teste de unidade). Não é
- * leitor de PDF genérico: entende o que o renderer do sistema escreve —
- * objetos numerados, FlateDecode, posição por `cm`/`Tm` e texto WinAnsi em
- * `Tj`/`TJ`. Trechos na mesma linha de base viram uma linha.
+ * Contrato provado contra o documento real em E2E-BASELINE-REDESIGN-WAVE-01-02
+ * (`leitor-de-pdf-da-tela.mjs`): iframe `.pdf-screen__frame`, `src` em `blob:`
+ * (com `#toolbar=0…` depois), arquivo começando por `%PDF-`. A primeira carga
+ * do motor de PDF pode passar de um minuto — a espera padrão é 90 s. O texto
+ * sai com espaço comum no lugar de NBSP: valor formatado pelo sistema
+ * (`R$ 1.234,56`) traz U+00A0, e a suíte compara com espaço.
+ *
+ * `lerPdf` é gêmeo de `apps/web/src/pdf/testing/pdf-text.ts` (teste de
+ * unidade), com paridade conferida em `lib/pdf.test.ts`. Não é leitor de PDF
+ * genérico: entende o que o renderer do sistema escreve — objetos numerados,
+ * FlateDecode, posição por `cm`/`Tm` e texto WinAnsi em `Tj`/`TJ`. Trechos na
+ * mesma linha de base viram uma linha.
  */
 
+/** NBSP (U+00A0) e espaço fino (U+202F) viram espaço comum. */
+export function normalizarTexto(texto) {
+  return texto.replace(/[  ]/g, " ");
+}
+
 /** Espera a tela terminar de gerar e devolve o texto do PDF, página após página. */
-export async function textoDoPdfDaTela(pagina, { timeout = 30000 } = {}) {
-  await pagina.locator("iframe.pdf-screen__frame").waitFor({ timeout });
-  const bytes = await pagina.evaluate(async () => {
-    const origem = document.querySelector("iframe.pdf-screen__frame")?.getAttribute("src")?.split("#")[0];
-    if (!origem) return [];
-    const resposta = await fetch(origem);
-    return Array.from(new Uint8Array(await resposta.arrayBuffer()));
+export async function textoDoPdfDaTela(pagina, { timeout = 90000 } = {}) {
+  await pagina.locator("iframe.pdf-screen__frame").first().waitFor({ timeout });
+  const lido = await pagina.evaluate(async () => {
+    const src = document.querySelector("iframe.pdf-screen__frame")?.getAttribute("src") ?? "";
+    const origem = src.split("#")[0];
+    if (!origem.startsWith("blob:")) return { src, base64: null };
+    const bytes = new Uint8Array(await (await fetch(origem)).arrayBuffer());
+    let binario = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      binario += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    }
+    return { src, base64: btoa(binario) };
   });
-  return lerPdf(Uint8Array.from(bytes)).paginas.join("\n");
+  if (!lido.base64) {
+    throw new Error(`o documento não veio como blob gerado no navegador: src="${lido.src.slice(0, 80)}"`);
+  }
+  const bytes = Buffer.from(lido.base64, "base64");
+  if (bytes.subarray(0, 5).toString("latin1") !== "%PDF-") {
+    throw new Error(
+      `o blob do iframe não é PDF (${bytes.length} bytes, começa com "${bytes.subarray(0, 8).toString("latin1")}")`,
+    );
+  }
+  return normalizarTexto(lerPdf(bytes).paginas.join("\n"));
 }
 
 const IDENTIDADE = [1, 0, 0, 1, 0, 0];

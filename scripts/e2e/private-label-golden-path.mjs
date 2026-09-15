@@ -32,7 +32,12 @@ const argumento = (nome) => process.argv.find((a) => a.startsWith(`--${nome}=`))
 const DESDE = argumento("desde");
 const RUN = argumento("run");
 
-const run = RUN ? { runId: RUN } : DESDE ? obterRun() : obterRun({ novo: true, dono: "golden-path" });
+// Não existe mais "a última execução" em arquivo: retomar exige dizer QUAL.
+if (DESDE && !RUN) {
+  console.error("--desde retoma a massa de uma execução: informe também --run=<runId> (sai no fim da execução anterior).");
+  process.exit(2);
+}
+const run = RUN ? { runId: RUN } : obterRun({ dono: "golden-path" });
 const P = `GP${run.runId}`;
 const ARQUIVO_ESTADO = path.resolve(`handoff/golden-path-${run.runId}.json`);
 const estado =

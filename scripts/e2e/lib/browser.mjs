@@ -1,4 +1,6 @@
 import { chromium } from "@playwright/test";
+import { API, autenticar, clienteApi, exigirOrigemLocal } from "../fixtures/api.mjs";
+import { FUSO_OPERACIONAL } from "../fixtures/datas.mjs";
 
 /**
  * Navegador autenticado, sem digitar senha em formulário.
@@ -8,8 +10,21 @@ import { chromium } from "@playwright/test";
  * falha deve ser o da tela de login, não os vinte que só precisavam estar
  * autenticados para chegar ao que medem.
  *
- * `erros` acumula `console.error` e `pageerror`: console sujo é resultado, não
- * ruído, e uma suíte que não olha para ele aprova página quebrada.
+ * O navegador é o da operação: `timezoneId` America/Sao_Paulo (§72), `locale`
+ * pt-BR e o Chromium em `--lang=pt-BR` — a máquina do laboratório não está em
+ * São Paulo.
+ *
+ * `erros` acumula, de TODAS as abas do contexto:
+ * - `console.error` e `pageerror` — console sujo é resultado, não ruído;
+ * - resposta 4xx/5xx da API (reconhecida pela origem de `E2E_API`, não por uma
+ *   porta fixa) que a suíte não declarou. Recusa provocada pelo próprio teste
+ *   se declara antes de provocar:
+ *
+ *     const { esperarErroHttp } = await abrirNavegador();
+ *     esperarErroHttp({ status: 409, metodo: "POST", caminho: /\/from-template$/ });
+ *
+ *   A linha "Failed to load resource" que o Chromium escreve para a mesma
+ *   resposta não conta de novo: a resposta já foi julgada.
  *
  *   const { pagina, erros, fechar } = await abrirNavegador();
  *   await pagina.goto(`${WEB}/producao/formulacoes`);
@@ -17,72 +32,72 @@ import { chromium } from "@playwright/test";
  *   await fechar();
  */
 
-export const API = process.env.E2E_API ?? "http://127.0.0.1:3333";
+export { API, autenticar, clienteApi };
 export const WEB = process.env.E2E_WEB ?? "http://127.0.0.1:5173";
 
-const CREDENCIAL = {
-  email: process.env.E2E_EMAIL ?? "admin@veridi.local",
-  password: process.env.E2E_PASSWORD ?? "veridi-local-dev",
-};
+const FALHA_DE_RECURSO = /^Failed to load resource: the server responded with a status of (\d{3})/;
 
-/** Cookie de sessão a partir da API — serve para `fetch` e para o navegador. */
-export async function autenticar() {
-  const resposta = await fetch(`${API}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(CREDENCIAL),
-  });
-  if (!resposta.ok) throw new Error(`login → ${resposta.status}`);
-  const cookie = resposta.headers.get("set-cookie")?.split(";")[0];
-  if (!cookie) throw new Error("login não devolveu cookie de sessão");
-  return cookie;
-}
-
-/**
- * Cliente HTTP autenticado.
- *
- * Corpo vazio com `Content-Type: application/json` o Fastify recusa: rotas que
- * não recebem payload ainda precisam de um objeto.
- */
-export function clienteApi(cookie) {
-  return async (caminho, init = {}) => {
-    const resposta = await fetch(`${API}${caminho}`, {
-      ...init,
-      body: init.body ?? (init.method === "POST" ? "{}" : undefined),
-      headers: { cookie, "Content-Type": "application/json", ...(init.headers ?? {}) },
-    });
-    return { status: resposta.status, corpo: resposta.status < 400 ? await resposta.json() : null };
-  };
-}
-
-/**
- * `fuso` emula o fuso do navegador (`timezoneId` do Playwright). Sem ele vale
- * o da máquina — que não precisa ser o da operação: quem usa o sistema está
- * em `America/Sao_Paulo` (§72), a máquina do laboratório pode não estar.
- */
-export async function abrirNavegador({ largura = 1440, altura = 900, fuso } = {}) {
+export async function abrirNavegador({
+  largura = 1440,
+  altura = 900,
+  fuso = FUSO_OPERACIONAL,
+  idioma = "pt-BR",
+  errosHttpEsperados = [],
+} = {}) {
+  const origemApi = exigirOrigemLocal(API, "E2E_API");
+  const origemWeb = exigirOrigemLocal(WEB, "E2E_WEB");
   const cookie = await autenticar();
   const corte = cookie.indexOf("=");
-  const navegador = await chromium.launch();
+  const navegador = await chromium.launch({ args: [`--lang=${idioma}`] });
   const contexto = await navegador.newContext({
     viewport: { width: largura, height: altura },
-    ...(fuso ? { timezoneId: fuso } : {}),
+    timezoneId: fuso,
+    locale: idioma,
   });
   await contexto.addCookies([
     {
       name: cookie.slice(0, corte),
       value: cookie.slice(corte + 1),
-      domain: new URL(WEB).hostname,
+      domain: new URL(origemWeb).hostname,
       path: "/",
       httpOnly: true,
       sameSite: "Lax",
     },
   ]);
 
-  const pagina = await contexto.newPage();
   const erros = [];
-  pagina.on("pageerror", (e) => erros.push(`pageerror: ${String(e).slice(0, 200)}`));
-  pagina.on("console", (m) => m.type() === "error" && erros.push(`console.error: ${m.text().slice(0, 200)}`));
+  const esperados = [...errosHttpEsperados];
+  /** Toda resposta ≥ 400 da API, esperada ou não — para o relatório da suíte. */
+  const errosHttp = [];
+  const foiDeclarado = ({ status, metodo, caminho }) =>
+    esperados.some(
+      (esperado) =>
+        esperado.status === status &&
+        (!esperado.metodo || esperado.metodo === metodo) &&
+        (!esperado.caminho ||
+          (typeof esperado.caminho === "string" ? esperado.caminho === caminho : esperado.caminho.test(caminho))),
+    );
+
+  contexto.on("response", (resposta) => {
+    const url = new URL(resposta.url());
+    if (url.origin !== origemApi || resposta.status() < 400) return;
+    const registro = { status: resposta.status(), metodo: resposta.request().method(), caminho: url.pathname };
+    const esperado = foiDeclarado(registro);
+    errosHttp.push({ ...registro, esperado });
+    if (!esperado) {
+      erros.push(`http ${registro.status}${registro.status >= 500 ? " (5xx)" : ""} ${registro.metodo} ${registro.caminho}`);
+    }
+  });
+  contexto.on("weberror", (erro) => erros.push(`pageerror: ${String(erro.error()).slice(0, 200)}`));
+  contexto.on("console", (mensagem) => {
+    if (mensagem.type() !== "error") return;
+    const texto = mensagem.text();
+    const recurso = mensagem.location()?.url ?? "";
+    if (FALHA_DE_RECURSO.test(texto) && recurso.startsWith(`${origemApi}/`)) return;
+    erros.push(`console.error: ${texto.slice(0, 200)}`);
+  });
+
+  const pagina = await contexto.newPage();
 
   return {
     navegador,
@@ -91,6 +106,8 @@ export async function abrirNavegador({ largura = 1440, altura = 900, fuso } = {}
     cookie,
     api: clienteApi(cookie),
     erros,
+    errosHttp,
+    esperarErroHttp: (esperado) => esperados.push(esperado),
     fechar: () => navegador.close(),
   };
 }
