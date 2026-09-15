@@ -34,7 +34,8 @@
     "veridi:data:validate": "dotenv -e .env -- tsx scripts/veridi-data/validate.ts",
     "veridi:data:seed": "dotenv -e .env -- tsx scripts/veridi-data/seed.ts",
     "db:demo": "pnpm --filter @veridi/api db:demo",
-    "validate:migrations:fresh": "dotenv -e .env -- node scripts/validate-migrations-fresh.mjs"
+    "validate:migrations:fresh": "dotenv -e .env -- node scripts/validate-migrations-fresh.mjs",
+    "e2e:baseline:rebuild": "dotenv -e .env -- node scripts/e2e-baseline-rebuild.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
