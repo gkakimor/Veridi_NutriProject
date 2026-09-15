@@ -223,6 +223,17 @@ describe("opções, suítes e origens", () => {
     expect(suitesDaExecucao({ bateria: "provas-wave-01-02", suites: null })).toHaveLength(2);
   });
 
+  it("a WAVE 3 é o Hub e as sete do Orçamento na página da versão, com o envio fundido", () => {
+    const suites = suitesDaExecucao({ bateria: "wave-03", suites: null });
+    expect(suites).toHaveLength(8);
+    expect(suites).toContain("orcamentos-hub-e-pagina-da-versao");
+    expect(suites).toContain("envio-exige-condicoes-e-linhas-salvas");
+    // Fundidas na suíte do envio (decisão D do PO): não voltam como arquivo solto.
+    for (const antiga of ["envio-exige-condicoes-salvas", "envio-exige-linhas-salvas"]) {
+      expect(existsSync(path.join(PASTA_E2E, `${antiga}.mjs`)), antiga).toBe(false);
+    }
+  });
+
   it.each([
     [{ bateria: "wave-01-02", suites: ["troca-de-cep-do-cliente"] }, /OU/],
     [{ bateria: "nenhuma", suites: null }, /desconhecida/],
@@ -390,12 +401,28 @@ describe("runId em memória", () => {
     }
   });
 
-  it("as suítes da wave e as provas não citam código comercial fixo nem leem banco", () => {
-    const suites = [...BATERIAS["wave-01-02"], ...BATERIAS["provas-wave-01-02"]];
+  it("as suítes das waves e as provas não citam código comercial fixo nem leem banco", () => {
+    const suites = [...BATERIAS["wave-01-02"], ...BATERIAS["provas-wave-01-02"], ...BATERIAS["wave-03"]];
     for (const suite of suites) {
       const fonte = readFileSync(path.join(PASTA_E2E, `${suite}.mjs`), "utf8");
       expect(fonte.match(/\b(CLI|FOR|MP|EMB|PA|PROD|PED|ORC|OC|OP|REC|FAT|LOT|PROJ)-\d{4,}\b/g), suite).toBeNull();
       expect(fonte, suite).not.toMatch(/@prisma\/client|DATABASE_URL|\$queryRaw/);
+    }
+  });
+
+  it("as suítes da WAVE 3 não escolhem registro pela posição nem montam código de orçamento", () => {
+    const semComentario = (fonte: string) => fonte.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    for (const suite of BATERIAS["wave-03"]) {
+      const fonte = semComentario(readFileSync(path.join(PASTA_E2E, `${suite}.mjs`), "utf8"));
+      // "Primeira linha": opção por índice, linha de tabela ou opção de seletor pela posição, item [0] de lista da API.
+      expect(fonte, suite).not.toMatch(/selectOption\([^)]*\{\s*index\s*:/);
+      expect(fonte, suite).not.toMatch(/(tbody tr|\[role="option"\]|entity-select__option)["'`][^;]*\.(first|nth)\(/);
+      expect(fonte, suite).not.toMatch(/\.(quoteVersions|lines|products|customers|projects|customerOrders)\[0\]/);
+      // Rótulo e código de orçamento vêm do servidor, nunca de template.
+      expect(fonte, suite).not.toMatch(/`ORC-\$\{/);
+      // runId da fixture nova, em memória.
+      expect(fonte, suite).toMatch(/criarRun\(\)/);
+      expect(fonte, suite).not.toMatch(/obterRun|run-id\.mjs/);
     }
   });
 });

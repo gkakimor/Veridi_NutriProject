@@ -72,15 +72,15 @@ backfill) e o envio pede confirmação por `pricingCostQuality ?? costQuality`. 
 Orçamento fica cortada dentro da tabela rolável (já cortava o preço; a explicação de F-05-1 alonga a frase).
 Achados de QUOTE-WORKSPACE-NAVIGATION-01 (2026-09-14, §92): ~~QUOTES-HUB-01~~ **fechado em 2026-09-14** (§93) —
 Comercial → Orçamentos, a lista geral das versões (`GET /quote-versions`), que só NAVEGA para
-`/comercial/orcamentos/:id` (`rotaDoOrcamento`) e tem item de menu próprio. **E2E-QUOTE-PAGE-FLOW-01 (P2, continua
-aberto)** — as E2E que operavam o Orçamento embutido no Projeto não
-rodaram nesta rodada (FAST) e usam o caminho antigo: depois de enviar ou aceitar na página da versão elas clicam em
-botão da ficha como se estivessem nela — "Aprovar projeto" (`projeto-aprovado-vende-de-novo`, e o golden path
-`private-label-golden-path`), "Criar nova versão"/"Novo orçamento" (`preco-herdado-sobrevive-ao-tab`,
-`formacao-de-preco-do-novo-orcamento`, `resumo-comercial-do-projeto`) —, ou procuram o rótulo da versão em
-`.quote-workspace__head` e a validade da enviada em campo desabilitado (`condicoes-do-orcamento-sobrevivem-a-linha`,
-`envio-exige-condicoes-salvas`); `guia-capturas.mjs` recorta a seção antiga. Ajustar para navegar pela lista e pelo
-"← Voltar ao Projeto" e ler a versão enviada como texto — agora também pela lista geral (Comercial → Orçamentos).
+`/comercial/orcamentos/:id` (`rotaDoOrcamento`) e tem item de menu próprio. ~~E2E-QUOTE-PAGE-FLOW-01~~ **fechado em
+2026-09-15** por E2E-BASELINE-REDESIGN-WAVE-03 — as suítes do Orçamento andam pelo fluxo atual (ficha → versão em
+`/comercial/orcamentos/:id` → aprovação na ficha → Pedido no Fechamento da versão aceita):
+`condicoes-do-orcamento-sobrevivem-a-linha`, `prazo-invalido-nao-apaga`, `preco-herdado-sobrevive-ao-tab`,
+`resumo-comercial-do-projeto`, `projeto-aprovado-vende-de-novo` e `formacao-de-preco-do-novo-orcamento`, mais
+`envio-exige-condicoes-e-linhas-salvas` (as duas do envio fundidas) e `orcamentos-hub-e-pagina-da-versao` (a lista
+geral) — bateria `wave-03` verde em clone novo e sujo. Sobram no caminho antigo, fora do escopo da WAVE 3:
+`desconto-do-pedido-chega-ao-faturamento` (grupo C) e o golden path (`private-label-golden-path`, que para em
+`pedido`); `guia-capturas.mjs` segue fora do gate (decisão H).
 ~~QUOTE-PAGE-NAV-ACTIVE-01~~ **fechado em 2026-09-14** com QUOTES-HUB-01 — Orçamentos fica ativo na lista e na página
 de cada versão, e a aba diz qual versão está aberta ("ORC-000444 · V1 · Veridi Nutrition").
 Achado de QUOTES-HUB-01, sem posição na fila: ~~LISTS-LOADING-DATES-GESTURE-01~~ **fechado em 2026-09-14** — teste
@@ -1043,7 +1043,7 @@ ficou congelada durante a rodada: posição destes itens é decisão do PO.
 | ~~CUSTOMER-MATERIALS-ONLY-WITH-BALANCE-PERMISSIVE-01~~ | **Fechado em 2026-09-14** por QUERY-BOOLEAN-STRICTNESS-WAVE-02 ([`PROJECT_STATE.md`](PROJECT_STATE.md), seção própria): reproduzido pela rota (`onlyWithBalance=1` listava o lote zerado, na lista e no CSV); `booleanoDeConsultaSchema().default(false)` — ausente segue sem filtro, o resto é 400 | — | — |
 | ~~QUERY-BOOLEAN-PERMISSIVE-REMAINING-01~~ | **Fechado em 2026-09-14** ([`PROJECT_STATE.md`](PROJECT_STATE.md), seção própria): reproduzido pela rota (`onlyPending=1` mostrava a fila inteira; `onlyWithBalance=1` trazia o lote zerado; `active=1` listava só os inativos; `archived=1` listava os não arquivados nas três bibliotecas; `includeArchived=1` escondia o anexo arquivado); os sete leem `booleanoDeConsultaSchema` com o padrão de antes, o resto é 400; anexos ganham `listAttachmentsQuerySchema`, sem leitura crua de `request.query`; a guarda não tem mais lista de dívida, só `LEGADO_EXPLICITO` (`semRoteiro`, `activeOnly`); web intocada | — | — |
 | **TEMPLATE-PURITY-LEGACY-DATA-01** | Desde INPUT-DATE-CONTRACT-WAVE-01 o Modelo recusa pureza 0 ou acima de 100. Modelo gravado antes com esses valores continua lido, mas salvar a versão em rascunho sem corrigir a linha passa a dar 400 com a mensagem da pureza. Não conferido em PROD (sem leitura de produção nesta rodada): contar `formulation_template_components` com pureza `<= 0` ou `> 100` | LOW | XS |
-| **E2E-CORPUS-MASS-01** | Sete suítes E2E procuram código fixo do corpus (`CLI-000013`, `PROD-000031`, `MP-000365`…) e três saem sem avaliar quando não há PA disponível: numa base recriada do zero não avaliam nada. Fere a regra 1 do README das suítes, onde está a lista. Desde DEV-REALDATA-BASELINE-RESET-01 (2026-09-14) há base real reproduzível (`pnpm e2e:baseline:rebuild`) e mapa por suíte em `E2E_STRATEGY.md`: das sete, quatro seguem sem a massa que leem (C), `formacao-de-preco…` e a de `PROD-000214` vão para reescrita (D) e `recebimento-validacao-viva` passava a achar a sua (B). **Em 2026-09-15 (E2E-BASELINE-REDESIGN-WAVE-01-02)** o recebimento ganhou massa própria por API — fornecedor e matéria-prima com lote e validade da execução — e saiu da lista; as três de PA sairiam "SEM MASSA", que o runner (`pnpm e2e:run`) agora reprova. Absorvido por E2E-BASELINE-REDESIGN-01; o resto do grupo C é da WAVE 3 em diante | LOW | M |
+| **E2E-CORPUS-MASS-01** | Sete suítes E2E procuram código fixo do corpus (`CLI-000013`, `PROD-000031`, `MP-000365`…) e três saem sem avaliar quando não há PA disponível: numa base recriada do zero não avaliam nada. Fere a regra 1 do README das suítes, onde está a lista. Desde DEV-REALDATA-BASELINE-RESET-01 (2026-09-14) há base real reproduzível (`pnpm e2e:baseline:rebuild`) e mapa por suíte em `E2E_STRATEGY.md`: das sete, quatro seguem sem a massa que leem (C), `formacao-de-preco…` e a de `PROD-000214` vão para reescrita (D) e `recebimento-validacao-viva` passava a achar a sua (B). **Em 2026-09-15 (E2E-BASELINE-REDESIGN-WAVE-01-02)** o recebimento ganhou massa própria por API — fornecedor e matéria-prima com lote e validade da execução — e saiu da lista; as três de PA sairiam "SEM MASSA", que o runner (`pnpm e2e:run`) agora reprova. Absorvido por E2E-BASELINE-REDESIGN-01. **Em 2026-09-15 (E2E-BASELINE-REDESIGN-WAVE-03)** `formacao-de-preco-do-novo-orcamento` passou a criar o próprio cliente; restam as do grupo C e a de `PROD-000214`, da WAVE 4 em diante | LOW | M |
 | **COST-MP-EMB-SPLIT-01** | Nem a estimativa da Formulação nem o CMV mostram matéria-prima e embalagem em subtotais separados — o cálculo soma "Materiais e embalagens Veridi" numa linha (`CostBreakdown.tsx`). O total está certo; a separação sai somando pelo código MP-/ME- | UX | S |
 
 ### Encerrados na triagem, sem trabalho

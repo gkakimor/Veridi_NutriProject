@@ -4557,6 +4557,55 @@ entrar. As duas seguem o contrato de `projeto-inteiros.test.tsx` (letra não ent
 `fixtures.test.ts`, `pdf.test.ts` e `e2e-baseline-rebuild.test.ts` (77); `pnpm typecheck`. Sem `pnpm test` global,
 full web/API, fresh nem golden path (FAST).
 
+## Orçamento nas E2E: Hub e página própria da versão (E2E-BASELINE-REDESIGN-WAVE-03, 2026-09-15)
+
+Só E2E: sem API, tela, shared, schema, migration ou regra. Fecha E2E-QUOTE-PAGE-FLOW-01. PROD, Railway PROD e
+`release/prod` intocados.
+
+**Fluxo nas suítes.** Ficha do Projeto → criar ou abrir a versão → `/comercial/orcamentos/:id` (linhas, condições, PDF,
+envio, aceite ou recusa, Fechamento); aprovação na ficha; Pedido no Fechamento da versão aceita, com o Projeto
+aprovado. Nenhum comportamento antigo restaurado para caber no teste.
+
+**Helpers.** `fixtures/comercial.mjs`: Projeto, produto do Projeto, versão, linha achada pelo produto, condições, envio,
+recusa e GET de conferência — por API, carimbados, código e rótulo lidos da resposta. `fixtures/comercial-ui.mjs`:
+`abrirVersao` e `esperarVersaoNaTela` (o título do documento precisa mudar, não só a URL), `voltarAoProjeto`,
+`criarNovaVersao` (o botão da ficha dito pela suíte), `aprovarProjeto`, `enviarAoCliente`, `registrarAceite`,
+`gerarPedido` e `aguardarReleitura` (a versão e depois o Projeto) — esperam a tela e devolvem id, URL e rótulo, sem
+afirmar regra. `ui.mjs` ganha `abrirPeloMenu`.
+
+**Suítes (bateria `wave-03`).** `orcamentos-hub-e-pagina-da-versao`, nova, sobre 24 versões carimbadas por API: menu,
+Em aberto (consulta `DRAFT,SENT`, fora da URL), Todos, busca numa consulta, cliente e projeto pelo id, período
+personalizado e paginação; linha, Enter e "Abrir" com `?voltar=`, e a volta restaura os seis — busca, status,
+cliente, projeto, período e página — na URL e na tela; menu ativo e aba na lista e na versão; vazio; 500 simulado com
+Tentar novamente; 404; 390px. `envio-exige-condicoes-e-linhas-salvas` funde as duas do envio (decisão D; as antigas
+saíram depois de cada verificação delas ter par na nova): condição suja, linha suja com 503 provocado e o servidor
+ainda com o preço antigo, envio uma vez, enviada em leitura e o PDF de cada versão com a V2 existindo. Migradas para a
+página da versão: `condicoes-do-orcamento-sobrevivem-a-linha` (V2 pela ficha; trocar de versão com condição suja passa
+pela guarda — "Continuar editando" fica sem gravar, "Sair sem salvar" descarta —, decisão E),
+`prazo-invalido-nao-apaga` (letra não entra; 0 e 121 recusados no campo; o 30 intacto na segunda aba),
+`preco-herdado-sobrevive-ao-tab` (V1 aceita → ficha → "Criar nova versão"; Tab sem PATCH),
+`resumo-comercial-do-projeto` (edita e envia na versão, lê na ficha), `projeto-aprovado-vende-de-novo` (aceite na
+versão, aprovação na ficha, Pedido no Fechamento, vencida não aceita) e `formacao-de-preco-do-novo-orcamento` (cliente
+da execução no lugar do código fixo; condição mantida até o Pedido, exceção com motivo e 409 declarado, reajuste de 8%).
+
+**Guardas.** `scripts/e2e-run.test.ts`: bateria `wave-03` (8), as duas do envio não voltam como arquivo, e as suítes da
+WAVE 3 sem código comercial fixo, sem escolha por posição (índice, primeira linha, `[0]` de lista da API), sem rótulo
+de orçamento montado e com `criarRun()`. `fixtures.test.ts`: contrato das fixtures comerciais. Mutações: 9 de 9
+derrubadas.
+
+**Validação.** Clone novo: 8/8 em 1m27s (suítes 1m19s), SEM MASSA 0, console limpo, 5xx 0 (API: 745 × 200, 86 × 201,
+47 × 204, os dois 404 e o 409 declarados; o 500 e o 503 são simulados na rede do navegador). Clone sujo — o mesmo, sem
+recriar, runIds novos: 8/8 em 1m25s, as mesmas verificações por suíte (Hub 68, envio 65, condições 87, prazo 29, preço
+herdado 21, resumo 37, recompra 36, formação 28), SEM MASSA 0, 5xx 0; clone removido. Regressão Wave 1–2 pelo runner,
+uma vez, em clone novo depois do rebase: 11/11 em 3m05s, SEM MASSA 0, 5xx 0. Focados: `e2e-run.test.ts`,
+`fixtures.test.ts`, `pdf.test.ts` e `e2e-baseline-rebuild.test.ts` (83); `pnpm typecheck`. A `main` andou no meio
+(ERP-REVIEWER-SKILLS-01 e INVENTORY-PHYSICAL-COUNT-PO-BASELINE-01, só docs e skills): rebase limpo, nenhum gate de
+código afetado. Sem `pnpm test` global, fresh nem golden path (FAST).
+
+**Achados.** Nenhum bug de aplicação. Só rodando apareceu contrato velho nas suítes: o `IntegerField` não deixa letra
+nem vírgula entrar (o prazo passou a testar `0` e `121`), `1,2,3` também não entra na quantidade (a linha recusada é
+`1.234`), e preço e desconto aparecem em pt-BR (`12,50`, `7,5`).
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
@@ -4570,12 +4619,14 @@ pede decisão de schema, sem posição na fila.
 
 **QUOTE-WORKSPACE-NAVIGATION-01 fechado em 2026-09-14** (§92): cada versão de orçamento tem página própria.
 **QUOTES-HUB-01 fechado em 2026-09-14** (§93), com QUOTE-PAGE-NAV-ACTIVE-01: Comercial → Orçamentos, a lista geral
-que só navega para a mesma rota. Do assunto sobra **E2E-QUOTE-PAGE-FLOW-01 (P2)**, a próxima onda, já contra a
-navegação final.
+que só navega para a mesma rota. **E2E-QUOTE-PAGE-FLOW-01 fechado em 2026-09-15** pela WAVE 3 das E2E (seção própria
+acima).
 
 **E2E-BASELINE-REDESIGN-WAVE-01-02 fechado em 2026-09-15**: fundação nova das E2E (`pnpm e2e:run`, fixtures, runId
-em memória) e as 11 suítes simples verdes em clone novo e sujo. Próxima: **WAVE 3** — grupo C com massa própria e,
-depois, o fluxo do Orçamento (E2E-QUOTE-PAGE-FLOW-01).
+em memória) e as 11 suítes simples verdes em clone novo e sujo. **E2E-BASELINE-REDESIGN-WAVE-03 fechado em
+2026-09-15**: o Orçamento nas E2E pelo fluxo da página própria da versão e o Hub de Orçamentos — o PO rodou a WAVE 3
+como o fluxo do Orçamento, e o grupo C passou para a seguinte. Próxima: **WAVE 4** — grupo C com massa própria
+(desconto → faturamento, entregas e expedição, produção, ajuda contextual); o golden path segue na reescrita D.
 
 **Nenhum módulo é ocultado** — decisão da Veridi em 2026-09-10: Precificação,
 Orçamento e Faturamento continuam disponíveis. Nenhum item do backlog propunha

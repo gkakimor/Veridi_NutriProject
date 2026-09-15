@@ -11,7 +11,7 @@ import { carimbar } from "./run.mjs";
  * suíte, ele nasce pela tela — não por aqui.
  */
 
-function nomeCarimbado(run, nome, rotulo) {
+export function nomeCarimbado(run, nome, rotulo) {
   if (!run?.carimbo) throw new Error("fixture sem execução: passe o run de criarRun()");
   const final = nome ?? carimbar(run, rotulo);
   if (!final.includes(run.carimbo)) {
