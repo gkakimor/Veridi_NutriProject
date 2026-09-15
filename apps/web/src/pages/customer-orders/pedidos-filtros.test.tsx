@@ -98,12 +98,13 @@ describe("fila padrão: EM ABERTO", () => {
     expect(screen.queryByText(/^Filtros \(/)).toBeNull();
   });
 
-  it("nenhum status inventado: Em aberto, Todos e os seis do domínio", async () => {
+  it("nenhum status inventado: Em aberto, Todos, Carteira e os seis do domínio", async () => {
     await abrir();
     const opcoes = [...screen.getByLabelText("Filtrar por status").querySelectorAll("option")];
     expect(opcoes.map((opcao) => opcao.textContent)).toEqual([
       "Em aberto",
       "Todos os status",
+      "Carteira (a expedir)",
       "Rascunho",
       "Confirmado",
       "Em atendimento",
@@ -128,6 +129,15 @@ describe("Todos e status específico", () => {
 
     const chips = container.querySelector(".filter-chips") as HTMLElement;
     expect(within(chips).getByText("Todos os status")).toBeInTheDocument();
+  });
+
+  it("Carteira pela URL — o destino do A expedir: confirmados com saldo, numa consulta, e vira chip", async () => {
+    const { container } = await abrir("/comercial/pedidos?status=carteira");
+    expect(chamadas()).toHaveLength(1);
+    expect(ultimaConsulta().status).toEqual(["CONFIRMED", "IN_FULFILLMENT", "PARTIALLY_SHIPPED"]);
+    expect(screen.getByLabelText("Filtrar por status")).toHaveValue("carteira");
+    const chips = container.querySelector(".filter-chips") as HTMLElement;
+    expect(within(chips).getByText("Carteira (a expedir)")).toBeInTheDocument();
   });
 
   it("um status específico consulta só ele", async () => {

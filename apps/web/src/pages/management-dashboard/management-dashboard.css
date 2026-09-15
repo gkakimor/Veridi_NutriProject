@@ -1,0 +1,382 @@
+/*
+ * Painel Gerencial. Sem biblioteca de gráfico: cartões em grade, barras de
+ * CSS e listas. Só tokens — nada de hex cru. Em tela estreita tudo empilha:
+ * a grade usa `min(100%, …)` para nenhuma coluna exigir mais largura do que a
+ * tela tem, e a única rolagem horizontal é a das barras da tendência, dentro
+ * do próprio quadro.
+ */
+
+.mgmt-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.mgmt-filter__label {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.mgmt-filter__custom {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  max-width: 100%;
+}
+
+.mgmt-filter__custom input {
+  max-width: 100%;
+}
+
+/* Período recusado: a frase numa linha só dela, logo abaixo dos campos. */
+.mgmt-filter__error {
+  flex-basis: 100%;
+}
+
+.mgmt-compare {
+  margin-bottom: var(--sp-5);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.mgmt-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.mgmt-section {
+  margin-bottom: var(--sp-6);
+}
+
+.mgmt-section__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-1) var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+
+.mgmt-section__head h2,
+.mgmt-ranking h2 {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.mgmt-section__hint {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.mgmt-cards,
+.mgmt-position,
+.mgmt-commitments {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--sp-3);
+}
+
+.mgmt-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.mgmt-card__label {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-2);
+}
+
+.mgmt-card__value {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-tight);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* Valor incompleto nunca é número — é um aviso. */
+.mgmt-card__value--incomplete {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+  color: var(--warn-fg);
+}
+
+.mgmt-card__note,
+.mgmt-card__compare {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.mgmt-card__note--incomplete {
+  color: var(--warn-fg);
+}
+
+.mgmt-card__link {
+  margin-top: auto;
+  padding-top: var(--sp-1);
+  font-size: var(--fs-sm);
+}
+
+.mgmt-missing {
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+.mgmt-missing summary {
+  cursor: pointer;
+  color: var(--warn-fg);
+}
+
+.mgmt-missing ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-2);
+  margin: var(--sp-1) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mgmt-missing__more,
+.mgmt-list__more {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.mgmt-note {
+  margin-top: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.mgmt-empty {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+/* Composição da carteira — só com os dois valores completos. */
+.mgmt-composition {
+  margin: var(--sp-3) 0 0;
+}
+
+.mgmt-composition__bar {
+  display: flex;
+  height: 12px;
+  margin-top: var(--sp-1);
+  overflow: hidden;
+  background: var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.mgmt-composition__segment {
+  flex-basis: 0;
+  min-width: 0;
+}
+
+.mgmt-composition__segment--ship,
+.mgmt-composition__swatch--ship {
+  background: var(--v-green-700);
+}
+
+.mgmt-composition__segment--bill,
+.mgmt-composition__swatch--bill {
+  background: var(--v-lime);
+}
+
+.mgmt-composition__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-top: var(--sp-1);
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+.mgmt-composition__swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: var(--sp-1);
+  border-radius: 2px;
+}
+
+/*
+ * Tendência: barras de CSS; a altura vem de `--altura` (0 a 100). `position:
+ * relative` faz do quadro o contêiner do texto oculto (`.sr-only`, absoluto) de
+ * cada barra: sem isso, o texto das barras além da tela escapava da rolagem do
+ * quadro e a área de trabalho inteira rolava de lado em 390px.
+ */
+.mgmt-trend {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  overflow-x: auto;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.mgmt-trend__item {
+  display: flex;
+  flex: 1 0 24px;
+  min-width: 24px;
+}
+
+.mgmt-trend__target {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+}
+
+.mgmt-trend__target:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.mgmt-trend__track {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 120px;
+}
+
+.mgmt-trend__bar {
+  display: block;
+  height: calc(var(--altura, 0) * 1%);
+  background: var(--v-green-600);
+  border-radius: 3px 3px 0 0;
+}
+
+a.mgmt-trend__target:hover .mgmt-trend__bar {
+  background: var(--v-green-800);
+}
+
+.mgmt-trend__incomplete {
+  align-self: center;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: var(--fs-xs);
+  color: var(--warn-fg);
+}
+
+.mgmt-trend__label {
+  min-height: 1.2em;
+  margin-top: var(--sp-1);
+  font-size: var(--fs-xs);
+  line-height: 1.2;
+  white-space: nowrap;
+  text-align: center;
+  color: var(--ink-3);
+}
+
+/* Rankings: lista legível, que empilha em tela estreita — nunca tabela minúscula. */
+.mgmt-rankings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-6);
+}
+
+.mgmt-ranking {
+  min-width: 0;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.mgmt-ranking__list {
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mgmt-ranking__row {
+  display: grid;
+  grid-template-columns: 1.75em minmax(0, 1fr) auto;
+  grid-template-areas:
+    "pos name value"
+    ". detail detail";
+  gap: 0 var(--sp-2);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.mgmt-ranking__row:last-child {
+  border-bottom: 0;
+}
+
+.mgmt-ranking__pos {
+  grid-area: pos;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+
+.mgmt-ranking__name {
+  grid-area: name;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mgmt-ranking__value {
+  grid-area: value;
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mgmt-ranking__detail {
+  grid-area: detail;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.mgmt-ranking__excluded {
+  margin-top: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--warn-fg);
+}
+
+.mgmt-ranking__excluded ul {
+  margin: var(--sp-1) 0 0;
+  padding-left: var(--sp-4);
+}
+
+.mgmt-list {
+  display: grid;
+  gap: var(--sp-1);
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.mgmt-footer {
+  padding-top: var(--sp-3);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  border-top: 1px solid var(--line);
+}

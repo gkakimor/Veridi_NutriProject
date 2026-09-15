@@ -123,6 +123,7 @@ describe("Arquitetura do menu — rotas e ids de sempre", () => {
       "industrial-resources": "/gestao/recursos-industriais",
       "cost-templates": "/gestao/templates-estrutura",
       "pricing-policies": "/gestao/politicas-precificacao",
+      "management-dashboard": "/gestao/painel-gerencial",
       reports: "/relatorios",
       pricing: "/gestao/precificacao",
       users: "/administracao/usuarios",

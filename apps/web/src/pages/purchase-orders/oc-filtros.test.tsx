@@ -97,6 +97,7 @@ describe("Em aberto, Todos e status", () => {
     expect(opcoes.map((opcao) => opcao.textContent)).toEqual([
       "Em aberto",
       "Todos os status",
+      "Contratadas",
       "Rascunho",
       "Confirmado",
       "Recebido parcialmente",
@@ -111,6 +112,17 @@ describe("Em aberto, Todos e status", () => {
     await waitFor(() => expect(ultimaConsulta().status).toBeUndefined());
     const chips = container.querySelector(".filter-chips") as HTMLElement;
     expect(within(chips).getByText("Todos os status")).toBeInTheDocument();
+  });
+
+  it("Contratadas no período pela URL — o destino de Compras contratadas: três status e as datas do pedido", async () => {
+    await abrir("/compras/ordens?status=contratadas&period=custom&dateFrom=2026-09-01&dateTo=2026-09-15");
+    expect(chamadas()).toHaveLength(1);
+    expect(ultimaConsulta()).toMatchObject({
+      status: ["ORDERED", "PARTIALLY_RECEIVED", "RECEIVED"],
+      dateFrom: "2026-09-01",
+      dateTo: "2026-09-15",
+    });
+    expect(screen.getByLabelText("Filtrar por status")).toHaveValue("contratadas");
   });
 
   it("status específico, e remover o chip volta para Em aberto", async () => {

@@ -61,6 +61,12 @@ import { ambienteComBancoDeTeste } from "./src/test-support/banco-de-teste.js";
  * mesmo critério: compara o Painel com cada conjunto do banco inteiro calculado
  * à parte logo depois.
  *
+ * `management-dashboard.test.ts` (MANAGEMENT-DASHBOARD-V1-01), pelo critério
+ * do painel: a carteira (A expedir, A faturar) e os próximos compromissos são
+ * do banco inteiro. O teste mede o Painel Gerencial dentro de uma transação
+ * desfeita que tira do retrato os Pedidos, Expedições e OCs abertos que não são
+ * dele — com vizinho escrevendo ao lado, essa escrita esperaria a trava dele.
+ *
  * Só entra aqui arquivo que dependa de estado global de forma inevitável.
  * Todo o resto continua em paralelo, no `vitest.config.ts`.
  */
@@ -74,6 +80,7 @@ export default defineConfig(({ mode }) => ({
       "src/modules/dashboard/dashboard.test.ts",
       "src/modules/dashboard/dashboard-retrato-unico.test.ts",
       "src/modules/dashboard/dashboard-conjuntos-uma-vez.test.ts",
+      "src/modules/management-dashboard/management-dashboard.test.ts",
       "src/modules/production-orders/gmp-execution.test.ts",
       "src/modules/controlled-documents/controlled-documents.test.ts",
       "src/modules/production-calendar/production-calendar.test.ts",

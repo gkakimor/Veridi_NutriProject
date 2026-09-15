@@ -59,6 +59,7 @@ export * from "./shipments.js";
 export * from "./billings.js";
 export * from "./costs.js";
 export * from "./dashboard.js";
+export * from "./management-dashboard.js";
 export * from "./finished-goods.js";
 export * from "./reports.js";
 export * from "./report-filter-contracts.js";

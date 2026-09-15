@@ -4,7 +4,12 @@ import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { Link, useNavigate } from "react-router-dom";
 import type { PurchaseOrderDTO, PurchaseOrderStatus } from "@veridi/shared";
-import { PURCHASE_ORDER_STATUSES, PURCHASE_ORDER_STATUS_LABELS, recusaDoPeriodo } from "@veridi/shared";
+import {
+  CONTRACTED_PURCHASE_ORDER_STATUSES,
+  PURCHASE_ORDER_STATUSES,
+  PURCHASE_ORDER_STATUS_LABELS,
+  recusaDoPeriodo,
+} from "@veridi/shared";
 import type { ListPurchaseOrdersParams } from "../../lib/purchase-orders-api";
 import { listPurchaseOrders } from "../../lib/purchase-orders-api";
 import { formatBRL } from "../../lib/currency";
@@ -73,6 +78,12 @@ const EM_ABERTO: PurchaseOrderStatus[] = ["DRAFT", "ORDERED", "PARTIALLY_RECEIVE
 const GRUPOS: StatusGroup<PurchaseOrderStatus>[] = [
   { key: "em-aberto", label: "Em aberto", statuses: EM_ABERTO },
   { key: "todos", label: "Todos os status", statuses: [] },
+  /*
+   * Contratadas: confirmadas ao fornecedor, recebidas em parte ou inteiras. É
+   * o destino de "Compras contratadas" do Painel Gerencial, com a MESMA lista
+   * de status que o painel soma (`CONTRACTED_PURCHASE_ORDER_STATUSES`).
+   */
+  { key: "contratadas", label: "Contratadas", statuses: [...CONTRACTED_PURCHASE_ORDER_STATUSES] },
   ...PURCHASE_ORDER_STATUSES.map((status) => ({
     key: status,
     label: PURCHASE_ORDER_STATUS_LABELS[status],

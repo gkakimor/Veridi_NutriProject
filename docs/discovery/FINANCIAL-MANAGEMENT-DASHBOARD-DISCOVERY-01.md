@@ -5,6 +5,10 @@ Rodada conjunta com DISCOVERY-FOUNDATION-01, que criou esta pasta e o
 
 ## 1. Status
 
+**`IMPLEMENTADO`** — 2026-09-15 (addendum). O PO fechou D1–D5 com as recomendações da seção 11:
+BILLED-VALUE-CANONICAL-01 corrigiu G1, e MANAGEMENT-DASHBOARD-V1-01 entregou a versão 1 da seção 10.3 (seções 16 e
+17). O registro da rodada de discovery segue abaixo como foi escrito.
+
 **`EM_ANALISE`** — 2026-09-15.
 
 Cinco decisões de PO continuam abertas (seção 11): duas sobre dinheiro, uma
@@ -928,6 +932,29 @@ Duas capabilities, nesta ordem:
 
 ## 16. Implementação
 
+**IMPLEMENTADO** (addendum de 2026-09-15).
+
+- **BILLED-VALUE-CANONICAL-01** — G1 corrigido: `billings/billed-value.ts` (`valorDoFaturamento`,
+  `resumirValorFaturado`) é a única conta do valor faturado.
+- **MANAGEMENT-DASHBOARD-V1-01** — Gestão → Painel Gerencial (`/gestao/painel-gerencial`) sobre
+  `GET /management-dashboard`, com ADMIN e COMMERCIAL e a recusa (403) no servidor: resultado do período com a
+  comparação equivalente, posição atual com a composição, tendência, rankings, próximos compromissos, "Valores
+  incompletos" e "Como funciona" — a versão 1 da seção 10.3. Regras duráveis em `PRODUCT_RULES.md` §94; proteção em
+  `TEST_COVERAGE_MAP.md`.
+
+Diferenças deliberadas em relação ao desenho da seção 10, decididas na implementação:
+
+- "Pedidos confirmados" não tem link: a lista de Pedidos não filtra por `confirmedAt` (G4 residual), e link para lista
+  que não filtra fica fora (§6.15);
+- "Compras esperadas" mostra contagem e lista, sem R$ previsto — seria o saldo de OC que não se encerra (G5);
+- cliente com qualquer faturamento sem valor sai do ranking inteiro e é nomeado; produto com linha sem preço, idem;
+- o Personalizado exige as duas datas: a ponta vazia não vira hoje, porque a comparação precisa de intervalo concreto;
+- barras por dia até 31 dias, por semana até 62 e por mês acima disso;
+- os drill-downs que faltavam (G4) entraram como grupos de status das listas — "Carteira (a expedir)" em Pedidos e
+  "Contratadas" em Ordens de Compra —, sem API nova.
+
+Registro da rodada de discovery, preservado:
+
 **NÃO IMPLEMENTADO.**
 
 `READY_TO_IMPLEMENT: NO` — há gap HIGH (G1) com decisão pendente (D1) e
@@ -942,3 +969,4 @@ respondida.
 |---|---|---|
 | 2026-09-15 | Discovery aberto em `EM_ANALISE`, com recomendações e cinco decisões de PO pendentes | rodada inicial |
 | 2026-09-15 | **Addendum.** D1 decidida pelo PO: "Faturado" é `Billing.totalAmount` (a recomendação da seção 11). BILLED-VALUE-CANONICAL-01 implementada no mesmo dia: Painel, R-14 e R-15 (tela, CSV e PDF) leem `billings/billed-value.ts`; emitido legado sem total congelado vale a soma das linhas arredondadas; sem preço completo não há valor nem total. O resto do documento fica como foi escrito, e o discovery segue `EM_ANALISE` com D2–D5 abertas | handoff BILLED-VALUE-CANONICAL-01 |
+| 2026-09-15 | **Addendum.** D2–D5 decididas pelo PO, todas com a recomendação da seção 11: D2 — "Valores incompletos" e "N de M com valor", sem subtotal que pareça total; D3 — "Painel Gerencial", tela própria em Gestão, Painel Operacional intacto; D4 — ADMIN e COMMERCIAL, com a recusa no servidor; D5 — A expedir e A faturar pelo preço acordado, antes do desconto, sem antecipar a apropriação. MANAGEMENT-DASHBOARD-V1-01 implementada sobre BILLED-VALUE-CANONICAL-01, com as diferenças da seção 16; status `IMPLEMENTADO` | handoff MANAGEMENT-DASHBOARD-V1-01 |

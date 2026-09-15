@@ -16,6 +16,7 @@ import {
   CUSTOMER_ORDER_BILLING_STATUS_LABELS,
   CUSTOMER_ORDER_STATUSES,
   CUSTOMER_ORDER_STATUS_LABELS,
+  PORTFOLIO_ORDER_STATUSES,
 } from "@veridi/shared";
 import type { CustomerOrderListFilters, ListCustomerOrdersParams } from "../../lib/customer-orders-api";
 import {
@@ -85,6 +86,12 @@ const GRUPOS: StatusGroup<CustomerOrderStatus>[] = [
   { key: "em-aberto", label: "Em aberto", statuses: EM_ABERTO },
   // A saída para o histórico: sem ela a tela ficaria presa à fila.
   { key: "todos", label: "Todos os status", statuses: [] },
+  /*
+   * A carteira: confirmados que ainda têm saldo a expedir. É o destino do
+   * "A expedir" do Painel Gerencial, com a MESMA lista de status que o painel
+   * soma (`PORTFOLIO_ORDER_STATUSES`) — o link filtra o que o número conta.
+   */
+  { key: "carteira", label: "Carteira (a expedir)", statuses: [...PORTFOLIO_ORDER_STATUSES] },
   ...CUSTOMER_ORDER_STATUSES.map((status) => ({
     key: status,
     label: CUSTOMER_ORDER_STATUS_LABELS[status],

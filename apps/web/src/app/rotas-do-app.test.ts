@@ -70,6 +70,8 @@ const ROTAS_ANTES_DA_MIGRACAO = [
   "/estoque/lotes/escanear",
   "/estoque/materiais-de-clientes",
   "/estoque/movimentacoes",
+  // MANAGEMENT-DASHBOARD-V1-01: Gestão → Painel Gerencial, rota nova declarada aqui de propósito.
+  "/gestao/painel-gerencial",
   "/gestao/politicas-precificacao",
   "/gestao/politicas-precificacao/:policyId",
   "/gestao/precificacao",

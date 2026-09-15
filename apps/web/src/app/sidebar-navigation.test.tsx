@@ -56,7 +56,7 @@ const SECOES: [id: string, titulo: string, telas: string[]][] = [
       "Políticas de Precificação",
     ],
   ],
-  ["management", "Gestão", ["Relatórios", "Precificação"]],
+  ["management", "Gestão", ["Painel Gerencial", "Relatórios", "Precificação"]],
   ["administration", "Administração", ["Usuários"]],
 ];
 
