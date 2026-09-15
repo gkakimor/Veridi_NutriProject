@@ -122,7 +122,10 @@ Discovery sem posição na fila: SUPPLIER-OFFER-OVERLAP-01 — que desde
 pergunta nos dois lados do custo, uma resposta só —, SUPPLIER-MODE-01,
 ASSET-01, COM-CONTRACT-01 e INVENTORY-PHYSICAL-COUNT-PO-BASELINE-01 — este com a
 intenção do PO já aprovada (seção G). Brainstorm: tributos e custo de aquisição
-(seção F).
+(seção F). FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01 (Painel Gerencial) tem
+documento próprio em [`discovery/`](discovery/README.md), com cinco decisões de PO
+abertas; o defeito que ele achou no valor faturado atual é
+BILLED-VALUE-CANONICAL-01 (seção A).
 
 ---
 
@@ -947,6 +950,37 @@ devolve a Prospect**.
 
 **Contrato não dirige situação** — ver COM-CONTRACT-01. Cliente pode ser ativo
 sem contrato cadastrado; os conceitos são independentes.
+
+#### BILLED-VALUE-CANONICAL-01 — "Valor faturado" do Painel, do R-15 e do R-14 não é o valor dos documentos — ABERTO
+
+Achado de FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01 (2026-09-15,
+[`discovery/`](discovery/FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01.md), F1),
+sem correção. **Severidade HIGH** — dinheiro exibido a todos os perfis.
+Prioridade a decidir pelo PO; é pré-requisito de qualquer Painel Gerencial.
+
+O documento de Faturamento, a lista, o resumo do Pedido e a Visão do Cliente
+mostram `Billing.totalAmount`: congelado na emissão, com desconto apropriado e
+ajuste de fechamento, e com cada linha arredondada antes da soma (§34, §55). Três
+superfícies somam por conta própria `quantidade × preço` de todas as linhas, sem
+desconto e sem arredondar a linha:
+
+- Painel, "Valor faturado" — `modules/dashboard/dashboard.service.ts:60-72`;
+- R-15, valor por documento, total do filtro, CSV e PDF —
+  `modules/reports/billing-reports.service.ts:78-92`;
+- R-14, valor de cada faturamento — `modules/reports/commercial-reports.service.ts:409-426`.
+
+Pedido de R$ 1.000,00 com 10% de desconto, faturado num documento: o documento
+vale R$ 900,00; Painel, R-15 e R-14 dizem R$ 1.000,00. Duas linhas de
+`1 × 0,1250`: o documento soma R$ 0,26; Painel e R-15 dizem R$ 0,25. O teste do
+Painel só cobre documento sem desconto (`dashboard.test.ts:386-490`), e o
+comentário de `web pages/customer-consultation/SummaryTab.tsx:11-19` ainda diz que
+o total do Faturamento não é persistido.
+
+Direção recomendada, **dependente da decisão D1 do discovery**: uma função única
+de valor do documento emitido — `totalAmount`; o legado sem ele vale a soma das
+linhas arredondadas — servindo às três superfícies, com a regra de ausência de
+sempre (total só com todos os documentos completos). Nada gravado muda, só a
+leitura das três superfícies. Sem migration.
 
 ### P2 — depois da estabilização
 
