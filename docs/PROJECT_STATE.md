@@ -46,8 +46,8 @@ estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0
 - **discoveries persistidos** em [`discovery/`](discovery/README.md), todos `EM_ANALISE` e sem implementação: Painel
   Gerencial (FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01), WAVE 4 (E2E-BASELINE-REDESIGN-WAVE-04-DISCOVERY-01), golden
   path (WAVE-05-GOLDEN-PATH-DISCOVERY-01) e permissões da Produção (PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01);
-- **Inventário Físico:** PO baseline aprovada (INVENTORY-PHYSICAL-COUNT-PO-BASELINE-01, seção G do BACKLOG); discovery
-  completo ainda não executado;
+- **Inventário Físico:** discovery `DECIDIDO` (D1–D8 e P1–P7 fechadas pelo PO em 2026-09-15); Fatia 1 (domínio e API)
+  entregue em 2026-09-15 (INVENTORY-PHYSICAL-COUNT-01); Fatia 2 (telas) e Fatia 3 (FO-01 de sessão e CSV) abertas;
 - **Painel Gerencial:** D1 decidida e BILLED-VALUE-CANONICAL-01 fechado em 2026-09-15 (valor faturado = `Billing.totalAmount`
   em Painel, R-14 e R-15); D2–D5 abertas antes de MANAGEMENT-DASHBOARD-V1-01;
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
@@ -4608,10 +4608,42 @@ código afetado. Sem `pnpm test` global, fresh nem golden path (FAST).
 nem vírgula entrar (o prazo passou a testar `0` e `121`), `1,2,3` também não entra na quantidade (a linha recusada é
 `1.234`), e preço e desconto aparecem em pt-BR (`12,50`, `7,5`).
 
+## Inventário Físico em sessão — domínio e API (INVENTORY-PHYSICAL-COUNT-01, Fatia 1, 2026-09-15)
+
+Discovery `DECIDIDO` (D1–D8 e P1–P7 fechadas pelo PO). Só domínio, schema, migration e API, sem tela nova. PROD e
+`release/prod` intocados.
+
+**Modelo.** `StockCount` (`INV-000001`; `SESSION` ou `QUICK`; `BLIND` ou `ASSISTED`; em contagem → em revisão →
+encerrado, e cancelado a partir dos dois primeiros), `StockCountPosition` (item, ou item + lote, com retrato de cadastro
+e saldo de referência), `StockCountEntry` (só acrescenta; cada registro guarda o esperado lido na própria transação) e
+`StockCountFinding` (lote ou item sem cadastro — nunca cria cadastro nem movimento). Migration aditiva
+`20260925093026_inventory_physical_count_sessions`; `inventory_movements` intocada, porque a FK 1:1 do ajuste mora na
+posição.
+
+**Regras (§16).** Ajuste = diferença congelada do registro que vale, aplicada como delta no encerramento, com item e lote
+travados só nas posições ajustadas e recusa se o saldo ficar negativo ou abaixo do reservado. Uma posição física em no
+máximo um inventário aberto, garantido por índice único (`openPositionKey`), inclusive entre transações simultâneas.
+Divergência com movimentação durante o inventário fecha só recontada ou confirmada. Conflito otimista 409 entre
+operadores. Contagem cega feita pela API. Encerrado e cancelado não reabrem. Escrita: ADMIN, PRODUCTION e QUALITY;
+leitura: toda sessão autenticada.
+
+**Contagem rápida.** `POST /stock-counts` mantém o contrato da tela atual (só ganhou campos) e passa a gravar `INV-` QUICK
+com posição, registro e ajuste ligado, inclusive quando confere; recusa posição em inventário aberto; unidade COUNT exige
+inteiro; `expectedSystemQuantity`, opcional, responde 409 quando o saldo mudou (a tela ainda não envia).
+
+**Validação.** 22 testes novos em três arquivos (`stock-count-session`, `stock-count-quick`,
+`stock-count-exclusividade-concorrente`), com a corrida de duas transações provada pelo `pg_stat_activity`; 5 mutações das
+regras-chave derrubadas; o módulo de estoque inteiro (11 arquivos, 106 testes) antes e depois do rebase; `code-prefixes`;
+typecheck da API e da web; os testes da tela atual (`inventario-alteracoes-nao-salvas`, `catalogo-busca-no-servidor`,
+24); `pnpm validate:migrations:fresh` sem drift. Sem `pnpm test` global, E2E, golden path nem build (FAST).
+
+**Aberto.** Fatia 2 (telas, e no montador os filtros de qualidade/validade, última contagem, movimentação e local) e
+Fatia 3 (FO-01 de sessão e CSV controlado).
+
 ## Próxima prioridade
 
-**A ordem vive na fila viva do [`BACKLOG.md`](BACKLOG.md)**, reconciliada em 2026-09-15: WAVE 4; discovery completo do
-Inventário Físico; decisões do Painel Gerencial; decisões de permissões da Produção; WAVE 5; estabilização final. Os
+**A ordem vive na fila viva do [`BACKLOG.md`](BACKLOG.md)**, reconciliada em 2026-09-15: WAVE 4; Inventário Físico em
+fatias (a próxima é a Fatia 2, telas); decisões do Painel Gerencial; decisões de permissões da Produção; WAVE 5; estabilização final. Os
 parágrafos abaixo registram como cada assunto chegou até aqui.
 
 **BILLED-VALUE-CANONICAL-01 fechado em 2026-09-15** (§30), o primeiro da fila: com a decisão D1 do PO,
@@ -4619,6 +4651,9 @@ parágrafos abaixo registram como cada assunto chegou até aqui.
 `billings/billed-value.ts` (`valorDoFaturamento` e `resumirValorFaturado`, com o `SUM` do total congelado no banco);
 emitido legado sem total congelado vale a soma das linhas arredondadas, como o próprio documento. Sem migration.
 MANAGEMENT-DASHBOARD-V1-01 continua esperando D2–D5 e lê o faturado por essas funções.
+
+**INVENTORY-PHYSICAL-COUNT-01 — Fatia 1 entregue em 2026-09-15** (§16, seção própria acima): sessões de inventário no
+domínio e na API, e a Contagem rápida gravando `INV-` QUICK. Próxima do assunto: Fatia 2 (telas).
 
 **PRICING-TEMPLATE-FLEX-01 fechado em 2026-09-11** (§84). Os três achados fecharam:
 PRICING-MODEL-DIFF-01 e PRICING-ACTIVATE-CONFIRM-01 em COST-PRICING-CLARITY-WAVE-01, e
