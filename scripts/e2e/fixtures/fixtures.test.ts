@@ -8,6 +8,16 @@ import {
   criarItem,
   criarProdutoOperacional,
 } from "./cadastros.mjs";
+import {
+  adicionarLinha,
+  criarProdutoDoProjeto,
+  criarProjeto,
+  criarVersao,
+  gravarCondicoes,
+  linhaDoProduto,
+  precificarLinha,
+} from "./comercial.mjs";
+import { idDaRota, ROTA_DA_VERSAO, ROTA_DO_PROJETO, rotaDaVersao, rotaDoProjeto } from "./comercial-ui.mjs";
 import { diaComercial, porExtenso } from "./datas.mjs";
 import {
   aplicarRoteiro,
@@ -216,12 +226,112 @@ describe("fixtures de cadastro", () => {
   });
 
   it("nenhuma fixture navega, lista cadastro para pegar o primeiro ou cita código da carga", () => {
-    for (const modulo of ["cadastros.mjs", "producao.mjs"]) {
+    for (const modulo of ["cadastros.mjs", "producao.mjs", "comercial.mjs"]) {
       const fonte = readFileSync(new URL(`./${modulo}`, import.meta.url), "utf8");
       expect(fonte, modulo).not.toMatch(/pagina|\.goto\(|\[0\]/);
       expect(fonte, modulo).not.toMatch(/"GET", "\/(customers|suppliers|items|products)[?"]/);
       expect(fonte, modulo).not.toMatch(/\b(CLI|FOR|MP|PROD|PED|ORC)-\d{4,}\b/);
     }
+  });
+});
+
+describe("fixtures comerciais (E2E-BASELINE-REDESIGN-WAVE-03)", () => {
+  const linhaDto = (id: string, productId: string, extra: Record<string, unknown> = {}) => ({
+    id,
+    productId,
+    quotedQuantity: null,
+    unitPrice: null,
+    priceOrigin: null,
+    inheritedFromQuoteLineId: null,
+    priceOriginReason: null,
+    ...extra,
+  });
+  const versaoDto = (lines: unknown[] = []) => ({
+    id: "uuid-v",
+    code: "ORC-000321",
+    versionNumber: 2,
+    versionLabel: "ORC-000321 · V2",
+    status: "DRAFT",
+    validUntil: null,
+    lines,
+  });
+
+  it("projeto e produto do projeto: nome carimbado, id e código lidos da resposta", async () => {
+    const run = criarRun();
+    const { api, chamadas, rotasChamadas } = apiFalsa({
+      "POST /projects": (corpo) => ({ status: 201, corpo: { id: "uuid-pj", code: "PROJ-000183", name: corpo.name } }),
+      "POST /projects/uuid-pj/products": (corpo) => ({
+        status: 201,
+        corpo: { id: "uuid-pp", productId: "uuid-p", productCode: "PROD-000174", productName: corpo.name },
+      }),
+    });
+    const projeto = await criarProjeto(api, run, { cliente: { id: "uuid-c" } });
+    const produto = await criarProdutoDoProjeto(api, run, { projeto });
+
+    expect(projeto).toEqual({ id: "uuid-pj", codigo: "PROJ-000183", nome: `Projeto ${run.carimbo}` });
+    expect(produto).toEqual({
+      vinculoId: "uuid-pp",
+      id: "uuid-p",
+      codigo: "PROD-000174",
+      nome: `Produto ${run.carimbo}`,
+      unidade: "un",
+    });
+    expect(rotasChamadas()).toEqual(["POST /projects", "POST /projects/uuid-pj/products"]);
+    expect(chamadas[0]!.corpo).toEqual({ customerId: "uuid-c", name: `Projeto ${run.carimbo}` });
+    expect(chamadas[1]!.corpo).toEqual({ operation: "create", name: `Produto ${run.carimbo}`, finishedUnitCode: "un" });
+  });
+
+  it("recusa projeto sem cliente, nome sem carimbo e versão sem projeto — antes de chamar a API", async () => {
+    const run = criarRun();
+    const { api, chamadas } = apiFalsa({});
+    await expect(criarProjeto(api, run, {})).rejects.toThrow(/exige o cliente/);
+    await expect(criarProjeto(api, run, { cliente: { id: "c" }, nome: "Projeto fixo" })).rejects.toThrow(/carimbo/);
+    await expect(criarProdutoDoProjeto(api, run, {})).rejects.toThrow(/exige o projeto/);
+    await expect(criarVersao(api, {})).rejects.toThrow(/exige o projeto/);
+    expect(chamadas).toEqual([]);
+  });
+
+  it("a linha é achada pelo PRODUTO, não pela posição, e precificada pelo id dela", async () => {
+    const outra = linhaDto("uuid-l0", "uuid-outro");
+    const nossa = linhaDto("uuid-l1", "uuid-p");
+    const { api, chamadas, rotasChamadas } = apiFalsa({
+      "POST /projects/uuid-pj/quote-versions": () => ({ status: 201, corpo: versaoDto() }),
+      "POST /quote-versions/uuid-v/lines": () => ({ status: 201, corpo: versaoDto([outra, nossa]) }),
+      "PATCH /quote-lines/uuid-l1": (corpo) => ({
+        status: 200,
+        corpo: versaoDto([outra, { ...nossa, quotedQuantity: corpo.quotedQuantity, unitPrice: corpo.unitPrice }]),
+      }),
+      "PATCH /quote-versions/uuid-v": () => ({ status: 200, corpo: versaoDto([outra, nossa]) }),
+    });
+    const versao = await criarVersao(api, { projeto: { id: "uuid-pj" } });
+    expect(versao).toMatchObject({ id: "uuid-v", codigo: "ORC-000321", numero: 2, rotulo: "ORC-000321 · V2", linhas: [] });
+
+    const produto = { id: "uuid-p", vinculoId: "uuid-pp", codigo: "PROD-000174" };
+    const comLinha = await adicionarLinha(api, { versao, produto, quantidade: 1000, preco: "12.5" });
+    expect(chamadas[1]!.corpo).toEqual({ projectProductId: "uuid-pp" });
+    expect(rotasChamadas().at(-1)).toBe("PATCH /quote-lines/uuid-l1");
+    expect(chamadas.at(-1)!.corpo).toEqual({ quotedQuantity: "1000", unitPrice: "12.5" });
+    expect(linhaDoProduto(comLinha, produto)).toMatchObject({ id: "uuid-l1", quantidade: "1000", preco: "12.5" });
+    expect(() => linhaDoProduto(comLinha, { id: "uuid-x", codigo: "PROD-000999" })).toThrow(
+      /PROD-000999 não está na ORC-000321 · V2/,
+    );
+
+    await gravarCondicoes(api, { versao, condicoes: { validUntil: "2099-12-31", quoteDate: "2026-08-06" } });
+    expect(chamadas.at(-1)!.corpo).toEqual({ validUntil: "2099-12-31", quoteDate: "2026-08-06" });
+    await expect(precificarLinha(api, { linha: { id: "uuid-l1" } })).rejects.toThrow(/sem quantidade nem preço/);
+  });
+
+  it("rota da versão e do projeto como a tela monta, e o id lido de volta da URL", () => {
+    const id = "0c1d2e3f-4a5b-4c6d-8e7f-001122334455";
+    expect(rotaDaVersao(id)).toBe(`/comercial/orcamentos/${id}`);
+    expect(rotaDaVersao(id, { voltar: "/comercial/orcamentos?search=E2E&page=2" })).toBe(
+      `/comercial/orcamentos/${id}?voltar=%2Fcomercial%2Forcamentos%3Fsearch%3DE2E%26page%3D2`,
+    );
+    const web = "http://127.0.0.1:5174";
+    expect(idDaRota(`${web}${rotaDaVersao(id, { voltar: rotaDoProjeto("uuid-pj") })}`, ROTA_DA_VERSAO)).toBe(id);
+    expect(idDaRota(`${web}/comercial/orcamentos/${id}/imprimir`, ROTA_DA_VERSAO)).toBeNull();
+    expect(idDaRota(new URL(`${web}${rotaDoProjeto(id)}`), ROTA_DO_PROJETO)).toBe(id);
+    expect(idDaRota(`${web}/comercial/orcamentos`, ROTA_DA_VERSAO)).toBeNull();
   });
 });
 

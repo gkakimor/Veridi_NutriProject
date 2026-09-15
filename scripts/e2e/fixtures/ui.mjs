@@ -28,6 +28,24 @@ export async function esperarRota(pagina, caminho, { timeout = 25000, consulta }
 }
 
 /**
+ * Chega a uma tela pelo menu lateral, como a pessoa faz: o grupo abre (pelo
+ * cabeçalho no menu expandido, pelo ícone no trilho) e o item é clicado.
+ *
+ *   await abrirPeloMenu(pagina, { grupo: "commercial", item: "Orçamentos" });
+ */
+export async function abrirPeloMenu(pagina, { grupo, item, timeout = 25000 }) {
+  const menu = pagina.locator("nav#sidebar");
+  await menu.waitFor({ timeout });
+  const link = menu.getByRole("link", { name: item, exact: true });
+  if (!(await link.isVisible())) {
+    const trilho = menu.locator(`[data-rail="${grupo}"]`);
+    if ((await trilho.count()) > 0) await trilho.click();
+    else await menu.locator(`[data-group-toggle="${grupo}"]`).click();
+  }
+  await link.click({ timeout });
+}
+
+/**
  * Escolhe um REGISTRO num seletor de entidade digitando, como a pessoa faz.
  * Ignora a ação "criar novo" — que também é `option`, repete o texto digitado
  * e tira a pessoa da tela.
