@@ -74,13 +74,14 @@ Poucas, completas, determinísticas — e num clone descartável da base E2E:
 
 ```bash
 pnpm e2e:run --bateria=wave-01-02
+pnpm e2e:run --bateria=wave-03
 ```
 
 Infraestrutura em [`scripts/e2e/`](../scripts/e2e): `lib/` (navegador autenticado
-e leitor de PDF) e `fixtures/` (runId, API, gestos de tela, datas e cadastros
-básicos por API). Os helpers não carregam registro de negócio: fixture cria massa
-genérica carimbada; se a suíte precisa de um produto ou lote específico, ele
-pertence à suíte.
+e leitor de PDF) e `fixtures/` (runId, API, gestos de tela, datas, cadastros
+básicos e massa comercial por API, e os gestos do Orçamento na tela). Os helpers
+não carregam registro de negócio: fixture cria massa genérica carimbada; se a
+suíte precisa de um produto ou lote específico, ele pertence à suíte.
 
 ## Base das suítes — E2E_BASELINE_REBUILD (2026-09-14)
 
@@ -128,9 +129,11 @@ só em `http://127.0.0.1:<porta>`: `lib/browser.mjs` recusa outra origem.
 - **A. Massa por API** — aprovada nas quatro condições da regra 2; GET de conferência livre; Prisma/SQL proibido.
 - **B.** `formulacao-quantidade-fisica-e-custo` ganha massa própria numa wave futura.
 - **C.** `ajuda-contextual-nivel-1` fica em quatro telas por enquanto; Faturamento sai do E2E.
-- **D.** Fundir no futuro `envio-exige-condicoes-salvas` com `envio-exige-linhas-salvas`, e
-  `entregas-programadas-do-pedido` com `expedicao-geral-entre-entregas` — cenários separados dentro da suíte combinada.
-- **E.** Condição suja: a guarda de saída é a regra atual correta.
+- **D.** Fundir `envio-exige-condicoes-salvas` com `envio-exige-linhas-salvas` — **feito na WAVE 3**
+  (`envio-exige-condicoes-e-linhas-salvas`) — e, no futuro, `entregas-programadas-do-pedido` com
+  `expedicao-geral-entre-entregas` — cenários separados dentro da suíte combinada.
+- **E.** Condição suja: a guarda de saída é a regra atual correta — afirmada na troca de versão por
+  `condicoes-do-orcamento-sobrevivem-a-linha` (WAVE 3).
 - **F.** Base: clone por PostgreSQL TEMPLATE, só local.
 - **G.** Usuário: o runner usa ADMIN próprio da execução; COMMERCIAL e PRODUCTION ficam para a adversarial.
 - **H.** `guia-capturas.mjs` fica fora do gate.
@@ -139,12 +142,22 @@ só em `http://127.0.0.1:<porta>`: `lib/browser.mjs` recusa outra origem.
 Massa sobre a base real: a base é leitura — o que a suíte muda, ela cria, carimbado; registro da carga não é editado
 nem procurado por código fixo; nenhuma suíte depende de outra ter rodado antes; nenhuma aponta para PROD.
 
+## Orçamento nas suítes — o fluxo atual (E2E-BASELINE-REDESIGN-WAVE-03)
+
+Ficha do Projeto → criar ou abrir a versão → `/comercial/orcamentos/:id`, onde moram linhas, condições, PDF, envio,
+aceite ou recusa e o Fechamento. A aprovação do Projeto fica na ficha; "Gerar pedido a partir do orçamento aceito"
+fica no Fechamento da versão aceita, com o Projeto aprovado. As suítes não procuram condição editável na ficha nem
+restauram comportamento antigo para caber no teste. Os gestos (`fixtures/comercial-ui.mjs`) esperam a tela e devolvem
+id da rota, URL e rótulo do servidor; a versão nova pela ficha nunca é "Duplicar como nova versão", que é outro
+contrato.
+
 ## Mapa das suítes (2026-09-15)
 
 | Grupo | Suítes | Estado |
 |---|---|---|
 | **WAVE 1–2** — fundação nova | `base-calculada-e-equivalente-por-mil`, `contato-do-cliente-no-projeto`, `modelo-aplicado-preserva-base`, `modelo-formulacao-unidade-controlada`, `oferta-de-fornecedor-vira-custo`, `perfil-tributario-do-cliente`, `produto-do-cliente-do-pedido`, `projeto-inteiro-invalido-nao-apaga`, `troca-de-cep-do-cliente`, `vigencia-de-tarifa-industrial`, `recebimento-validacao-viva` | bateria `wave-01-02` do runner — verde em clone novo e, sem recriar, na mesma bateria sobre o clone sujo (2026-09-15). As três que esperavam a lista de Clientes por regex terminando em `/cadastros/clientes` esperam pelo caminho (`esperarRota`), e `perfil-tributario` e `troca-de-cep` reabrem o cliente pelo id (`?ids=`), sem depender do filtro "Clientes ativos". O recebimento cria fornecedor e matéria-prima com lote e validade por API; OC e recebimentos continuam pela tela |
 | **Provas** das libs das próximas waves | `leitor-de-pdf-da-tela`, `roteiro-aplicado-planeja-ordem` | bateria `provas-wave-01-02`: iframe `.pdf-screen__frame`, `blob:`, texto e NBSP contra PDF real; roteiro criado, ativado e aplicado a OP em rascunho, que planeja (e sem roteiro é recusada) |
+| **WAVE 3** — Orçamento na página da versão | `orcamentos-hub-e-pagina-da-versao`, `envio-exige-condicoes-e-linhas-salvas`, `condicoes-do-orcamento-sobrevivem-a-linha`, `prazo-invalido-nao-apaga`, `preco-herdado-sobrevive-ao-tab`, `resumo-comercial-do-projeto`, `projeto-aprovado-vende-de-novo`, `formacao-de-preco-do-novo-orcamento` | bateria `wave-03` — verde em clone novo (1m27s) e, sem recriar, no clone sujo (1m25s): SEM MASSA 0, 5xx 0, console limpo, as mesmas verificações por suíte (2026-09-15). Cliente, Projeto, produtos e versões de pré-condição por API (`fixtures/comercial.mjs`); o Hub cria 24 versões carimbadas; as duas do envio viraram uma (decisão D) |
 | **C** — precisam criar a própria massa | `ajuda-contextual-nivel-1` (quatro telas, decisão C), `cancelamento-de-pedido-com-op-cancelada`, `custo-estimado-acompanha-o-salvamento`, `desconto-do-pedido-chega-ao-faturamento`, `disponibilidade-comercial-explicada`, `entregas-programadas-do-pedido`, `expedicao-geral-entre-entregas`, `formulacao-quantidade-fisica-e-custo` | abrem o primeiro registro de lista ou leem código e saldo que a base não tem (`PROD-000031` é de outro cliente, não há lote nem PA com saldo; PA com saldo só nasce por produção). `desconto…` também usa o fluxo antigo do Orçamento |
-| **D** — reescrever | `condicoes-do-orcamento-sobrevivem-a-linha`, `envio-exige-condicoes-salvas`, `envio-exige-linhas-salvas`, `formacao-de-preco-do-novo-orcamento`, `prazo-invalido-nao-apaga`, `preco-herdado-sobrevive-ao-tab`, `projeto-aprovado-vende-de-novo`, `resumo-comercial-do-projeto`, `private-label-golden-path`, `ordem-de-producao-produto-fora-da-primeira-pagina` | nove operam o Orçamento embutido no Projeto (E2E-QUOTE-PAGE-FLOW-01; o golden path para em `pedido`); a última procura `PROD-000214`, que não existe — a premissa "fora da primeira página" segue válida com produto achado por consulta |
+| **D** — reescrever | `private-label-golden-path`, `ordem-de-producao-produto-fora-da-primeira-pagina` | o golden path para em `pedido`: "Gerar pedido a partir do orçamento aceito" só existe no Fechamento da versão; a outra procura `PROD-000214`, que não existe — a premissa "fora da primeira página" segue válida com produto achado por consulta |
 | **E** — dependem de ordem | `private-label-golden-path` (também D) | `--desde` exige `--run=<runId>` desde WAVE-01-02 (antes retomava pelo arquivo global); o checkpoint de entidades segue em `handoff/golden-path-<runId>.json` |
