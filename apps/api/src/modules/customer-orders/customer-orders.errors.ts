@@ -12,12 +12,12 @@ export class CustomerNotFoundError extends Error {
   }
 }
 
-export class InactiveCustomerError extends Error {
-  constructor(id: string) {
-    super(`Cliente inativo não pode ser usado em um pedido: ${id}`);
-    this.name = "InactiveCustomerError";
-  }
-}
+/*
+ * A recusa por situação cadastral do Cliente (bloqueado ou inativo) mora em
+ * `customers/customers.errors.ts` desde CUSTOMER-STATUS-LIFECYCLE-01: são duas
+ * frases diferentes, iguais em todo fluxo comercial, e uma cópia por módulo
+ * voltaria a divergir.
+ */
 
 export class LineProductNotFoundError extends Error {
   constructor(id: string) {

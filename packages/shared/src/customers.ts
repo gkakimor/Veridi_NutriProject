@@ -1,6 +1,7 @@
 /** Contratos do módulo de Clientes, consumidos por `apps/api` e `apps/web`. */
 
 import type { CustomerCommercialStatusDTO } from "./customer-commercial-status.js";
+import type { CustomerBlockDTO, CustomerStatus } from "./customer-status.js";
 
 export const CUSTOMER_CODE_PREFIX = "CLI";
 
@@ -78,7 +79,17 @@ export interface CustomerDTO {
   notes: string | null;
   /** Sufixo do cliente na máscara de lote comercial (ex.: "A3") — só alimenta a sugestão. */
   businessLotSuffix: string | null;
+  /**
+   * Cadastro não arquivado. Sozinho não diz se pode vender: cliente bloqueado
+   * continua `active`. Quem responde isso é `status` (§95).
+   */
   active: boolean;
+  /** Bloqueio comercial vigente; sobrevive à inativação e volta na reativação. */
+  blocked: boolean;
+  /** Situação cadastral (§95) — derivada de `active` + `blocked`, nunca a comercial (§86). */
+  status: CustomerStatus;
+  /** O bloqueio em vigor, com motivo, data e autor; `null` quando não há. */
+  block: CustomerBlockDTO | null;
   createdAt: string;
   /**
    * Nome de quem cadastrou/alterou, congelado no momento da acao. `null`

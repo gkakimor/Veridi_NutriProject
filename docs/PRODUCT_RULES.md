@@ -5992,3 +5992,60 @@ o saldo de OC recebida em parte não se encerra.
 intervalo (e do cliente), Ordens de Compra "Contratadas" do intervalo, Pedidos
 "Carteira (a expedir)", o R-16, a Visão do Cliente e cada documento citado.
 Indicador sem destino que filtre fica sem link.
+
+## §95 — Situação cadastral do Cliente: pode vender, e por quê
+
+CUSTOMER-STATUS-LIFECYCLE-01, 2026-09-15, pedido direto da Veridi.
+
+**A situação cadastral responde "posso abrir operação comercial NOVA com este
+cliente?" — Ativo · Bloqueado · Inativo.** Não é a situação comercial (§86),
+que é leitura derivada da história e não decide venda: um Cliente ativo
+comercialmente pode estar bloqueado, e um Prospect pode estar inativo. As duas
+convivem, em colunas e filtros separados, e nenhuma decide a outra.
+
+**Onde ela vive.** Dois fatos persistidos no Cliente: `active` (cadastro
+arquivado ou não, que já existia) e `blocked` (bloqueio comercial em vigor). A
+situação é derivada dos dois — inativo prevalece — e não existe coluna de
+situação que alguém pudesse gravar por fora. O motivo NUNCA fica no cadastro:
+o próximo evento o sobrescreveria.
+
+**As quatro ações, todas com motivo obrigatório:**
+
+1. **Bloquear** — Ativo → Bloqueado.
+2. **Desbloquear** — Bloqueado → Ativo.
+3. **Inativar** — Ativo ou Bloqueado → Inativo.
+4. **Reativar** — Inativo → Bloqueado se ele estava bloqueado quando foi
+   arquivado; senão, Ativo.
+
+Arquivar não desbloqueia: o bloqueio fica latente e volta com a reativação —
+senão inativar viraria o caminho curto para desfazer uma decisão comercial.
+Ação que não parte da situação atual é recusa de negócio (409), nunca 500.
+
+**Histórico append-only** (`customer_status_history`): situação anterior,
+situação nova, motivo, usuário e data/hora, um registro por ação. Nada é
+alterado nem apagado — o motivo do bloqueio continua legível depois do
+desbloqueio, e o bloqueio em vigor é o do último `Ativo → Bloqueado`. A
+mudança é transacional, com a linha do Cliente travada (`FOR UPDATE`): dois
+comandos concorrentes não partem da mesma situação, e o segundo é recusado
+pela transição em vez de gravar um evento que contradiz o outro.
+
+**Operação comercial NOVA é recusada para Bloqueado e Inativo:** Projeto novo
+e troca de cliente do Projeto, versão nova de Orçamento (criar e duplicar),
+envio, aceite, geração do Pedido a partir da proposta aceita, Pedido novo,
+troca de cliente do rascunho e confirmação do Pedido. As mensagens são de
+negócio — "Cliente bloqueado para novas vendas." com o motivo em vigor, e
+"Cliente inativo." —, nunca erro genérico.
+
+**O que NÃO muda:** Pedido confirmado, faturamento, expedição, produção,
+documentos e histórico existentes continuam íntegros; nada é cancelado por
+mudança de situação. Produto novo e recebimento de material do cliente
+continuam recusando só o INATIVO, como antes — não são venda.
+
+**Listagem:** filtro de situação cadastral com Ativos · Bloqueados · Inativos ·
+Todos, aberto em **Ativos**: bloqueados e inativos ficam arquivados fora da
+abertura, a um filtro de distância. O filtro de situação comercial (§86)
+continua ao lado, com o padrão dele — um nunca substitui o outro. A API sem
+filtro devolve todos; os seletores de venda pedem `status=ACTIVE`.
+
+**Visão do Cliente:** situação atual, motivo e autor do bloqueio em vigor,
+aviso explícito de arquivado quando inativo, e o histórico inteiro.

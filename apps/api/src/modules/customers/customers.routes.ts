@@ -1,17 +1,22 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import type { ZodError } from "zod";
+import type { CustomerStatusAction, CustomerStatusHistoryResponse } from "@veridi/shared";
 import { requireCurrentUser } from "../../lib/current-user.js";
 import {
-  activateCustomer,
   createCustomer,
-  deactivateCustomer,
   getCustomerById,
   listCustomers,
   updateCustomer,
 } from "./customers.service.js";
-import { CustomerNotFoundError, DuplicateCnpjError } from "./customers.errors.js";
+import { changeCustomerStatus, listCustomerStatusHistory } from "./customer-status.js";
+import {
+  CustomerNotFoundError,
+  DuplicateCnpjError,
+  InvalidCustomerStatusTransitionError,
+} from "./customers.errors.js";
 import {
   createCustomerSchema,
+  customerStatusChangeSchema,
   listCustomersQuerySchema,
   updateCustomerSchema,
 } from "./customers.schemas.js";
@@ -25,10 +30,12 @@ function formatZodError(error: ZodError) {
 
 /**
  * `GET /customers`, `GET /customers/:id`, `POST /customers`,
- * `PATCH /customers/:id`, `POST /customers/:id/activate`,
- * `POST /customers/:id/deactivate`.
+ * `PATCH /customers/:id`, `GET /customers/:id/status-history` e as quatro
+ * ações de situação cadastral (§95): `POST /customers/:id/block`,
+ * `/unblock`, `/deactivate` e `/activate`, todas com motivo obrigatório.
  *
- * Sem exclusão física: clientes inativos permanecem visíveis.
+ * Sem exclusão física: clientes bloqueados e inativos permanecem consultáveis,
+ * com o histórico inteiro.
  */
 export const customersRoutes: FastifyPluginAsync = async (app) => {
   app.get("/customers", async (request, reply) => {
@@ -96,27 +103,63 @@ export const customersRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.post("/customers/:id/activate", async (request, reply) => {
+  /**
+   * As quatro ações têm o MESMO corpo (motivo) e o mesmo tratamento: só muda
+   * qual transição elas pedem. Ação que não parte da situação atual é recusa
+   * de negócio — 409 com a frase do domínio —, nunca 500.
+   */
+  async function mudarSituacao(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    action: CustomerStatusAction,
+  ) {
     const { id } = request.params as { id: string };
-    try {
-      return reply.send(await activateCustomer(id, requireCurrentUser(request)));
-    } catch (error) {
-      if (error instanceof CustomerNotFoundError) {
-        return reply.status(404).send({ error: "not_found" });
-      }
-      throw error;
+    const parsed = customerStatusChangeSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply
+        .status(400)
+        .send({ error: "validation_error", issues: formatZodError(parsed.error) });
     }
-  });
 
-  app.post("/customers/:id/deactivate", async (request, reply) => {
-    const { id } = request.params as { id: string };
     try {
-      return reply.send(await deactivateCustomer(id, requireCurrentUser(request)));
+      await changeCustomerStatus(id, action, parsed.data.reason, requireCurrentUser(request));
+      return reply.send(await getCustomerById(id));
     } catch (error) {
       if (error instanceof CustomerNotFoundError) {
         return reply.status(404).send({ error: "not_found" });
       }
+      if (error instanceof InvalidCustomerStatusTransitionError) {
+        return reply
+          .status(409)
+          .send({ error: "invalid_status_transition", message: error.message });
+      }
       throw error;
     }
+  }
+
+  app.post("/customers/:id/block", async (request, reply) =>
+    mudarSituacao(request, reply, "BLOCK"),
+  );
+
+  app.post("/customers/:id/unblock", async (request, reply) =>
+    mudarSituacao(request, reply, "UNBLOCK"),
+  );
+
+  app.post("/customers/:id/deactivate", async (request, reply) =>
+    mudarSituacao(request, reply, "DEACTIVATE"),
+  );
+
+  app.post("/customers/:id/activate", async (request, reply) =>
+    mudarSituacao(request, reply, "ACTIVATE"),
+  );
+
+  app.get("/customers/:id/status-history", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const customer = await getCustomerById(id);
+    if (!customer) return reply.status(404).send({ error: "not_found" });
+    const response: CustomerStatusHistoryResponse = {
+      events: await listCustomerStatusHistory(id),
+    };
+    return reply.send(response);
   });
 };

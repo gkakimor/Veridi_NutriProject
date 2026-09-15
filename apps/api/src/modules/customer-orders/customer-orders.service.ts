@@ -58,13 +58,15 @@ import {
   CustomerOrderNotFoundError,
   DuplicateLineProductError,
   EmptyOrderError,
-  InactiveCustomerError,
   InactiveLineProductError,
   InvalidTransitionError,
   LineProductNotFoundError,
   MissingFinishedItemError,
   OrderLockedError,
 } from "./customer-orders.errors.js";
+// Venda nova exige cliente ATIVO (§95): bloqueado e inativo recusam, cada um
+// com a sua frase. Quem decide é a regra do cadastro, não uma cópia aqui.
+import { assertCustomerCanSell, bloqueioVigenteInclude } from "../customers/customer-status.js";
 import type {
   CreateCustomerOrderInput,
   CustomerOrderLineInput,
@@ -538,10 +540,18 @@ function toCustomerOrderDTO(order: OrderWithRelations): CustomerOrderDTO {
   };
 }
 
+/**
+ * Pedido NOVO — e troca de cliente no rascunho — exige cliente ATIVO (§95).
+ * O bloqueio vigente vem junto para a recusa dizer o motivo; o 404 continua
+ * sendo o deste módulo.
+ */
 async function assertCustomerActive(id: string): Promise<Customer> {
-  const customer = await getPrisma().customer.findUnique({ where: { id } });
+  const customer = await getPrisma().customer.findUnique({
+    where: { id },
+    include: bloqueioVigenteInclude,
+  });
   if (!customer) throw new CustomerNotFoundError(id);
-  if (!customer.active) throw new InactiveCustomerError(id);
+  assertCustomerCanSell(customer);
   return customer;
 }
 
@@ -833,9 +843,17 @@ export async function confirmCustomerOrder(id: string): Promise<CustomerOrderDTO
     }
     if (current.lines.length === 0) throw new EmptyOrderError();
 
-    const customer = await tx.customer.findUnique({ where: { id: current.customerId } });
+    const customer = await tx.customer.findUnique({
+      where: { id: current.customerId },
+      include: bloqueioVigenteInclude,
+    });
     if (!customer) throw new CustomerNotFoundError(current.customerId);
-    if (!customer.active) throw new InactiveCustomerError(current.customerId);
+    /*
+     * Confirmar é o momento em que o rascunho vira compromisso: o cliente
+     * bloqueado ou inativado DEPOIS da abertura é recusado aqui (§95). O
+     * rascunho continua existindo — nada é cancelado por conta disso.
+     */
+    assertCustomerCanSell(customer);
 
     const seen = new Set<string>();
     for (const line of current.lines) {

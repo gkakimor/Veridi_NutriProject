@@ -3,6 +3,8 @@ import type {
   CustomerCommercialStatus,
   CustomerDTO,
   CustomerListResponse,
+  CustomerStatus,
+  CustomerStatusAction,
   UpdateCustomerInput,
 } from "@veridi/shared";
 import { API_URL, apiFetch } from "./api";
@@ -14,6 +16,11 @@ export interface ListCustomersParams {
   search?: string;
   state?: string;
   active?: boolean;
+  /**
+   * Situação cadastral (§95), uma ou mais. Ausente: todas. Quem vende pede
+   * só `ACTIVE`; cadastro e material do cliente aceitam também o bloqueado.
+   */
+  status?: CustomerStatus[];
   /** Situação comercial derivada (§86). Ausente: todas. */
   commercialStatus?: CustomerCommercialStatus;
   page?: number;
@@ -28,6 +35,7 @@ export async function listCustomers(
   if (params.search) query.set("search", params.search);
   if (params.state) query.set("state", params.state);
   if (params.active !== undefined) query.set("active", String(params.active));
+  if (params.status && params.status.length > 0) query.set("status", params.status.join(","));
   if (params.commercialStatus) query.set("commercialStatus", params.commercialStatus);
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 20));
@@ -59,13 +67,26 @@ export async function updateCustomer(
   return (await parseJsonOrThrow(response)) as CustomerDTO;
 }
 
-export async function setCustomerActive(
+const CAMINHO_DA_ACAO: Record<CustomerStatusAction, string> = {
+  BLOCK: "block",
+  UNBLOCK: "unblock",
+  DEACTIVATE: "deactivate",
+  ACTIVATE: "activate",
+};
+
+/**
+ * As quatro ações de situação cadastral (§95). Mesmo corpo — o motivo, sempre
+ * obrigatório —, e a resposta é o cliente já na situação nova.
+ */
+export async function changeCustomerStatus(
   id: string,
-  active: boolean,
+  action: CustomerStatusAction,
+  reason: string,
 ): Promise<CustomerDTO> {
-  const response = await apiFetch(
-    `${API_URL}/customers/${id}/${active ? "activate" : "deactivate"}`,
-    { method: "POST" },
-  );
+  const response = await apiFetch(`${API_URL}/customers/${id}/${CAMINHO_DA_ACAO[action]}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason }),
+  });
   return (await parseJsonOrThrow(response)) as CustomerDTO;
 }

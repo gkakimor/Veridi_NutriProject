@@ -3,6 +3,8 @@ import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
 import {
   BR_STATE_CODES,
   CUSTOMER_COMMERCIAL_STATUSES,
+  CUSTOMER_STATUSES,
+  CUSTOMER_STATUS_REASON_MAX_LENGTH,
   CUSTOMER_TAX_PROFILES,
 } from "@veridi/shared";
 import { optionalCnpjSchema, optionalNullableText } from "../../lib/cnpj-schema.js";
@@ -37,6 +39,35 @@ const optionalTaxProfileSchema = z
     errorMap: () => ({ message: "Perfil tributário inválido" }),
   })
   .optional();
+
+/**
+ * Situação cadastral (§95), uma ou mais, separadas por vírgula. Valor
+ * desconhecido é 400 — filtro que o servidor não entende nunca vira "todos"
+ * em silêncio.
+ */
+const optionalStatusListSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .optional()
+  .transform((value) =>
+    value
+      ? value
+          .split(",")
+          .map((parte) => parte.trim())
+          .filter(Boolean)
+      : undefined,
+  )
+  .pipe(
+    z
+      .array(
+        z.enum(CUSTOMER_STATUSES, {
+          errorMap: () => ({ message: "Situação cadastral inválida" }),
+        }),
+      )
+      .min(1, "Situação cadastral inválida")
+      .optional(),
+  );
 
 export const createCustomerSchema = z.object({
   legalName: z.string().trim().min(1, "Razão social é obrigatória").max(200),
@@ -79,6 +110,22 @@ export const updateCustomerSchema = z.object({
   businessLotSuffix: optionalNullableText(20),
 });
 
+/**
+ * Corpo das quatro ações de situação (§95). O motivo é OBRIGATÓRIO em todas:
+ * o histórico existe para responder "por quê", e evento sem motivo não
+ * responde nada. Só espaços é o mesmo que vazio.
+ */
+export const customerStatusChangeSchema = z.object({
+  reason: z
+    .string({
+      required_error: "Motivo é obrigatório",
+      invalid_type_error: "Motivo é obrigatório",
+    })
+    .trim()
+    .min(1, "Motivo é obrigatório")
+    .max(CUSTOMER_STATUS_REASON_MAX_LENGTH),
+});
+
 export const listCustomersQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
   state: z.string().trim().length(2).optional().transform((v) => v?.toUpperCase()),
@@ -86,6 +133,12 @@ export const listCustomersQuerySchema = z.object({
     .enum(["true", "false"])
     .optional()
     .transform((value) => (value === undefined ? undefined : value === "true")),
+  /**
+   * Situação cadastral (§95). Ausente: todas — a tela de Clientes é que abre
+   * em "Ativos", e os seletores de outras telas pedem o recorte que cada uma
+   * precisa (venda só com ATIVO; cadastro e material também com BLOCKED).
+   */
+  status: optionalStatusListSchema,
   /**
    * Situação comercial derivada (§86). Ausente: todas — os seletores de
    * Cliente das outras telas usam esta mesma rota e não podem esconder Prospect.
@@ -111,3 +164,4 @@ export const listCustomersQuerySchema = z.object({
 export type CreateCustomerInput = z.infer<typeof createCustomerSchema>;
 export type UpdateCustomerInput = z.infer<typeof updateCustomerSchema>;
 export type ListCustomersQuery = z.infer<typeof listCustomersQuerySchema>;
+export type CustomerStatusChangeInput = z.infer<typeof customerStatusChangeSchema>;

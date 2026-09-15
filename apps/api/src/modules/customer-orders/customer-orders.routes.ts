@@ -16,7 +16,6 @@ import {
   CustomerOrderNotFoundError,
   DuplicateLineProductError,
   EmptyOrderError,
-  InactiveCustomerError,
   InactiveLineProductError,
   CommercialOriginLockedError,
   InvalidTransitionError,
@@ -24,6 +23,10 @@ import {
   MissingFinishedItemError,
   OrderLockedError,
 } from "./customer-orders.errors.js";
+import {
+  CustomerBlockedForSalesError,
+  CustomerInactiveForSalesError,
+} from "../customers/customers.errors.js";
 import {
   cancelCustomerOrderSchema,
   createCustomerOrderSchema,
@@ -56,7 +59,15 @@ function mapDomainError(
   if (error instanceof CustomerMismatchError) {
     return { status: 400, body: { error: "customer_mismatch", message: error.message } };
   }
-  if (error instanceof InactiveCustomerError) {
+  /*
+   * Situação cadastral do Cliente (§95). Bloqueado leva o motivo na mensagem
+   * — quem vende precisa saber por que não pode —, e inativo continua no
+   * mesmo `inactive_customer` de sempre.
+   */
+  if (error instanceof CustomerBlockedForSalesError) {
+    return { status: 400, body: { error: "customer_blocked", message: error.message } };
+  }
+  if (error instanceof CustomerInactiveForSalesError) {
     return { status: 400, body: { error: "inactive_customer", message: error.message } };
   }
   if (error instanceof LineProductNotFoundError) {

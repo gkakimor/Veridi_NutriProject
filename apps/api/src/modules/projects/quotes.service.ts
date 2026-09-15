@@ -36,6 +36,9 @@ import {
   QuoteNotSentError,
   QuoteWithoutValidUntilError,
 } from "./projects.errors.js";
+// Orçamento novo, duplicação, envio e aceite são operação comercial NOVA:
+// cliente bloqueado ou inativo não recebe nenhuma delas (§95).
+import { assertCustomerCanSell, bloqueioVigenteInclude } from "../customers/customer-status.js";
 import { getProjectById } from "./projects.service.js";
 import { buildPaymentSchedule } from "./quote-payment.js";
 import {
@@ -525,7 +528,10 @@ export async function createQuoteVersion(
   const prisma = getPrisma();
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    include: { quoteVersions: { orderBy: { versionNumber: "desc" } } },
+    include: {
+      quoteVersions: { orderBy: { versionNumber: "desc" } },
+      customer: { include: bloqueioVigenteInclude },
+    },
   });
   if (!project) throw new ProjectNotFoundError(projectId);
   /*
@@ -545,7 +551,12 @@ export async function createQuoteVersion(
   }
 
   const existingDraft = project.quoteVersions.find((quote) => quote.status === "DRAFT");
+  // Abrir o rascunho que já existe é continuar o que começou antes: a guarda
+  // vale para a versão NOVA, logo abaixo.
   if (existingDraft) return (await getQuoteById(existingDraft.id)) as QuoteVersionDTO;
+
+  // Versão nova é proposta nova: cliente bloqueado ou inativo não recebe (§95).
+  assertCustomerCanSell(project.customer);
 
   const previous = project.quoteVersions[0] ?? null;
   const code = await nextSequenceCode(prisma, CODE_SEQUENCE, QUOTE_CODE_PREFIX);
@@ -713,7 +724,7 @@ export async function duplicateQuoteVersion(
   const source = await prisma.quoteVersion.findUnique({
     where: { id: sourceId },
     include: {
-      project: { select: { status: true } },
+      project: { select: { status: true, customer: { include: bloqueioVigenteInclude } } },
       lines: {
         orderBy: { sortOrder: "asc" },
         include: {
@@ -725,6 +736,8 @@ export async function duplicateQuoteVersion(
   });
   if (!source) throw new QuoteNotFoundError(sourceId);
   if (source.project.status === "CANCELLED") throw new ProjectLockedError(source.project.status);
+  // Duplicar cria VERSÃO NOVA: é proposta nova, e vale a mesma guarda (§95).
+  assertCustomerCanSell(source.project.customer);
 
   // Num projeto aprovado a versão nova negocia o ESCOPO APROVADO — a mesma
   // regra de quem adiciona produto à proposta (`addQuoteLine`).
@@ -1126,10 +1139,19 @@ export async function sendQuoteVersion(
   const prisma = getPrisma();
   const quote = await prisma.quoteVersion.findUnique({
     where: { id },
-    include: { project: { include: { customer: true } }, lines: true },
+    include: {
+      project: { include: { customer: { include: bloqueioVigenteInclude } } },
+      lines: true,
+    },
   });
   if (!quote) throw new QuoteNotFoundError(id);
   if (quote.status !== "DRAFT") throw new QuoteNotDraftError(quote.status);
+  /*
+   * Enviar é apresentar a proposta ao cliente — compromisso comercial novo.
+   * Cliente bloqueado ou inativado depois que o rascunho nasceu é recusado
+   * aqui (§95); o rascunho continua existindo, e nada é cancelado.
+   */
+  assertCustomerCanSell(quote.project.customer);
   /*
    * Rascunho pode não ter validade — é trabalho em andamento. O documento que
    * vai ao cliente, não: o preço nele foi calculado sobre o custo de uma data,
@@ -1177,9 +1199,18 @@ export async function sendQuoteVersion(
  */
 export async function acceptQuoteVersion(id: string, actor: User): Promise<QuoteVersionDTO> {
   const prisma = getPrisma();
-  const quote = await prisma.quoteVersion.findUnique({ where: { id } });
+  const quote = await prisma.quoteVersion.findUnique({
+    where: { id },
+    include: { project: { select: { customer: { include: bloqueioVigenteInclude } } } },
+  });
   if (!quote) throw new QuoteNotFoundError(id);
   if (quote.status !== "SENT") throw new QuoteNotSentError(quote.status);
+  /*
+   * Aceitar fecha o acordo — dali sai a aprovação do projeto e o Pedido.
+   * Cliente bloqueado ou inativo não fecha acordo novo (§95); a proposta
+   * enviada continua no histórico, sem alteração.
+   */
+  assertCustomerCanSell(quote.project.customer);
   /*
    * A validade controla a janela de ACEITE, e só ela. Depois de aceita, a
    * proposta virou acordo: o Pedido pode ser materializado semanas depois sem

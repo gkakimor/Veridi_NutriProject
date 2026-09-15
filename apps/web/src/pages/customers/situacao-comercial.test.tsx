@@ -8,12 +8,13 @@ import type { CustomerDTO } from "@veridi/shared";
  *
  * A lista abre em "Clientes ativos" (padrão registrado no BACKLOG), cada
  * filtro pede o seu recorte ao servidor — quem deriva é a API — e a situação
- * comercial é uma coluna diferente do cadastro ativo/inativo.
+ * comercial é uma coluna diferente da situação cadastral (§95), que responde
+ * "pode vender?" e tem filtro próprio.
  */
 
 vi.mock("../../lib/customers-api", () => ({
   listCustomers: vi.fn(),
-  setCustomerActive: vi.fn(),
+  changeCustomerStatus: vi.fn(),
   createCustomer: vi.fn(),
   updateCustomer: vi.fn(),
 }));
@@ -41,6 +42,9 @@ function cliente(overrides: Partial<CustomerDTO> = {}): CustomerDTO {
     notes: null,
     businessLotSuffix: null,
     active: true,
+    blocked: false,
+    status: "ACTIVE",
+    block: null,
     createdAt: "2026-08-31T17:32:00.000Z",
     createdByName: null,
     updatedAt: "2026-08-31T19:14:00.000Z",
@@ -49,9 +53,10 @@ function cliente(overrides: Partial<CustomerDTO> = {}): CustomerDTO {
   };
 }
 
-/** Cadastro INATIVO e Cliente ativo: as duas perguntas convivem. */
+/** Cadastro INATIVO e Cliente ativo comercialmente: as duas perguntas convivem. */
 const ATIVO_COM_CADASTRO_INATIVO = cliente({
   active: false,
+  status: "INACTIVE",
   commercial: { status: "ACTIVE", reason: "Projeto aprovado (PROJ-000001)", customerSince: "2026-03-18" },
 });
 const PROSPECT = cliente({
@@ -103,28 +108,29 @@ describe("CUSTOMER-COMMERCIAL-STATUS-01 — lista de Clientes", () => {
     await waitFor(() => expect(ultimaConsulta().commercialStatus).toBeUndefined());
   });
 
-  it("situação comercial e cadastro são colunas diferentes, com o motivo no rótulo", async () => {
+  it("situação comercial e situação cadastral são colunas diferentes, com o motivo no rótulo", async () => {
     abrir();
     const linha = (await screen.findByText("CLI-000001")).closest("tr")!;
     expect(within(linha).getByText("Cliente ativo")).toBeInTheDocument();
-    // O cadastro inativo continua sendo dito — na coluna dele.
+    // O cadastro arquivado continua sendo dito — na coluna dele.
     expect(within(linha).getByText("Inativo")).toBeInTheDocument();
 
     const cabecalhos = screen.getAllByRole("columnheader").map((celula) => celula.textContent ?? "");
     expect(cabecalhos).toContain("Situação comercial");
-    expect(cabecalhos.some((texto) => texto.startsWith("Cadastro"))).toBe(true);
+    expect(cabecalhos.some((texto) => texto.startsWith("Situação cadastral"))).toBe(true);
 
     const outra = screen.getByText("CLI-000002").closest("tr")!;
     expect(within(outra).getByText("Prospect")).toHaveAttribute("title", "Projeto PROJ-000009 em andamento");
   });
 
-  it("lista vazia no padrão diz a situação e oferece ver todos", async () => {
+  it("lista vazia no padrão diz as situações filtradas e oferece ver todos", async () => {
     vi.mocked(listCustomers).mockResolvedValue({ customers: [], page: 1, pageSize: 20, total: 0 });
     abrir();
-    expect(await screen.findByText(/Nenhum cliente com a situação comercial/)).toBeInTheDocument();
+    expect(await screen.findByText(/Nenhum cliente com a situação/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Ver todos" }));
     await waitFor(() => expect(filtro().value).toBe("ALL"));
     await waitFor(() => expect(ultimaConsulta().commercialStatus).toBeUndefined());
+    expect(ultimaConsulta().status).toBeUndefined();
   });
 
   it("a chegada por contexto mostra o registro, seja qual for a situação dele", async () => {
@@ -132,5 +138,6 @@ describe("CUSTOMER-COMMERCIAL-STATUS-01 — lista de Clientes", () => {
     await screen.findByText("CLI-000002");
     await waitFor(() => expect(ultimaConsulta()).toEqual(expect.objectContaining({ ids: ["cli-2"] })));
     expect(ultimaConsulta().commercialStatus).toBeUndefined();
+    expect(ultimaConsulta().status).toBeUndefined();
   });
 });
