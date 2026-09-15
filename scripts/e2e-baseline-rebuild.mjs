@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writ
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { estadoDasMigrations } from "./e2e-baseline-migrations.mjs";
 import { descreverDestino, exigirBancoLocal } from "./local-db-guard.mjs";
 
 /**
@@ -34,6 +35,10 @@ import { descreverDestino, exigirBancoLocal } from "./local-db-guard.mjs";
  * `../.local-data/veridi/e2e-baseline/<banco>/`: o importador grava plano,
  * findings e de-para ao lado dos CSVs, e a cópia mantém os relatórios da carga
  * de produção onde estão.
+ *
+ * `baseline.json` registra também o estado das migrations aplicadas
+ * (`e2e-baseline-migrations.mjs`): é por ele que `pnpm e2e:run` recusa clonar
+ * uma base montada com outra cadeia de migrations.
  */
 
 const RAIZ = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -196,7 +201,13 @@ async function main() {
   writeFileSync(
     path.join(trabalho, "baseline.json"),
     JSON.stringify(
-      { banco: alvo.banco, geradoEm: new Date().toISOString(), pacote: plano.reviewPackage?.identidade ?? null, contagens },
+      {
+        banco: alvo.banco,
+        geradoEm: new Date().toISOString(),
+        pacote: plano.reviewPackage?.identidade ?? null,
+        migrations: estadoDasMigrations(path.join(API, "prisma", "migrations")),
+        contagens,
+      },
       null,
       2,
     ),
