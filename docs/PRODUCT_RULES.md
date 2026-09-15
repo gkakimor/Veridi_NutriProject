@@ -2232,6 +2232,17 @@ the official roadmap ordering.
   is complete**. With any incomplete document the aggregate is `null` and
   the surface states that values are incomplete, alongside how many
   documents are complete. A partial sum is never displayed as a total.
+- The **billed value** of a billing document is its frozen
+  `Billing.totalAmount` — rounded line sum, minus the apportioned discount,
+  plus the closing adjustment (§34, §55) — and is never recomputed as
+  `quantity × unitPrice` over the lines. The Dashboard "Valor faturado", R-14
+  and R-15 (screen, CSV and the PDF built from the CSV) read it through one
+  implementation (`billings/billed-value.ts`), the same rule the billing
+  document and the order summary apply; an aggregate is the sum of document
+  values under the rule above. A legacy issued billing without a frozen total
+  is worth the sum of its rounded lines, exactly what the document shows. PO
+  decision D1 of FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01,
+  BILLED-VALUE-CANONICAL-01 (2026-09-15).
 - The attention list is fully **derived**: no `Attention` table, no
   persisted severity, no configurable rule engine. Severity comes from a
   fixed map, ordering is severity → date → code (deterministic), and the

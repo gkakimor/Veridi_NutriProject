@@ -18,7 +18,7 @@ zero BLOCKER. O MVP foi entregue; o que está aqui é evolução do produto.
 
 | Ordem | Prioridade | Item | Estado | Próxima ação | Dependência |
 |---|---|---|---|---|---|
-| 1 | P1 | **BILLED-VALUE-CANONICAL-01** — "Valor faturado" do Painel, R-15 e R-14 igual ao valor do documento (seção A) | ABERTO · HIGH · sem migration | PO responde D1 do Painel Gerencial (recomendado: `Billing.totalAmount`); depois implementar | D1 |
+| 1 | P1 | ~~**BILLED-VALUE-CANONICAL-01**~~ — "Valor faturado" do Painel, R-15 e R-14 igual ao valor do documento | **FECHADO em 2026-09-15** · D1 decidida pelo PO: `Billing.totalAmount` · sem migration | — (entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
 | 2 | P1 | **E2E-BASELINE-REDESIGN-WAVE-04** — grupo C das E2E com massa própria | Discovery `EM_ANALISE`; P1 e a espera da 4E resolvidas pelo estado posterior | PO fecha P2–P8 ([abaixo](#wave-4--decisões-ainda-reais)); 4A pode começar | — |
 | 3 | P1 | **INVENTORY-PHYSICAL-COUNT-DISCOVERY-01** — Inventário Físico em sessões de inventário | Discovery `EM_ANALISE` · D1–D4 bloqueiam | PO fecha D1–D4 ([discovery](discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md)); depois INVENTORY-PHYSICAL-COUNT-01 | — |
 | 4 | P1 | Decisões de **FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01** → MANAGEMENT-DASHBOARD-V1-01 (Painel Gerencial) | Discovery `EM_ANALISE` · D2–D5 abertas | PO fecha D2–D5; implementar a versão 1 | BILLED-VALUE-CANONICAL-01 entregue |
@@ -42,13 +42,6 @@ watchlist (E). A estabilização final (7) é o lugar natural para varrê-los.
 ---
 
 ## Decisões ainda reais, por item da fila
-
-### BILLED-VALUE-CANONICAL-01 — posição
-
-Primeiro da fila porque é dinheiro já exibido a todos os perfis e pré-requisito do Painel Gerencial. Pronto para
-implementar assim que o PO responder D1 de
-[FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01](discovery/FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01.md). Detalhe na
-seção A.
 
 ### WAVE 4 — decisões ainda reais
 
@@ -89,11 +82,12 @@ localizações seguem FUTURO.
 
 ### Painel Gerencial — status
 
-Nome recomendado: **Painel Gerencial**, não "Painel Financeiro". D1 destrava BILLED-VALUE-CANONICAL-01; D2 (valores
-incompletos), D3 (nome e lugar), D4 (quem vê) e D5 (valor de carteira e a faturar) destravam MANAGEMENT-DASHBOARD-V1-01,
-que só começa com BILLED-VALUE-CANONICAL-01 entregue. Fora da versão 1, e não promovidos: contas a pagar, contas a
-receber, caixa e margem realizada. Pendências do discovery sem posição: encerramento de saldo de OC parcialmente
-recebida (G5) e preço acordado em Pedido direto (G2).
+Nome recomendado: **Painel Gerencial**, não "Painel Financeiro". D1 decidida em 2026-09-15 (`Billing.totalAmount`) e
+BILLED-VALUE-CANONICAL-01 entregue no mesmo dia: o faturado de qualquer tela nova sai de `billings/billed-value.ts`
+(`valorDoFaturamento`, `resumirValorFaturado`), nunca de uma conta própria. D2 (valores incompletos), D3 (nome e lugar),
+D4 (quem vê) e D5 (valor de carteira e a faturar) destravam MANAGEMENT-DASHBOARD-V1-01. Fora da versão 1, e não
+promovidos: contas a pagar, contas a receber, caixa e margem realizada. Pendências do discovery sem posição:
+encerramento de saldo de OC parcialmente recebida (G5) e preço acordado em Pedido direto (G2).
 
 ### Permissões da Produção — status
 
@@ -142,37 +136,6 @@ Triados em 2026-09-07 sobre a auditoria de produto. Evidência, passos e
 conferência numérica ficam em [`archive/E2E_AUDIT_2026-09-07.md`](archive/E2E_AUDIT_2026-09-07.md);
 aqui fica só o que exige trabalho, com a severidade **do PO**, que nem sempre é
 a do auditor.
-
-### BILLED-VALUE-CANONICAL-01 — "Valor faturado" do Painel, do R-15 e do R-14 não é o valor dos documentos — ABERTO
-
-Achado de FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01 (2026-09-15,
-[`discovery/`](discovery/FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01.md), F1),
-sem correção. **Severidade HIGH** — dinheiro exibido a todos os perfis.
-Posição 1 da fila viva desde 2026-09-15; é pré-requisito de qualquer Painel Gerencial.
-
-O documento de Faturamento, a lista, o resumo do Pedido e a Visão do Cliente
-mostram `Billing.totalAmount`: congelado na emissão, com desconto apropriado e
-ajuste de fechamento, e com cada linha arredondada antes da soma (§34, §55). Três
-superfícies somam por conta própria `quantidade × preço` de todas as linhas, sem
-desconto e sem arredondar a linha:
-
-- Painel, "Valor faturado" — `modules/dashboard/dashboard.service.ts:60-72`;
-- R-15, valor por documento, total do filtro, CSV e PDF —
-  `modules/reports/billing-reports.service.ts:78-92`;
-- R-14, valor de cada faturamento — `modules/reports/commercial-reports.service.ts:409-426`.
-
-Pedido de R$ 1.000,00 com 10% de desconto, faturado num documento: o documento
-vale R$ 900,00; Painel, R-15 e R-14 dizem R$ 1.000,00. Duas linhas de
-`1 × 0,1250`: o documento soma R$ 0,26; Painel e R-15 dizem R$ 0,25. O teste do
-Painel só cobre documento sem desconto (`dashboard.test.ts:386-490`), e o
-comentário de `web pages/customer-consultation/SummaryTab.tsx:11-19` ainda diz que
-o total do Faturamento não é persistido.
-
-Direção recomendada, **dependente da decisão D1 do discovery**: uma função única
-de valor do documento emitido — `totalAmount`; o legado sem ele vale a soma das
-linhas arredondadas — servindo às três superfícies, com a regra de ausência de
-sempre (total só com todos os documentos completos). Nada gravado muda, só a
-leitura das três superfícies. Sem migration.
 
 ### LOW e UX da triagem de 2026-09-07
 

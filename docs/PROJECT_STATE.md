@@ -48,7 +48,8 @@ estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0
   path (WAVE-05-GOLDEN-PATH-DISCOVERY-01) e permissões da Produção (PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01);
 - **Inventário Físico:** PO baseline aprovada (INVENTORY-PHYSICAL-COUNT-PO-BASELINE-01, seção G do BACKLOG); discovery
   completo ainda não executado;
-- **defeito HIGH aberto:** BILLED-VALUE-CANONICAL-01, primeiro da fila;
+- **Painel Gerencial:** D1 decidida e BILLED-VALUE-CANONICAL-01 fechado em 2026-09-15 (valor faturado = `Billing.totalAmount`
+  em Painel, R-14 e R-15); D2–D5 abertas antes de MANAGEMENT-DASHBOARD-V1-01;
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 
 Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
@@ -4609,9 +4610,15 @@ nem vírgula entrar (o prazo passou a testar `0` e `121`), `1,2,3` também não 
 
 ## Próxima prioridade
 
-**A ordem vive na fila viva do [`BACKLOG.md`](BACKLOG.md)**, reconciliada em 2026-09-15: BILLED-VALUE-CANONICAL-01;
-WAVE 4; discovery completo do Inventário Físico; decisões do Painel Gerencial; decisões de permissões da Produção;
-WAVE 5; estabilização final. Os parágrafos abaixo registram como cada assunto chegou até aqui.
+**A ordem vive na fila viva do [`BACKLOG.md`](BACKLOG.md)**, reconciliada em 2026-09-15: WAVE 4; discovery completo do
+Inventário Físico; decisões do Painel Gerencial; decisões de permissões da Produção; WAVE 5; estabilização final. Os
+parágrafos abaixo registram como cada assunto chegou até aqui.
+
+**BILLED-VALUE-CANONICAL-01 fechado em 2026-09-15** (§30), o primeiro da fila: com a decisão D1 do PO,
+`Billing.totalAmount` é a autoridade do valor faturado. Painel, R-14 e R-15 — tela, CSV e o PDF, que lê o CSV — leem
+`billings/billed-value.ts` (`valorDoFaturamento` e `resumirValorFaturado`, com o `SUM` do total congelado no banco);
+emitido legado sem total congelado vale a soma das linhas arredondadas, como o próprio documento. Sem migration.
+MANAGEMENT-DASHBOARD-V1-01 continua esperando D2–D5 e lê o faturado por essas funções.
 
 **PRICING-TEMPLATE-FLEX-01 fechado em 2026-09-11** (§84). Os três achados fecharam:
 PRICING-MODEL-DIFF-01 e PRICING-ACTIVATE-CONFIRM-01 em COST-PRICING-CLARITY-WAVE-01, e

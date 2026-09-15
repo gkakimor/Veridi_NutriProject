@@ -1129,6 +1129,39 @@ devolve a Prospect**.
 **Contrato não dirige situação** — ver COM-CONTRACT-01. Cliente pode ser ativo
 sem contrato cadastrado; os conceitos são independentes.
 
+### BILLED-VALUE-CANONICAL-01 — "Valor faturado" do Painel, do R-15 e do R-14 não era o valor dos documentos — **RESOLVIDO em 2026-09-15**
+
+**Fechado em 2026-09-15**, depois da decisão D1 do PO em
+[FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01](../discovery/FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01.md):
+`Billing.totalAmount` é a autoridade do valor faturado. Regra durável em [`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §30;
+proteção em [`TEST_COVERAGE_MAP.md`](../TEST_COVERAGE_MAP.md). Sem migration e sem backfill.
+
+Painel ("Valor faturado"), R-15 (linha, total do filtro, CSV e o PDF, que lê o CSV) e R-14 passaram a ler
+`apps/api/src/modules/billings/billed-value.ts`: `valorDoFaturamento` para um documento e `resumirValorFaturado` para
+um recorte de emitidos — `SUM` do `totalAmount` congelado no banco, com as linhas carregadas só para os documentos sem
+valor congelado. Emitido legado sem total congelado (a migration `20260925093009_billing_commercial_reconciliation`
+criou as colunas sem preencher o passado) vale a soma das linhas arredondadas, o mesmo que o documento mostra; sem
+preço completo o documento não tem valor e o total não sai. Rascunho não entra em total; no R-14 vale o número do
+resumo do Pedido. Prova em `valor-faturado-canonico.test.ts` — documento, resumo do Pedido, R-14, R-15, CSV e Painel com
+o mesmo número sem desconto, com desconto, com ajuste de fechamento, com linha arredondada, com vários documentos,
+incompleto e legado — e em `r15-resumo-agregado.test.ts`; 9 mutações derrubadas.
+
+Registro original (BACKLOG, seção A, 2026-09-15):
+
+Achado de FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01 (F1), sem correção. **Severidade HIGH** — dinheiro exibido a
+todos os perfis. Posição 1 da fila viva; pré-requisito de qualquer Painel Gerencial.
+
+O documento de Faturamento, a lista, o resumo do Pedido e a Visão do Cliente mostravam `Billing.totalAmount`: congelado
+na emissão, com desconto apropriado e ajuste de fechamento, e com cada linha arredondada antes da soma (§34, §55). Três
+superfícies somavam por conta própria `quantidade × preço` de todas as linhas, sem desconto e sem arredondar a linha:
+Painel, "Valor faturado" (`modules/dashboard/dashboard.service.ts:60-72`); R-15, valor por documento, total do filtro,
+CSV e PDF (`modules/reports/billing-reports.service.ts:78-92`); R-14, valor de cada faturamento
+(`modules/reports/commercial-reports.service.ts:409-426`). Pedido de R$ 1.000,00 com 10% de desconto, faturado num
+documento: o documento valia R$ 900,00; Painel, R-15 e R-14 diziam R$ 1.000,00. Duas linhas de `1 × 0,1250`: o
+documento somava R$ 0,26; Painel e R-15 diziam R$ 0,25. O teste do Painel só cobria documento sem desconto, e o
+comentário de `web pages/customer-consultation/SummaryTab.tsx` dizia que o total do Faturamento não era persistido
+(corrigido na mesma entrega).
+
 ## Seção A — linhas fechadas das tabelas
 
 | ID | Título | Sev. | Tam. |
