@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { premissasIniciaisDoProduto } from "../formulations/formulations.service.js";
 import type { Prisma as PrismaTypes, ProductLifecycle, Project, User } from "@prisma/client";
 import type { ProjectCostingSummaryDTO } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
@@ -108,6 +109,9 @@ export async function createProjectProduct(
       versionNumber: 1,
       status: "DRAFT",
       basisQuantity: new Prisma.Decimal(1),
+      // Forma, apresentação e dose vieram do brief do projeto para o produto;
+      // a V1 nasce com elas em vez de em branco (FORMULATION-WORKBENCH-01).
+      ...premissasIniciaisDoProduto(product),
       outputItemId: finishedItem.id,
       outputItemCode: finishedItem.code,
       outputItemName: finishedItem.name,

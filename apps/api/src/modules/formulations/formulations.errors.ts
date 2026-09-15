@@ -93,6 +93,26 @@ export class IncompatibleComponentUnitError extends Error {
   }
 }
 
+/**
+ * Premissa da apresentação que não fecha um número de doses
+ * (FORMULATION-WORKBENCH-01).
+ *
+ * Carrega o CAMPO junto da frase porque a recusa tem endereço: "cápsulas por
+ * embalagem precisa ser múltiplo de cápsulas por dose" dito na faixa do topo
+ * manda a pessoa procurar qual dos campos está errado. Arredondar as doses
+ * seria pior que recusar — mudaria em silêncio o material de toda linha por
+ * dose.
+ */
+export class InvalidFormulationPresentationError extends Error {
+  constructor(
+    readonly path: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "InvalidFormulationPresentationError";
+  }
+}
+
 /** Motivo já vem pronto em português — reúne todas as falhas do gate de ativação (seção 16). */
 export class FormulationActivationError extends Error {
   constructor(message: string) {

@@ -224,6 +224,14 @@ interface PainelDeAjustesProps {
   onCancelar: () => void;
   /** Onde a regra vai valer: a frase do cálculo muda entre Formulação e Modelo. */
   contexto?: "FORMULACAO" | "MODELO" | undefined;
+  /**
+   * Mostrar o campo de pureza aqui? Na bancada da Formulação a pureza é COLUNA
+   * da linha de matéria-prima (FORMULATION-WORKBENCH-01) — repetir o campo no
+   * painel daria dois lugares para editar o mesmo valor, e o painel só aplica
+   * no "Aplicar ajustes". A caixa "Corrigir pela pureza" continua aqui: marcar
+   * é a autorização, e ela é do painel.
+   */
+  mostrarPureza?: boolean | undefined;
   /** Recusa que veio de fora (servidor, salvar) para um campo desta linha. */
   errosExternos?: Partial<Record<CampoDeAjuste, string>> | undefined;
   /** Alguém tentou fechar, salvar ou ativar com esta alteração aberta. */
@@ -327,15 +335,19 @@ export function PainelDeAjustes(props: PainelDeAjustesProps) {
             />
           )}
           <span>Pureza %</span>
-          <PercentField
-            id={props.idDoCampo("purityPercentApplied")}
-            scale={CASAS_PERCENTUAL_TECNICO}
-            aria-label="Pureza aplicada"
-            placeholder="—"
-            value={rascunho.purityPercentApplied}
-            onChangeValue={(valor) => mudar("purityPercentApplied", valor)}
-            {...marcaDeErro("purityPercentApplied")}
-          />
+          {props.mostrarPureza === false ? (
+            <strong>{rascunho.purityPercentApplied.trim() || "—"}</strong>
+          ) : (
+            <PercentField
+              id={props.idDoCampo("purityPercentApplied")}
+              scale={CASAS_PERCENTUAL_TECNICO}
+              aria-label="Pureza aplicada"
+              placeholder="—"
+              value={rascunho.purityPercentApplied}
+              onChangeValue={(valor) => mudar("purityPercentApplied", valor)}
+              {...marcaDeErro("purityPercentApplied")}
+            />
+          )}
         </label>
         {mensagem("purityPercentApplied") && (
           <p className="field__error" id={idDaMensagem("purityPercentApplied")}>

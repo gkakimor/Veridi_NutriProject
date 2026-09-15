@@ -3461,6 +3461,39 @@ button.help-flow__box:focus-visible {
   text-align: right;
 }
 
+/*
+ * Colunas da BANCADA (FORMULATION-WORKBENCH-01): fonte/função, pureza e as
+ * grandezas por dose e por cápsula. A composição tem mais colunas que a
+ * embalagem porque responde mais perguntas; base e fornecimento passaram a
+ * dividir uma célula, um sob o outro, para a largura sobrar onde a conta
+ * aparece. Em 1440 a tabela continua cabendo; abaixo disso rola de lado com a
+ * ação fixa, e cada célula segue legível.
+ */
+.table--formulacao .col-fonte {
+  min-width: 148px;
+}
+
+.table--formulacao .col-pureza {
+  min-width: 100px;
+  text-align: right;
+}
+
+.table--formulacao .col-dose,
+.table--formulacao .col-capsula {
+  min-width: 108px;
+  text-align: right;
+}
+
+.table--formulacao .col-regras {
+  min-width: 152px;
+}
+
+.table--formulacao .col-regras__campos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
 .table--formulacao td select,
 .table--formulacao td input[type="text"] {
   width: 100%;

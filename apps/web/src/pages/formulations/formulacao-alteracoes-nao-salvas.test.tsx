@@ -91,6 +91,23 @@ function versao(): FormulationVersionDTO {
     basisQuantity: "1",
     calculationMode: "FIXED_BASIS",
     dosesPerPackage: null,
+    // Premissas da bancada (FORMULATION-WORKBENCH-01): versão sem elas.
+    dosageForm: null,
+    presentationType: null,
+    capsulesPerDose: null,
+    capsulesPerPackage: null,
+    doseAmount: null,
+    doseUomCode: null,
+    packageContentAmount: null,
+    packageContentUomCode: null,
+    productProfile: {
+      dosageForm: null,
+      presentationType: null,
+      capsulesPerDose: null,
+      doseAmount: null,
+      doseUomCode: null,
+      dosesPerPackage: null,
+    },
     outputItemId: "pa-1",
     outputItemCode: "PA-000005",
     outputItemName: "Produto de teste",
@@ -185,8 +202,10 @@ describe("Formulação — guarda de alterações não salvas", () => {
     await abrir();
 
     await user.click(screen.getByRole("button", { name: /Calculada/ }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Pureza aplicada" }), {
-      target: { value: "95" },
+    // Overage: o que ainda mora no painel e só vale depois de "Aplicar ajustes"
+    // (a pureza virou coluna da linha em FORMULATION-WORKBENCH-01).
+    fireEvent.change(screen.getByRole("textbox", { name: "Overage do componente" }), {
+      target: { value: "5" },
     });
 
     await user.click(menuPedidos());

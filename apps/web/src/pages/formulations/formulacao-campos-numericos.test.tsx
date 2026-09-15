@@ -290,14 +290,16 @@ describe("Formulação — percentual técnico com seis casas", () => {
     const user = userEvent.setup();
     await abrir();
 
-    await user.click(screen.getByRole("button", { name: /Física informada/ }));
-    const pureza = screen.getByRole("textbox", { name: "Pureza aplicada" }) as HTMLInputElement;
+    // A pureza é coluna da linha desde FORMULATION-WORKBENCH-01: o campo está à
+    // vista, e o que ele recusa continua sendo o mesmo.
+    const pureza = screen.getByRole("textbox", {
+      name: "Pureza de MP-000003",
+    }) as HTMLInputElement;
 
     fireEvent.change(pureza, { target: { value: "99,9999999" } });
     expect(pureza.value).not.toBe("99,9999999");
 
     fireEvent.change(pureza, { target: { value: "12,5" } });
-    await user.click(screen.getByRole("button", { name: "Aplicar ajustes" }));
     await salvar(user);
 
     await waitFor(() => expect(updateFormulationVersion).toHaveBeenCalledTimes(1));

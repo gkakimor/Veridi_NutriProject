@@ -8,6 +8,8 @@ import {
   quantityDecimalSchema,
 } from "../../lib/decimal-schema.js";
 import {
+  optionalEnum,
+  optionalPositiveDecimal,
   optionalPositiveInt,
   optionalPurityPercent,
 } from "../../lib/industrial-schema.js";
@@ -90,6 +92,26 @@ export const updateFormulationVersionSchema = z.object({
   basisQuantity: quantityDecimalSchema().optional(),
   calculationMode: z.enum(["FIXED_BASIS", "PER_DOSE"]).optional(),
   dosesPerPackage: optionalPositiveInt("Doses por embalagem deve ser maior que zero"),
+  /*
+   * PREMISSAS DA APRESENTAÇÃO — os mesmos validadores do cadastro do Produto:
+   * enum (ou "" para limpar), inteiro positivo, decimal positivo.
+   *
+   * Nas formas cápsula e pó o serviço DERIVA `dosesPerPackage` destas premissas
+   * (cápsulas por embalagem ÷ cápsulas por dose; conteúdo ÷ dose), e o número
+   * que o cliente mandar não substitui a divisão: duas fontes para a mesma
+   * premissa divergem no primeiro campo que alguém esquecer de atualizar.
+   *
+   * `capsulesPerPackage` é ENTRADA, não coluna — volta no DTO como produto de
+   * cápsulas por dose e doses por embalagem.
+   */
+  dosageForm: optionalEnum(["CAPSULE", "POWDER", "TABLET", "LIQUID", "OTHER"]),
+  presentationType: optionalEnum(["POT", "POUCH", "CARTON", "BULK", "BOTTLE", "OTHER"]),
+  capsulesPerDose: optionalPositiveInt("Cápsulas por dose deve ser maior que zero"),
+  capsulesPerPackage: optionalPositiveInt("Cápsulas por embalagem deve ser maior que zero"),
+  doseAmount: optionalPositiveDecimal("Dose deve ser maior que zero"),
+  doseUomCode: optionalNullableText(20),
+  packageContentAmount: optionalPositiveDecimal("Conteúdo da embalagem deve ser maior que zero"),
+  packageContentUomCode: optionalNullableText(20),
   notes: optionalNullableText(2000),
   components: z.array(formulationComponentInputSchema).optional(),
 });

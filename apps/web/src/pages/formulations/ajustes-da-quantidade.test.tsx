@@ -161,13 +161,36 @@ describe("Painel de ajustes — rascunho, Aplicar e Cancelar", () => {
     expect(vi.mocked(updateFormulationVersion)).not.toHaveBeenCalled();
   });
 
+  it("pureza é COLUNA da linha e vale na hora; o painel só autoriza a correção", async () => {
+    const user = userEvent.setup();
+    await abrir();
+
+    /*
+     * FORMULATION-WORKBENCH-01: a pureza saiu do painel para a coluna da linha
+     * de matéria-prima, porque é ela que responde "por que essa quantidade
+     * física". O painel continua dono do MODO e das marcas — e mostra a pureza
+     * vigente sem um segundo campo para editá-la, que seria dois lugares
+     * gravando o mesmo valor.
+     */
+    fireEvent.change(screen.getByRole("textbox", { name: "Pureza de MP-000003" }), {
+      target: { value: "50" },
+    });
+
+    await waitFor(() => expect(celula("fisico")).toBe("0,44 kg"));
+    expect(painel()).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /Calculada · Pureza 50%/ }));
+    expect(screen.queryByRole("textbox", { name: "Pureza aplicada" })).toBeNull();
+    expect(screen.getByRole("checkbox", { name: "Corrigir pela pureza" })).toBeChecked();
+  });
+
   it("Cancelar descarta só o que mudou desde que o painel abriu", async () => {
     const user = userEvent.setup();
     await abrir();
 
     await user.click(screen.getByRole("button", { name: /Calculada/ }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Pureza aplicada" }), {
-      target: { value: "95" },
+    fireEvent.change(screen.getByRole("textbox", { name: "Overage do componente" }), {
+      target: { value: "5" },
     });
     await user.click(screen.getByRole("button", { name: "Cancelar" }));
 
@@ -176,7 +199,7 @@ describe("Painel de ajustes — rascunho, Aplicar e Cancelar", () => {
 
     // Reaberto, o painel parte do que a linha tem — não do que foi cancelado.
     await user.click(screen.getByRole("button", { name: /Calculada/ }));
-    expect(screen.getByRole("textbox", { name: "Pureza aplicada" })).toHaveValue("98");
+    expect(screen.getByRole("textbox", { name: "Overage do componente" })).toHaveValue("");
   });
 
   it("Aplicar fica desabilitado sem alteração e com valor inválido", async () => {
@@ -186,14 +209,14 @@ describe("Painel de ajustes — rascunho, Aplicar e Cancelar", () => {
 
     expect(aplicar()).toBeDisabled();
 
-    const pureza = screen.getByRole("textbox", { name: "Pureza aplicada" });
+    const overage = screen.getByRole("textbox", { name: "Overage do componente" });
     // Letra nem entra no campo; o ambíguo `1.234` entra e não vira número.
-    fireEvent.change(pureza, { target: { value: "1.234" } });
+    fireEvent.change(overage, { target: { value: "1.234" } });
     expect(aplicar()).toBeDisabled();
-    expect(pureza).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByText(/MP-000003 — Pureza %/)).toBeInTheDocument();
+    expect(overage).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText(/MP-000003 — Overage %/)).toBeInTheDocument();
 
-    fireEvent.change(pureza, { target: { value: "97" } });
+    fireEvent.change(overage, { target: { value: "2" } });
     expect(aplicar()).toBeEnabled();
   });
 
@@ -202,8 +225,8 @@ describe("Painel de ajustes — rascunho, Aplicar e Cancelar", () => {
     await abrir();
     const botaoDaLinha = screen.getByRole("button", { name: /Calculada/ });
     await user.click(botaoDaLinha);
-    fireEvent.change(screen.getByRole("textbox", { name: "Pureza aplicada" }), {
-      target: { value: "95" },
+    fireEvent.change(screen.getByRole("textbox", { name: "Overage do componente" }), {
+      target: { value: "5" },
     });
 
     await user.click(botaoDaLinha);
@@ -213,15 +236,15 @@ describe("Painel de ajustes — rascunho, Aplicar e Cancelar", () => {
     expect(within(painel() as HTMLElement).getByRole("status")).toHaveTextContent(
       /Há ajustes não aplicados nesta linha/,
     );
-    expect(screen.getByRole("textbox", { name: "Pureza aplicada" })).toHaveValue("95");
+    expect(screen.getByRole("textbox", { name: "Overage do componente" })).toHaveValue("5");
   });
 
   it("salvar com ajuste por aplicar é recusado e diz qual linha", async () => {
     const user = userEvent.setup();
     await abrir();
     await user.click(screen.getByRole("button", { name: /Calculada/ }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Pureza aplicada" }), {
-      target: { value: "95" },
+    fireEvent.change(screen.getByRole("textbox", { name: "Overage do componente" }), {
+      target: { value: "5" },
     });
 
     await user.click(screen.getByRole("button", { name: /Salvar rascunho/i }));
@@ -237,8 +260,8 @@ describe("Painel de ajustes — rascunho, Aplicar e Cancelar", () => {
     const user = userEvent.setup();
     await abrir();
     await user.click(screen.getByRole("button", { name: /Calculada/ }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Pureza aplicada" }), {
-      target: { value: "95" },
+    fireEvent.change(screen.getByRole("textbox", { name: "Overage do componente" }), {
+      target: { value: "5" },
     });
 
     await user.click(screen.getByRole("button", { name: /Ativar versão/ }));
@@ -332,43 +355,45 @@ describe("Resumo dos ajustes na linha", () => {
   });
 });
 
-describe("Colunas Equivalente estoque e Físico / unidade", () => {
-  it("cada valor fica na sua coluna, sob o seu cabeçalho, alinhado à direita", async () => {
+describe("Coluna Por embalagem — físico e equivalente na mesma célula", () => {
+  it("os dois números ficam sob o mesmo cabeçalho, alinhados à direita", async () => {
     await abrir();
 
-    const cabecalhos = Array.from(document.querySelectorAll("thead th")).map(
+    /*
+     * A bancada trouxe as grandezas por DOSE e por CÁPSULA para a linha
+     * (FORMULATION-WORKBENCH-01), e o par equivalente/físico por embalagem
+     * passou a dividir uma célula: continuam nomeados e juntos, sob o cabeçalho
+     * que diz de que embalagem se fala.
+     */
+    const tabela = document.querySelector("table.table--formulacao")!;
+    const cabecalhos = Array.from(tabela.querySelectorAll("thead th")).map(
       (th) => th.textContent?.trim() ?? "",
     );
-    const equivalente = cabecalhos.findIndex((texto) => texto.startsWith("Equivalente estoque"));
-    const fisico = cabecalhos.findIndex((texto) => texto.startsWith("Físico / unidade"));
-    expect(equivalente).toBeGreaterThan(-1);
-    expect(fisico).toBe(equivalente + 1);
+    const porEmbalagem = cabecalhos.findIndex((texto) => texto.startsWith("Por embalagem"));
+    expect(porEmbalagem).toBeGreaterThan(-1);
 
-    const celulas = document.querySelectorAll("tbody tr:first-child > td");
-    expect(celulas[equivalente]!.querySelector(".estoque-valor--equivalente")?.textContent).toBe(
-      "0,22 kg",
-    );
-    expect(celulas[fisico]!.querySelector(".estoque-valor--fisico")?.textContent).toBe(
-      "0,22449 kg",
-    );
-    expect(celulas[equivalente]!.classList.contains("is-numeric")).toBe(true);
-    expect(celulas[fisico]!.classList.contains("is-numeric")).toBe(true);
+    const celulas = tabela.querySelectorAll("tbody tr:first-child > td");
+    const doEstoque = celulas[porEmbalagem]!;
+    expect(doEstoque.querySelector(".estoque-valor--fisico")?.textContent).toBe("0,22449 kg");
+    expect(doEstoque.querySelector(".estoque-valor--equivalente")?.textContent).toBe("0,22 kg");
+    expect(doEstoque.classList.contains("is-numeric")).toBe(true);
   });
 
   it("em tela estreita cada valor técnico leva o seu rótulo, para virar cartão", async () => {
     await abrir();
 
-    const linha = document.querySelector("tbody tr")!;
+    const linha = document.querySelector("table.table--formulacao tbody tr")!;
     const rotulos = Array.from(linha.querySelectorAll("td[data-label]")).map((td) =>
       td.getAttribute("data-label"),
     );
     expect(rotulos).toEqual([
-      "Base",
-      "Fornecimento",
-      "Quantidade · unidade",
+      "Fonte / Função",
+      "Pureza",
+      "Alvo por dose",
+      "Física por dose",
+      "Base · Fornecimento",
       "Ajustes",
-      "Equivalente estoque",
-      "Físico / unidade",
+      "Por embalagem",
     ]);
   });
 });
