@@ -91,6 +91,8 @@ const PARES: [arquivo: string, topico: string][] = [
   ["pages/reports/ReportPage.tsx", "relatorio.comoFunciona"],
   ["pages/customer-consultation/ConsultationShell.tsx", "consultaCliente.comoFunciona"],
   ["pages/DashboardPage.tsx", "painel.comoFunciona"],
+  // O Painel Gerencial explica o que ele NÃO é — e não o Painel Operacional.
+  ["pages/management-dashboard/ManagementDashboardPage.tsx", "painelGerencial.comoFunciona"],
 
   // Comercial — o par que motivou o teste: o Pedido explicava o Plano.
   ["pages/customer-orders/CustomerOrdersPage.tsx", "comercial.pedidos"],
@@ -257,6 +259,16 @@ const ESSENCIAIS: Record<string, string[]> = {
   "faturamento.comoFunciona": ["Quantidade faturada", "Preço acordado", "Preço faturado", "Alteração de preço", "Situação"],
   "comercial.projeto": ["Versão de orçamento", "Faixa de precificação", "Aceite", "Produtos do projeto", "Condições comerciais", "Documentos do projeto"],
   "consultaCliente.comoFunciona": ["Abas", "Trocar cliente", "Resumo", "Abrir … completo"],
+  "painelGerencial.comoFunciona": [
+    "Faturado",
+    "Pedidos confirmados",
+    "Compras contratadas",
+    "Clientes faturados",
+    "A expedir",
+    "A faturar",
+    "Valores incompletos",
+    "Comparação",
+  ],
 };
 
 /**

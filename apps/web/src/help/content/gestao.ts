@@ -16,6 +16,79 @@ import type { HelpTopic } from "../help-content";
  */
 export const gestaoTopics = {
 
+  "painelGerencial.comoFunciona": {
+    module: "gestao",
+    title: "Painel Gerencial: valores comerciais, não financeiros",
+    summary:
+      "O Painel Gerencial mostra o que a Veridi faturou, confirmou e contratou no período, a carteira que ainda vai sair e ser faturada, e os compromissos já registrados para os próximos 30 dias. Todo valor vem dos documentos comerciais no momento da consulta. A tela não mostra contas a receber, contas a pagar, caixa, impostos, margem realizada nem CMV do período: esses controles não existem no sistema.",
+    concepts: [
+      {
+        term: "Faturado",
+        text: "Soma do valor dos faturamentos emitidos no período, pela data de emissão. É o valor de cada documento, já com o desconto do pedido. Faturado não quer dizer recebido: o sistema não registra pagamento de cliente.",
+      },
+      {
+        term: "Pedidos confirmados",
+        text: "Pedidos confirmados no período, pelo valor acordado na proposta. Pedido digitado direto não tem valor acordado e deixa o total incompleto. Pedido cancelado depois da confirmação sai da conta, também em períodos passados.",
+      },
+      {
+        term: "Compras contratadas",
+        text: "Ordens de compra confirmadas ao fornecedor, pela data do pedido, com o preço previsto na ordem. Compra contratada não quer dizer paga.",
+      },
+      {
+        term: "Clientes faturados",
+        text: "Quantos clientes diferentes tiveram faturamento emitido no período.",
+      },
+      {
+        term: "A expedir",
+        text: "O saldo dos pedidos em carteira que ainda não saiu, pelo preço acordado de cada linha, antes do desconto do pedido. Não depende do período.",
+      },
+      {
+        term: "A faturar",
+        text: "Expedições confirmadas sem faturamento emitido, pelo preço acordado, antes do desconto. Faturamento em rascunho não conta como faturado. Não depende do período.",
+      },
+      {
+        term: "Valores incompletos",
+        text: "Quando algum documento do recorte não tem valor, a tela não mostra soma: diz quantos têm valor e cita os que faltam. Soma parcial nunca aparece como total.",
+      },
+      {
+        term: "Comparação",
+        text: "Cada indicador do período é comparado com o período equivalente anterior: o mês anterior até o mesmo dia, o mês antes do mês fechado, o mesmo trecho do ano anterior ou o intervalo de mesmo tamanho logo antes. A variação só aparece quando os dois períodos têm valor completo e o anterior é maior que zero.",
+      },
+    ],
+    flow: [
+      {
+        label: "Escolher o período",
+        detail:
+          "Mês atual, Mês anterior, Acumulado no ano ou Personalizado. O período vale para o resultado, a tendência e os rankings — nunca para a posição atual nem para os compromissos.",
+      },
+      {
+        label: "Ler o resultado",
+        detail:
+          "Faturado, pedidos confirmados, compras contratadas e clientes faturados, cada um com o período anterior equivalente ao lado.",
+      },
+      {
+        label: "Conferir a carteira",
+        detail:
+          "A expedir e A faturar mostram o que já foi vendido e ainda não virou faturamento, pelo preço acordado.",
+      },
+      {
+        label: "Abrir os documentos",
+        tone: "accent",
+        detail:
+          "Barras, rankings e listas levam aos faturamentos, pedidos e ordens que formam o número. O documento é que vale.",
+      },
+    ],
+    notes: [
+      "Esta tela não mostra contas a receber, contas a pagar, caixa, impostos, margem realizada nem CMV do período.",
+      "Faturado não significa recebido, e compras contratadas não significam pagas.",
+      "A expedir e A faturar usam o preço acordado antes do desconto do pedido; o Faturado já traz o desconto. Por isso os três nunca são somados num total.",
+      "O ranking de produtos soma o valor das linhas antes do desconto do pedido, e a soma dele não bate com o Faturado. Quantidade aparece só dentro do produto, na unidade dele: quilo e unidade nunca se somam.",
+      "Cliente ou produto com documento sem valor fica fora do ranking e é citado abaixo dele, para o número de ninguém aparecer menor do que é.",
+      "Faturamento emitido não é cancelado nem corrigido no sistema: um documento emitido errado continua no indicador.",
+      "Só os perfis comercial e administrativo abrem esta tela. Os mesmos valores continuam nas telas de faturamento, pedidos e relatórios.",
+    ],
+  },
+
   "calculo.comoFunciona": {
     module: "gestao",
     title: "O cálculo de custo salvo: um retrato congelado",

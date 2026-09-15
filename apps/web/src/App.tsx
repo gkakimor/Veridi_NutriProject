@@ -14,6 +14,7 @@ import { ControlledDocumentsPage } from "./pages/admin/ControlledDocumentsPage";
 import { RecipeSheetPage } from "./pages/production-orders/RecipeSheetPage";
 import { navItems } from "./app/navigation";
 import { DashboardPage } from "./pages/DashboardPage";
+import { ManagementDashboardPage } from "./pages/management-dashboard/ManagementDashboardPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { ItemsPage } from "./pages/items/ItemsPage";
@@ -331,6 +332,9 @@ const router = createBrowserRouter(
         />
         <Route path="/gestao/precificacao" element={<PricingListPage />} />
         <Route path="/gestao/precificacao/:pricingId" element={<PricingPage />} />
+        {/* Gestão → Painel Gerencial (MANAGEMENT-DASHBOARD-V1-01): valores
+            comerciais, não financeiros. O Painel Operacional segue em `/`. */}
+        <Route path="/gestao/painel-gerencial" element={<ManagementDashboardPage />} />
         <Route path="/relatorios" element={<ReportsHubPage />} />
         <Route
           path="/relatorios/custos/industrial-por-produto"

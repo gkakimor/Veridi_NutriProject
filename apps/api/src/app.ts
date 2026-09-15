@@ -54,6 +54,7 @@ import { shipmentsRoutes } from "./modules/shipments/shipments.routes.js";
 import { billingsRoutes } from "./modules/billings/billings.routes.js";
 import { costsRoutes } from "./modules/costs/costs.routes.js";
 import { dashboardRoutes } from "./modules/dashboard/dashboard.routes.js";
+import { managementDashboardRoutes } from "./modules/management-dashboard/management-dashboard.routes.js";
 import { finishedGoodsRoutes } from "./modules/finished-goods/finished-goods.routes.js";
 import { reportsRoutes } from "./modules/reports/reports.routes.js";
 import { exportsRoutes } from "./modules/exports/exports.routes.js";
@@ -135,6 +136,7 @@ export function buildApp() {
   app.register(billingsRoutes);
   app.register(costsRoutes);
   app.register(dashboardRoutes);
+  app.register(managementDashboardRoutes);
   app.register(finishedGoodsRoutes);
   app.register(reportsRoutes);
   app.register(exportsRoutes);

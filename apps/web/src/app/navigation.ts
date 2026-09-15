@@ -1,4 +1,5 @@
 import type { UserRole } from "@veridi/shared";
+import { MANAGEMENT_DASHBOARD_ROLES } from "@veridi/shared";
 import type { NavIconName } from "./nav-icons";
 
 /**
@@ -367,6 +368,19 @@ export const navGroups: NavGroup[] = [
     title: "Gestão",
     icon: "management",
     items: [
+      /*
+       * Tela própria em Gestão (MANAGEMENT-DASHBOARD-V1-01, decisão D3): o
+       * Painel Operacional segue intacto no topo. `GET /management-dashboard`
+       * só responde a Comercial e ADMIN (D4), e a entrada some para os demais.
+       */
+      {
+        id: "management-dashboard",
+        label: "Painel Gerencial",
+        path: "/gestao/painel-gerencial",
+        implemented: true,
+        roles: MANAGEMENT_DASHBOARD_ROLES,
+        aliases: ["gerencial", "faturado", "carteira", "a faturar", "a expedir"],
+      },
       { id: "reports", label: "Relatórios", path: "/relatorios", implemented: true, aliases: ["relatório"] },
       /* `GET /pricing-versions` só responde a Comercial, Compras e ADMIN. */
       {
