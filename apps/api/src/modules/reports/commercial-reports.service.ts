@@ -7,6 +7,7 @@ import type {
   ReportPageDTO,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { valorDoFaturamento } from "../billings/billed-value.js";
 import { getBilledByOrderLines } from "../billings/billings.service.js";
 import { deriveOrderBillingStatus } from "../customer-orders/customer-orders.service.js";
 import { getReservedRemainingByLines, getShippedByOrderLines } from "../shipments/shipments.service.js";
@@ -406,23 +407,17 @@ export async function getOrderOperation(
         unitCode: line.unitCode,
       })),
     })),
-    billings: order.billings.map((billing) => {
-      // Valor só quando o documento inteiro tem preço — parcial nunca vira total.
-      const complete = billing.lines.length > 0 && billing.lines.every((line) => line.unitPrice !== null);
-      return {
-        billingId: billing.id,
-        code: billing.code,
-        shipmentId: billing.shipmentId,
-        shipmentCode: billing.shipmentCode,
-        status: billing.status,
-        issuedAt: billing.issuedAt ? billing.issuedAt.toISOString() : null,
-        lineCount: billing.lines.length,
-        totalAmount: complete
-          ? billing.lines
-              .reduce((sum, line) => sum.plus(line.quantity.times(line.unitPrice!)), new Prisma.Decimal(0))
-              .toFixed(2)
-          : null,
-      };
-    }),
+    billings: order.billings.map((billing) => ({
+      billingId: billing.id,
+      code: billing.code,
+      shipmentId: billing.shipmentId,
+      shipmentCode: billing.shipmentCode,
+      status: billing.status,
+      issuedAt: billing.issuedAt ? billing.issuedAt.toISOString() : null,
+      lineCount: billing.lines.length,
+      // O valor do DOCUMENTO — o mesmo do Faturamento e do resumo do Pedido
+      // (BILLED-VALUE-CANONICAL-01) —, e nunca soma parcial: sem valor, `null`.
+      totalAmount: valorDoFaturamento(billing),
+    })),
   };
 }
