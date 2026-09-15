@@ -1162,6 +1162,23 @@ documento somava R$ 0,26; Painel e R-15 diziam R$ 0,25. O teste do Painel só co
 comentário de `web pages/customer-consultation/SummaryTab.tsx` dizia que o total do Faturamento não era persistido
 (corrigido na mesma entrega).
 
+### MANAGEMENT-DASHBOARD-V1-01 — Painel Gerencial, versão 1 — **ENTREGUE em 2026-09-15**
+
+**Fechado em 2026-09-15**, depois das decisões D2–D5 do PO em
+[FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01](../discovery/FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01.md) (agora
+`IMPLEMENTADO`), sobre BILLED-VALUE-CANONICAL-01. Regras duráveis em [`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §94;
+proteção em [`TEST_COVERAGE_MAP.md`](../TEST_COVERAGE_MAP.md). Sem migration.
+
+Gestão → Painel Gerencial (`/gestao/painel-gerencial`) sobre `GET /management-dashboard`, só ADMIN e COMMERCIAL, com a
+recusa no servidor: resultado do período com a comparação equivalente, posição atual (A expedir e A faturar pelo preço
+acordado antes do desconto), tendência do Faturado, rankings de clientes e produtos, próximos compromissos, "Valores
+incompletos" sem subtotal e "Como funciona". O faturado lê `billings/billed-value.ts`. Ficam abertos, sem posição, G2,
+G5 e o G4 residual (lista de Pedidos por data de confirmação) — ver a seção "Painel Gerencial — status" do BACKLOG.
+
+Registro original (BACKLOG, fila viva, 2026-09-15): posição 4 — "Decisões de FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01 →
+MANAGEMENT-DASHBOARD-V1-01 (Painel Gerencial)", discovery `EM_ANALISE` com D2–D5 abertas; próxima ação "PO fecha D2–D5;
+implementar a versão 1"; dependência BILLED-VALUE-CANONICAL-01 entregue.
+
 ## Seção A — linhas fechadas das tabelas
 
 | ID | Título | Sev. | Tam. |

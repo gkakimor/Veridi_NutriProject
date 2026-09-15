@@ -43,13 +43,15 @@ estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0
 
 - **E2E:** WAVE 1–2 e WAVE 3 fechadas (merges `9c60845` e `6256ca9`); a próxima é a WAVE 4 (grupo C) e depois a WAVE 5
   (golden path);
-- **discoveries persistidos** em [`discovery/`](discovery/README.md), todos `EM_ANALISE` e sem implementação: Painel
-  Gerencial (FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01), WAVE 4 (E2E-BASELINE-REDESIGN-WAVE-04-DISCOVERY-01), golden
-  path (WAVE-05-GOLDEN-PATH-DISCOVERY-01) e permissões da Produção (PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01);
+- **discoveries persistidos** em [`discovery/`](discovery/README.md), `EM_ANALISE` e sem implementação: WAVE 4
+  (E2E-BASELINE-REDESIGN-WAVE-04-DISCOVERY-01), golden path (WAVE-05-GOLDEN-PATH-DISCOVERY-01) e permissões da Produção
+  (PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01); o do Painel Gerencial (FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01) está
+  `IMPLEMENTADO`;
 - **Inventário Físico:** discovery `DECIDIDO` (D1–D8 e P1–P7 fechadas pelo PO em 2026-09-15); Fatia 1 (domínio e API)
   entregue em 2026-09-15 (INVENTORY-PHYSICAL-COUNT-01); Fatia 2 (telas) e Fatia 3 (FO-01 de sessão e CSV) abertas;
-- **Painel Gerencial:** D1 decidida e BILLED-VALUE-CANONICAL-01 fechado em 2026-09-15 (valor faturado = `Billing.totalAmount`
-  em Painel, R-14 e R-15); D2–D5 abertas antes de MANAGEMENT-DASHBOARD-V1-01;
+- **Painel Gerencial:** entregue em 2026-09-15 — BILLED-VALUE-CANONICAL-01 (valor faturado = `Billing.totalAmount` em
+  Painel, R-14 e R-15) e MANAGEMENT-DASHBOARD-V1-01 (Gestão → Painel Gerencial, D1–D5); G2, G5 e o G4 residual seguem sem
+  posição;
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 
 Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
@@ -4640,17 +4642,52 @@ typecheck da API e da web; os testes da tela atual (`inventario-alteracoes-nao-s
 **Aberto.** Fatia 2 (telas, e no montador os filtros de qualidade/validade, última contagem, movimentação e local) e
 Fatia 3 (FO-01 de sessão e CSV controlado).
 
+## Painel Gerencial (MANAGEMENT-DASHBOARD-V1-01, 2026-09-15)
+
+Decisões D1–D5 do PO em FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01 (agora `IMPLEMENTADO`); regras em §94. Sem
+migration, tabela, cache ou job. Painel Operacional intocado. PROD e `release/prod` intocados.
+
+**Contrato.** `GET /management-dashboard?period=mes-atual|mes-anterior|acumulado-ano|custom` (Personalizado com
+`dateFrom` e `dateTo`), só ADMIN e COMMERCIAL (`MANAGEMENT_DASHBOARD_ROLES`): os demais perfis levam 403 antes de o
+filtro ser lido, sem sessão 401. Um instante e um retrato `RepeatableRead` por requisição. Período, comparação,
+variação, granularidade e o DTO em `packages/shared/src/management-dashboard.ts`; read model em
+`api modules/management-dashboard/`. O Faturado lê `billings/billed-value.ts` (`resumirValorFaturado` e
+`valorDoFaturamento`) — nenhuma outra conta do valor faturado, com guarda estrutural no teste.
+
+**Tela.** Gestão → Painel Gerencial (`/gestao/painel-gerencial`), primeiro item do grupo: resultado do período
+(Faturado, Pedidos confirmados, Compras contratadas, Clientes faturados, com anterior e variação), posição atual (A
+expedir, A faturar e a composição só com os dois completos), tendência do Faturado em barras de CSS, top 10 clientes e
+produtos, próximos compromissos (hoje e os 29 dias seguintes), "Como funciona" e o rodapé do que a tela não mostra.
+Período na URL. Sem documento, "—" e a frase; incompleto, "Valores incompletos", "N de M" e os documentos que faltam.
+
+**Drill-down.** Faturamentos emitidos do intervalo (e do cliente), Ordens de Compra com o grupo novo "Contratadas" e o
+período, Pedidos com o grupo novo "Carteira (a expedir)", R-16 para A faturar, Visão do Cliente e cada documento
+citado. Pedidos confirmados fica sem link: a lista de Pedidos não filtra por data de confirmação (G4 residual).
+
+**Validação.** shared 27, API 28 (faixa serial; agregados globais exatos num retrato `RepeatableRead` desfeito), web 32
+na tela, mais menu, rotas, arquitetura da navegação, contrato da ajuda e filtros de Pedidos e OC; 34 mutações
+derrubadas (7 do período, 19 do read model e da rota, 8 da tela); typecheck de shared, API e web. Smoke no navegador
+(API e Vite do worktree contra o `veridi_dev`, escrita barrada): 14/14 em 1440 e 390px, com a base real e com DTO
+sintético cheio. A `main` andou no meio (Fatia 1 do Inventário, com migration): rebase com conflito só em docs, e de
+novo typecheck, shared 27, API 28 e web focados (298, em 27 arquivos). Sem `pnpm test` global, E2E nem build (FAST).
+
+**Achados.** Em 390px a área de trabalho rolava de lado (869 × 390): o texto oculto das barras (`.sr-only`, absoluto)
+escapava da rolagem do quadro da tendência, que passou a ser `position: relative`. Período sem faturamento mostra a
+frase em vez de um quadro de barras zeradas. Abertos, sem posição: G2 (preço acordado em Pedido direto), G5 (encerrar
+saldo de OC recebida em parte) e o G4 residual.
+
 ## Próxima prioridade
 
 **A ordem vive na fila viva do [`BACKLOG.md`](BACKLOG.md)**, reconciliada em 2026-09-15: WAVE 4; Inventário Físico em
-fatias (a próxima é a Fatia 2, telas); decisões do Painel Gerencial; decisões de permissões da Produção; WAVE 5; estabilização final. Os
-parágrafos abaixo registram como cada assunto chegou até aqui.
+fatias (a próxima é a Fatia 2, telas); decisões de permissões da Produção; WAVE 5; estabilização final. Os parágrafos
+abaixo registram como cada assunto chegou até aqui.
 
 **BILLED-VALUE-CANONICAL-01 fechado em 2026-09-15** (§30), o primeiro da fila: com a decisão D1 do PO,
 `Billing.totalAmount` é a autoridade do valor faturado. Painel, R-14 e R-15 — tela, CSV e o PDF, que lê o CSV — leem
 `billings/billed-value.ts` (`valorDoFaturamento` e `resumirValorFaturado`, com o `SUM` do total congelado no banco);
 emitido legado sem total congelado vale a soma das linhas arredondadas, como o próprio documento. Sem migration.
-MANAGEMENT-DASHBOARD-V1-01 continua esperando D2–D5 e lê o faturado por essas funções.
+**MANAGEMENT-DASHBOARD-V1-01 fechado no mesmo dia** (§94, seção própria acima): D2–D5 decididas, e o Painel Gerencial
+lê o faturado por essas funções.
 
 **INVENTORY-PHYSICAL-COUNT-01 — Fatia 1 entregue em 2026-09-15** (§16, seção própria acima): sessões de inventário no
 domínio e na API, e a Contagem rápida gravando `INV-` QUICK. Próxima do assunto: Fatia 2 (telas).

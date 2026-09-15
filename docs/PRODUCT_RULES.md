@@ -5919,3 +5919,76 @@ mesmo recorte e a mesma página.
 **Menu e aba.** O item Orçamentos acende na lista e na página de cada versão (a
 versão aberta pelo Projeto também). A aba da versão diz qual é: "ORC-000444 · V1
 · Veridi Nutrition".
+
+## §94 — Painel Gerencial: valores comerciais, não financeiros
+
+MANAGEMENT-DASHBOARD-V1-01, 2026-09-15, com as decisões D1–D5 de
+FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01. Gestão → Painel Gerencial é tela
+própria, com read model próprio (`GET /management-dashboard`); o Painel
+Operacional (§30) não muda.
+
+**O que a tela não é.** Faturado não é recebido, compra contratada não é paga, e
+não há contas a receber, contas a pagar, caixa, imposto, margem realizada nem CMV
+do período: o domínio não registra esses fatos, e a tela não os infere de preço
+nem de custo.
+
+**Quem vê.** ADMIN e COMMERCIAL (`MANAGEMENT_DASHBOARD_ROLES`). A API recusa os
+demais com 403 antes de ler o filtro; menu e tela usam a mesma lista só para não
+oferecer o que seria negado. A restrição é da tela, não do dado: os mesmos valores
+continuam nas telas operacionais e nos relatórios abertos.
+
+**Três horizontes.** O resultado responde ao período; a posição atual e os
+próximos compromissos (hoje e os 29 dias civis seguintes) não. Um instante e um
+retrato `RepeatableRead` por requisição; nada é persistido, nada fica em cache.
+
+**Período e comparação.** Mês atual, Mês anterior, Acumulado no ano (ano civil) e
+Personalizado, no dia comercial de São Paulo (§72). Cada período se compara com o
+equivalente: o mês atual com o anterior do dia 1 até o mesmo dia (ou o último dia
+dele); o mês fechado com o fechado antes; o acumulado com o mesmo trecho do ano
+anterior (29/02 com 28/02); o personalizado com o intervalo de mesmo tamanho logo
+antes. O Personalizado exige as duas datas, e invertido é recusa. Variação só entre
+dois valores completos e com o anterior maior que zero; fora disso, "Sem base de
+comparação". Recorte sem documento compara como zero.
+
+**Os números.**
+
+- **Faturado** — faturamentos `ISSUED` por `issuedAt`, pelo valor do documento
+  (§30, `billings/billed-value.ts`), nunca `quantidade × preço`.
+- **Pedidos confirmados** — `confirmedAt` no período, de confirmado a expedido; o
+  cancelado sai, também do passado. Valor: o total acordado; Pedido digitado direto
+  conta e deixa o valor incompleto.
+- **Compras contratadas** — OCs confirmadas, recebidas em parte ou inteiras, por
+  `orderDate` em dia civil, pelo total da OC (§61); OC sem linha ou com linha sem
+  preço deixa incompleto.
+- **Clientes faturados** — clientes distintos, do Pedido, com faturamento emitido.
+- **A expedir** — Pedidos em carteira (confirmado, em atendimento, parcialmente
+  expedido): pedido menos o expedido em Expedição confirmada, por linha, vezes o
+  preço acordado, cada linha em duas casas, **antes do desconto do Pedido** (D5).
+- **A faturar** — Expedições confirmadas sem faturamento emitido (rascunho não
+  fatura), pelo preço acordado da linha do Pedido, antes do desconto.
+- Por linha de Pedido, faturado + a faturar + a expedir = pedido, em quantidade.
+  Em valor os três nunca se somam: o faturado já tem desconto e ajuste.
+
+**Incompleto nunca vira subtotal (D2).** Sem documento, "—" e a frase do vazio.
+Com documento sem valor, "Valores incompletos", "N de M" e os documentos que
+faltam, sem soma. A composição da carteira só aparece com A expedir e A faturar
+completos; a barra da tendência com documento sem valor fica sem altura.
+
+**Tendência e rankings.** Faturado por dia até 31 dias, por semana até 62 e por
+mês acima disso, cada documento na barra do dia comercial da emissão. Top 10
+clientes pelo Faturado — cliente com qualquer documento sem valor sai inteiro e é
+nomeado — e top 10 produtos pelo valor das linhas antes do desconto do cabeçalho,
+que não é rateado (a soma do ranking não é o Faturado), com quantidade só dentro
+do produto e por unidade; produto com linha sem preço sai e é nomeado. Empate em
+valor se decide pelo código.
+
+**Compromissos.** Entrega programada é a de Pedido em carteira, não cancelada,
+com saldo e dia prometido na janela; atrasada é a com saldo e dia já passado
+(§75). O valor das programadas é o saldo pelo preço acordado. Compra esperada é
+OC aberta com saldo e previsão na janela, em contagem e lista, sem valor previsto:
+o saldo de OC recebida em parte não se encerra.
+
+**Link só para destino que filtra exatamente o número.** Faturamentos emitidos do
+intervalo (e do cliente), Ordens de Compra "Contratadas" do intervalo, Pedidos
+"Carteira (a expedir)", o R-16, a Visão do Cliente e cada documento citado.
+Indicador sem destino que filtre fica sem link.
