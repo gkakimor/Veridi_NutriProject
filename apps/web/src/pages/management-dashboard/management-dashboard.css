@@ -215,8 +215,14 @@
   border-radius: 2px;
 }
 
-/* Tendência: barras de CSS; a altura vem de `--altura` (0 a 100). */
+/*
+ * Tendência: barras de CSS; a altura vem de `--altura` (0 a 100). `position:
+ * relative` faz do quadro o contêiner do texto oculto (`.sr-only`, absoluto) de
+ * cada barra: sem isso, o texto das barras além da tela escapava da rolagem do
+ * quadro e a área de trabalho inteira rolava de lado em 390px.
+ */
 .mgmt-trend {
+  position: relative;
   display: flex;
   align-items: stretch;
   gap: var(--sp-1);

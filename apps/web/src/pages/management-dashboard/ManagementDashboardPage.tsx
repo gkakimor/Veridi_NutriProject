@@ -348,6 +348,10 @@ function rotuloDoBalde(balde: IntervaloDeDias, granularidade: GranularidadeDaTen
  */
 function TendenciaDoFaturado({ tendencia }: { tendencia: ManagementDashboardDTO["trend"] }) {
   const { buckets, granularity } = tendencia;
+  // Período sem faturamento não vira um quadro de barras zeradas: a frase diz que não houve.
+  if (buckets.every((balde) => balde.count === 0)) {
+    return <p className="mgmt-empty">Sem faturamentos no período.</p>;
+  }
   const maior = buckets.reduce(
     (atual, balde) =>
       balde.amount !== null && new Decimal(balde.amount).greaterThan(atual) ? new Decimal(balde.amount) : atual,

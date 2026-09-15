@@ -678,8 +678,23 @@ describe("Como funciona", () => {
   });
 });
 
+describe("tendência sem faturamento", () => {
+  it("período sem faturamento: a frase, e nenhum quadro de barras zeradas", async () => {
+    abrir();
+    const tendencia = await screen.findByRole("region", { name: "Tendência — Faturado por dia" });
+    expect(tendencia).toHaveTextContent("Sem faturamentos no período.");
+    expect(within(tendencia).queryByRole("list")).toBeNull();
+  });
+});
+
 describe("390px", () => {
   const css = readFileSync(join(process.cwd(), "src", "pages", "management-dashboard", "management-dashboard.css"), "utf8");
+
+  it("as barras rolam dentro do próprio quadro: o texto oculto delas não alarga a página", () => {
+    // `.sr-only` é absoluto: sem o quadro posicionado, o texto das barras além da tela
+    // escapava da rolagem dele e a área de trabalho rolava de lado (smoke em 390px: 869 × 390).
+    expect(css).toMatch(/\.mgmt-trend\s*\{[^}]*position:\s*relative/);
+  });
 
   it("cartões, posição, compromissos e rankings empilham: nenhuma coluna pede mais largura do que a tela", () => {
     const grades = [...css.matchAll(/grid-template-columns:\s*([^;]+);/g)].map((achado) => achado[1]!.trim());
