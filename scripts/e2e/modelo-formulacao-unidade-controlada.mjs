@@ -1,5 +1,5 @@
+import { criarRun } from "./fixtures/run.mjs";
 import { abrirNavegador, WEB } from "./lib/browser.mjs";
-import { obterRun } from "./lib/run-id.mjs";
 
 /**
  * Unidade controlada no Modelo de Formulação — FORM-UOM-01.
@@ -24,8 +24,8 @@ import { obterRun } from "./lib/run-id.mjs";
  *   node scripts/e2e/modelo-formulacao-unidade-controlada.mjs
  */
 
-const run = obterRun({ novo: true, dono: "producao" });
-const P = `E2E${run.runId}`;
+const run = criarRun();
+const P = run.carimbo;
 
 const CLIENTE = `Cliente UOM ${P} LTDA`;
 const INSUMO = `Insumo UOM ${P}`;

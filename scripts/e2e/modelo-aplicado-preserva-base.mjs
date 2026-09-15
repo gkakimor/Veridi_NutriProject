@@ -1,5 +1,5 @@
+import { criarRun } from "./fixtures/run.mjs";
 import { abrirNavegador, WEB } from "./lib/browser.mjs";
-import { obterRun } from "./lib/run-id.mjs";
 
 /**
  * Aplicar um Modelo preserva a grandeza física da base — TEMPLATE-APPLY-BASE-UOM-01.
@@ -21,8 +21,8 @@ import { obterRun } from "./lib/run-id.mjs";
  *   node scripts/e2e/modelo-aplicado-preserva-base.mjs
  */
 
-const run = obterRun({ novo: true, dono: "producao" });
-const P = `E2E${run.runId}`;
+const run = criarRun();
+const P = run.carimbo;
 
 const CLIENTE = `Cliente Base ${P} LTDA`;
 const INSUMO = `Insumo Base ${P}`;
@@ -31,6 +31,9 @@ const PRODUTO_EM_G = `Produto em g ${P}`;
 const PRODUTO_EM_UN = `Produto em un ${P}`;
 
 const RECUSA = "A unidade da base do Modelo (kg) não é compatível com a unidade do Produto (un).";
+
+/** `1.000` → 1000, `0,5` → 0.5: fora do foco o campo numérico mostra pt-BR (PTBR-NUMERIC-INPUT-ROLLOUT-01). */
+const numeroPtBr = (texto) => Number(texto.replace(/\./g, "").replace(",", "."));
 
 const falhas = [];
 
@@ -45,7 +48,7 @@ function afirmar(descricao, condicao, detalhe = "") {
 }
 
 async function main() {
-  const { pagina, erros, fechar } = await abrirNavegador();
+  const { pagina, erros, esperarErroHttp, fechar } = await abrirNavegador();
 
   const clicar = (nome) => pagina.getByRole("button", { name: nome, exact: true }).first().click();
   const preencher = (id, valor) => pagina.locator(`#${id}`).first().fill(valor);
@@ -161,12 +164,12 @@ async function main() {
     await pagina.locator("#version-basis").first().waitFor({ timeout: 25000 });
     await assentar();
     const base = await pagina.locator("#version-basis").first().inputValue();
-    afirmar("a base nasce 1000 g — 1 kg na unidade do Produto", base === "1000", base);
+    afirmar("a base nasce 1000 g — 1 kg na unidade do Produto", numeroPtBr(base) === 1000, base);
     const quantidade = await pagina.locator('input[aria-label^="Quantidade de "]').first().inputValue();
     const unidade = await pagina.locator('select[aria-label^="Unidade de "]').first().inputValue();
     afirmar(
       "o componente chega intacto: 100 g, a mesma proporção por base",
-      Number(quantidade.replace(",", ".")) === 100 && unidade === "g",
+      numeroPtBr(quantidade) === 100 && unidade === "g",
       `${quantidade} ${unidade}`,
     );
 
@@ -174,6 +177,8 @@ async function main() {
     console.log(`\n[3] Aplicado a um Produto em un: recusado, e nada nasce`);
 
     const produtoEmUn = await criarProduto(PRODUTO_EM_UN, "un");
+    // A recusa é o que este passo provoca: declarada, ela não conta como erro de rede nem de console.
+    esperarErroHttp({ status: 409, metodo: "POST", caminho: /\/formulation-versions\/from-template$/ });
     const statusEmUn = await aplicarModelo(produtoEmUn);
     afirmar("a aplicação é recusada", statusEmUn === 409, String(statusEmUn));
     const alerta = pagina.locator(".form-alert").first();
@@ -189,8 +194,7 @@ async function main() {
     afirmar("reaberto, o Produto continua sem formulação nenhuma", true);
 
     // ── 4. Console ──────────────────────────────────────────────────────
-    const inesperados = erros.filter((erro) => !/status of 409/.test(erro));
-    afirmar("console só com a recusa provocada", inesperados.length === 0, inesperados.slice(0, 3).join(" | "));
+    afirmar("console e rede só com a recusa provocada", erros.length === 0, erros.slice(0, 3).join(" | "));
   } finally {
     await fechar();
   }

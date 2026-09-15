@@ -1,5 +1,6 @@
+import { criarRun } from "./fixtures/run.mjs";
+import { esperarRota } from "./fixtures/ui.mjs";
 import { abrirNavegador, WEB } from "./lib/browser.mjs";
-import { obterRun } from "./lib/run-id.mjs";
 
 /**
  * Trocar o CEP substitui o endereço — CUSTOMER-CEP-02.
@@ -37,8 +38,8 @@ import { obterRun } from "./lib/run-id.mjs";
  *   node scripts/e2e/troca-de-cep-do-cliente.mjs
  */
 
-const run = obterRun({ novo: true, dono: "cadastros" });
-const P = `E2E${run.runId}`;
+const run = criarRun();
+const P = run.carimbo;
 
 const CEP_A = "04816100";
 const CEP_B = "13010000";
@@ -235,16 +236,23 @@ async function main() {
 
     await preencher("customer-number", NUMERO_B);
     await clicar("Criar cliente");
-    await pagina.waitForURL(/\/cadastros\/clientes$/, { timeout: 25000 });
+    const idDoCliente = (await esperarRota(pagina, "/cadastros/clientes")).searchParams.get("ids");
 
     // ── 6. reabrir e conferir o que ficou ───────────────────────────────
     console.log(`\n[6] Reabertura do cadastro salvo`);
 
-    await pagina.locator("#customers-search").first().fill(RAZAO_SOCIAL);
-    await pagina.getByText(RAZAO_SOCIAL, { exact: false }).first().waitFor({ timeout: 25000 });
-    // "Editar" DA LINHA deste cliente. O primeiro botão da página abria o
-    // cliente que a lista mostrava antes de a busca filtrar — em base com
-    // poucos clientes, outro cadastro, sem endereço, e a suíte lia vazio.
+    /*
+     * Pelo id do cliente criado, a lista a que o cadastro volta (`?ids=`): a
+     * lista padrão abre em "Clientes ativos" e o cliente novo é Prospect — pela
+     * busca ele nem aparecia. "Editar" é o DA LINHA dele: o primeiro botão da
+     * página já abriu outro cadastro, sem endereço, e a suíte lia vazio.
+     */
+    afirmar(
+      "o cadastro volta à lista já reduzida ao cliente criado",
+      /^[0-9a-f-]{36}$/.test(idDoCliente ?? ""),
+      pagina.url(),
+    );
+    await pagina.goto(`${WEB}/cadastros/clientes?ids=${idDoCliente}`);
     await pagina
       .getByRole("row", { name: new RegExp(RAZAO_SOCIAL) })
       .first()

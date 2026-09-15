@@ -1,5 +1,6 @@
+import { criarRun } from "./fixtures/run.mjs";
+import { esperarRota } from "./fixtures/ui.mjs";
 import { abrirNavegador, WEB } from "./lib/browser.mjs";
-import { obterRun } from "./lib/run-id.mjs";
 
 /**
  * Perfil tributário do Cliente — CUSTOMER-TAX-PROFILE-01, PRODUCT_RULES §83.
@@ -21,15 +22,20 @@ import { obterRun } from "./lib/run-id.mjs";
  *   17. em 390px o seletor cabe no próprio campo e no formulário.
  *
  * Mutação de negócio só pela interface. A API do laboratório entra uma vez,
- * como verificação do default gravado.
+ * como verificação do default gravado — lida pelo id do cliente criado.
+ *
+ * O cliente é reaberto pelo PRÓPRIO id: o cadastro volta para
+ * `/cadastros/clientes?ids=<id>` desde CUSTOMER-COMMERCIAL-STATUS-01, e é por
+ * essa lista que a edição abre. A lista padrão abre em "Clientes ativos" e o
+ * cliente recém-criado é Prospect — pela busca nela, ele nem aparece.
  *
  * Massa própria, carimbada pelo `runId`.
  *
  *   node scripts/e2e/perfil-tributario-do-cliente.mjs
  */
 
-const run = obterRun({ novo: true, dono: "cadastros" });
-const P = `E2E${run.runId}`;
+const run = criarRun();
+const P = run.carimbo;
 
 const RAZAO_SOCIAL = `Cliente Perfil ${P} LTDA`;
 const RAZAO_SOCIAL_SEM_PERFIL = `Cliente Sem Perfil ${P} LTDA`;
@@ -78,11 +84,11 @@ async function main() {
     }, rotulo);
 
   /**
-   * Abre a edição do cliente pela lista — o "Editar" DA LINHA dele, depois
-   * de a busca filtrar. O primeiro botão da página pode ser de outro cliente.
+   * Abre a edição do cliente pela lista reduzida ao id dele — o "Editar" DA
+   * LINHA dele. A lista por id mostra o cliente em qualquer situação comercial.
    */
-  async function abrirEdicao(razao) {
-    await pagina.locator("#customers-search").first().fill(razao);
+  async function abrirEdicao(id, razao) {
+    await pagina.goto(`${WEB}/cadastros/clientes?ids=${id}`);
     const linha = pagina.getByRole("row", { name: new RegExp(razao) }).first();
     await linha.waitFor({ timeout: 25000 });
     await linha.getByRole("button", { name: "Editar" }).click();
@@ -105,12 +111,13 @@ async function main() {
     return valorDoResumo("Perfil tributário");
   }
 
+  /** Cria pela tela e devolve o id que o cadastro põe na URL de volta. */
   async function criarCliente(razao) {
     await pagina.goto(`${WEB}/cadastros/clientes/novo`);
     await pagina.locator("#customer-legal-name").first().waitFor({ timeout: 25000 });
     await pagina.locator("#customer-legal-name").first().fill(razao);
     await pagina.getByRole("button", { name: "Criar cliente" }).first().click();
-    await pagina.waitForURL(/\/cadastros\/clientes$/, { timeout: 25000 });
+    return (await esperarRota(pagina, "/cadastros/clientes")).searchParams.get("ids");
   }
 
   async function criarProjeto(razao, nome) {
@@ -196,7 +203,12 @@ async function main() {
 
     await pagina.locator("#customer-legal-name").first().fill(RAZAO_SOCIAL);
     await pagina.getByRole("button", { name: "Criar cliente" }).first().click();
-    await pagina.waitForURL(/\/cadastros\/clientes$/, { timeout: 25000 });
+    const idDoCliente = (await esperarRota(pagina, "/cadastros/clientes")).searchParams.get("ids");
+    afirmar(
+      "o cadastro volta à lista já reduzida ao cliente criado",
+      /^[0-9a-f-]{36}$/.test(idDoCliente ?? ""),
+      pagina.url(),
+    );
     afirmar(
       "o POST do cadastro não levou o campo",
       ultimaGravacao()?.metodo === "POST" && !("taxProfile" in ultimaGravacao().corpo),
@@ -206,14 +218,14 @@ async function main() {
     // ── 3. Não informado, gravado ───────────────────────────────────────
     console.log(`\n[3] O que ficou gravado`);
 
-    const busca = await api(`/customers?search=${encodeURIComponent(RAZAO_SOCIAL)}`);
+    const gravado = await api(`/customers/${idDoCliente}`);
     afirmar(
       "o servidor gravou Não informado (verificação pela API)",
-      busca.corpo?.customers?.[0]?.taxProfile === "NOT_INFORMED",
-      busca.corpo?.customers?.[0]?.taxProfile,
+      gravado.corpo?.taxProfile === "NOT_INFORMED",
+      gravado.corpo?.taxProfile ?? `status ${gravado.status}`,
     );
 
-    await abrirEdicao(RAZAO_SOCIAL);
+    await abrirEdicao(idDoCliente, RAZAO_SOCIAL);
     afirmar(
       "a edição mostra Não informado",
       (await rotuloMarcado()) === "Não informado",
@@ -230,8 +242,7 @@ async function main() {
     // ── 4–6. Simples Nacional ───────────────────────────────────────────
     console.log(`\n[4–6] Editar para Simples Nacional e salvar`);
 
-    await pagina.goto(`${WEB}/cadastros/clientes`);
-    await abrirEdicao(RAZAO_SOCIAL);
+    await abrirEdicao(idDoCliente, RAZAO_SOCIAL);
     await seletor().selectOption({ label: "Simples Nacional" });
     await salvarEdicao();
     afirmar(
@@ -244,7 +255,7 @@ async function main() {
     console.log(`\n[7–8] Recarregar e conferir`);
 
     await pagina.reload();
-    await abrirEdicao(RAZAO_SOCIAL);
+    await abrirEdicao(idDoCliente, RAZAO_SOCIAL);
     afirmar(
       "reaberto depois do reload, o cadastro mostra Simples Nacional",
       (await perfilNaTela()) === "SIMPLES_NACIONAL" && (await rotuloMarcado()) === "Simples Nacional",
@@ -256,8 +267,7 @@ async function main() {
     // ── 9–11. Lucro Presumido, pelo teclado ─────────────────────────────
     console.log(`\n[9–11] Editar de novo, pelo teclado, para Lucro Presumido`);
 
-    await pagina.goto(`${WEB}/cadastros/clientes`);
-    await abrirEdicao(RAZAO_SOCIAL);
+    await abrirEdicao(idDoCliente, RAZAO_SOCIAL);
     await seletor().focus();
     afirmar(
       "o seletor recebe foco",
@@ -282,7 +292,7 @@ async function main() {
     console.log(`\n[12–13] Recarregar e conferir`);
 
     await pagina.reload();
-    await abrirEdicao(RAZAO_SOCIAL);
+    await abrirEdicao(idDoCliente, RAZAO_SOCIAL);
     afirmar(
       "reaberto depois do reload, o cadastro mostra Lucro Presumido",
       (await perfilNaTela()) === "LUCRO_PRESUMIDO" && (await rotuloMarcado()) === "Lucro Presumido",
@@ -364,8 +374,7 @@ async function main() {
     await seletor().waitFor({ timeout: 25000 });
     conferir("cadastro novo", await medir());
 
-    await pagina.goto(`${WEB}/cadastros/clientes`);
-    await abrirEdicao(RAZAO_SOCIAL);
+    await abrirEdicao(idDoCliente, RAZAO_SOCIAL);
     conferir("edição", await medir());
     afirmar(
       "em 390px o perfil gravado continua legível",

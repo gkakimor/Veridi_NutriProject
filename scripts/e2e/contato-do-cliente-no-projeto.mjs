@@ -1,5 +1,5 @@
+import { criarRun } from "./fixtures/run.mjs";
 import { abrirNavegador, WEB } from "./lib/browser.mjs";
-import { obterRun } from "./lib/run-id.mjs";
 
 /**
  * O telefone do Cliente dentro do Projeto — PROJECT-CUSTOMER-CONTACT-01.
@@ -31,8 +31,8 @@ import { obterRun } from "./lib/run-id.mjs";
  *   node scripts/e2e/contato-do-cliente-no-projeto.mjs
  */
 
-const run = obterRun({ novo: true, dono: "comercial" });
-const P = `E2E${run.runId}`;
+const run = criarRun();
+const P = run.carimbo;
 
 const RAZAO_SOCIAL = `Cliente Contato ${P} LTDA`;
 const NOME_DO_PROJETO = `Projeto Contato ${P}`;

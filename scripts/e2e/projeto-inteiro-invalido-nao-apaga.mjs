@@ -1,5 +1,5 @@
+import { criarRun } from "./fixtures/run.mjs";
 import { abrirNavegador, WEB } from "./lib/browser.mjs";
-import { obterRun } from "./lib/run-id.mjs";
 
 /**
  * Doses e vida útil inválidas não apagam o que o Projeto tem — PROJECT-INT-FIELDS-01.
@@ -13,22 +13,24 @@ import { obterRun } from "./lib/run-id.mjs";
  *
  *   1. o Projeto nasce com doses 60 e vida útil 24, e a edição reaberta mostra
  *      os dois;
- *   2. doses trocadas por `abc`: o erro aparece no próprio campo, "Salvar
- *      alterações" fica indisponível, e insistir no clique não manda nenhuma
- *      gravação do Projeto;
+ *   2. desde PTBR-NUMERIC-INPUT-ROLLOUT-01 o campo é `IntegerField`: `abc` —
+ *      colado ou digitado tecla a tecla — nem entra, e as doses gravadas ficam;
+ *      doses `0` entram e são inválidas: o erro aparece no próprio campo,
+ *      "Salvar alterações" fica indisponível, e insistir no clique não manda
+ *      nenhuma gravação do Projeto;
  *   3. uma segunda aba prova que as doses gravadas continuam 60;
  *   4. corrigidas para 90, as doses salvam como inteiro, e a edição reaberta
  *      mostra 90;
- *   5. a mesma prova para a vida útil: `30abc` recusado, a segunda aba ainda
- *      com 24, e 36 salvo e reaberto.
+ *   5. a mesma prova para a vida útil: `30abc` não entra, `0` é recusado, a
+ *      segunda aba ainda com 24, e 36 salvo e reaberto.
  *
  * Toda mutação é de interface. A rede é só observada.
  *
  *   node scripts/e2e/projeto-inteiro-invalido-nao-apaga.mjs
  */
 
-const run = obterRun({ novo: true, dono: "comercial" });
-const P = `E2E${run.runId}`;
+const run = criarRun();
+const P = run.carimbo;
 
 const RAZAO_SOCIAL = `Cliente Doses ${P} LTDA`;
 const NOME_DO_PROJETO = `Projeto Doses ${P}`;
@@ -146,11 +148,26 @@ async function main() {
     afirmar("reaberta, doses 60", (await doses().inputValue()) === "60", await doses().inputValue());
     afirmar("e vida útil 24", (await vidaUtil().inputValue()) === "24", await vidaUtil().inputValue());
 
-    // ── 2. Doses inválidas ──────────────────────────────────────────────
-    console.log(`\n[2] Doses trocadas por "abc"`);
+    // ── 2. Doses que não são inteiro nem entram ─────────────────────────
+    console.log(`\n[2] Doses: "abc" nem entra no campo; "0" entra e é inválido`);
 
     const antesDasDoses = gravacoes.length;
     await doses().fill("abc");
+    afirmar(
+      "colado, abc não entra: o campo continua com as doses gravadas",
+      (await doses().inputValue()) === "60",
+      await doses().inputValue(),
+    );
+    await doses().click();
+    await doses().pressSequentially("abc");
+    afirmar(
+      "digitado tecla a tecla, também não entra",
+      (await doses().inputValue()) === "60",
+      await doses().inputValue(),
+    );
+    afirmar("sem erro, porque nada inválido entrou", (await textoDe("#project-doses-error")) === null);
+
+    await doses().fill("0");
     afirmar(
       "o erro aparece no próprio campo",
       (await textoDe("#project-doses-error")) === ERRO_DOSES,
@@ -161,7 +178,7 @@ async function main() {
       "e aponta para o erro",
       (await doses().getAttribute("aria-describedby")) === "project-doses-error",
     );
-    afirmar("o texto digitado fica no campo", (await doses().inputValue()) === "abc");
+    afirmar("o texto digitado fica no campo", (await doses().inputValue()) === "0");
     afirmar('"Salvar alterações" indisponível', await botaoSalvar().isDisabled());
 
     // `force` ignora a espera por botão habilitado: é o clique de quem insiste.
@@ -209,10 +226,16 @@ async function main() {
     afirmar("reaberta, doses 90", (await doses().inputValue()) === "90", await doses().inputValue());
 
     // ── 5. Vida útil ────────────────────────────────────────────────────
-    console.log(`\n[5] Vida útil trocada por "30abc", depois 36`);
+    console.log(`\n[5] Vida útil: "30abc" não entra, "0" é recusado, depois 36`);
 
     const antesDaVidaUtil = gravacoes.length;
     await vidaUtil().fill("30abc");
+    afirmar(
+      "30abc não entra: o campo continua com a vida útil gravada",
+      (await vidaUtil().inputValue()) === "24",
+      await vidaUtil().inputValue(),
+    );
+    await vidaUtil().fill("0");
     afirmar(
       "o erro aparece na vida útil",
       (await textoDe("#project-shelf-life-error")) === ERRO_VIDA_UTIL,
