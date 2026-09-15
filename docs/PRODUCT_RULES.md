@@ -3681,6 +3681,55 @@ CMV e Ordem de Produção usam a **mesma** quantidade física quando nascem da
 mesma versão e da mesma base. Documentos históricos podem divergir
 legitimamente da versão vigente de hoje.
 
+### A bancada: forma, apresentação, dose e cápsula (FORMULATION-WORKBENCH-01)
+
+**Forma do produto e apresentação são conceitos diferentes.** Cápsula e pó são
+FORMA — é a forma que diz o que a bancada calcula por dose. Pote, sachê e
+cartucho são APRESENTAÇÃO. Um enum que misture os dois ("pote/cápsula") não
+descreve nem o produto nem a embalagem.
+
+As premissas da apresentação — forma, apresentação, cápsulas por dose, dose e
+conteúdo do pó — são **snapshot da VERSÃO**, ao lado de pureza e overage. O
+cadastro do Produto preenche a V1 e fica visível como referência, mas mudá-lo
+depois não reescreve versão nenhuma: a quantidade por cápsula de uma versão
+ativa é resultado da receita dela, não do cadastro de hoje.
+
+**Doses por embalagem é RESULTADO, não um segundo campo digitado:**
+
+```
+cápsula: doses = cápsulas por embalagem ÷ cápsulas por dose
+pó:      doses = conteúdo da embalagem ÷ dose
+```
+
+Divisão que não fecha em número inteiro é **recusada com o campo junto** —
+arredondar doses mudaria em silêncio a necessidade de material de toda linha por
+dose. Nas demais formas o número continua digitado, como sempre foi. Premissa em
+branco é ausência, não zero: o rascunho fica incompleto e a ativação recusa,
+como já recusava.
+
+**As grandezas da bancada saem do mesmo motor.** `calcularQuantidadeDaDose`
+(`packages/shared`) pede ao motor a necessidade de uma embalagem de uma dose, na
+unidade declarada; a única aritmética nova é a divisão pelas cápsulas da dose. A
+tela e a API chamam a mesma função — por dose, por cápsula e por embalagem são
+recortes da mesma conta, e é por isso que não podem divergir.
+
+**Matéria-prima nova nasce declarando o alvo ativo.** Na bancada, a quantidade
+digitada de uma matéria-prima é o alvo ATIVO por dose, e a pureza do cadastro
+entra aplicada (modo teórico com a marca de pureza ligada) — a correção fica
+visível na coluna Pureza e no resumo dos ajustes da linha. Embalagem nasce com
+quantidade física informada, por unidade acabada: pote não tem pureza. Componente
+já gravado não muda de modo nem de marca por causa desta regra, e a distinção de
+§52 continua: pureza corrige a quantidade física do ingrediente; overage e
+reserva de produção são outro ajuste, com outra autorização.
+
+**Composição e embalagem se separam pelo TIPO REAL do Item** (`RAW_MATERIAL` ×
+`PACKAGING`), nunca pelo nome do cadastro: "cápsula" é matéria-prima num produto
+e embalagem em outro. A busca de item de cada seção procura só o tipo dela, por
+código ou nome, no catálogo inteiro.
+
+**Custo continua fora da Formulação.** A bancada responde o que entra e quanto
+entra; quanto custa é Estrutura de Custos, por quanto vender é Precificação.
+
 ## §53 — Fonte de custo do material: seleção automática, referência manual e substituição por cálculo
 
 ### A ordem canônica, num lugar só
