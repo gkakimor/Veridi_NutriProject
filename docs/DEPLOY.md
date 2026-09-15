@@ -175,3 +175,44 @@ Detalhe que engana: `@fastify/static` registra uma rota por arquivo na
 inicialização. Se o front for recompilado com o servidor no ar, os arquivos
 novos (com hash novo no nome) dão `404` até reiniciar o processo. Em produção
 isso não acontece — build e start são etapas separadas.
+
+---
+
+## 9. Ferramentas operacionais de produção
+
+Scripts que falam com o ambiente publicado. Nenhum faz parte do build, do
+deploy ou da suíte de testes: cada um roda à mão, por decisão de quem opera. A
+credencial do banco chega pelo Railway CLI (`railway run -s Postgres`) e nunca
+é copiada nem impressa. A produção publica a partir de `release/prod`;
+rodar um destes scripts não publica nada.
+
+### Somente leitura
+
+| Script | O que faz | Como rodar |
+|---|---|---|
+| `scripts/smoke-prod.mjs` | smoke autenticado da release no ar: `/health`, login e as telas principais, com captura de tela | `pnpm exec node scripts/smoke-prod.mjs <pasta-de-saída>` |
+| `scripts/maintenance/prod-inventory.mjs` | contagem por tabela e marcas de dado artificial | `railway run -s Postgres node scripts/maintenance/prod-inventory.mjs` |
+| `scripts/maintenance/prod-sessions.mjs` | contagem e datas das sessões, sem token | `railway run -s Postgres node scripts/maintenance/prod-sessions.mjs` |
+| `scripts/maintenance/fk-order.mjs` | FKs reais do banco (`pg_constraint`) e a ordem de remoção que impõem; `--json` opcional | `railway run -s Postgres node scripts/maintenance/fk-order.mjs` |
+
+`smoke-prod.mjs` lê a credencial de `.local-data/prod-demo.json` (ignorado pelo
+Git). A perna de **escrita** — cria um cliente "SMOKE" e o inativa — só roda
+com `--escrita`. As capturas mostram dado real de cliente: a pasta de saída
+fica fora do Git (`handoff/` ou fora do repositório) e é descartada depois da
+conferência.
+
+### Escrita — exigem confirmação explícita
+
+| Script | O que faz | Trava |
+|---|---|---|
+| `scripts/maintenance/prod-sessions-revoke.mjs` | marca `revokedAt` nas sessões vigentes; não apaga linha | sem `--confirmar` só lista o que faria |
+| `scripts/maintenance/prod-cleanup.mjs` | **apaga os dados de negócio** de produção, preservando usuários, sessões e unidades de medida | ver abaixo |
+
+**`prod-cleanup.mjs` é destrutivo e não é rotina.** Foi usado uma vez, na
+limpeza de 2026-09-11, antes da carga inicial. Hoje a produção contém a carga
+real da Veridi (2026-09-14): rodar o `--apply` apagaria cliente, pedido, lote e
+histórico. Sem `--apply` ele só faz dry-run. O `--apply` exige ambiente
+`production`, `--confirmar-projeto=<RAILWAY_PROJECT_ID>` igual ao que o CLI
+injeta e `--backup=<arquivo>` gerado por `prod-backup-json.mjs` com a mesma
+contagem de cada tabela. Só com decisão explícita do PO, registrada antes.
+

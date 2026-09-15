@@ -18,7 +18,7 @@ interface, contra a base recarregada com os dados reais da Veridi.** Os dez
 passaram. Trinta e nove conferências numéricas independentes bateram sem uma
 diferença, e a precisão foi demonstrada preservada ponta a ponta (o preço
 sugerido saiu R$ 16,44 do custo cheio `10,68903`, não R$ 16,45 do custo
-arredondado). Achados em [`E2E_AUDIT_CURRENT.md`](E2E_AUDIT_CURRENT.md): 22 no total, zero
+arredondado). Achados em [`archive/E2E_AUDIT_2026-09-07.md`](archive/E2E_AUDIT_2026-09-07.md): 22 no total, zero
 CRITICAL. **Triados em 2026-09-07 com leitura de código:** 3 HIGH, 4 MEDIUM,
 4 LOW, 7 UX, 2 duplicados, 1 encerrado, 1 adiado. Auditoria e triagem não
 corrigem — nenhuma linha de produto mudou.
@@ -4736,7 +4736,7 @@ resolve por `externalCode` e recusa a linha que não o tiver.
 | Assunto | Fonte única |
 |---|---|
 | Estado atual, próximo gate | este arquivo |
-| Achados da auditoria de produto | [E2E_AUDIT_CURRENT.md](E2E_AUDIT_CURRENT.md) |
+| Achados da auditoria de produto (rodada de 2026-09-07, histórico) | [archive/E2E_AUDIT_2026-09-07.md](archive/E2E_AUDIT_2026-09-07.md) |
 | Pendências abertas | [BACKLOG.md](BACKLOG.md) |
 | Regras duráveis de negócio | [PRODUCT_RULES.md](PRODUCT_RULES.md) |
 | Precisão numérica: inventário e plano | [NUMERIC_PRECISION_AUDIT.md](NUMERIC_PRECISION_AUDIT.md) |
