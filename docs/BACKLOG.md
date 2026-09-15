@@ -20,7 +20,7 @@ zero BLOCKER. O MVP foi entregue; o que está aqui é evolução do produto.
 |---|---|---|---|---|---|
 | 1 | P1 | ~~**BILLED-VALUE-CANONICAL-01**~~ — "Valor faturado" do Painel, R-15 e R-14 igual ao valor do documento | **FECHADO em 2026-09-15** · D1 decidida pelo PO: `Billing.totalAmount` · sem migration | — (entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
 | 2 | P1 | **E2E-BASELINE-REDESIGN-WAVE-04** — grupo C das E2E com massa própria | Discovery `EM_ANALISE`; P1 e a espera da 4E resolvidas pelo estado posterior | PO fecha P2–P8 ([abaixo](#wave-4--decisões-ainda-reais)); 4A pode começar | — |
-| 3 | P1 | **INVENTORY-PHYSICAL-COUNT-DISCOVERY-01** — Inventário Físico em sessões de inventário | Discovery `EM_ANALISE` · D1–D4 bloqueiam | PO fecha D1–D4 ([discovery](discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md)); depois INVENTORY-PHYSICAL-COUNT-01 | — |
+| 3 | P1 | **INVENTORY-PHYSICAL-COUNT-01** — Inventário Físico em sessões de inventário | Discovery `DECIDIDO` · **Fatia 1 (domínio e API) entregue em 2026-09-15** | Fatia 2 — telas (home, novo inventário com preview, grade, revisão, encerramento, Contagem rápida renomeada); depois Fatia 3 — FO-01 de sessão e CSV ([discovery](discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md)) | — |
 | 4 | P1 | Decisões de **FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01** → MANAGEMENT-DASHBOARD-V1-01 (Painel Gerencial) | Discovery `EM_ANALISE` · D2–D5 abertas | PO fecha D2–D5; implementar a versão 1 | BILLED-VALUE-CANONICAL-01 entregue |
 | 5 | P1 | Decisões de **PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01** → PRODUCTION-PERMISSION-HARDENING-01 | Discovery `EM_ANALISE` · P1 e P6 bloqueiam | PO fecha P1 e P6 (e confirma P2–P5, P7, P8); implementar | — |
 | 6 | P1 | Decisões de **WAVE-05-GOLDEN-PATH-DISCOVERY-01** → E2E-BASELINE-REDESIGN-WAVE-05 (golden path) | Discovery `EM_ANALISE` · Q3 bloqueia | PO fecha Q3 e as demais; passos 1–2 do plano não dependem de decisão | WAVE 4 entregue |
@@ -75,10 +75,13 @@ Absorve E2E-CORPUS-MASS-01: o que sobrava dele (grupo C e a suíte de `PROD-0002
 ### Inventário Físico — status
 
 **PO BASELINE APROVADA** (INVENTORY-PHYSICAL-COUNT-PO-BASELINE-01, seção G; `04d97ad`, merge `9b011aa`).
-**Discovery completo INVENTORY-PHYSICAL-COUNT-DISCOVERY-01: `EM_ANALISE`** (executado em 2026-09-15; D1–D4 bloqueiam) — documento em
-[`discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md`](discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md), com recomendação fechada para o ponto estrutural: **concorrência +
-saldo de referência + movimentos durante a contagem** (HIGH, seção G). Inventário cíclico, scanner dedicado e
-localizações seguem FUTURO.
+**Discovery INVENTORY-PHYSICAL-COUNT-DISCOVERY-01: `DECIDIDO`** — D1–D8 e P1–P7 fechadas pelo PO em 2026-09-15
+(opção F de concorrência, recontagem opcional, sem tolerância, ADMIN/PRODUCTION/QUALITY contam e aprovam), documento em
+[`discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md`](discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md).
+**Fatia 1 entregue em 2026-09-15** (INVENTORY-PHYSICAL-COUNT-01): domínio, schema e API das sessões, e a Contagem rápida
+gravando `INV-` QUICK. Abertos: Fatia 2 (telas, e no montador os filtros de qualidade/validade, última contagem,
+movimentação e local) e Fatia 3 (FO-01 de sessão e CSV controlado). Regularização de material sem lote (P7),
+inventário cíclico, scanner dedicado e localizações seguem FUTURO.
 
 ### Painel Gerencial — status
 
@@ -411,9 +414,9 @@ Nenhum destes tem escopo definido. O trabalho de cada um é **responder uma
 pergunta**; desenhar solução antes da resposta é o que produz módulo que ninguém
 usa.
 
-O único com posição na fila viva é o Inventário Físico (posição 3): tem PO
-baseline aprovada, e a posição é do DISCOVERY completo, não de uma implementação
-autorizada. Os outros esperam a pergunta virar decisão. SUPPLIER-ADDRESS-01, que
+O único com posição na fila viva é o Inventário Físico (posição 3): o discovery
+foi decidido e a implementação segue em fatias — a Fatia 1 saiu em 2026-09-15.
+Os outros esperam a pergunta virar decisão. SUPPLIER-ADDRESS-01, que
 tinha posição, foi entregue em 2026-09-11 (merge b8d744b).
 
 ### SUPPLIER-OFFER-OVERLAP-01 — vigências sobrepostas de oferta E de tarifa industrial
@@ -533,9 +536,9 @@ Registrado em 2026-09-15, só em documento. **Status: PO BASELINE / INTENÇÃO
 APROVADA — não é especificação técnica final.** Diferente dos outros itens desta
 seção, os objetivos já foram aprovados pelo PO: o discovery responde o que está
 aberto e desenha a solução, e pode mudar detalhe, mas não pode perder objetivo
-aprovado. O discovery completo (INVENTORY-PHYSICAL-COUNT-DISCOVERY-01) é a posição 3
-da fila viva e está `EM_ANALISE` desde 2026-09-15 ([documento](discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md)). Sem implementação autorizada — nenhum schema,
-migration, tela ou API nasce deste registro.
+aprovado. O discovery completo (INVENTORY-PHYSICAL-COUNT-DISCOVERY-01) está `DECIDIDO` desde 2026-09-15
+([documento](discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md)); a implementação é INVENTORY-PHYSICAL-COUNT-01, posição 3
+da fila viva, em fatias — a Fatia 1 (domínio e API) saiu em 2026-09-15.
 
 **Ponto de partida.** O Inventário Físico de hoje (`StockCountPage`) conta UMA
 posição por vez — item, lote quando o item controla lote, contagem e motivo — e,

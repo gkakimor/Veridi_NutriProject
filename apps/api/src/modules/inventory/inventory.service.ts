@@ -8,7 +8,6 @@ import type {
   InventoryMovementDTO,
   InventoryMovementListResponse,
   InventoryMovementSourceType,
-  StockCountResultDTO,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import type { Pagination } from "../../lib/pagination.js";
@@ -26,12 +25,10 @@ import {
   isLotExpired,
 } from "../../lib/inventory-ledger.js";
 import {
-  CountBelowReservedError,
   InsufficientStockError,
   ItemNotFoundError,
   LotItemMismatchError,
   LotNotFoundError,
-  MissingCountReasonError,
   MissingLotError,
   UnexpectedLotError,
 } from "./inventory.errors.js";
@@ -39,7 +36,6 @@ import type {
   CreateInventoryAdjustmentInput,
   ListInventoryMovementsQuery,
   ListInventoryQuery,
-  StockCountInput,
 } from "./inventory.schemas.js";
 
 /**
@@ -151,7 +147,7 @@ function toMovementDTO(
   };
 }
 
-async function getMovementById(id: string): Promise<InventoryMovementDTO | null> {
+export async function getMovementById(id: string): Promise<InventoryMovementDTO | null> {
   const movement = await getPrisma().inventoryMovement.findUnique({
     where: { id },
     include: movementInclude,
@@ -319,7 +315,7 @@ export async function listInventoryMovements(
 }
 
 /** Valida item/lote e retorna o lote resolvido (ou null quando o item nao controla lote). */
-async function resolveItemAndLot(
+export async function resolveItemAndLot(
   itemId: string,
   lotId: string | undefined,
 ): Promise<{ item: Item; lot: Lot | null }> {
@@ -346,7 +342,7 @@ async function resolveItemAndLot(
  * Recebimento, agora contra corrida entre saidas/perdas concorrentes no
  * mesmo escopo.
  */
-async function lockStockScope(
+export async function lockStockScope(
   tx: Prisma.TransactionClient,
   scope: { itemId: string; lotId: string | null },
 ): Promise<void> {
@@ -401,57 +397,5 @@ export async function createInventoryAdjustment(
   return (await getMovementById(movementId))!;
 }
 
-export async function createStockCount(
-  input: StockCountInput,
-  actorName?: string,
-): Promise<StockCountResultDTO> {
-  const { item, lot } = await resolveItemAndLot(input.itemId, input.lotId);
-  const countedQuantity = new Prisma.Decimal(input.countedQuantity);
-
-  const result = await getPrisma().$transaction(async (tx) => {
-    await lockStockScope(tx, { itemId: item.id, lotId: lot ? lot.id : null });
-
-    const systemQuantity = await getOnHand(tx, { itemId: item.id, lotId: input.lotId ?? null });
-    const difference = countedQuantity.minus(systemQuantity);
-
-    if (difference.isZero()) {
-      return { systemQuantity, difference, movementId: null as string | null };
-    }
-
-    if (difference.lessThan(0)) {
-      const reserved = lot
-        ? ((await getReservedByLots(tx, [lot.id])).get(lot.id) ?? new Prisma.Decimal(0))
-        : ((await getReservedByItems(tx, [item.id])).get(item.id) ?? new Prisma.Decimal(0));
-      // Nao resolve automaticamente cancelando reservas — rejeita e deixa o
-      // usuario revisar as reservas antes de ajustar o estoque.
-      if (countedQuantity.lessThan(reserved)) throw new CountBelowReservedError();
-    }
-
-    if (!input.reason) throw new MissingCountReasonError();
-
-    const type = difference.greaterThan(0) ? "ADJUSTMENT_IN" : "ADJUSTMENT_OUT";
-    const movement = await tx.inventoryMovement.create({
-      data: {
-        itemId: item.id,
-        lotId: lot ? lot.id : null,
-        type,
-        quantity: difference.abs(),
-        occurredAt: new Date(),
-        sourceType: "STOCK_COUNT",
-        reason: input.reason,
-        createdBy: actorName ?? SYSTEM_ACTOR,
-      },
-    });
-
-    return { systemQuantity, difference, movementId: movement.id };
-  });
-
-  return {
-    itemId: item.id,
-    lotId: lot ? lot.id : null,
-    systemQuantity: result.systemQuantity.toString(),
-    countedQuantity: countedQuantity.toString(),
-    difference: result.difference.toString(),
-    movementCreated: result.movementId ? await getMovementById(result.movementId) : null,
-  };
-}
+// A Contagem rápida (`POST /stock-counts`) mora em `stock-count.service.ts`
+// desde INVENTORY-PHYSICAL-COUNT-01: ela passou a gravar o documento INV-.

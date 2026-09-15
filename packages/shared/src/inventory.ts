@@ -202,12 +202,19 @@ export interface CreateInventoryAdjustmentInput {
   reason: string;
 }
 
+/** Contagem rápida — uma posição, contada e encerrada no mesmo passo. */
 export interface StockCountInput {
   itemId: string;
   lotId?: string;
   countedQuantity: string;
   /** Obrigatório quando há diferença; validado no backend. */
   reason?: string;
+  /**
+   * O saldo que a tela mostrou. Informado e diferente do saldo no instante do
+   * confirmar, o servidor responde conflito em vez de ajustar uma diferença
+   * que ninguém viu. Opcional enquanto a tela atual não o envia.
+   */
+  expectedSystemQuantity?: string;
 }
 
 export interface StockCountResultDTO {
@@ -219,6 +226,11 @@ export interface StockCountResultDTO {
   difference: string;
   /** `null` quando não houve diferença — nenhum InventoryMovement é criado nesse caso. */
   movementCreated: InventoryMovementDTO | null;
+  /** O documento `INV-` (kind `QUICK`) que a contagem gravou — inclusive quando confere. */
+  stockCountId: string;
+  stockCountCode: string;
+  positionId: string;
+  entryId: string;
 }
 
 /**

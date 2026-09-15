@@ -1223,12 +1223,41 @@ Advanced cycle-count scheduling remains future scope.
   only ever create `InventoryMovement` rows (`ADJUSTMENT_IN`/
   `ADJUSTMENT_OUT`/`LOSS`), reason required whenever there is a difference
   or an outbound quantity.
-- A stock count with no difference creates no movement at all — nothing to
-  audit when the count matches the system.
+- A stock count with no difference creates no movement at all. Since
+  INVENTORY-PHYSICAL-COUNT-01 the count itself is still recorded: the quick
+  count writes an `INV-` document (kind `QUICK`) with position and entry even
+  when it matches.
 - A stock count whose counted quantity would fall below the currently
   reserved quantity is rejected — the system never resolves this
   automatically by cancelling a reservation; the user must review
   reservations first.
+
+## Durable rules confirmed at implementation — count sessions (INVENTORY-PHYSICAL-COUNT-01)
+
+- A position is an item without lot control, or item + lot. A physical
+  position takes part in at most one open count (`IN_PROGRESS`/`IN_REVIEW`),
+  guaranteed by a unique index and not by a read-then-insert check; the quick
+  count respects it.
+- Every count entry freezes the ledger balance read in its own transaction
+  (expected). Entries are append-only; a recount or a correction is a new
+  entry with its own expected balance, and the latest entry is the one that
+  counts. Nothing blocks Receiving, Production, Shipping or Adjustments while
+  a count is open.
+- Completion applies the frozen difference of the valid entry as a DELTA on
+  the balance at that moment — never "counted − balance at completion", never
+  "counted − reference". Movements posted after the count stay in the ledger.
+  One adjustment per adjusted position, `occurredAt` = completion; refused if
+  the result would be negative or, on an outbound adjustment, below reserved.
+- No tolerance: every non-zero difference is decided (adjust / do not adjust)
+  with a reason. A divergent position with movement during the count closes
+  only after a recount or an explicit confirmation.
+- A blind count is blind in the API: reference, expected balance and
+  difference are never returned while the first round is open, nor in the
+  counting view.
+- Completed and cancelled counts never reopen or reverse; cancelling creates no
+  movement and keeps positions, entries and findings. Material found without a
+  registered item or lot becomes a finding — never a new item, lot or movement.
+- A count in a unit of `COUNT` dimension must be a whole number.
 
 ---
 

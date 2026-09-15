@@ -4,7 +4,12 @@ Redesenho do Inventário Físico em sessões de inventário em lote.
 
 ## Status
 
-`EM_ANALISE` — 2026-09-15. Análise lida sobre `origin/main` = `c63c124`.
+`DECIDIDO` — 2026-09-15. O PO fechou D1–D8 e P1–P7 no handoff INVENTORY-PHYSICAL-COUNT-01: ver "Addendum PO —
+decisões fechadas". `READY_TO_IMPLEMENT = YES`.
+
+**FATIA 1 IMPLEMENTADA** em 2026-09-15 (domínio e API, sem tela nova) — ver "Implementação". Fatias 2 e 3 pendentes.
+
+Leitura original, mantida como histórico: `EM_ANALISE` — 2026-09-15. Análise lida sobre `origin/main` = `c63c124`.
 
 - Discovery completo executado. Nada implementado: nenhum schema, migration, tela, API ou teste.
 - Concorrência e saldo de referência têm **recomendação fechada** (seção "Concorrência e saldo de referência").
@@ -1244,6 +1249,43 @@ Não estruturais; cada uma com recomendação, decidíveis na implementação se
 - **P7** — capability futura de regularização de material encontrado sem lote no ERP (G9). Recomendado: abrir
   discovery próprio quando a operação pedir.
 
+## Addendum PO — decisões fechadas
+
+Fonte: handoff **INVENTORY-PHYSICAL-COUNT-01** (Fatia 1), 2026-09-15. Registrado antes da implementação.
+**`READY_TO_IMPLEMENT = YES`.**
+
+| # | Decisão do PO | Em relação à recomendação |
+|---|---|---|
+| D1 | Concorrência = opção F | Igual |
+| D2 | Recontagem opcional | Igual |
+| D3 | Sem tolerância na primeira entrega | Igual |
+| D4 | ADMIN, PRODUCTION e QUALITY podem contar e aprovar; a mesma pessoa pode fazer os dois, e isso fica auditável | Igual |
+| D5 | Multiusuário otimista, com conflito explícito; nunca último-write silencioso | Igual |
+| D6 | CSV controlado, na Fatia 3 | Igual |
+| D7 | Item ou lote inexistente vira ocorrência; nunca cria cadastro em silêncio | Igual |
+| D8 | Cancelado ou encerrado não reabre nem estorna | Igual |
+| P1 | Máximo inicial de 3.000 posições por sessão | Igual |
+| P2 | Unidade de dimensão COUNT não aceita quantidade fracionária | Igual |
+| P3 | Nome: "Contagem rápida" | Igual |
+| P4 | Contagem rápida gera `INV-` com `kind = QUICK` | Igual |
+| P5 | "Com ou sem saldo" inclui lotes elegíveis com saldo zero; "Somente com saldo" exclui saldo zero | Igual |
+| P6 | FO-01 genérica fica como está; FO-01 de sessão entra na Fatia 3 | **Diverge**: o discovery recomendava "somente com saldo" e sem coluna Diferença na cega |
+| P7 | Material físico sem lote cadastrado vira ocorrência; regularização é futuro | Igual |
+
+Precisões do handoff sobre a Fatia 1:
+
+- Escopo: domínio, schema, migration, service/API e compatibilidade da Contagem rápida. Sem home, grade, wizard, CSV,
+  FO-01 de sessão, scanner, inventário cíclico, painel ou relatório.
+- `StockCountImportBatch` só nasce na Fatia 3, com o CSV — nada de schema prematuro.
+- Sem `DRAFT` e sem status `RECOUNT`: recontagem é da posição e do registro.
+- A exclusividade de posição entre sessões abertas resiste a concorrência real — consultar e depois inserir não basta.
+  A Contagem rápida respeita.
+- Ajuste = diferença congelada no registro que vale, aplicada como delta no encerramento. Exemplos obrigatórios em
+  teste: saldo 10, consumo −2, contagem 8 → zero ajuste; esperado 8, contagem 7, recebimento +5 depois da contagem →
+  o encerramento aplica −1 e o saldo fica 12.
+- Contagem cega: o backend é a autoridade; na primeira rodada a API não devolve saldo esperado nem diferença.
+- Contrato HTTP da tela atual preservado; se precisar mudar, compatível até a Fatia 2.
+
 ## Modelo de dados proposto
 
 **Conceitual. Sem migration.** Nomes seguem as convenções do schema (`@@map` em snake_case, `Decimal(24,12)` para
@@ -1397,6 +1439,49 @@ READY_TO_IMPLEMENT = **NO**. Motivo: a pergunta estrutural (concorrência / sald
 clara e sem ambiguidade técnica, mas D1–D4 tocam quantidade de estoque e permissões e continuam sem resposta do PO.
 Com D1–D4 aceitas como recomendado, a primeira entrega pode ser implementada sem ambiguidade perigosa.
 
+**Atualização 2026-09-15:** READY_TO_IMPLEMENT = **YES** — D1–D8 e P1–P7 fechadas pelo PO ("Addendum PO — decisões
+fechadas"). A implementação começa pela Fatia 1 (INVENTORY-PHYSICAL-COUNT-01).
+
+### FATIA 1 IMPLEMENTADA — 2026-09-15
+
+INVENTORY-PHYSICAL-COUNT-01, domínio e API, sem tela nova. Fatia 2 (telas) e Fatia 3 (FO-01 de sessão e CSV)
+pendentes.
+
+- **Schema:** `StockCount`, `StockCountPosition`, `StockCountEntry` e `StockCountFinding`; migration aditiva
+  `20260925093026_inventory_physical_count_sessions`, com a sequence `stock_count_code_seq` e CHECKs de chave de
+  posição, chave aberta, rodada e contagem ≥ 0. Sem `StockCountImportBatch` (Fatia 3).
+- **Exclusividade:** `openPositionKey` com índice único — igual à chave enquanto a sessão está aberta e a posição não foi
+  retirada; zerada ao encerrar, cancelar e retirar. Resiste a duas transações simultâneas (provado com transação aberta
+  e `pg_stat_activity`). A Contagem rápida respeita: ela trava a linha do lote, que a inserção concorrente de posição já
+  segura pela chave estrangeira, e depois encontra a posição aberta.
+- **Mudança de desenho sobre "Alteração em `InventoryMovement`":** a FK 1:1 do ajuste mora na posição
+  (`adjustmentMovementId @unique`), não no ledger. Motivo: o `pnpm migration:create` oficial recusa, sem TTY, índice
+  único novo em tabela existente ("A unique constraint … will be added"), e assim a migration não toca
+  `inventory_movements`. O `sourceId` do movimento continua sendo a posição; a garantia de um ajuste por posição fica.
+- **Registro que vale explícito:** `validEntryId` na posição, sempre o último registrado. Registro novo ou recontagem
+  pedida apagam a decisão, que nunca vale para outro número.
+- **Conflito otimista** pela rodada e pelo último registro visto: 409 com a posição atual; o mesmo valor e o reenvio do
+  mesmo `clientRequestId` não duplicam.
+- **Cegueira:** a leitura `review` esconde referência, esperado e diferença até a primeira rodada concluir; a leitura
+  `counting` sempre esconde numa contagem cega, e na recontagem esconde as rodadas anteriores. As telas de saldo do
+  estoque (`GET /inventory`) continuam abertas a quem já as via: a cegueira é da API do inventário.
+- **Movimentação durante o inventário:** movimento da posição com `createdAt` depois da referência (fora os ajustes de
+  inventário) ou esperado do registro que vale ≠ referência. Referência e registro usam o relógio do processo, a mesma
+  régua do `createdAt` que o Prisma grava. Divergência marcada fecha só recontada ou confirmada, em "Ajustar" e em
+  "Não ajustar".
+- **Escopo de início desta fatia:** tipo de item, saldo (P5), propriedade (Veridi, material de cliente, cliente
+  específico) e seleção por itens e lotes. Qualidade/validade, última contagem, movimentação e local entram na Fatia 2,
+  com o montador.
+- **Rotas:** `GET /stock-counts`, `GET /stock-counts/:id?view=review|counting`, `POST /stock-counts/preview`,
+  `POST /stock-counts/sessions` e, sob `POST /stock-counts/:id/`, `positions`, `positions/:positionId/remove`,
+  `positions/:positionId/entries`, `close-first-round`, `recounts`, `decisions`, `complete`, `cancel` e `findings`.
+  `POST /stock-counts` segue sendo a Contagem rápida, com o contrato só acrescido.
+
 ## Histórico de decisões
 
 - 2026-09-15 — Discovery executado sobre `c63c124`; status `EM_ANALISE`; D1–D8 e P1–P7 abertas.
+- 2026-09-15 — PO fecha D1–D8 e P1–P7 no handoff INVENTORY-PHYSICAL-COUNT-01; status `EM_ANALISE` → `DECIDIDO`;
+  `READY_TO_IMPLEMENT` NO → YES. P6 muda a recomendação: a FO-01 genérica fica como está (antes: "somente com saldo"
+  e sem coluna Diferença na cega); a FO-01 de sessão entra na Fatia 3.
+- 2026-09-15 — FATIA 1 IMPLEMENTADA (INVENTORY-PHYSICAL-COUNT-01). Desenho alterado num ponto: a FK 1:1 do ajuste mora
+  na posição, não em `InventoryMovement` (motivo em "Implementação"). Status segue `DECIDIDO` até as Fatias 2 e 3.

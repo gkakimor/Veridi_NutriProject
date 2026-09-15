@@ -1,0 +1,138 @@
+import { z } from "zod";
+import {
+  STOCK_COUNT_DECISIONS,
+  STOCK_COUNT_FINDING_KINDS,
+  STOCK_COUNT_KINDS,
+  STOCK_COUNT_MAX_POSITIONS,
+  STOCK_COUNT_MODES,
+  STOCK_COUNT_STATUSES,
+} from "@veridi/shared";
+import { optionalQuantityDecimalSchema, quantityDecimalSchema } from "../../lib/decimal-schema.js";
+import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
+
+/** Enum de uma lista canônica do shared — nunca uma cópia à mão. */
+function enumDe<T extends string>(valores: readonly T[]) {
+  return z.enum(valores as unknown as [T, ...T[]]);
+}
+
+const idSchema = z.string().trim().min(1);
+const motivoSchema = z.string().trim().min(3, "Motivo é obrigatório (mínimo de 3 caracteres)").max(500);
+
+/**
+ * Teto das listas do escopo. Maior que o limite de posições de propósito: o
+ * filtro pode selecionar mais do que cabe, e quem responde "divida o escopo" é
+ * o serviço, com o número real — não um 400 genérico de tamanho de lista.
+ */
+const TETO_DE_LISTA = 20_000;
+
+const semRepeticao = (ids: string[]) => new Set(ids).size === ids.length;
+
+export const stockCountScopeSchema = z
+  .object({
+    itemTypes: z.array(z.enum(["RAW_MATERIAL", "PACKAGING", "FINISHED_PRODUCT"])).max(3).optional(),
+    balance: z.enum(["WITH_BALANCE", "ANY"]),
+    owner: z.enum(["ALL", "VERIDI", "CUSTOMER"]).default("ALL"),
+    customerId: idSchema.optional(),
+    itemIds: z.array(idSchema).min(1).max(TETO_DE_LISTA).optional(),
+    lotIds: z.array(idSchema).min(1).max(TETO_DE_LISTA).optional(),
+  })
+  .refine((scope) => !scope.customerId || scope.owner === "CUSTOMER", {
+    message: "Cliente específico só com propriedade de cliente",
+    path: ["customerId"],
+  });
+
+export const previewStockCountSchema = z.object({
+  mode: enumDe(STOCK_COUNT_MODES),
+  scope: stockCountScopeSchema,
+  excludedPositionKeys: z.array(z.string().min(1)).max(TETO_DE_LISTA).optional(),
+});
+
+export const startStockCountSchema = previewStockCountSchema.extend({
+  description: z.string().trim().max(200).optional(),
+  expectedPositionKeys: z.array(z.string().min(1)).max(STOCK_COUNT_MAX_POSITIONS).optional(),
+});
+
+export const listStockCountsQuerySchema = z.object({
+  status: enumDe(STOCK_COUNT_STATUSES).optional(),
+  kind: enumDe(STOCK_COUNT_KINDS).optional(),
+  page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
+  pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
+});
+
+export const stockCountDetailQuerySchema = z.object({
+  view: z.enum(["review", "counting"]).default("review"),
+});
+
+export const registerStockCountEntrySchema = z.object({
+  round: z.number().int().min(1),
+  expectedLastEntryId: idSchema.nullable(),
+  countedQuantity: quantityDecimalSchema({ allowZero: true }),
+  clientRequestId: z.string().uuid("Identificador do envio inválido"),
+  note: z.string().trim().max(500).optional(),
+});
+
+export const addStockCountPositionSchema = z.object({
+  itemId: idSchema,
+  lotId: idSchema.optional(),
+  reason: motivoSchema,
+});
+
+export const removeStockCountPositionSchema = z.object({
+  reason: motivoSchema,
+});
+
+export const requestStockCountRecountSchema = z.object({
+  positionIds: z
+    .array(idSchema)
+    .min(1)
+    .max(STOCK_COUNT_MAX_POSITIONS)
+    .refine(semRepeticao, { message: "Posição repetida na lista" }),
+});
+
+export const decideStockCountSchema = z.object({
+  decisions: z
+    .array(
+      z.object({
+        positionId: idSchema,
+        decision: enumDe(STOCK_COUNT_DECISIONS),
+        reason: motivoSchema,
+        confirmConcurrentMovement: z.boolean().optional(),
+      }),
+    )
+    .min(1)
+    .max(STOCK_COUNT_MAX_POSITIONS)
+    .refine((decisoes) => semRepeticao(decisoes.map((d) => d.positionId)), {
+      message: "Posição repetida na lista",
+    }),
+});
+
+export const cancelStockCountSchema = z.object({
+  reason: motivoSchema,
+});
+
+export const createStockCountFindingSchema = z
+  .object({
+    kind: enumDe(STOCK_COUNT_FINDING_KINDS),
+    itemId: idSchema.optional(),
+    identification: z.string().trim().min(1, "Identificação é obrigatória").max(200),
+    quantity: optionalQuantityDecimalSchema(),
+    unitCode: idSchema.optional(),
+    note: z.string().trim().max(500).optional(),
+  })
+  .refine((finding) => finding.kind !== "UNREGISTERED_LOT" || Boolean(finding.itemId), {
+    message: "Lote sem cadastro exige o item do ERP",
+    path: ["itemId"],
+  })
+  .refine((finding) => finding.kind !== "UNREGISTERED_ITEM" || !finding.itemId, {
+    message: "Item sem cadastro não aponta item do ERP",
+    path: ["itemId"],
+  });
+
+export type StockCountScopeQuery = z.infer<typeof stockCountScopeSchema>;
+export type PreviewStockCountQuery = z.infer<typeof previewStockCountSchema>;
+export type StartStockCountQuery = z.infer<typeof startStockCountSchema>;
+export type ListStockCountsQuery = z.infer<typeof listStockCountsQuerySchema>;
+export type RegisterStockCountEntryBody = z.infer<typeof registerStockCountEntrySchema>;
+export type AddStockCountPositionBody = z.infer<typeof addStockCountPositionSchema>;
+export type DecideStockCountBody = z.infer<typeof decideStockCountSchema>;
+export type CreateStockCountFindingBody = z.infer<typeof createStockCountFindingSchema>;
