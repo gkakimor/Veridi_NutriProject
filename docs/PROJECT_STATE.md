@@ -37,27 +37,19 @@ reconstruído do zero, DEV e produção são a mesma estrutura, campo a campo.
 
 ## O que está aberto
 
-[`BACKLOG.md`](BACKLOG.md) — **zero CRITICAL, zero BLOCKER**. O que sobra:
+[`BACKLOG.md`](BACKLOG.md) — **zero CRITICAL, zero BLOCKER**. A ordem vive só na fila viva de lá, reconciliada com o
+estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0d81aae` (MAIN-STABILITY-FAST-GATE-01,
+2026-09-15: MAIN_STABLE = YES); PROD em `release/prod` = `2400def`.
 
-- **achados triados da auditoria de 2026-09-07** — seção A do
-  [`BACKLOG.md`](BACKLOG.md): **P0 e P1 vazias**, 6 P2 e 3 P3 (F-08-1 fechado em
-  FIX-01; F-02-2 e F-02-1 em FIX-02; F-08-2 em FIX-03; F-06-1 e F-06-2 em
-  FIX-04; F-09-1 e F-07-2 em FIX-05; F-03-1 e F-07-1 em FIX-06);
-- **melhorias aprovadas, aguardando autorização do PO:** #8E, #8F, #8G;
-- **aguardando validação com a Veridi:** #7 e #11;
-- **manutenção:** #10;
-- **discovery com intenção já aprovada pelo PO:** redesenho do Inventário Físico
-  em sessões de inventário em lote, com a contagem de hoje mantida como Contagem
-  rápida — INVENTORY-PHYSICAL-COUNT-PO-BASELINE-01, seção G do
-  [`BACKLOG.md`](BACKLOG.md). É PO BASELINE, não especificação: sem posição na
-  fila, nada implementado, e concorrência/cut-off aberta como HIGH;
-- **discovery em análise:** Painel Gerencial — o que o ERP mostra de dinheiro com
-  confiança — FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01, em
-  [`discovery/`](discovery/README.md), o índice de todos os discoveries. Cinco
-  decisões de PO abertas e um defeito HIGH no valor faturado atual
-  (BILLED-VALUE-CANONICAL-01, seção A do [`BACKLOG.md`](BACKLOG.md)); nada
-  implementado;
-- **watchlist** (observado, sem ação conhecida): W1 a W6.
+- **E2E:** WAVE 1–2 e WAVE 3 fechadas (merges `9c60845` e `6256ca9`); a próxima é a WAVE 4 (grupo C) e depois a WAVE 5
+  (golden path);
+- **discoveries persistidos** em [`discovery/`](discovery/README.md), todos `EM_ANALISE` e sem implementação: Painel
+  Gerencial (FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01), WAVE 4 (E2E-BASELINE-REDESIGN-WAVE-04-DISCOVERY-01), golden
+  path (WAVE-05-GOLDEN-PATH-DISCOVERY-01) e permissões da Produção (PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01);
+- **Inventário Físico:** PO baseline aprovada (INVENTORY-PHYSICAL-COUNT-PO-BASELINE-01, seção G do BACKLOG); discovery
+  completo ainda não executado;
+- **defeito HIGH aberto:** BILLED-VALUE-CANONICAL-01, primeiro da fila;
+- **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 
 Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
 
@@ -4614,8 +4606,9 @@ nem vírgula entrar (o prazo passou a testar `0` e `121`), `1,2,3` também não 
 
 ## Próxima prioridade
 
-A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
-mesma. Os achados da rodada estão no BACKLOG, sem posição na fila.
+**A ordem vive na fila viva do [`BACKLOG.md`](BACKLOG.md)**, reconciliada em 2026-09-15: BILLED-VALUE-CANONICAL-01;
+WAVE 4; discovery completo do Inventário Físico; decisões do Painel Gerencial; decisões de permissões da Produção;
+WAVE 5; estabilização final. Os parágrafos abaixo registram como cada assunto chegou até aqui.
 
 **PRICING-TEMPLATE-FLEX-01 fechado em 2026-09-11** (§84). Os três achados fecharam:
 PRICING-MODEL-DIFF-01 e PRICING-ACTIVATE-CONFIRM-01 em COST-PRICING-CLARITY-WAVE-01, e
@@ -4669,7 +4662,7 @@ manual —, e o sistema não faz escrita de massa.
 acima). **FORMULATION-ADJUSTMENTS-UX-01 fechado no mesmo dia** (§88), fora da
 fila, por handoff do PO, e **NAVIGATION-SIDEBAR-01** também, com a passada de
 acabamento NAV-PAGE-TITLES-01 + QUALITY-DOC-WRITE-01 (seção própria acima).
-Próximo da fila viva: SUPPLIER-ADDRESS-01.
+SUPPLIER-ADDRESS-01, então o próximo da fila viva, fechou no mesmo dia (merge b8d744b).
 
 **COST-VAR-02** (comparação de CMV e proteção de margem) segue BLOQUEADO
 aguardando as sete decisões do PO em
