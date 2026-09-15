@@ -139,7 +139,7 @@ os LOW e UX da seção A, a seção D e a watchlist.
 ## A. Defeitos abertos
 
 Triados em 2026-09-07 sobre a auditoria de produto. Evidência, passos e
-conferência numérica ficam em [`E2E_AUDIT_CURRENT.md`](E2E_AUDIT_CURRENT.md);
+conferência numérica ficam em [`archive/E2E_AUDIT_2026-09-07.md`](archive/E2E_AUDIT_2026-09-07.md);
 aqui fica só o que exige trabalho, com a severidade **do PO**, que nem sempre é
 a do auditor.
 
