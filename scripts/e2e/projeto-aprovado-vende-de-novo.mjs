@@ -1,31 +1,49 @@
+import { exigir } from "./fixtures/api.mjs";
+import { criarCliente } from "./fixtures/cadastros.mjs";
+import { criarProdutoDoProjeto, criarProjeto } from "./fixtures/comercial.mjs";
+import {
+  aguardarReleitura,
+  aprovarProjeto,
+  criarNovaVersao,
+  enviarAoCliente,
+  esperarProjetoNaTela,
+  esperarVersaoNaTela,
+  gerarPedido,
+  registrarAceite,
+  rotaDoProjeto,
+  voltarAoProjeto,
+} from "./fixtures/comercial-ui.mjs";
+import { carimbar, criarRun } from "./fixtures/run.mjs";
 import { abrirNavegador, WEB } from "./lib/browser.mjs";
-import { obterRun } from "./lib/run-id.mjs";
 
 /**
- * O mesmo projeto vende duas vezes — pela interface, do zero.
+ * O mesmo Projeto vende duas vezes — COM-CORE, pelo fluxo da página própria da
+ * versão (E2E-BASELINE-REDESIGN-WAVE-03).
  *
- * A regra antiga travava `createQuoteVersion` em projeto `APPROVED`, e a tela
- * mandava criar um projeto novo para o mesmo cliente. Recompra multiplicava o
- * cadastro pelo calendário, e a segunda venda perdia a história técnica da
- * primeira.
+ * A regra antiga travava versão nova em Projeto aprovado e mandava criar outro
+ * Projeto para o mesmo cliente. Hoje o aceite mora na página da versão, a
+ * aprovação na ficha do Projeto, e o Pedido nasce no Fechamento da versão
+ * aceita quando o Projeto já está aprovado.
  *
- * Esta suíte percorre dois ciclos clicando:
+ * Esta suíte percorre, clicando:
  *
- *   1. projeto novo → produto técnico → orçamento → validade → enviar →
- *      aceitar → aprovar projeto → PEDIDO 1;
- *   2. MESMO projeto, já aprovado → "Novo orçamento" → validade → enviar →
- *      aceitar → PEDIDO 2.
+ *   1. ficha → V1 → produto, preço e validade → enviar → aceitar (na versão) →
+ *      o Fechamento explica que falta aprovar → ficha → aprovar → V1 →
+ *      Fechamento → PEDIDO 1;
+ *   2. MESMO Projeto, já aprovado → "Novo orçamento" → V2 com preço renegociado
+ *      → enviar → aceitar → a ficha lista a V1 ainda aceita, com o Pedido 1, e a
+ *      V2 aceita → V2 → Fechamento → PEDIDO 2, que aponta para a V2;
+ *   3. a proposta vencida: V3 enviada com validade passada diz "Vencido", explica
+ *      que a janela de aceite fechou e não deixa aceitar.
  *
- * E prova o que o PO pediu: nenhum projeto novo, dois orçamentos distintos,
- * dois Pedidos distintos, cada Pedido apontando para a sua proposta, e a
- * primeira aceita continuando ACEITA — ela é a origem do Pedido 1.
+ * Cliente, Projeto e Produto nascem por API — a suíte procurava um cliente pelo
+ * código fixo da carga antiga, que a base não tem. Versões, envio, aceite,
+ * aprovação e Pedido, pela tela; a origem de cada Pedido é conferida por GET.
  *
- * O terceiro cenário é a validade: um orçamento com data passada é enviado e
- * a tela recusa o aceite, dizendo "Vencido" e a data. Nada de SQL, nada de
- * relógio adulterado — a data vencida é digitada no próprio campo.
- *
- *   node scripts/e2e/projeto-aprovado-vende-de-novo.mjs
+ *   pnpm e2e:run --suites=projeto-aprovado-vende-de-novo
  */
+
+const run = criarRun();
 
 const QUANTIDADE = "100";
 const PRECO_CICLO_1 = "12,50";
@@ -33,16 +51,8 @@ const PRECO_CICLO_2 = "13,90";
 const VALIDADE_FUTURA = "2099-12-31";
 const VALIDADE_VENCIDA = "2020-01-31";
 
-const run = obterRun({ novo: true, dono: "com-core" });
-
-/**
- * O cliente desta execução, criado pela interface. A suíte procurava
- * `CLI-000013`, massa do corpus que uma base recriada do zero não tem — e
- * cada suíte cria a própria massa (regra 1 do README).
- */
-const CLIENTE = `Cliente Recompra E2E${run.runId}`;
-
 const falhas = [];
+
 function afirmar(descricao, condicao, detalhe = "") {
   if (condicao) {
     console.log(`  ok   ${descricao}${detalhe ? ` — ${detalhe}` : ""}`);
@@ -53,266 +63,221 @@ function afirmar(descricao, condicao, detalhe = "") {
   return false;
 }
 
-const { pagina, erros, fechar } = await abrirNavegador();
-const respostas = [];
-pagina.on("response", (r) => respostas.push({ status: r.status(), url: r.url() }));
+async function main() {
+  const { pagina, api, erros, fechar } = await abrirNavegador();
 
-/** A tabela de versões, como a pessoa a lê. */
-async function lerVersoes() {
-  return pagina.evaluate(() => {
-    const tabela = [...document.querySelectorAll("table")].find((t) =>
-      /Versão/.test(t.querySelector("thead")?.textContent ?? ""),
+  const assentar = () => pagina.waitForTimeout(400);
+  const statusNoTitulo = async () => (await pagina.locator(".doc-title > span").first().innerText()).trim();
+  const esperarStatus = (status) =>
+    pagina.waitForFunction(
+      (esperado) => document.querySelector(".doc-title > span")?.textContent?.trim() === esperado,
+      status,
+      { timeout: 25000 },
     );
-    if (!tabela) return [];
-    return [...tabela.querySelectorAll("tbody tr")].map((tr) => {
-      const celulas = [...tr.children].map((td) => td.textContent.trim().replace(/\s+/g, " "));
-      return { versao: celulas[0] ?? "", validade: celulas[4] ?? "", status: celulas[5] ?? "" };
-    });
-  });
-}
 
-async function clicar(nome, { exact = true } = {}) {
-  await pagina.getByRole("button", { name: nome, exact }).first().click();
-}
+  /** Um campo que grava ao sair, e a releitura que ele dispara. */
+  const gravarCampoDaLinha = async (campo, valor) => {
+    const releitura = aguardarReleitura(pagina);
+    await campo.fill(valor);
+    await campo.blur();
+    await releitura;
+    await assentar();
+  };
 
-/**
- * O Pedido aberto: id da rota e código na tela.
- *
- * Ler o código antes de a tela terminar de montar devolvia `null` — daí a
- * espera explícita pelo padrão do código, e não por um tempo fixo.
- */
-async function pedidoAberto() {
-  /*
-   * A rota troca ANTES de a tela do Pedido montar, e por um instante a URL
-   * ja e a nova enquanto o DOM ainda e o do Projeto — que tambem imprime um
-   * codigo PED na coluna "originou". Esperar so pelo padrao lia a pagina
-   * anterior. A espera exige a tela do Pedido de verdade: sem os botoes do
-   * Projeto, e com o codigo ja renderizado.
+  /**
+   * Validade gravada. "Salvar condições" fica desabilitado quando não há o que
+   * gravar — a versão da recompra já nasce com a validade da condição vigente
+   * sugerida (§74) —, e aí não se clica.
    */
-  await pagina.waitForFunction(
-    () => {
-      const texto = document.body.innerText;
-      const noProjeto = /Novo orçamento|Criar nova versão|Abrir rascunho/.test(texto);
-      return (
-        location.pathname.includes("/comercial/pedidos/") &&
-        !noProjeto &&
-        /PED-\d{6}/.test(texto)
+  const definirValidade = async (valor) => {
+    await pagina.locator("#quote-valid-until").fill(valor);
+    const salvar = pagina.getByRole("button", { name: "Salvar condições", exact: true });
+    if (await salvar.isEnabled()) {
+      const releitura = aguardarReleitura(pagina);
+      await salvar.click();
+      await releitura;
+      await assentar();
+    }
+  };
+
+  /** A tabela de versões da ficha, como a pessoa a lê. */
+  const versoesDaFicha = () =>
+    pagina.evaluate(() => {
+      const tabela = [...document.querySelectorAll("table")].find((t) =>
+        /Versão/.test(t.querySelector("thead")?.textContent ?? ""),
       );
-    },
-    { timeout: 30000 },
-  );
-  return pagina.evaluate(() => ({
-    id: location.pathname.split("/").pop(),
-    codigo: document.body.innerText.match(/PED-\d{6}/)?.[0] ?? null,
-    origem: document.body.innerText.match(/ORC-\d{6} · V\d+/)?.[0] ?? null,
-  }));
-}
+      return [...(tabela?.querySelectorAll("tbody tr") ?? [])]
+        .filter((tr) => tr.querySelector("td.is-code"))
+        .map((tr) => {
+          const celulas = [...tr.children].map((td) => td.textContent.trim().replace(/\s+/g, " "));
+          return { versao: celulas[0] ?? "", validade: celulas[4] ?? "", status: celulas[5] ?? "" };
+        });
+    });
 
-async function esperarTexto(texto, timeout = 20000) {
-  await pagina.waitForFunction(
-    (alvo) => document.body.innerText.includes(alvo),
-    texto,
-    { timeout },
-  );
-}
+  const abrirPelaFicha = async (rotulo) => {
+    await pagina.getByRole("link", { name: `Abrir ${rotulo}`, exact: true }).click();
+    return esperarVersaoNaTela(pagina);
+  };
 
-/**
- * Informa a validade e GRAVA as condições.
- *
- * O botão de enviar lê o que está gravado, não o que está digitado — por isso
- * ele continua bloqueado até "Salvar condições". É o comportamento correto: a
- * validade é do documento, não do formulário.
- *
- * "Salvar condições" fica desabilitado quando não há nada a gravar — e é o
- * que acontece no ciclo 2: a versão nova já nasce com a validade da condição
- * vigente sugerida (§74), e digitar a mesma data não muda nada. Clicar mesmo
- * assim esgotava 30 s num botão que está certo em não estar disponível
- * (BACKLOG #17).
- */
-async function definirValidade(valor) {
-  await pagina.locator("#quote-valid-until").fill(valor);
-  await pagina.locator("#quote-valid-until").blur();
-  await pagina.waitForTimeout(300);
-  const salvar = pagina.getByRole("button", { name: "Salvar condições", exact: true }).first();
-  if (await salvar.isEnabled()) {
-    await salvar.click();
-    await pagina.waitForTimeout(900);
-  }
-}
+  const origemDoPedido = async (pedido) =>
+    (await exigir(api, "GET", `/customer-orders/${pedido.id}`)).commercialOrigin?.quoteVersionId ?? null;
 
-/** Envia a proposta aberta, passando pelo diálogo de confirmação. */
-async function enviarProposta() {
-  await clicar("Enviar ao cliente");
-  await pagina.waitForTimeout(300);
-  const confirmar = pagina.getByRole("button", { name: /Enviar mesmo assim|Enviar ao cliente/ });
-  await confirmar.last().click();
-  await esperarTexto("Enviado");
-}
+  try {
+    // ── 0. Massa ────────────────────────────────────────────────────────
+    console.log(`\n[0] Cliente, Projeto e Produto desta execução, por API (${run.runId})`);
 
-try {
-  console.log(`\n== ciclo 1 — projeto novo (${run.runId})`);
+    const cliente = await criarCliente(api, run, { nome: carimbar(run, "Cliente Recompra") });
+    const projeto = await criarProjeto(api, run, { cliente, nome: carimbar(run, "Projeto Recompra") });
+    const produto = await criarProdutoDoProjeto(api, run, { projeto, nome: carimbar(run, "Produto Recompra") });
+    const urlDoProjeto = `${WEB}${rotaDoProjeto(projeto.id)}`;
+    const campoPreco = () => pagina.getByLabel(`Preço unitário de ${produto.codigo}`);
 
-  // O cliente desta execução, pela tela de cadastro.
-  await pagina.goto(`${WEB}/cadastros/clientes/novo`, { waitUntil: "networkidle" });
-  await pagina.locator("#customer-legal-name").first().fill(CLIENTE);
-  const clienteCriado = pagina.waitForResponse(
-    (r) => r.request().method() === "POST" && new URL(r.url()).pathname === "/customers",
-    { timeout: 25000 },
-  );
-  await clicar("Criar cliente");
-  afirmar("cliente desta execução criado pela interface", (await clienteCriado).ok(), CLIENTE);
+    // ── 1. Ciclo 1 ──────────────────────────────────────────────────────
+    console.log(`\n== ciclo 1 — Projeto novo`);
 
-  await pagina.goto(`${WEB}/comercial/projetos`, { waitUntil: "networkidle" });
-  await clicar("Novo projeto");
-  await pagina.waitForSelector("#project-customer");
-  await pagina.fill("#project-customer", CLIENTE);
-  // A opção do cliente, nunca a de "criar": o nome carimbado é único.
-  const opcaoDoCliente = pagina.locator("li.entity-select__option:not(.entity-select__create)", {
-    hasText: CLIENTE,
-  });
-  await opcaoDoCliente.first().waitFor({ timeout: 25000 });
-  await opcaoDoCliente.first().click();
-  await pagina.fill("#project-name", `Recompra ${run.runId}`);
-  await clicar("Criar projeto", { exact: false });
-  await pagina.waitForFunction(() => /\/comercial\/projetos\/[0-9a-f-]{10,}/.test(location.pathname), {
-    timeout: 20000,
-  });
+    await pagina.goto(urlDoProjeto);
+    await esperarProjetoNaTela(pagina);
+    const v1 = await criarNovaVersao(pagina, { botao: "Criar nova versão" });
+    afirmar("a ficha cria a V1", v1.id === v1.resposta.id && / · V1$/.test(v1.rotulo ?? ""), v1.rotulo);
 
-  const urlDoProjeto = pagina.url();
-  console.log(`  projeto: ${urlDoProjeto}`);
+    const releituraDaLinha = aguardarReleitura(pagina);
+    await pagina.locator("#quote-add-product").selectOption({ label: `${produto.codigo} · ${produto.nome}` });
+    await pagina.getByRole("button", { name: "Adicionar", exact: true }).click();
+    await releituraDaLinha;
+    await pagina.getByLabel(`Quantidade de ${produto.codigo}`).waitFor({ timeout: 25000 });
+    await gravarCampoDaLinha(pagina.getByLabel(`Quantidade de ${produto.codigo}`), QUANTIDADE);
+    await gravarCampoDaLinha(campoPreco(), PRECO_CICLO_1);
+    await definirValidade(VALIDADE_FUTURA);
 
-  // Produto técnico: sem ele não há o que orçar.
-  await pagina.waitForSelector("#technical-unit");
-  await pagina.fill("#technical-unit", "un");
-  await clicar("Preparar produto técnico");
-  await esperarTexto("Produto");
+    afirmar("V1 enviada", (await enviarAoCliente(pagina)).status === 200);
+    await esperarStatus("Enviado");
+    afirmar("V1 aceita na página da versão", (await registrarAceite(pagina)).status === 200);
+    await esperarStatus("Aceito");
 
-  // Orçamento V1.
-  await clicar("Criar nova versão");
-  await pagina.waitForTimeout(800);
-  await pagina.waitForSelector("#quote-add-product");
-  await pagina.selectOption("#quote-add-product", { index: 1 });
-  await clicar("Adicionar");
-  await pagina.waitForTimeout(800);
-
-  const campoQuantidade = pagina.locator('input[aria-label^="Quantidade de"]').first();
-  await campoQuantidade.fill(QUANTIDADE);
-  await campoQuantidade.blur();
-  const campoPreco = pagina.locator('input[aria-label^="Preço unitário de"]').first();
-  await campoPreco.fill(PRECO_CICLO_1);
-  await campoPreco.blur();
-  await pagina.waitForTimeout(600);
-
-  await definirValidade(VALIDADE_FUTURA);
-  await enviarProposta();
-  await clicar("Registrar aceite");
-  await esperarTexto("Aceito");
-
-  await clicar("Aprovar projeto");
-  await pagina.waitForTimeout(600);
-  await clicar("Aprovar");
-  await esperarTexto("Aprovado");
-
-  await clicar("Gerar pedido a partir do orçamento aceito", { exact: false });
-  await pagina.waitForFunction(() => location.pathname.includes("/comercial/pedidos/"), {
-    timeout: 20000,
-  });
-  const pedido1 = await pedidoAberto();
-  afirmar("ciclo 1 gerou um Pedido", pedido1.codigo !== null, pedido1.codigo ?? "");
-
-  console.log("\n== ciclo 2 — o MESMO projeto, já aprovado");
-  await pagina.goto(urlDoProjeto, { waitUntil: "networkidle" });
-  await esperarTexto("Aprovado");
-
-  const temBotaoNovo = await pagina.evaluate(() =>
-    [...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "Novo orçamento"),
-  );
-  afirmar("projeto aprovado oferece “Novo orçamento”", temBotaoNovo);
-  afirmar(
-    "e não manda mais criar outro projeto",
-    !(await pagina.evaluate(() => document.body.innerText.includes("crie um projeto novo"))),
-  );
-
-  await clicar("Novo orçamento");
-  await pagina.waitForTimeout(1000);
-
-  // A versão nova nasce com a linha da anterior: só o preço é renegociado.
-  const precoCiclo2 = pagina.locator('input[aria-label^="Preço unitário de"]').first();
-  await precoCiclo2.fill(PRECO_CICLO_2);
-  await precoCiclo2.blur();
-  await pagina.waitForTimeout(600);
-
-  await definirValidade(VALIDADE_FUTURA);
-  await enviarProposta();
-  await clicar("Registrar aceite");
-  await pagina.waitForTimeout(800);
-
-  const versoesDepois = await lerVersoes();
-  afirmar("o projeto tem duas versões", versoesDepois.length >= 2, JSON.stringify(versoesDepois));
-  afirmar(
-    "a V1 continua ACEITA — ela é a origem do Pedido 1",
-    versoesDepois[0]?.status.includes("Aceito") === true,
-    versoesDepois[0]?.status ?? "",
-  );
-  afirmar(
-    "e diz qual Pedido originou",
-    versoesDepois[0]?.status.includes(pedido1.codigo ?? "PED-") === true,
-    versoesDepois[0]?.status ?? "",
-  );
-
-  await clicar("Gerar pedido a partir do orçamento aceito", { exact: false });
-  await pagina.waitForFunction(() => location.pathname.includes("/comercial/pedidos/"), {
-    timeout: 20000,
-  });
-  const pedido2 = await pedidoAberto();
-
-  afirmar("ciclo 2 gerou um Pedido próprio", pedido2.codigo !== null, pedido2.codigo ?? "");
-  afirmar(
-    "os dois Pedidos são diferentes",
-    pedido1.id !== pedido2.id && pedido1.codigo !== pedido2.codigo,
-    `${pedido1.codigo} × ${pedido2.codigo}`,
-  );
-  afirmar(
-    "e cada Pedido aponta para a SUA proposta",
-    pedido1.origem !== null && pedido2.origem !== null && pedido1.origem !== pedido2.origem,
-    `${pedido1.origem} × ${pedido2.origem}`,
-  );
-
-  console.log("\n== cenário 3 — proposta vencida não é aceita");
-  await pagina.goto(urlDoProjeto, { waitUntil: "networkidle" });
-  await clicar("Novo orçamento");
-  await pagina.waitForTimeout(1000);
-  await definirValidade(VALIDADE_VENCIDA);
-  await enviarProposta();
-  await pagina.waitForTimeout(600);
-
-  const vencida = await pagina.evaluate(() => {
-    const aceite = [...document.querySelectorAll("button")].find(
-      (b) => b.textContent.trim() === "Registrar aceite",
+    const fechamentoAntes = (await pagina.locator(".quote-closing").innerText()).replace(/\s+/g, " ");
+    afirmar("aceita, o Fechamento diz que o Projeto ainda precisa de aprovação", fechamentoAntes.includes("Ainda precisa de aprovação"));
+    afirmar(
+      "e não oferece gerar Pedido antes da aprovação",
+      (await pagina.getByRole("button", { name: "Gerar pedido a partir do orçamento aceito" }).count()) === 0,
     );
-    return {
-      dizVencido: document.body.innerText.includes("Vencido"),
-      explica: document.body.innerText.includes("janela de aceite fechou"),
-      aceiteBloqueado: aceite ? aceite.disabled : null,
-    };
-  });
 
-  afirmar("a proposta vencida se identifica na tela", vencida.dizVencido);
-  afirmar("com a explicação do que fazer", vencida.explica);
-  afirmar("e o aceite fica bloqueado", vencida.aceiteBloqueado === true);
+    await voltarAoProjeto(pagina);
+    const aprovacao = await aprovarProjeto(pagina);
+    afirmar("a aprovação mora na ficha e pergunta antes", aprovacao.pergunta === "Aprovar o projeto?", aprovacao.pergunta);
+    afirmar("o Projeto é aprovado", aprovacao.status === 200 && aprovacao.projeto?.status === "APPROVED", `${aprovacao.status}`);
+    await esperarStatus("Aprovado");
+    afirmar("a ficha diz Aprovado", (await statusNoTitulo()) === "Aprovado");
+    afirmar(
+      "a ficha lista a V1 aceita",
+      (await versoesDaFicha()).some((linha) => linha.versao === v1.rotulo && linha.status.includes("Aceito")),
+      JSON.stringify(await versoesDaFicha()),
+    );
 
-  console.log("\n-- console e rede");
-  afirmar("console limpo", erros.length === 0, erros.join(" | "));
-  const servidor = respostas.filter((r) => r.status >= 500);
-  afirmar("nenhuma resposta 5xx", servidor.length === 0, servidor.map((r) => r.url).join(" "));
-} finally {
-  await fechar();
+    const v1Aberta = await abrirPelaFicha(v1.rotulo);
+    afirmar("de volta à V1 pela ficha", v1Aberta.id === v1.id, v1Aberta.rotulo);
+    afirmar(
+      "com o Projeto aprovado, o Fechamento diz Aprovado",
+      (await pagina.locator(".quote-closing").innerText()).includes("Aprovado"),
+    );
+    const pedido1 = await gerarPedido(pagina);
+    afirmar("ciclo 1 gerou um Pedido pelo Fechamento", pedido1.status === 201 && pedido1.pedido !== null, pedido1.pedido?.codigo ?? "");
+    await pagina.waitForFunction((codigo) => document.body.innerText.includes(codigo), pedido1.pedido.codigo, { timeout: 25000 });
+    afirmar("a tela do Pedido 1 abre", true, pedido1.pedido.codigo);
+    afirmar("o Pedido 1 aponta para a V1", (await origemDoPedido(pedido1.pedido)) === v1.id);
+
+    // ── 2. Ciclo 2 ──────────────────────────────────────────────────────
+    console.log(`\n== ciclo 2 — o MESMO Projeto, já aprovado`);
+
+    await pagina.goto(urlDoProjeto);
+    await esperarProjetoNaTela(pagina);
+    afirmar("a ficha continua Aprovado", (await statusNoTitulo()) === "Aprovado");
+    afirmar(
+      "Projeto aprovado oferece “Novo orçamento”",
+      await pagina.getByRole("button", { name: "Novo orçamento", exact: true }).isVisible(),
+    );
+    afirmar(
+      "e não manda criar outro Projeto",
+      !(await pagina.evaluate(() => document.body.innerText.includes("crie um projeto novo"))),
+    );
+
+    const v2 = await criarNovaVersao(pagina, { botao: "Novo orçamento" });
+    afirmar("“Novo orçamento” cria a V2 no mesmo Projeto", v2.id === v2.resposta.id && / · V2$/.test(v2.rotulo ?? ""), v2.rotulo);
+    await campoPreco().waitFor({ timeout: 25000 });
+    await gravarCampoDaLinha(campoPreco(), PRECO_CICLO_2);
+    afirmar("a V2 renegocia o preço", (await campoPreco().inputValue()) === PRECO_CICLO_2, await campoPreco().inputValue());
+    await definirValidade(VALIDADE_FUTURA);
+
+    afirmar("V2 enviada", (await enviarAoCliente(pagina)).status === 200);
+    await esperarStatus("Enviado");
+    afirmar("V2 aceita", (await registrarAceite(pagina)).status === 200);
+    await esperarStatus("Aceito");
+
+    await voltarAoProjeto(pagina);
+    const versoes = await versoesDaFicha();
+    const linhaV1 = versoes.find((linha) => linha.versao === v1.rotulo);
+    const linhaV2 = versoes.find((linha) => linha.versao === v2.rotulo);
+    afirmar("a ficha lista as duas versões", versoes.length >= 2 && linhaV1 && linhaV2, JSON.stringify(versoes));
+    afirmar("a V1 continua ACEITA — ela é a origem do Pedido 1", (linhaV1?.status ?? "").includes("Aceito"), linhaV1?.status);
+    afirmar("e diz qual Pedido originou", (linhaV1?.status ?? "").includes(pedido1.pedido.codigo), linhaV1?.status);
+    afirmar("a V2 está aceita", (linhaV2?.status ?? "").includes("Aceito"), linhaV2?.status);
+
+    const v2Aberta = await abrirPelaFicha(v2.rotulo);
+    afirmar("de volta à V2 pela ficha", v2Aberta.id === v2.id, v2Aberta.rotulo);
+    const pedido2 = await gerarPedido(pagina);
+    afirmar("ciclo 2 gerou um Pedido próprio", pedido2.status === 201 && pedido2.pedido !== null, pedido2.pedido?.codigo ?? "");
+    await pagina.waitForFunction((codigo) => document.body.innerText.includes(codigo), pedido2.pedido.codigo, { timeout: 25000 });
+    afirmar(
+      "os dois Pedidos são diferentes",
+      pedido1.pedido.id !== pedido2.pedido.id && pedido1.pedido.codigo !== pedido2.pedido.codigo,
+      `${pedido1.pedido.codigo} × ${pedido2.pedido.codigo}`,
+    );
+    afirmar(
+      "e cada Pedido aponta para a SUA proposta",
+      (await origemDoPedido(pedido1.pedido)) === v1.id && (await origemDoPedido(pedido2.pedido)) === v2.id,
+    );
+
+    // ── 3. Vencida ──────────────────────────────────────────────────────
+    console.log(`\n== cenário 3 — proposta vencida não é aceita`);
+
+    await pagina.goto(urlDoProjeto);
+    await esperarProjetoNaTela(pagina);
+    const v3 = await criarNovaVersao(pagina, { botao: "Novo orçamento" });
+    afirmar("a V3 nasce no mesmo Projeto", / · V3$/.test(v3.rotulo ?? ""), v3.rotulo);
+    await definirValidade(VALIDADE_VENCIDA);
+    afirmar("V3 enviada com validade passada", (await enviarAoCliente(pagina)).status === 200);
+    await esperarStatus("Enviado");
+
+    afirmar("a proposta vencida se identifica no título", (await pagina.locator(".doc-title .badge--warn", { hasText: "Vencido" }).count()) === 1);
+    const aviso = pagina.locator('.quote-workspace p[role="alert"]');
+    afirmar(
+      "com a explicação do que fazer",
+      (await aviso.count()) === 1 && (await aviso.innerText()).includes("a janela de aceite fechou"),
+      (await aviso.count()) ? (await aviso.innerText()).trim() : "(sem aviso)",
+    );
+    const aceite = pagina.getByRole("button", { name: "Registrar aceite", exact: true });
+    afirmar("e o aceite fica bloqueado", await aceite.isDisabled());
+    afirmar(
+      "dizendo por quê",
+      ((await aceite.getAttribute("title")) ?? "").includes("Proposta vencida em 31/01/2020"),
+      await aceite.getAttribute("title"),
+    );
+
+    afirmar("console e rede limpos", erros.length === 0, erros.slice(0, 3).join(" | "));
+  } finally {
+    await fechar();
+  }
+
+  console.log("");
+  if (falhas.length > 0) {
+    console.log(`FALHOU — ${falhas.length} verificação(ões):`);
+    for (const falha of falhas) console.log(`  - ${falha}`);
+    process.exitCode = 1;
+    return;
+  }
+  console.log("OK — o mesmo Projeto vendeu duas vezes, e a proposta vencida não foi aceita.");
 }
 
-console.log("");
-if (falhas.length > 0) {
-  console.log(`REPROVADO — ${falhas.length} verificação(ões):`);
-  for (const falha of falhas) console.log(`  - ${falha}`);
-  process.exit(1);
-}
-console.log("APROVADO — o mesmo projeto vendeu duas vezes, e a proposta vencida não foi aceita.");
+main().catch((erro) => {
+  console.error(erro);
+  process.exitCode = 1;
+});
