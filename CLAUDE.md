@@ -175,6 +175,7 @@ Keep `docs/PROJECT_STATE.md` compact. Rewrite/condense it; do not append an endl
 - legacy migration runbook: `docs/VERIDI_MIGRATION.md`
 - where each rule is protected: `docs/TEST_COVERAGE_MAP.md`
 - E2E plan and rules: `docs/E2E_STRATEGY.md`
+- product discoveries (index and rules): `docs/discovery/README.md`
 
 Use `/ship` for implementation work.
 
@@ -187,6 +188,15 @@ Suggested order (guidance, not an enforced workflow):
 - normal feature: `/erp-functional-reviewer` → `/ship` → validation;
 - operational feature: `/erp-functional-reviewer` → `/erp-operations-reviewer` → `/ship` → `/erp-operations-reviewer` on the delivered flow;
 - risky release: `/erp-release-reviewer` → authorized deploy.
+
+## Discoveries
+
+Before starting a new discovery:
+1. read `docs/discovery/README.md`;
+2. check whether a discovery on the same theme already exists;
+3. reuse the decisions in force;
+4. do not redo a discovery without a stated reason;
+5. update the index at the end.
 
 ## Session execution and finalization
 

@@ -51,6 +51,12 @@ reconstruído do zero, DEV e produção são a mesma estrutura, campo a campo.
   rápida — INVENTORY-PHYSICAL-COUNT-PO-BASELINE-01, seção G do
   [`BACKLOG.md`](BACKLOG.md). É PO BASELINE, não especificação: sem posição na
   fila, nada implementado, e concorrência/cut-off aberta como HIGH;
+- **discovery em análise:** Painel Gerencial — o que o ERP mostra de dinheiro com
+  confiança — FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01, em
+  [`discovery/`](discovery/README.md), o índice de todos os discoveries. Cinco
+  decisões de PO abertas e um defeito HIGH no valor faturado atual
+  (BILLED-VALUE-CANONICAL-01, seção A do [`BACKLOG.md`](BACKLOG.md)); nada
+  implementado;
 - **watchlist** (observado, sem ação conhecida): W1 a W6.
 
 Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
@@ -4745,6 +4751,7 @@ resolve por `externalCode` e recusa a linha que não o tiver.
 | Estratégia de E2E | [E2E_STRATEGY.md](E2E_STRATEGY.md) |
 | Regras duráveis de UI e marca | [UI_BRAND.md](UI_BRAND.md) |
 | Escopo do MVP · valor futuro | [MVP_PLAN.md](MVP_PLAN.md) · [ROADMAP_POST_MVP.md](ROADMAP_POST_MVP.md) |
+| Discoveries do produto: índice e regras | [discovery/README.md](discovery/README.md) |
 | Stack e ambiente · implantação · migração do legado | [TECH_BASELINE.md](TECH_BASELINE.md) · [DEPLOY.md](DEPLOY.md) · [VERIDI_MIGRATION.md](VERIDI_MIGRATION.md) |
 | Validação com o cliente · perguntas regulatórias | [ROTEIRO_VALIDACAO_CLIENTE.md](ROTEIRO_VALIDACAO_CLIENTE.md) · [BLOCK_H_VALIDATION.md](BLOCK_H_VALIDATION.md) |
 | Histórico — validações, deliveries e findings | [archive/E2E_VALIDATION_HISTORY.md](archive/E2E_VALIDATION_HISTORY.md) · [archive/DELIVERY_HISTORY.md](archive/DELIVERY_HISTORY.md) · [archive/BACKLOG_HISTORY.md](archive/BACKLOG_HISTORY.md) |
