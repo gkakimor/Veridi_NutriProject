@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { Prisma } from "@prisma/client";
 import type { CustomerOrderStatus, PurchaseOrderStatus, UserRole } from "@prisma/client";
@@ -587,9 +587,11 @@ describe("estrutura do read model", () => {
     expect(servico).toContain("TransactionIsolationLevel.RepeatableRead");
   });
 
-  it("nenhum dinheiro multiplicado à mão: o valor faturado é o do documento, e linha passa pela conta do documento", () => {
+  it("nenhum dinheiro multiplicado à mão: o valor faturado vem da implementação canônica, e só dela", () => {
     expect(servico).not.toMatch(/\.times\(/);
-    expect(servico).toMatch(/import \{ resumirValorFaturado, valorDoFaturamento \}/);
+    expect(servico).toContain('import { resumirValorFaturado, valorDoFaturamento } from "../billings/billed-value.js";');
+    // A ponte provisória sobre `totalAmount` saiu no rebase sobre BILLED-VALUE-CANONICAL-01.
+    expect(existsSync(new URL("./faturado-provisorio.ts", import.meta.url))).toBe(false);
   });
 });
 
@@ -722,6 +724,46 @@ describe("Faturado — o valor do documento emitido (D1)", () => {
       { productId: produtoA.id, amount: "300.00", quantities: [{ unitCode: "kg", quantity: "100" }] },
     ]);
     expect(painel.rankings.products.rows[0]?.customerId).toBe(clienteB.id);
+  }, LONGO);
+
+  it("emitido legado sem total congelado vale a soma das linhas arredondadas — no cartão, na barra e no ranking", async () => {
+    const ano = anoDoTeste();
+    const cenario = novoCenario();
+    const cliente = await criarCliente("-L");
+    const produto = await criarProduto(cliente.id);
+    const outroProduto = await criarProduto(cliente.id);
+
+    // Duas linhas de 1 × 0,1250 sem total congelado: o documento vale 0,13 + 0,13 = R$ 0,26, não R$ 0,25 nem "sem valor".
+    const legado = await criarPedido(cenario, cliente, {
+      status: "SHIPPED",
+      confirmadoEm: meioDia(`${ano}-03-05`),
+      linhas: [
+        { produto, quantidade: "1", preco: "0.125" },
+        { produto: outroProduto, quantidade: "1", preco: "0.125" },
+      ],
+    });
+    const expedicaoLegada = await criarExpedicao(cenario, legado, {
+      status: "CONFIRMED",
+      linhas: [
+        { linha: 0, quantidade: "1" },
+        { linha: 1, quantidade: "1" },
+      ],
+    });
+    await faturar(expedicaoLegada, { emitidoEm: meioDia(`${ano}-03-05`), precos: ["0.125", "0.125"], total: null });
+    await vendaFaturada(cenario, cliente, produto, { quantidade: "2", preco: "10", emitidoEm: meioDia(`${ano}-03-06`), total: "20.00" });
+
+    const painel = await painelNoRetrato(cenario, meioDia(`${ano}-03-10`));
+
+    expect(painel.result.billed.current).toEqual({ count: 2, withValue: 2, amount: "20.26" });
+    expect(painel.result.billed.withoutValue).toEqual([]);
+    expect(painel.trend.buckets.find((balde) => balde.from === `${ano}-03-05`)).toMatchObject({
+      count: 1,
+      withValue: 1,
+      amount: "0.26",
+    });
+    expect(painel.rankings.customers.rows).toEqual([
+      { customerId: cliente.id, code: cliente.code, name: cliente.legalName, amount: "20.26", billingCount: 2 },
+    ]);
   }, LONGO);
 
   it("documento emitido sem valor deixa o Faturado incompleto, é citado, e o cliente sai do ranking com o nome", async () => {

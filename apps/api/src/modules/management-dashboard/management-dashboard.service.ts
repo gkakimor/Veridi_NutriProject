@@ -40,8 +40,8 @@ import {
 import { getPrisma } from "../../db/prisma.js";
 import { diaDaColunaDeData, intervaloDeDiasCivis, marcadorDoDiaCivil } from "../../lib/business-day.js";
 import { STATUS_QUE_RECEBEM } from "../purchase-orders/purchase-order-receivable.js";
+import { resumirValorFaturado, valorDoFaturamento } from "../billings/billed-value.js";
 import { getShippedByOrderLines } from "../shipments/shipments.service.js";
-import { resumirValorFaturado, valorDoFaturamento } from "./faturado-provisorio.js";
 import type { ManagementDashboardQuery } from "./management-dashboard.schemas.js";
 
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;

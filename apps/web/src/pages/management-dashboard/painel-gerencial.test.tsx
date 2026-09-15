@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { ManagementDashboardDTO, UserRole, ValorDoRecorteDTO } from "@veridi/shared";
 import {
@@ -325,16 +325,27 @@ describe("período", () => {
     expect(new URLSearchParams(local.search).get("period")).toBe("custom");
   });
 
-  it("data digitada só consulta depois da pausa", async () => {
-    abrir("/gestao/painel-gerencial?period=custom&dateFrom=2026-09-01&dateTo=2026-09-15");
-    await waitFor(() => expect(consultas()).toHaveLength(1));
+  it("data digitada só consulta quando a digitação para (300 ms)", async () => {
+    vi.useFakeTimers();
+    try {
+      abrir("/gestao/painel-gerencial?period=custom&dateFrom=2026-09-01&dateTo=2026-09-15");
+      expect(consultas()).toHaveLength(1);
 
-    fireEvent.change(screen.getByLabelText("Data final"), { target: { value: "2026-09-30" } });
-    expect(consultas()).toHaveLength(1);
-    await waitFor(() =>
-      expect(consultas().at(-1)).toEqual({ period: "custom", dateFrom: "2026-09-01", dateTo: "2026-09-30" }),
-    );
-    expect(new URLSearchParams(local.search).get("dateTo")).toBe("2026-09-30");
+      fireEvent.change(screen.getByLabelText("Data final"), { target: { value: "2026-09-30" } });
+      await act(async () => {
+        vi.advanceTimersByTime(299);
+      });
+      expect(consultas()).toHaveLength(1);
+
+      await act(async () => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(consultas()).toHaveLength(2);
+      expect(consultas().at(-1)).toEqual({ period: "custom", dateFrom: "2026-09-01", dateTo: "2026-09-30" });
+      expect(new URLSearchParams(local.search).get("dateTo")).toBe("2026-09-30");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("Personalizado sem data final não consulta: a frase fica junto dos campos", async () => {
