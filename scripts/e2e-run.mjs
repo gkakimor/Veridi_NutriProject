@@ -71,6 +71,17 @@ export const BATERIAS = Object.freeze({
   ],
   /** Contratos das libs das próximas waves: leitor de PDF e roteiro na OP. */
   "provas-wave-01-02": ["leitor-de-pdf-da-tela", "roteiro-aplicado-planeja-ordem"],
+  /** O Orçamento na página própria da versão e a lista geral de Orçamentos. */
+  "wave-03": [
+    "orcamentos-hub-e-pagina-da-versao",
+    "envio-exige-condicoes-e-linhas-salvas",
+    "condicoes-do-orcamento-sobrevivem-a-linha",
+    "prazo-invalido-nao-apaga",
+    "preco-herdado-sobrevive-ao-tab",
+    "resumo-comercial-do-projeto",
+    "projeto-aprovado-vende-de-novo",
+    "formacao-de-preco-do-novo-orcamento",
+  ],
 });
 
 const PRAZO = Symbol("prazo");
