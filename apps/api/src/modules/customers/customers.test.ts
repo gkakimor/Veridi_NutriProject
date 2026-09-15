@@ -151,7 +151,11 @@ describe("Customers", () => {
 
     const created = await createTestCustomer(app, { legalName: "Cliente filtro" });
     const id = created.json().id;
-    await app.inject({ method: "POST", url: `/customers/${id}/deactivate` });
+    await app.inject({
+      method: "POST",
+      url: `/customers/${id}/deactivate`,
+      payload: { reason: "Filtro do teste" },
+    });
 
     const onlyInactive = await app.inject({
       method: "GET",
@@ -171,19 +175,24 @@ describe("Customers", () => {
     const created = await createTestCustomer(app, { legalName: "Cliente inativar" });
     const id = created.json().id;
 
+    // Inativar e reativar exigem motivo desde CUSTOMER-STATUS-LIFECYCLE-01 (§95).
     const deactivated = await app.inject({
       method: "POST",
       url: `/customers/${id}/deactivate`,
+      payload: { reason: "Encerrou as operações" },
     });
     expect(deactivated.statusCode).toBe(200);
     expect(deactivated.json().active).toBe(false);
+    expect(deactivated.json().status).toBe("INACTIVE");
 
     const reactivated = await app.inject({
       method: "POST",
       url: `/customers/${id}/activate`,
+      payload: { reason: "Voltou a comprar" },
     });
     expect(reactivated.statusCode).toBe(200);
     expect(reactivated.json().active).toBe(true);
+    expect(reactivated.json().status).toBe("ACTIVE");
 
     await app.close();
   });

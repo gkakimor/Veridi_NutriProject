@@ -422,6 +422,7 @@ model User {
   updatedIndustrialResources IndustrialResource[]               @relation("IndustrialResourceUpdatedBy")
   createdCustomers           Customer[]                         @relation("CustomerCreatedBy")
   updatedCustomers           Customer[]                         @relation("CustomerUpdatedBy")
+  customerStatusChanges      CustomerStatusHistory[]            @relation("CustomerStatusChangedBy")
   createdIndustrialRates     IndustrialResourceRate[]           @relation("IndustrialResourceRateCreatedBy")
   createdItemCostReferences  ItemCostReference[]                @relation("ItemCostReferenceCreatedBy")
   createdStockCounts         StockCount[]                       @relation("StockCountCreatedBy")
@@ -2317,7 +2318,17 @@ model Customer {
   state String?
   notes String?
 
+  /// Cadastro arquivado ou nao — o INATIVO da situacao cadastral (§95).
+  /// Muda so por Inativar/Reativar, que gravam `CustomerStatusHistory` na
+  /// mesma transacao. Inativo continua consultavel, com o historico inteiro.
   active Boolean @default(true)
+
+  /// Bloqueio comercial vigente — o BLOQUEADO da situacao cadastral (§95):
+  /// recusa operacao comercial NOVA. Muda so por Bloquear/Desbloquear, com o
+  /// motivo no historico, nunca aqui (o proximo evento o sobrescreveria).
+  /// Sobrevive a Inativar: reativar um cliente arquivado bloqueado devolve
+  /// o bloqueio.
+  blocked Boolean @default(false)
 
   /// Autoria do cadastro. Nullable de proposito: cliente criado antes desta
   /// capacidade (ou importado do legado) nao tem autor conhecido, e inventar
@@ -2342,10 +2353,46 @@ model Customer {
   receipts         Receipt[]
   productionOrders ProductionOrder[]
   projects         Project[]
+  statusHistory    CustomerStatusHistory[]
 
   @@index([active])
   @@index([externalCode])
   @@map("customers")
+}
+
+/// Situacao cadastral do Cliente (PRODUCT_RULES §95): pode receber operacao
+/// comercial NOVA? Nao e a situacao comercial (§86), derivada da historia. No
+/// Cliente ela e derivada de `active` + `blocked`; aqui aparece so no
+/// historico, como a situacao exibida antes e depois de cada acao.
+enum CustomerStatus {
+  ACTIVE
+  BLOCKED
+  INACTIVE
+}
+
+/// Historico da situacao cadastral — APPEND-ONLY. Bloquear, Desbloquear,
+/// Inativar e Reativar gravam uma linha cada, na mesma transacao que muda o
+/// Cliente; nenhuma linha e alterada nem apagada, e o motivo do bloqueio
+/// anterior continua aqui depois do desbloqueio. `Cascade` so porque Cliente
+/// nao tem exclusao fisica — a mesma escolha dos outros historicos.
+model CustomerStatusHistory {
+  id String @id @default(uuid())
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  fromStatus CustomerStatus
+  toStatus   CustomerStatus
+  /// Obrigatorio em toda acao; validado na API.
+  reason     String
+
+  changedAt             DateTime @default(now())
+  changedByUserId       String?
+  changedByUser         User?    @relation("CustomerStatusChangedBy", fields: [changedByUserId], references: [id])
+  changedByNameSnapshot String?
+
+  @@index([customerId, changedAt])
+  @@map("customer_status_history")
 }
 
 /// Definicao comercial/industrial do produto fabricado pela Veridi.

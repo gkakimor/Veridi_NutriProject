@@ -166,8 +166,16 @@ describe("Perfil tributário — alteração", () => {
     expect(renomeado.json().taxProfile).toBe("LUCRO_REAL");
 
     expect((await alterar(app, id, {})).json().taxProfile).toBe("LUCRO_REAL");
-    await app.inject({ method: "POST", url: `/customers/${id}/deactivate` });
-    await app.inject({ method: "POST", url: `/customers/${id}/activate` });
+    await app.inject({
+      method: "POST",
+      url: `/customers/${id}/deactivate`,
+      payload: { reason: "Arquivado pelo teste" },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/customers/${id}/activate`,
+      payload: { reason: "Reaberto pelo teste" },
+    });
     expect(await perfilLido(app, id)).toBe("LUCRO_REAL");
 
     await app.close();

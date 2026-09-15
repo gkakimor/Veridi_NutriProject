@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
-import type { Customer, User } from "@prisma/client";
+import type { User } from "@prisma/client";
 import type { CustomerDTO, CustomerListResponse } from "@veridi/shared";
-import { CUSTOMER_CODE_PREFIX } from "@veridi/shared";
+import { CUSTOMER_CODE_PREFIX, situacaoCadastral } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
@@ -12,6 +12,12 @@ import {
   filtroDaSituacaoComercial,
   situacaoComercial,
 } from "./commercial-status.js";
+import type { CustomerComBloqueio } from "./customer-status.js";
+import {
+  bloqueioVigente,
+  bloqueioVigenteInclude,
+  filtroDaSituacaoCadastral,
+} from "./customer-status.js";
 import type {
   CreateCustomerInput,
   ListCustomersQuery,
@@ -36,7 +42,7 @@ function addressData(input: CreateCustomerInput | UpdateCustomerInput) {
   };
 }
 
-function toCustomerDTO(customer: Customer): CustomerDTO {
+function toCustomerDTO(customer: CustomerComBloqueio): CustomerDTO {
   return {
     id: customer.id,
     code: customer.code,
@@ -56,6 +62,11 @@ function toCustomerDTO(customer: Customer): CustomerDTO {
     notes: customer.notes,
     businessLotSuffix: customer.businessLotSuffix,
     active: customer.active,
+    blocked: customer.blocked,
+    // Situação cadastral (§95): derivada dos dois fatos, nunca uma coluna
+    // própria que alguém pudesse gravar sem passar pelo histórico.
+    status: situacaoCadastral(customer),
+    block: bloqueioVigente(customer),
     createdAt: customer.createdAt.toISOString(),
     createdByName: customer.createdByNameSnapshot,
     updatedAt: customer.updatedAt.toISOString(),
@@ -76,10 +87,9 @@ function isUniqueConstraintError(error: unknown): boolean {
   );
 }
 
-async function requireCustomer(id: string): Promise<Customer> {
-  const customer = await getPrisma().customer.findUnique({ where: { id } });
+async function requireCustomer(id: string): Promise<void> {
+  const customer = await getPrisma().customer.findUnique({ where: { id }, select: { id: true } });
   if (!customer) throw new CustomerNotFoundError(id);
-  return customer;
 }
 
 export async function listCustomers(
@@ -87,13 +97,13 @@ export async function listCustomers(
   pagination: Pagination = query,
 ): Promise<CustomerListResponse> {
   const prisma = getPrisma();
-  const where: Record<string, unknown> = {};
+  const where: Prisma.CustomerWhereInput = {};
 
-  if (query.ids && query.ids.length > 0) where["id"] = { in: query.ids };
-  if (query.active !== undefined) where["active"] = query.active;
-  if (query.state) where["state"] = query.state;
+  if (query.ids && query.ids.length > 0) where.id = { in: query.ids };
+  if (query.active !== undefined) where.active = query.active;
+  if (query.state) where.state = query.state;
   if (query.search) {
-    where["OR"] = [
+    where.OR = [
       { code: { contains: query.search, mode: "insensitive" } },
       { legalName: { contains: query.search, mode: "insensitive" } },
       { tradeName: { contains: query.search, mode: "insensitive" } },
@@ -102,19 +112,23 @@ export async function listCustomers(
   }
 
   /*
-   * Situação comercial (§86): o filtro decide no banco — a paginação conta o
-   * que a tela mostra — e a derivação de cada linha lê os fatos que o
-   * `include` trouxe para a página inteira, numa consulta por relação.
+   * Situação cadastral (§95) e situação comercial (§86) são perguntas
+   * diferentes e filtram juntas, cada uma no banco — a paginação conta o que a
+   * tela mostra, e a derivação de cada linha lê o que o `include` trouxe para
+   * a página inteira, numa consulta por relação.
    */
   const agora = new Date();
+  const condicoes: Prisma.CustomerWhereInput[] = [];
+  if (query.status) condicoes.push(filtroDaSituacaoCadastral(query.status));
   if (query.commercialStatus) {
-    where["AND"] = [filtroDaSituacaoComercial(query.commercialStatus, agora)];
+    condicoes.push(filtroDaSituacaoComercial(query.commercialStatus, agora));
   }
+  if (condicoes.length > 0) where.AND = condicoes;
 
   const [customers, total] = await Promise.all([
     prisma.customer.findMany({
       where,
-      include: fatosComerciaisInclude,
+      include: { ...fatosComerciaisInclude, ...bloqueioVigenteInclude },
       orderBy: { code: "asc" },
       ...pageArgs(pagination),
     }),
@@ -131,7 +145,10 @@ export async function listCustomers(
 }
 
 export async function getCustomerById(id: string): Promise<CustomerDTO | null> {
-  const customer = await getPrisma().customer.findUnique({ where: { id } });
+  const customer = await getPrisma().customer.findUnique({
+    where: { id },
+    include: bloqueioVigenteInclude,
+  });
   return customer ? toCustomerDTO(customer) : null;
 }
 
@@ -166,6 +183,7 @@ export async function createCustomer(
         updatedByUserId: actor.id,
         updatedByNameSnapshot: actor.name,
       },
+      include: bloqueioVigenteInclude,
     });
     return toCustomerDTO(customer);
   } catch (error) {
@@ -176,6 +194,12 @@ export async function createCustomer(
   }
 }
 
+/**
+ * Alteração de cadastro. A situação cadastral NÃO entra aqui: ela muda só
+ * pelas quatro ações de `customer-status.ts`, que exigem motivo e gravam o
+ * histórico — um PATCH que pudesse bloquear ou inativar deixaria o histórico
+ * incompleto sem ninguém perceber.
+ */
 export async function updateCustomer(
   id: string,
   input: UpdateCustomerInput,
@@ -203,6 +227,7 @@ export async function updateCustomer(
         updatedByUserId: actor.id,
         updatedByNameSnapshot: actor.name,
       },
+      include: bloqueioVigenteInclude,
     });
     return toCustomerDTO(customer);
   } catch (error) {
@@ -211,35 +236,4 @@ export async function updateCustomer(
     }
     throw error;
   }
-}
-
-/**
- * Ativar/inativar tambem e alteracao persistida: `updatedAt` ja muda por
- * conta do `@updatedAt`, entao deixar a autoria parada faria a tela mostrar
- * data nova com autor velho.
- */
-export async function activateCustomer(id: string, actor: User): Promise<CustomerDTO> {
-  await requireCustomer(id);
-  const customer = await getPrisma().customer.update({
-    where: { id },
-    data: {
-      active: true,
-      updatedByUserId: actor.id,
-      updatedByNameSnapshot: actor.name,
-    },
-  });
-  return toCustomerDTO(customer);
-}
-
-export async function deactivateCustomer(id: string, actor: User): Promise<CustomerDTO> {
-  await requireCustomer(id);
-  const customer = await getPrisma().customer.update({
-    where: { id },
-    data: {
-      active: false,
-      updatedByUserId: actor.id,
-      updatedByNameSnapshot: actor.name,
-    },
-  });
-  return toCustomerDTO(customer);
 }

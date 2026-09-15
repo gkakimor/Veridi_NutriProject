@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useOutletContext, useParams } from "react-router-dom";
 import type { CustomerConsultationSummaryDTO } from "@veridi/shared";
-import { formatBrPhone, formatCnpj } from "@veridi/shared";
+import { CUSTOMER_STATUS_LABELS, formatBrPhone, formatCnpj } from "@veridi/shared";
+import { customerStatusBadgeClass } from "../customers/customer-status-badge";
 import { getConsultationSummary } from "../../lib/customer-consultation-api";
 import { NotFoundApiError } from "../../lib/api-errors";
 import { ContextHelp } from "../../components/help";
@@ -210,7 +211,16 @@ export function ConsultationShell() {
             <span className="is-code">{customer.code}</span>
             {customer.tradeName && <span>{customer.tradeName}</span>}
             {customer.cnpj && <span>CNPJ {formatCnpj(customer.cnpj)}</span>}
-            {!customer.active && <span className="badge badge--inactive">Inativo</span>}
+            {/* Situação cadastral (§95) no cabeçalho: bloqueado e inativo
+                seguem o operador por todas as abas, com o motivo no rótulo. */}
+            {customer.status !== "ACTIVE" && (
+              <span
+                className={customerStatusBadgeClass(customer.status)}
+                {...(customer.block ? { title: `Motivo: ${customer.block.reason}` } : {})}
+              >
+                {CUSTOMER_STATUS_LABELS[customer.status]}
+              </span>
+            )}
           </div>
           {(customer.phone ?? customer.email) && (
             <div className="consult-head__contact">

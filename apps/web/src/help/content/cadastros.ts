@@ -885,8 +885,8 @@ export const cadastrosHints = {
   },
   "cliente.situacao": {
     module: "cadastros",
-    label: "Status do cliente",
-    text: "Inativar não é bloqueado por pedido em aberto e não desfaz nada. Depois disso o cliente é recusado em produto novo, em criação e confirmação de pedido e no registro de material enviado por ele.",
+    label: "Situação cadastral",
+    text: "Ativo recebe venda nova. Bloqueado é decisão comercial com motivo registrado: projeto, orçamento, envio, aceite e pedido novos são recusados, e o que já existe continua valendo. Inativo é cadastro arquivado — fora da lista padrão e também sem venda nova, sem excluir nada. Bloquear, desbloquear, inativar e reativar exigem motivo e ficam no histórico do cliente.",
   },
 
   /* Colunas do cadastro de Fornecedores. */

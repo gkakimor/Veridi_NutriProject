@@ -3,19 +3,31 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { ListStatusRow } from "../../components/ListStatusRow";
-import type { CustomerCommercialStatus, CustomerDTO } from "@veridi/shared";
+import type {
+  CustomerCommercialStatus,
+  CustomerDTO,
+  CustomerStatus,
+  CustomerStatusAction,
+} from "@veridi/shared";
 import {
   BR_STATE_CODES,
   CUSTOMER_COMMERCIAL_STATUS_LABELS,
+  CUSTOMER_STATUSES,
+  CUSTOMER_STATUS_ACTIONS_BY_STATUS,
+  CUSTOMER_STATUS_ACTION_LABELS,
+  CUSTOMER_STATUS_FILTER_LABELS,
+  CUSTOMER_STATUS_LABELS,
+  DEFAULT_CUSTOMER_STATUS_FILTER,
   formatBrPhone,
   formatCnpj,
 } from "@veridi/shared";
 import { commercialStatusBadgeClass } from "./commercial-status-badge";
+import { customerStatusBadgeClass } from "./customer-status-badge";
 import type { ListCustomersParams } from "../../lib/customers-api";
-import { listCustomers, setCustomerActive } from "../../lib/customers-api";
+import { changeCustomerStatus, listCustomers } from "../../lib/customers-api";
 import { useFilteredPage, useListQuery } from "../../lib/list-query";
 import { CustomerFormModal } from "./CustomerFormModal";
-import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { CustomerStatusDialog } from "./CustomerStatusDialog";
 import { RowActions } from "../../components/RowActions";
 import {
   RecordContextChip,
@@ -31,11 +43,16 @@ function DicaDaColuna({ id }: { id: HelpHintId }) {
   return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
 }
 
-type ActiveFilter = "all" | "active" | "inactive";
+/**
+ * Situação CADASTRAL (§95) — pode vender para este cliente? A lista abre em
+ * "Ativos": bloqueados e inativos ficam arquivados fora da abertura, a um
+ * filtro de distância, como a Veridi pediu.
+ */
+type StatusFilter = "ALL" | CustomerStatus;
 
 /**
- * Situação comercial derivada (§86) — outra pergunta que o cadastro ativo.
- * "Clientes ativos" é o padrão da lista, decisão registrada no BACKLOG; os
+ * Situação COMERCIAL derivada (§86) — outra pergunta, outro filtro. "Clientes
+ * ativos" continua sendo o padrão dela, decisão registrada no BACKLOG; os
  * seletores de Cliente das outras telas não filtram nada disso.
  */
 type CommercialFilter = "ALL" | CustomerCommercialStatus;
@@ -45,6 +62,12 @@ type ModalState =
   | { mode: "create" }
   | { mode: "edit"; customer: CustomerDTO };
 
+/** A ação de situação em curso, com o cliente sobre o qual ela vai acontecer. */
+interface AcaoDeSituacao {
+  action: CustomerStatusAction;
+  customer: CustomerDTO;
+}
+
 const PAGE_SIZE = 20;
 
 /** Cadastros → Clientes. Mesmo padrao de tabela densa + modal de Items. */
@@ -52,7 +75,7 @@ export function CustomersPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState("");
-  const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(DEFAULT_CUSTOMER_STATUS_FILTER);
   const [commercialFilter, setCommercialFilter] =
     useState<CommercialFilter>(COMMERCIAL_FILTER_DEFAULT);
 
@@ -61,14 +84,13 @@ export function CustomersPage() {
    * lista dizia so a segunda. Quem filtrou por UF e nao achou concluia que o
    * cliente nao existia — sem nenhum caminho de volta na tela.
    */
-  const hasFilters =
-    searchInput !== "" || search !== "" || stateFilter !== "" || activeFilter !== "all";
+  const hasFilters = searchInput !== "" || search !== "" || stateFilter !== "";
 
   function clearFilters() {
     setSearchInput("");
     setSearch("");
     setStateFilter("");
-    setActiveFilter("all");
+    setStatusFilter("ALL");
     setCommercialFilter("ALL");
   }
 
@@ -78,7 +100,9 @@ export function CustomersPage() {
   );
 
   const [modalState, setModalState] = useState<ModalState>({ mode: "closed" });
-  const [confirmDeactivate, setConfirmDeactivate] = useState<CustomerDTO | null>(null);
+  const [acao, setAcao] = useState<AcaoDeSituacao | null>(null);
+  const [erroDaAcao, setErroDaAcao] = useState<string | null>(null);
+  const [salvandoAcao, setSalvandoAcao] = useState(false);
 
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput), 300);
@@ -91,7 +115,7 @@ export function CustomersPage() {
     setSearchInput("");
     setSearch("");
     setStateFilter("");
-    setActiveFilter("all");
+    setStatusFilter("ALL");
     setCommercialFilter("ALL");
   }, [contextKey]);
 
@@ -100,11 +124,11 @@ export function CustomersPage() {
     if (contextKey) filtros.ids = contextKey.split(",").filter(Boolean);
     if (search) filtros.search = search;
     if (stateFilter) filtros.state = stateFilter;
-    if (activeFilter !== "all") filtros.active = activeFilter === "active";
     // O contexto mostra o registro citado, seja qual for a situação dele.
+    if (statusFilter !== "ALL" && !contextKey) filtros.status = [statusFilter];
     if (commercialFilter !== "ALL" && !contextKey) filtros.commercialStatus = commercialFilter;
     return filtros;
-  }, [contextKey, search, stateFilter, activeFilter, commercialFilter]);
+  }, [contextKey, search, stateFilter, statusFilter, commercialFilter]);
 
   /* Filtro novo é página 1 no mesmo render — uma consulta por troca (LISTS-LOADING-STALE-DATA-02). */
   const [page, setPage] = useFilteredPage(filtrosDaConsulta);
@@ -120,22 +144,40 @@ export function CustomersPage() {
 
   useOpenRecord(openId, customers, (customer) => setModalState({ mode: "edit", customer }));
 
-  function handleToggleActive(customer: CustomerDTO) {
-    if (customer.active) {
-      setConfirmDeactivate(customer);
-      return;
-    }
-    void applyActive(customer, true);
+  function abrirAcao(action: CustomerStatusAction, customer: CustomerDTO) {
+    setErroDaAcao(null);
+    setAcao({ action, customer });
   }
 
-  async function applyActive(customer: CustomerDTO, active: boolean) {
+  /*
+   * O diálogo continua aberto quando o servidor recusa — com o motivo já
+   * digitado —, porque a recusa costuma ser sobre a própria ação ("já está
+   * bloqueado") e fechar tudo obrigaria a redigitar para ler o porquê.
+   */
+  async function confirmarAcao(reason: string) {
+    if (!acao) return;
+    setSalvandoAcao(true);
+    setErroDaAcao(null);
     try {
-      await setCustomerActive(customer.id, active);
+      await changeCustomerStatus(acao.customer.id, acao.action, reason);
+      setAcao(null);
       reload();
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Falha ao atualizar status");
+      setErroDaAcao(err instanceof Error ? err.message : "Falha ao mudar a situação do cliente");
+    } finally {
+      setSalvandoAcao(false);
     }
   }
+
+  /** O que o vazio está respondendo — as duas situações filtradas, por extenso. */
+  const situacoesFiltradas = [
+    statusFilter !== "ALL"
+      ? `a situação cadastral “${CUSTOMER_STATUS_FILTER_LABELS[statusFilter]}”`
+      : null,
+    commercialFilter !== "ALL"
+      ? `a situação comercial “${CUSTOMER_COMMERCIAL_STATUS_LABELS[commercialFilter]}”`
+      : null,
+  ].filter((parte): parte is string => parte !== null);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -160,7 +202,7 @@ export function CustomersPage() {
           filters={{
             search,
             state: stateFilter,
-            active: activeFilter === "all" ? undefined : activeFilter === "active",
+            status: statusFilter === "ALL" ? undefined : statusFilter,
             commercialStatus: commercialFilter === "ALL" ? undefined : commercialFilter,
           }}
         />
@@ -168,7 +210,7 @@ export function CustomersPage() {
 
       {/* O cadastro parece só uma agenda até alguém descobrir que ele decide
           propriedade de material, identidade em documento impresso e o que
-          um cliente inativo passa a recusar. */}
+          um cliente bloqueado ou inativo passa a recusar. */}
       <ContextHelp topic={helpTopics["cliente.comoFunciona"]} />
 
       <div className="toolbar">
@@ -201,8 +243,25 @@ export function CustomersPage() {
           ))}
         </select>
 
-        {/* Situação comercial (§86) e cadastro ativo são perguntas diferentes,
-            e cada filtro diz qual está respondendo. */}
+        {/* Situação cadastral (§95): o filtro principal, aberto em "Ativos". */}
+        <label className="sr-only" htmlFor="customers-status-filter">
+          Filtrar por situação cadastral
+        </label>
+        <select
+          id="customers-status-filter"
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+        >
+          {CUSTOMER_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              {CUSTOMER_STATUS_FILTER_LABELS[status]}
+            </option>
+          ))}
+          <option value="ALL">Todos</option>
+        </select>
+
+        {/* Situação comercial (§86) e situação cadastral são perguntas
+            diferentes, e cada filtro diz qual está respondendo. */}
         <label className="sr-only" htmlFor="customers-commercial-filter">
           Filtrar por situação comercial
         </label>
@@ -215,19 +274,6 @@ export function CustomersPage() {
           <option value="PROSPECT">Prospects</option>
           <option value="INACTIVE">Inativos</option>
           <option value="ALL">Todos</option>
-        </select>
-
-        <label className="sr-only" htmlFor="customers-active-filter">
-          Filtrar por cadastro
-        </label>
-        <select
-          id="customers-active-filter"
-          value={activeFilter}
-          onChange={(event) => setActiveFilter(event.target.value as ActiveFilter)}
-        >
-          <option value="all">Todos os cadastros</option>
-          <option value="active">Cadastro ativo</option>
-          <option value="inactive">Cadastro inativo</option>
         </select>
       </div>
 
@@ -260,7 +306,7 @@ export function CustomersPage() {
               <th className="col-tight">Telefone</th>
               <th className="col-tight">Situação comercial</th>
               <th className="col-tight">
-                Cadastro
+                Situação cadastral
                 <DicaDaColuna id="cliente.situacao" />
               </th>
               <th aria-hidden="true" />
@@ -303,24 +349,23 @@ export function CustomersPage() {
                   )}
                 </td>
                 <td className="col-tight">
+                  {/* O motivo do bloqueio viaja no rótulo: quem passa o olho
+                      na lista precisa saber por que aquele cliente parou. */}
                   <span
-                    className={
-                      customer.active ? "badge badge--active" : "badge badge--inactive"
-                    }
+                    className={customerStatusBadgeClass(customer.status)}
+                    {...(customer.block ? { title: `Motivo: ${customer.block.reason}` } : {})}
                   >
-                    {customer.active ? "Ativo" : "Inativo"}
+                    {CUSTOMER_STATUS_LABELS[customer.status]}
                   </span>
                 </td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <RowActions
                     label={`Mais ações de ${customer.code}`}
-                    actions={[
-                      {
-                        label: customer.active ? "Inativar" : "Reativar",
-                        destructive: customer.active,
-                        onSelect: () => handleToggleActive(customer),
-                      },
-                    ]}
+                    actions={CUSTOMER_STATUS_ACTIONS_BY_STATUS[customer.status].map((action) => ({
+                      label: CUSTOMER_STATUS_ACTION_LABELS[action],
+                      destructive: action === "BLOCK" || action === "DEACTIVATE",
+                      onSelect: () => abrirAcao(action, customer),
+                    }))}
                   >
                     <button
                       type="button"
@@ -346,14 +391,16 @@ export function CustomersPage() {
                     Limpar filtros
                   </button>
                 </>
-              ) : commercialFilter !== "ALL" ? (
+              ) : situacoesFiltradas.length > 0 ? (
                 <>
-                  Nenhum cliente com a situação comercial “
-                  {CUSTOMER_COMMERCIAL_STATUS_LABELS[commercialFilter]}”.{" "}
+                  Nenhum cliente com {situacoesFiltradas.join(" e ")}.{" "}
                   <button
                     type="button"
                     className="btn btn--ghost btn--sm"
-                    onClick={() => setCommercialFilter("ALL")}
+                    onClick={() => {
+                      setStatusFilter("ALL");
+                      setCommercialFilter("ALL");
+                    }}
                   >
                     Ver todos
                   </button>
@@ -410,25 +457,20 @@ export function CustomersPage() {
         />
       )}
 
-      <ConfirmDialog
-        open={confirmDeactivate !== null}
-        title="Inativar cliente?"
-        message={
-          <>
-            "{confirmDeactivate?.legalName}" deixará de aparecer para novos
-            produtos e ordens de produção. O registro não será excluído — o
-            histórico será preservado e ele pode ser reativado a qualquer
-            momento.
-          </>
-        }
-        confirmLabel="Inativar"
-        onCancel={() => setConfirmDeactivate(null)}
-        onConfirm={() => {
-          const target = confirmDeactivate;
-          setConfirmDeactivate(null);
-          if (target) void applyActive(target, false);
-        }}
-      />
+      {acao && (
+        <CustomerStatusDialog
+          key={`${acao.action}-${acao.customer.id}`}
+          action={acao.action}
+          customer={acao.customer}
+          error={erroDaAcao}
+          saving={salvandoAcao}
+          onCancel={() => {
+            setAcao(null);
+            setErroDaAcao(null);
+          }}
+          onConfirm={(reason) => void confirmarAcao(reason)}
+        />
+      )}
     </>
   );
 }

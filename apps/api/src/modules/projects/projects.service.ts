@@ -26,6 +26,9 @@ import {
   ProjectLockedError,
   ProjectNotFoundError,
 } from "./projects.errors.js";
+// Abrir Projeto é começar negociação: cliente bloqueado ou inativo não recebe
+// negociação nova (§95). Projeto já existente não é tocado.
+import { assertCustomerCanSell, bloqueioVigenteInclude } from "../customers/customer-status.js";
 import type {
   ApproveProjectInput,
   CancelProjectInput,
@@ -343,6 +346,18 @@ function technicalBriefData(input: CreateProjectInput | UpdateProjectInput) {
 
 export async function createProject(input: CreateProjectInput, actor: User): Promise<ProjectDTO> {
   const prisma = getPrisma();
+  /*
+   * Projeto é o começo de uma negociação: cliente bloqueado ou inativo não
+   * recebe uma nova (§95). Cliente inexistente continua como antes — quem
+   * recusa é a chave estrangeira, e inventar um 404 aqui mudaria o contrato
+   * sem pedido.
+   */
+  const customer = await prisma.customer.findUnique({
+    where: { id: input.customerId },
+    include: bloqueioVigenteInclude,
+  });
+  if (customer) assertCustomerCanSell(customer);
+
   const code = await nextSequenceCode(prisma, CODE_SEQUENCE, PROJECT_CODE_PREFIX);
 
   const project = await prisma.$transaction(async (tx) => {
@@ -401,6 +416,16 @@ export async function updateProject(
       ["SENT", "ACCEPTED", "SUPERSEDED", "REJECTED"].includes(quote.status),
     );
     if (formalQuote) throw new CustomerLockedError();
+    /*
+     * O cliente NOVO passa a receber uma negociação que não era dele: a mesma
+     * guarda da abertura (§95). O antigo não é revalidado — o projeto dele já
+     * existia.
+     */
+    const destino = await getPrisma().customer.findUnique({
+      where: { id: input.customerId },
+      include: bloqueioVigenteInclude,
+    });
+    if (destino) assertCustomerCanSell(destino);
   }
 
   await getPrisma().project.update({

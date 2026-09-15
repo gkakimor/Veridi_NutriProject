@@ -38,6 +38,10 @@ import {
   ProjectProductAlreadyExistsError,
 } from "./technical-product.service.js";
 import {
+  CustomerBlockedForSalesError,
+  CustomerInactiveForSalesError,
+} from "../customers/customers.errors.js";
+import {
   CustomerLockedError,
   IncompleteQuoteError,
   ProjectProductCustomerMismatchError,
@@ -168,6 +172,17 @@ function mapDomainError(
   }
   if (error instanceof CustomerLockedError) {
     return { status: 409, body: { error: "customer_locked", message: error.message } };
+  }
+  /*
+   * Situação cadastral do Cliente (§95): recusa de NEGÓCIO com a mesma
+   * semântica e os mesmos códigos do Pedido — projeto novo, versão nova de
+   * orçamento, envio, aceite e geração de Pedido passam por ela.
+   */
+  if (error instanceof CustomerBlockedForSalesError) {
+    return { status: 400, body: { error: "customer_blocked", message: error.message } };
+  }
+  if (error instanceof CustomerInactiveForSalesError) {
+    return { status: 400, body: { error: "inactive_customer", message: error.message } };
   }
   if (error instanceof MissingAcceptedQuoteError) {
     return { status: 409, body: { error: "missing_accepted_quote", message: error.message } };

@@ -83,6 +83,9 @@ const customer: CustomerDTO = {
   notes: null,
   businessLotSuffix: null,
   active: true,
+  blocked: false,
+  status: "ACTIVE",
+  block: null,
   createdAt: "2026-08-31T17:32:00.000Z",
   createdByName: "João Silva",
   updatedAt: "2026-08-31T19:14:00.000Z",
@@ -107,6 +110,7 @@ const summary: CustomerConsultationSummaryDTO = {
     customerSince: "2026-03-18",
   },
   projectSummary: { open: 1, standBy: 0, approved: 1, cancelled: 0 },
+  statusHistory: [],
 };
 
 /*
@@ -409,6 +413,48 @@ describe("Consulta do Cliente — entrada", () => {
 });
 
 describe("Consulta do Cliente — shell", () => {
+  it("o resumo mostra a situação cadastral, o motivo do bloqueio e o histórico (§95)", async () => {
+    vi.mocked(getConsultationSummary).mockResolvedValue({
+      ...summary,
+      customer: {
+        ...customer,
+        blocked: true,
+        status: "BLOCKED",
+        block: {
+          reason: "Inadimplência desde março",
+          blockedAt: "2026-09-01T12:00:00.000Z",
+          blockedByName: "Ana",
+        },
+      },
+      statusHistory: [
+        {
+          id: "evt-1",
+          fromStatus: "ACTIVE",
+          toStatus: "BLOCKED",
+          reason: "Inadimplência desde março",
+          changedAt: "2026-09-01T12:00:00.000Z",
+          changedByName: "Ana",
+        },
+      ],
+    });
+    renderAt(`/consultas/clientes/${CUSTOMER_ID}/resumo`);
+
+    const secao = (
+      await screen.findByRole("heading", { level: 2, name: "Situação cadastral" })
+    ).closest("section") as HTMLElement;
+    // O motivo em vigor e a linha do histórico: o "por quê" não se perde.
+    expect(
+      within(secao).getAllByText("Inadimplência desde março").length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(within(secao).getByRole("table")).toBeInTheDocument();
+
+    // O crachá acompanha o operador por todas as abas, no cabeçalho.
+    const head = screen
+      .getByRole("heading", { level: 1, name: /Vida Saudável Alimentos LTDA/ })
+      .closest(".consult-head") as HTMLElement;
+    expect(within(head).getByText("Bloqueado")).toBeInTheDocument();
+  });
+
   it("mostra identidade e contato, e as abas são links de rota", async () => {
     renderAt(`/consultas/clientes/${CUSTOMER_ID}/resumo`);
 
@@ -481,8 +527,8 @@ describe("Consulta do Cliente — shell", () => {
     expect(valorDe("Motivo")).toBe("Projeto aprovado (PROJ-000001)");
     expect(valorDe("Cliente desde")).toBe("18/03/2026");
     expect(valorDe("Projetos")).toBe("Em andamento: 1 · Stand-by: 0 · Aprovados: 1 · Cancelados: 0");
-    // O cadastro ativo continua sendo outra pergunta, com outro rótulo.
-    expect(valorDe("Status do cadastro")).toBe("Ativo");
+    // A situação cadastral (§95) continua sendo outra pergunta, em seção própria.
+    expect(valorDe("Situação atual")).toBe("Ativo");
   });
 
   it("Prospect mostra o motivo e não inventa cliente desde", async () => {

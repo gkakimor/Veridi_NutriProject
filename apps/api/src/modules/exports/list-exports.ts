@@ -48,6 +48,7 @@ import {
 import type { CsvColumn } from "../../lib/csv.js";
 import { csvBoolean, csvCode, csvDate, csvDateTime, csvDecimal, csvEventDate, csvMoney, csvText, csvUnitPrice } from "../../lib/csv.js";
 import { ALL_ROWS } from "../../lib/pagination.js";
+import { CUSTOMER_STATUS_LABELS } from "@veridi/shared";
 import { listCustomers } from "../customers/customers.service.js";
 import { listSuppliers } from "../suppliers/suppliers.service.js";
 import { listSupplierItems } from "../supplier-items/supplier-items.service.js";
@@ -144,7 +145,19 @@ const customersExport = defineCsvExport({
     { header: "Bairro", value: (row: CustomerDTO) => csvText(row.district) },
     { header: "Cidade", value: (row: CustomerDTO) => csvText(row.city) },
     { header: "UF", value: (row: CustomerDTO) => csvText(row.state) },
-    { header: "Ativo", value: (row: CustomerDTO) => csvBoolean(row.active) },
+    /*
+     * Situação cadastral por extenso (§95). "Ativo: Sim/Não" não distinguia
+     * bloqueado de ativo — e bloqueado é justamente o que o Comercial procura
+     * na planilha.
+     */
+    {
+      header: "Situação cadastral",
+      value: (row: CustomerDTO) => csvText(CUSTOMER_STATUS_LABELS[row.status]),
+    },
+    {
+      header: "Motivo do bloqueio",
+      value: (row: CustomerDTO) => csvText(row.block?.reason ?? null),
+    },
   ],
 });
 

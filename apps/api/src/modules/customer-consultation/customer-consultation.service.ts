@@ -28,6 +28,7 @@ import {
   resumoDeProjetos,
   situacaoComercial,
 } from "../customers/commercial-status.js";
+import { listCustomerStatusHistory } from "../customers/customer-status.js";
 import { getProductById } from "../products/products.service.js";
 import { getProjectById } from "../projects/projects.service.js";
 import { OPEN_PRODUCTION_ORDER_STATUSES } from "../dashboard/dashboard.queries.js";
@@ -85,6 +86,7 @@ export async function getConsultationSummary(
     productionOrders,
     openProductionOrders,
     fatos,
+    statusHistory,
   ] = await Promise.all([
     prisma.product.count({ where: { customerId } }),
     prisma.project.count({ where: { customerId } }),
@@ -100,6 +102,13 @@ export async function getConsultationSummary(
     }),
     // Situação comercial (§86): os fatos num `include` só, derivados na leitura.
     prisma.customer.findUniqueOrThrow({ where: { id: customerId }, include: fatosComerciaisInclude }),
+    /*
+     * Situação cadastral (§95): o histórico inteiro vem junto do resumo. São
+     * poucos eventos por Cliente, e a alternativa — uma chamada só para eles —
+     * daria à tela um segundo estado de carregamento para mostrar o motivo do
+     * bloqueio que ela já precisa exibir.
+     */
+    listCustomerStatusHistory(customerId),
   ]);
 
   return {
@@ -116,6 +125,7 @@ export async function getConsultationSummary(
     },
     commercial: situacaoComercial(fatos),
     projectSummary: resumoDeProjetos(fatos.projects),
+    statusHistory,
   };
 }
 

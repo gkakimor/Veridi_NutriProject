@@ -17,6 +17,7 @@ import type {
   CustomerCommercialStatusDTO,
   CustomerProjectSummaryDTO,
 } from "./customer-commercial-status.js";
+import type { CustomerStatusEventDTO } from "./customer-status.js";
 
 /**
  * Contadores do Resumo.
@@ -61,6 +62,8 @@ export interface CustomerConsultationSummaryDTO {
   commercial: CustomerCommercialStatusDTO;
   /** Os Projetos que explicam a situação, por status. */
   projectSummary: CustomerProjectSummaryDTO;
+  /** Histórico da situação cadastral (§95), do evento mais recente ao mais antigo. */
+  statusHistory: CustomerStatusEventDTO[];
 }
 
 

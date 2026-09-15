@@ -179,7 +179,8 @@ export function ProjectFormModal({
   });
 
   useEffect(() => {
-    listCustomers({ active: true, pageSize: 50 })
+    // Projeto novo é negociação nova: só cliente ATIVO entra (§95).
+    listCustomers({ status: ["ACTIVE"], pageSize: 50 })
       .then((result) => setCustomers(result.customers))
       .catch(() => setCustomers([]));
     getProjectVocabulary()
@@ -199,7 +200,7 @@ export function ProjectFormModal({
    * com "+ Novo" logo acima convidando a duplicar.
    */
   async function buscarClientes(termo: string): Promise<EntityOption[]> {
-    const resultado = await listCustomers({ active: true, search: termo, pageSize: 50 });
+    const resultado = await listCustomers({ status: ["ACTIVE"], search: termo, pageSize: 50 });
     const novos = resultado.customers;
     setCustomers((atual) => {
       const conhecidos = new Set(atual.map((x) => x.id));

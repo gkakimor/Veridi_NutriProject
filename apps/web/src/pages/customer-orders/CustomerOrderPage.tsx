@@ -489,7 +489,9 @@ export function CustomerOrderPage() {
   }, [id, isNew, syncFormFromServer]);
 
   useEffect(() => {
-    listCustomers({ active: true, pageSize: 50 })
+    // Pedido é venda nova: só cliente ATIVO entra (§95). Bloqueado e inativo
+    // ficam fora do seletor, e a API recusa os dois de qualquer caminho.
+    listCustomers({ status: ["ACTIVE"], pageSize: 50 })
       .then((result) => setActiveCustomers(result.customers))
       .catch(() => setActiveCustomers([]));
   }, []);
@@ -551,7 +553,7 @@ export function CustomerOrderPage() {
    * com "+ Novo" logo acima convidando a duplicar.
    */
   async function buscarClientes(termo: string): Promise<EntityOption[]> {
-    const resultado = await listCustomers({ active: true, search: termo, pageSize: 50 });
+    const resultado = await listCustomers({ status: ["ACTIVE"], search: termo, pageSize: 50 });
     const novos = resultado.customers;
     setActiveCustomers((atual) => {
       const conhecidos = new Set(atual.map((x) => x.id));
@@ -904,7 +906,15 @@ export function CustomerOrderPage() {
         state: customerOrder.customerAddress.state,
         notes: null,
         businessLotSuffix: null,
+        /*
+         * Placeholder: o cliente do Pedido não está entre os ativos, e daqui
+         * não dá para saber se ele foi bloqueado ou arquivado. A tela não lê
+         * a situação desta opção — ela só mantém o campo legível.
+         */
         active: false,
+        blocked: false,
+        status: "INACTIVE",
+        block: null,
         createdAt: "",
         createdByName: null,
         updatedAt: "",

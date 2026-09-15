@@ -1,11 +1,13 @@
 import { Link } from "react-router-dom";
 import {
   CUSTOMER_COMMERCIAL_STATUS_LABELS,
+  CUSTOMER_STATUS_LABELS,
   CUSTOMER_TAX_PROFILE_LABELS,
   formatZipCode,
 } from "@veridi/shared";
 import { formatDate, formatDateTime } from "../../lib/dates";
 import { commercialStatusBadgeClass } from "../customers/commercial-status-badge";
+import { customerStatusBadgeClass } from "../customers/customer-status-badge";
 import { ConsultationTrail, consultationPath, useConsultationContext } from "./ConsultationShell";
 
 /**
@@ -21,7 +23,7 @@ import { ConsultationTrail, consultationPath, useConsultationContext } from "./C
  */
 export function SummaryTab() {
   const { customerId, summary } = useConsultationContext();
-  const { customer, counts, commercial, projectSummary } = summary;
+  const { customer, counts, commercial, projectSummary, statusHistory } = summary;
 
   const cards: { label: string; value: number; segment: string }[] = [
     { label: "Projetos", value: counts.projects, segment: "projetos" },
@@ -72,8 +74,80 @@ export function SummaryTab() {
         ))}
       </div>
 
+      {/* Situação CADASTRAL (§95): pode vender para este cliente? O motivo do
+          bloqueio em vigor e o histórico inteiro ficam aqui — o que foi
+          bloqueado, por quem e por quê não se perde no desbloqueio seguinte. */}
+      <section className="consult-section">
+        <h2>Situação cadastral</h2>
+        <dl className="definition-list">
+          {/* "Situação atual", não "Situação": a seção comercial logo abaixo
+              tem o rótulo dela, e dois "Situação" na mesma tela seriam duas
+              respostas com o mesmo nome. */}
+          <dt>Situação atual</dt>
+          <dd>
+            <span className={customerStatusBadgeClass(customer.status)}>
+              {CUSTOMER_STATUS_LABELS[customer.status]}
+            </span>
+          </dd>
+          {customer.block && (
+            <>
+              <dt>Motivo do bloqueio</dt>
+              <dd>{customer.block.reason}</dd>
+              <dt>Bloqueado em</dt>
+              <dd>
+                {formatDateTime(customer.block.blockedAt)}
+                {customer.block.blockedByName ? ` · ${customer.block.blockedByName}` : ""}
+              </dd>
+            </>
+          )}
+          {customer.status === "INACTIVE" && (
+            <>
+              <dt>O que isso significa</dt>
+              <dd>
+                Cadastro arquivado: fora da lista padrão de Clientes e sem operação comercial
+                nova. Nada foi excluído — o histórico abaixo, os documentos e os fatos
+                comerciais continuam.
+                {customer.blocked
+                  ? " O bloqueio acima volta a valer se o cadastro for reativado."
+                  : ""}
+              </dd>
+            </>
+          )}
+        </dl>
+
+        <h3>Histórico da situação</h3>
+        {statusHistory.length === 0 ? (
+          <p>Nenhuma mudança de situação registrada.</p>
+        ) : (
+          <div className="table-container">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th className="col-tight">Quando</th>
+                  <th className="col-tight">De</th>
+                  <th className="col-tight">Para</th>
+                  <th className="col-flex">Motivo</th>
+                  <th className="col-tight">Quem</th>
+                </tr>
+              </thead>
+              <tbody>
+                {statusHistory.map((evento) => (
+                  <tr key={evento.id}>
+                    <td className="col-tight">{formatDateTime(evento.changedAt)}</td>
+                    <td className="col-tight">{CUSTOMER_STATUS_LABELS[evento.fromStatus]}</td>
+                    <td className="col-tight">{CUSTOMER_STATUS_LABELS[evento.toStatus]}</td>
+                    <td className="col-flex">{evento.reason}</td>
+                    <td className="col-tight">{evento.changedByName ?? "Não disponível"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
       {/* Situação comercial (§86): derivada da história comercial, com o motivo
-          — nunca o cadastro ativo, que continua logo abaixo. */}
+          — nunca a cadastral acima, que é outra pergunta. */}
       <section className="consult-section">
         <h2>Situação comercial</h2>
         <dl className="definition-list">
@@ -114,8 +188,6 @@ export function SummaryTab() {
           <dd>{CUSTOMER_TAX_PROFILE_LABELS[customer.taxProfile]}</dd>
           <dt>Endereço</dt>
           <dd>{address.length > 0 ? address : "—"}</dd>
-          <dt>Status do cadastro</dt>
-          <dd>{customer.active ? "Ativo" : "Inativo"}</dd>
           <dt>Cadastrado em</dt>
           <dd>
             {formatDateTime(customer.createdAt)}

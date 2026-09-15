@@ -14,6 +14,8 @@ import {
   QuoteOrderUomMismatchError,
   QuoteWithoutOrderableLinesError,
 } from "./projects.errors.js";
+// Gerar o Pedido é abrir operação comercial nova (§95).
+import { assertCustomerCanSell, bloqueioVigenteSelect } from "../customers/customer-status.js";
 import { buildPaymentSchedule } from "./quote-payment.js";
 
 /**
@@ -46,7 +48,17 @@ const quoteForOrderInclude = {
       code: true,
       status: true,
       customerId: true,
-      customer: { select: { id: true, legalName: true } },
+      // `active`/`blocked` e o bloqueio vigente: gerar o Pedido é operação
+      // comercial nova, e a recusa precisa dizer o motivo (§95).
+      customer: {
+        select: {
+          id: true,
+          legalName: true,
+          active: true,
+          blocked: true,
+          statusHistory: bloqueioVigenteSelect,
+        },
+      },
     },
   },
   sourcedCustomerOrder: { select: { id: true } },
@@ -122,6 +134,9 @@ export async function createOrderFromAcceptedQuote(
   if (quote.project.status !== "APPROVED") {
     throw new ProjectNotApprovedForOrderError(quote.project.status);
   }
+  // Gerar o Pedido é venda nova: cliente bloqueado ou inativo não recebe (§95).
+  // O Pedido já gerado volta acima, intacto.
+  assertCustomerCanSell(quote.project.customer);
 
   /*
    * Só entra o que a proposta aceita contém. Produto marcado OUT_OF_SCOPE na

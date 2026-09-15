@@ -350,7 +350,11 @@ describe("Products", () => {
     expect(created.statusCode).toBe(201);
     const productId = created.json().id;
 
-    await app.inject({ method: "POST", url: `/customers/${customerId}/deactivate` });
+    await app.inject({
+      method: "POST",
+      url: `/customers/${customerId}/deactivate`,
+      payload: { reason: "Arquivado pelo teste" },
+    });
 
     // PATCH reenviando o mesmo customerId (nao mudou) deve manter, sem exigir cliente ativo.
     const patched = await app.inject({
