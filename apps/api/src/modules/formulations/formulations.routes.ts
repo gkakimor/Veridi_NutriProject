@@ -20,6 +20,7 @@ import {
   IncompatibleComponentUnitError,
   InvalidComponentItemTypeError,
   InvalidComponentQuantityError,
+  InvalidFormulationPresentationError,
   MissingFinishedItemError,
   ProductNotFoundError,
   VersionIsDraftSourceError,
@@ -41,7 +42,7 @@ function formatZodError(error: ZodError) {
 
 function mapDomainError(
   error: unknown,
-): { status: number; body: { error: string; message: string } } | null {
+): { status: number; body: Record<string, unknown> } | null {
   if (error instanceof ProductNotFoundError) {
     return { status: 400, body: { error: "product_not_found", message: error.message } };
   }
@@ -83,6 +84,20 @@ function mapDomainError(
   }
   if (error instanceof FormulationActivationError) {
     return { status: 400, body: { error: "activation_blocked", message: error.message } };
+  }
+  if (error instanceof InvalidFormulationPresentationError) {
+    /*
+     * Recusa com ENDEREÇO, na mesma forma do erro do Zod: a tela marca o campo
+     * em vez de mostrar a frase solta na faixa do topo, onde ela obrigaria a
+     * procurar qual das premissas não fechou.
+     */
+    return {
+      status: 400,
+      body: {
+        error: "validation_error",
+        issues: [{ path: error.path, message: error.message }],
+      },
+    };
   }
   return null;
 }

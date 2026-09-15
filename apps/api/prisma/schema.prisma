@@ -2006,6 +2006,8 @@ model UnitOfMeasure {
   pricingPolicyTiers         PricingPolicyTemplateTier[]     @relation("PricingPolicyTierUom")
   itemCostReferences         ItemCostReference[]             @relation("ItemCostReferenceUom")
   productionProfileBases     ProductionProfileVersion[]      @relation("ProductionProfileReferenceUom")
+  formulationVersionDoses    FormulationVersion[]            @relation("FormulationVersionDoseUom")
+  formulationVersionContents FormulationVersion[]            @relation("FormulationVersionPackageContentUom")
 
   @@map("units_of_measure")
 }
@@ -2538,7 +2540,33 @@ model FormulationVersion {
 
   /// Doses por embalagem — obrigatorio no modo PER_DOSE, nulo no
   /// FIXED_BASIS. E o elo entre "mg por dose" e a unidade vendida.
+  /// Nas formas CAPSULE e POWDER e DERIVADO das premissas abaixo
+  /// (FORMULATION-WORKBENCH-01) e continua sendo a premissa do motor.
   dosesPerPackage Int?
+
+  /// PREMISSAS DA APRESENTACAO — snapshot da versao (FORMULATION-WORKBENCH-01).
+  ///
+  /// Forma e apresentacao sao conceitos diferentes (Capsula x Pote), como no
+  /// cadastro do Produto. Vivem TAMBEM aqui porque quantidade por capsula e
+  /// doses por embalagem sao resultado desta receita: mudar o cadastro do
+  /// Produto depois nao pode reescrever o que uma versao ativa diz. Nulas nas
+  /// versoes gravadas antes da bancada.
+  dosageForm       DosageForm?
+  presentationType PresentationType?
+
+  /// Capsulas por dose (forma CAPSULE). Capsulas por embalagem nao e coluna:
+  /// e capsulesPerDose x dosesPerPackage, e dosesPerPackage nasce da divisao
+  /// das duas — inteira, ou a gravacao e recusada.
+  capsulesPerDose Int?
+
+  /// Dose e conteudo da embalagem (forma POWDER), em unidade de massa.
+  /// dosesPerPackage = conteudo / dose, inteiro, ou a gravacao e recusada.
+  doseAmount            Decimal?       @db.Decimal(24, 12)
+  doseUomCode           String?
+  doseUom               UnitOfMeasure? @relation("FormulationVersionDoseUom", fields: [doseUomCode], references: [code], onDelete: Restrict)
+  packageContentAmount  Decimal?       @db.Decimal(24, 12)
+  packageContentUomCode String?
+  packageContentUom     UnitOfMeasure? @relation("FormulationVersionPackageContentUom", fields: [packageContentUomCode], references: [code], onDelete: Restrict)
 
   /// Snapshot do output no momento da criacao/copia da versao — nunca
   /// depende da associacao ATUAL do Product (que pode mudar depois),

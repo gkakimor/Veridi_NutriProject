@@ -328,9 +328,10 @@ describe("O painel de ajustes não mente sobre o que está ligado", () => {
     const linha = document.querySelector("tr.ajuste-quantidade__linha");
     expect(linha).not.toBeNull();
     const celulaDoPainel = linha!.querySelector("td");
-    // Atravessa TODAS as colunas — tantas quantas o cabeçalho tiver.
+    // Atravessa TODAS as colunas da tabela DELA — composição e embalagem têm
+    // contagens diferentes desde a bancada (FORMULATION-WORKBENCH-01).
     expect(Number(celulaDoPainel!.getAttribute("colspan"))).toBe(
-      document.querySelectorAll("thead th").length,
+      linha!.closest("table")!.querySelectorAll("thead th").length,
     );
     expect(celulaDoPainel!.querySelector(".ajuste-quantidade__corpo")).not.toBeNull();
   });
@@ -341,8 +342,8 @@ describe("Erro de decimal aponta a linha", () => {
     const user = userEvent.setup();
     await abrir();
 
-    await user.click(screen.getByRole("button", { name: /Calculada/ }));
-    const pureza = screen.getByRole("textbox", { name: /Pureza/ });
+    // A pureza é coluna da linha: não precisa abrir painel nenhum para errá-la.
+    const pureza = screen.getByRole("textbox", { name: /^Pureza de / });
     fireEvent.change(pureza, { target: { value: "1.234" } });
     await user.click(screen.getByRole("button", { name: /Salvar rascunho/i }));
 

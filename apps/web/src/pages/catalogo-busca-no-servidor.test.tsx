@@ -307,6 +307,24 @@ function versaoDTO(): FormulationVersionDTO {
     basisQuantity: "1",
     calculationMode: "FIXED_BASIS",
     dosesPerPackage: null,
+    // Premissas da bancada (FORMULATION-WORKBENCH-01): versão sem elas, como as
+    // gravadas antes dela.
+    dosageForm: null,
+    presentationType: null,
+    capsulesPerDose: null,
+    capsulesPerPackage: null,
+    doseAmount: null,
+    doseUomCode: null,
+    packageContentAmount: null,
+    packageContentUomCode: null,
+    productProfile: {
+      dosageForm: null,
+      presentationType: null,
+      capsulesPerDose: null,
+      doseAmount: null,
+      doseUomCode: null,
+      dosesPerPackage: null,
+    },
     outputItemId: "pa-1",
     outputItemCode: "PA-000005",
     outputItemName: "Beta-Alanina 60 cápsulas",
@@ -344,10 +362,10 @@ describe("Formulação — busca de matéria-prima no servidor", () => {
       </MemoryRouter>,
     );
     await waitFor(() => expect(screen.getAllByText(/PROD-000005/).length).toBeGreaterThan(0));
-    fireEvent.click(screen.getByRole("button", { name: /Adicionar componente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Adicionar matéria-prima/ }));
     // A linha preenchida mostra o item escolhido no lugar do placeholder, então
     // o texto padrão pertence à linha nova — a que vai procurar.
-    const campo = screen.getByPlaceholderText("Digite código ou nome do item…");
+    const campo = screen.getByPlaceholderText("Buscar matéria-prima por código ou nome…");
     fireEvent.focus(campo);
     await screen.findByRole("option", { name: /MP-000001/ });
     return campo;
@@ -365,10 +383,15 @@ describe("Formulação — busca de matéria-prima no servidor", () => {
   it("digitar busca no servidor com os mesmos filtros de negócio da carga inicial", async () => {
     const campo = await abrir();
     fireEvent.change(campo, { target: { value: "Beta-Alanina" } });
-    await waitFor(() => expect(buscasPor("Beta-Alanina").length).toBe(2));
+    /*
+     * UMA consulta, do tipo da SEÇÃO (FORMULATION-WORKBENCH-01): a linha nasceu
+     * na composição, e composição é matéria-prima. Antes a busca perguntava os
+     * dois tipos porque a tabela era uma só; com as seções separadas, oferecer
+     * embalagem na composição seria oferecer o que não entra ali.
+     */
+    await waitFor(() => expect(buscasPor("Beta-Alanina").length).toBe(1));
     expect(buscasPor("Beta-Alanina")).toEqual([
       { type: "RAW_MATERIAL", active: true, search: "Beta-Alanina", pageSize: 50 },
-      { type: "PACKAGING", active: true, search: "Beta-Alanina", pageSize: 50 },
     ]);
   });
 
@@ -414,13 +437,12 @@ describe("Formulação — busca de matéria-prima no servidor", () => {
     const campo = await abrir();
     fireEvent.change(campo, { target: { value: "Beta-Alanina" } });
 
-    await waitFor(() => expect(pendentes.length).toBe(2));
+    await waitFor(() => expect(pendentes.length).toBe(1));
     expect(screen.getByText(/Procurando/)).toBeTruthy();
     expect(screen.queryByText(/Nenhum resultado/)).toBeNull();
 
     await act(async () => {
       pendentes[0]!();
-      pendentes[1]!();
     });
     expect(screen.getByRole("option", { name: /MP-002500/ })).toBeTruthy();
   });
@@ -430,18 +452,16 @@ describe("Formulação — busca de matéria-prima no servidor", () => {
     const campo = await abrir();
 
     fireEvent.change(campo, { target: { value: "Cafeína" } });
-    await waitFor(() => expect(pendentes.length).toBe(2));
+    await waitFor(() => expect(pendentes.length).toBe(1));
     fireEvent.change(campo, { target: { value: "Beta-Alanina" } });
-    await waitFor(() => expect(pendentes.length).toBe(4));
+    await waitFor(() => expect(pendentes.length).toBe(2));
 
     // A mais recente responde primeiro; a antiga chega depois.
     await act(async () => {
-      pendentes[2]!();
-      pendentes[3]!();
+      pendentes[1]!();
     });
     await act(async () => {
       pendentes[0]!();
-      pendentes[1]!();
     });
 
     expect(screen.getByRole("option", { name: /MP-002500/ })).toBeTruthy();

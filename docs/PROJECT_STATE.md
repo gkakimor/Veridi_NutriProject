@@ -52,6 +52,11 @@ estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0
 - **Painel Gerencial:** entregue em 2026-09-15 — BILLED-VALUE-CANONICAL-01 (valor faturado = `Billing.totalAmount` em
   Painel, R-14 e R-15) e MANAGEMENT-DASHBOARD-V1-01 (Gestão → Painel Gerencial, D1–D5); G2, G5 e o G4 residual seguem sem
   posição;
+- **Formulação — bancada:** entregue em 2026-09-15 (FORMULATION-WORKBENCH-01). A versão passou a guardar as premissas
+  da apresentação (forma, apresentação, cápsulas por dose, dose e conteúdo do pó) como SNAPSHOT, e doses por embalagem
+  virou resultado delas — cápsulas por embalagem ÷ cápsulas por dose, conteúdo ÷ dose, divisão que não fecha é recusada.
+  A tela mostra física por dose e por cápsula enquanto se digita, separa composição de embalagem pelo TIPO do Item e traz
+  fonte, família e pureza do cadastro para a linha. Migration aditiva `20260925093028`; custos seguem fora da Formulação;
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 
 Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).

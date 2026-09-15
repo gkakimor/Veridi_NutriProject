@@ -1,7 +1,8 @@
 /** Contratos do módulo de Formulações/Versionamento, consumidos por `apps/api` e `apps/web`. */
 
-import type { ItemType } from "./items.js";
+import type { ItemFamily, ItemType, PackagingSubtype } from "./items.js";
 import type { SupplyResponsibility } from "./ownership.js";
+import type { DosageForm, PresentationType } from "./products.js";
 
 export type FormulationVersionStatus = "DRAFT" | "ACTIVE" | "INACTIVE";
 
@@ -138,6 +139,26 @@ export interface FormulationComponentDTO {
   /** Necessidade física para uma unidade acabada, já com pureza/overage. */
   /** `null` quando a versão ainda não tem premissa para quantificar. Nunca zero. */
   physicalPerUnit: string | null;
+  /**
+   * Dados técnicos do cadastro ATUAL do Item (FORMULATION-WORKBENCH-01): leitura
+   * para quem monta a receita, nunca entrada de cálculo. O que a conta usa e a
+   * versão congela continua sendo `purityPercentApplied`.
+   */
+  itemSourceName: string | null;
+  itemDeclaredNutrient: string | null;
+  itemFamily: ItemFamily | null;
+  itemPackagingSubtype: PackagingSubtype | null;
+  /** Pureza padrão do cadastro HOJE — pode diferir da aplicada nesta versão. */
+  itemDefaultPurityPercent: string | null;
+  /**
+   * Alvo e física de UMA dose, na unidade declarada (`unitCode`), pelo motor
+   * canônico. `null` quando a base não é por dose ou a conta não é possível.
+   * Nunca zero.
+   */
+  theoreticalPerDose: string | null;
+  physicalPerDose: string | null;
+  /** Física por cápsula, na unidade declarada; `null` fora da forma cápsula. */
+  physicalPerCapsule: string | null;
   notes: string | null;
   position: number;
 }
@@ -172,6 +193,25 @@ export interface FormulationVersionDTO {
   calculationMode: FormulationCalculationMode;
   /** Obrigatório no modo `PER_DOSE`; `null` no `FIXED_BASIS`. */
   dosesPerPackage: number | null;
+  /**
+   * Premissas da apresentação — SNAPSHOT da versão (FORMULATION-WORKBENCH-01).
+   * `null` nas versões gravadas antes da bancada. Nas formas cápsula e pó,
+   * `dosesPerPackage` é derivado delas.
+   */
+  dosageForm: DosageForm | null;
+  presentationType: PresentationType | null;
+  capsulesPerDose: number | null;
+  /** Derivado: cápsulas por dose × doses por embalagem. Não é coluna. */
+  capsulesPerPackage: number | null;
+  doseAmount: string | null;
+  doseUomCode: string | null;
+  packageContentAmount: string | null;
+  packageContentUomCode: string | null;
+  /**
+   * Perfil industrial do Produto HOJE — referência para conferir a versão,
+   * nunca premissa dela: mudar o cadastro não reescreve versão nenhuma.
+   */
+  productProfile: FormulationProductProfileDTO;
   outputItemId: string;
   outputItemCode: string;
   outputItemName: string;
@@ -209,6 +249,16 @@ export interface FormulationVersionDTO {
    * não há edição possível.
    */
   componentIssues: FormulationComponentIssueDTO[];
+}
+
+/** Perfil industrial do Produto como está no cadastro, lido junto da versão. */
+export interface FormulationProductProfileDTO {
+  dosageForm: DosageForm | null;
+  presentationType: PresentationType | null;
+  capsulesPerDose: number | null;
+  doseAmount: string | null;
+  doseUomCode: string | null;
+  dosesPerPackage: number | null;
 }
 
 export interface FormulationSummaryDTO {
@@ -291,6 +341,19 @@ export interface UpdateFormulationVersionInput {
   basisQuantity?: string;
   calculationMode?: FormulationCalculationMode;
   dosesPerPackage?: number | string | null;
+  /**
+   * Premissas da apresentação. Nas formas cápsula e pó o servidor deriva
+   * `dosesPerPackage` delas, e divisão que não fecha é recusada.
+   */
+  dosageForm?: DosageForm | null;
+  presentationType?: PresentationType | null;
+  capsulesPerDose?: number | string | null;
+  /** Entrada, não coluna: com cápsulas por dose, fecha as doses por embalagem. */
+  capsulesPerPackage?: number | string | null;
+  doseAmount?: string | null;
+  doseUomCode?: string | null;
+  packageContentAmount?: string | null;
+  packageContentUomCode?: string | null;
   notes?: string;
   components?: FormulationComponentInput[];
 }

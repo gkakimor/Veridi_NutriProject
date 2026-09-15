@@ -182,20 +182,21 @@ describe("Validação inline por componente", () => {
     expect(rolagem).toHaveBeenCalledTimes(1);
   });
 
-  it("erro escondido no painel de ajustes fechado: o painel abre e o campo recebe o foco", async () => {
+  it("pureza ilegível é marcada na COLUNA da linha, sem esconder o erro atrás do painel", async () => {
     const user = userEvent.setup();
-    // Pureza ilegível já gravada, painel fechado — o erro não está na tela.
+    // Pureza ilegível já gravada. Desde FORMULATION-WORKBENCH-01 ela é coluna
+    // da linha de matéria-prima: o erro aparece onde o valor está.
     await abrir(versao({ components: [componente({ purityPercentApplied: "abc" })] }));
     expect(document.querySelector("tr.ajuste-quantidade__linha")).toBeNull();
 
     await salvar(user);
 
-    await waitFor(() => expect(document.querySelector("tr.ajuste-quantidade__linha")).not.toBeNull());
-    const pureza = screen.getByRole("textbox", { name: "Pureza aplicada" });
-    expect(pureza).toHaveAttribute("aria-invalid", "true");
+    const pureza = screen.getByRole("textbox", { name: "Pureza de MP-000003" });
+    await waitFor(() => expect(pureza).toHaveAttribute("aria-invalid", "true"));
     expect(mensagemDo(pureza)).toMatch(/^MP-000003 — Pureza %: use só números/);
     await waitFor(() => expect(document.activeElement).toBe(pureza));
-    // A linha avisa que há o que corrigir mesmo com o painel fechado de novo.
+    // O painel não precisa abrir — e o resumo da linha continua avisando.
+    expect(document.querySelector("tr.ajuste-quantidade__linha")).toBeNull();
     expect(screen.getByRole("button", { name: /corrigir/ })).toBeInTheDocument();
     expect(vi.mocked(updateFormulationVersion)).not.toHaveBeenCalled();
   });

@@ -55,6 +55,16 @@ function componente(basis: FormulationVersionDTO["components"][number]["basis"])
     theoreticalPerUnit: null,
     physicalPerUnit: null,
     stockUnitCode: "kg",
+    // Bancada (FORMULATION-WORKBENCH-01): dado técnico do Item e as grandezas
+    // por dose vêm do servidor; aqui ausentes, como numa versão antiga.
+    itemSourceName: null,
+    itemDeclaredNutrient: null,
+    itemFamily: null,
+    itemPackagingSubtype: null,
+    itemDefaultPurityPercent: null,
+    theoreticalPerDose: null,
+    physicalPerDose: null,
+    physicalPerCapsule: null,
     notes: null,
     position: 0,
   };

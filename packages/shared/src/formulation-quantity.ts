@@ -207,3 +207,236 @@ export function calcularQuantidadeDoComponente(
     ),
   };
 }
+
+/*
+ * BANCADA DA FORMULAÇÃO — dose, cápsula e apresentação (FORMULATION-WORKBENCH-01).
+ *
+ * A pessoa que monta a receita pensa como a planilha da Veridi: miligramas por
+ * dose, miligramas por cápsula, cápsulas por embalagem. O motor acima responde
+ * por embalagem, na unidade de estoque — que é o que a Ordem de Produção separa.
+ * As funções abaixo respondem as perguntas da bancada SEM outra conta: chamam o
+ * motor, e a única aritmética nova é a divisão pelas cápsulas de uma dose e pela
+ * dose do pó.
+ */
+
+/** Forma do produto — o mesmo vocabulário do cadastro do Produto. */
+export type DosageFormLike = "CAPSULE" | "POWDER" | "TABLET" | "LIQUID" | "OTHER";
+
+/** Unidade em que a bancada soma massa por dose — a da planilha da Veridi. */
+export const UNIDADE_DE_MASSA_DA_DOSE = "mg";
+
+/** Maior número de doses que a coluna `dosesPerPackage` (Int) guarda. */
+const LIMITE_DE_DOSES = 2_147_483_647;
+
+function inteiroPositivo(valor: number | null | undefined): number | null {
+  return typeof valor === "number" && Number.isInteger(valor) && valor > 0 ? valor : null;
+}
+
+function decimalPositivo(valor: DecimalValue | null | undefined): DecimalInstance | null {
+  if (valor === null || valor === undefined || valor === "") return null;
+  try {
+    const numero = new Decimal(valor);
+    return numero.isFinite() && numero.greaterThan(0) ? numero : null;
+  } catch {
+    return null;
+  }
+}
+
+export interface QuantidadeDaDose {
+  /** O que a linha declara para UMA dose, na unidade declarada — o alvo. */
+  teorica: DecimalInstance;
+  /** O que a fábrica pesa para UMA dose: o alvo com os ajustes autorizados. */
+  fisica: DecimalInstance;
+  /** A física de uma dose dividida pelas cápsulas da dose; `null` fora da cápsula. */
+  porCapsula: DecimalInstance | null;
+}
+
+/**
+ * Quanto de UM componente entra numa dose — e numa cápsula, na forma cápsula.
+ *
+ * É `calcularQuantidadeDoComponente` pedindo a necessidade de uma embalagem com
+ * uma dose, na própria unidade declarada: base por dose, conversão e ajustes
+ * autorizados continuam os do motor, na mesma ordem. Pureza corrige a massa
+ * física (alvo ÷ pureza/100); overage só entra se autorizado, e é outro ajuste.
+ *
+ * `null` quando a base da linha não é por dose — em base fixa ou por unidade
+ * acabada, "por dose" não é grandeza da linha. Conta impossível devolve o
+ * motivo, como no motor; nunca zero.
+ */
+export function calcularQuantidadeDaDose(
+  component: Omit<ComponentQuantityInput, "stockUnitCode">,
+  capsulasPorDose: number | null,
+  units: readonly UomFactorLike[],
+): QuantidadeDaDose | FormulationQuantityBlock | null {
+  if (component.basis !== "PER_DOSE") return null;
+  const resultado = calcularQuantidadeDoComponente(
+    { ...component, stockUnitCode: component.unitCode },
+    1,
+    { basisQuantity: 1, dosesPerPackage: 1 },
+    units,
+  );
+  if (typeof resultado === "string") return resultado;
+  const capsulas = inteiroPositivo(capsulasPorDose);
+  return {
+    teorica: resultado.theoretical,
+    fisica: resultado.physical,
+    porCapsula: capsulas === null ? null : resultado.physical.dividedBy(capsulas),
+  };
+}
+
+export interface ResumoDaDose {
+  /** Soma dos alvos por dose, em `mg`. */
+  teoricaTotal: DecimalInstance;
+  /** Soma das quantidades físicas por dose, em `mg` — o que uma dose pesa. */
+  fisicaTotal: DecimalInstance;
+  /** O que cada cápsula leva, em `mg`; `null` fora da forma cápsula. */
+  porCapsulaTotal: DecimalInstance | null;
+  /** Linhas que entraram na soma. */
+  somadas: number;
+  /** Linhas por dose FORA da soma: unidade que não é massa ou desconhecida. */
+  foraDaSoma: number;
+}
+
+/**
+ * Totais técnicos de uma dose.
+ *
+ * Soma em mg só o que é massa: "2 un" mais "500 mg" não é número nenhum. O que
+ * fica fora é contado, para a tela dizer que ficou — total que omite linha em
+ * silêncio parece completo e não é.
+ */
+export function resumirDoses(
+  linhas: readonly { teorica: DecimalValue; fisica: DecimalValue; unitCode: string }[],
+  capsulasPorDose: number | null,
+  units: readonly UomFactorLike[],
+): ResumoDaDose {
+  let teoricaTotal = new Decimal(0);
+  let fisicaTotal = new Decimal(0);
+  let somadas = 0;
+  let foraDaSoma = 0;
+  const destino = units.find((u) => u.code === UNIDADE_DE_MASSA_DA_DOSE);
+  for (const linha of linhas) {
+    const origem = units.find((u) => u.code === linha.unitCode);
+    if (!destino || !origem || origem.dimension !== destino.dimension) {
+      foraDaSoma += 1;
+      continue;
+    }
+    const teorica = converterQuantidadeDeUnidade(
+      linha.teorica,
+      linha.unitCode,
+      UNIDADE_DE_MASSA_DA_DOSE,
+      units,
+    );
+    const fisica = converterQuantidadeDeUnidade(
+      linha.fisica,
+      linha.unitCode,
+      UNIDADE_DE_MASSA_DA_DOSE,
+      units,
+    );
+    if (typeof teorica === "string" || typeof fisica === "string") {
+      foraDaSoma += 1;
+      continue;
+    }
+    teoricaTotal = teoricaTotal.plus(teorica);
+    fisicaTotal = fisicaTotal.plus(fisica);
+    somadas += 1;
+  }
+  const capsulas = inteiroPositivo(capsulasPorDose);
+  return {
+    teoricaTotal,
+    fisicaTotal,
+    porCapsulaTotal: capsulas === null ? null : fisicaTotal.dividedBy(capsulas),
+    somadas,
+    foraDaSoma,
+  };
+}
+
+/** Premissas da apresentação de uma versão, como a bancada as edita. */
+export interface PremissasDaApresentacao {
+  dosageForm: DosageFormLike | null;
+  capsulesPerDose: number | null;
+  capsulesPerPackage: number | null;
+  doseAmount: DecimalValue | null;
+  doseUomCode: string | null;
+  packageContentAmount: DecimalValue | null;
+  packageContentUomCode: string | null;
+}
+
+/** Por que as premissas não fecham um número de doses. */
+export type ApresentacaoBlock =
+  | "CAPSULAS_NAO_DIVIDEM"
+  | "DOSES_NAO_INTEIRAS"
+  | "UOM_DESCONHECIDA"
+  | "UOM_INCOMPATIVEL";
+
+/** A frase de cada recusa — a mesma na tela e na resposta da API. */
+export const MENSAGENS_DA_APRESENTACAO: Record<ApresentacaoBlock, string> = {
+  CAPSULAS_NAO_DIVIDEM:
+    "Cápsulas por embalagem precisa ser múltiplo de cápsulas por dose: cada dose leva um número inteiro de cápsulas.",
+  DOSES_NAO_INTEIRAS:
+    "O conteúdo da embalagem dividido pela dose precisa dar um número inteiro de doses.",
+  UOM_DESCONHECIDA: "Informe a unidade da dose e a do conteúdo da embalagem.",
+  UOM_INCOMPATIVEL: "Dose e conteúdo da embalagem precisam estar em unidade de massa.",
+};
+
+/**
+ * Em que formas as doses por embalagem são RESULTADO das premissas.
+ *
+ * Cápsula: cápsulas por embalagem ÷ cápsulas por dose. Pó: conteúdo ÷ dose.
+ * Nas demais formas o número continua digitado, como sempre foi.
+ */
+export function formaDerivaDoses(forma: DosageFormLike | null | undefined): boolean {
+  return forma === "CAPSULE" || forma === "POWDER";
+}
+
+/**
+ * Doses por embalagem a partir das premissas da apresentação.
+ *
+ * `null` = premissa ainda em branco (rascunho pode ficar incompleto; a ativação
+ * já recusa doses ausentes). Divisão que não fecha devolve o motivo:
+ * arredondar doses mudaria em silêncio o material de toda linha por dose.
+ */
+export function dosesPorEmbalagemDaApresentacao(
+  premissas: PremissasDaApresentacao,
+  units: readonly UomFactorLike[],
+): number | null | ApresentacaoBlock {
+  if (premissas.dosageForm === "CAPSULE") {
+    const porDose = inteiroPositivo(premissas.capsulesPerDose);
+    const porEmbalagem = inteiroPositivo(premissas.capsulesPerPackage);
+    if (porDose === null || porEmbalagem === null) return null;
+    if (porEmbalagem % porDose !== 0) return "CAPSULAS_NAO_DIVIDEM";
+    return porEmbalagem / porDose;
+  }
+  if (premissas.dosageForm === "POWDER") {
+    const dose = decimalPositivo(premissas.doseAmount);
+    const conteudo = decimalPositivo(premissas.packageContentAmount);
+    if (dose === null || conteudo === null) return null;
+    if (!premissas.doseUomCode || !premissas.packageContentUomCode) return "UOM_DESCONHECIDA";
+    const unidadeDaDose = units.find((u) => u.code === premissas.doseUomCode);
+    const unidadeDoConteudo = units.find((u) => u.code === premissas.packageContentUomCode);
+    if (!unidadeDaDose || !unidadeDoConteudo) return "UOM_DESCONHECIDA";
+    if (unidadeDaDose.dimension !== "MASS" || unidadeDoConteudo.dimension !== "MASS") {
+      return "UOM_INCOMPATIVEL";
+    }
+    const conteudoNaUnidadeDaDose = converterQuantidadeDeUnidade(
+      conteudo,
+      premissas.packageContentUomCode,
+      premissas.doseUomCode,
+      units,
+    );
+    if (typeof conteudoNaUnidadeDaDose === "string") return conteudoNaUnidadeDaDose;
+    const doses = conteudoNaUnidadeDaDose.dividedBy(dose);
+    if (!doses.isInteger() || doses.greaterThan(LIMITE_DE_DOSES)) return "DOSES_NAO_INTEIRAS";
+    return doses.toNumber();
+  }
+  return null;
+}
+
+/** Cápsulas por embalagem de uma versão: cápsulas por dose × doses por embalagem. */
+export function capsulasPorEmbalagem(
+  capsulasPorDose: number | null,
+  dosesPorEmbalagem: number | null,
+): number | null {
+  const porDose = inteiroPositivo(capsulasPorDose);
+  const doses = inteiroPositivo(dosesPorEmbalagem);
+  return porDose === null || doses === null ? null : porDose * doses;
+}
