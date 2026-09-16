@@ -92,10 +92,13 @@ export interface FormulationCostComponentDTO {
   /**
    * A perda prevista da versão entrou na quantidade desta linha?
    *
-   * `true` só nas bases que acompanham a quantidade PRODUZIDA (`PER_DOSE`,
-   * `FIXED_BASIS`) e só quando a versão declara perda. Embalagem comercial
-   * (`PER_FINISHED_UNIT`) continua na quantidade vendável e sai `false` — a
-   * perda não vende pote, tampa nem rótulo.
+   * `true` nas linhas consumidas proporcionalmente ao que ENTRA no processo, e
+   * só quando a versão declara perda: as que a base declara (`PER_DOSE`,
+   * `FIXED_BASIS`) e as de Item marcado como consumido na produção — a cápsula
+   * vazia, declarada por unidade acabada e ainda assim perdida com o lote.
+   *
+   * Embalagem comercial continua na quantidade vendável e sai `false`: a perda
+   * não vende pote, tampa, rótulo nem caixa.
    */
   expectedLossApplied: boolean;
 }

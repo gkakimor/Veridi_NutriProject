@@ -2077,6 +2077,24 @@ model Item {
   /// So para type = PACKAGING; permanece null nos demais tipos.
   packagingSubtype PackagingSubtype?
 
+  /// Este material e consumido NO PROCESSO, proporcional a quantidade BRUTA
+  /// produzida — e nao por unidade vendavel.
+  ///
+  /// Existe porque `type`/`packagingSubtype` nao distinguem a capsula vazia,
+  /// que entra na encapsuladora junto com cada unidade bruta, do pote, da
+  /// tampa e do rotulo, que acompanham a unidade VENDIDA. Os dois sao
+  /// PACKAGING e a capsula nao tem subtipo proprio; decidir pelo nome
+  /// ("CAPS") seria regra de custo escondida numa string.
+  ///
+  /// Quem lê: so o motor de necessidade, e so quando o chamador pede a perda
+  /// prevista (FORMULATION-LOSS-SCOPE-01). Materia-prima ja acompanha a
+  /// producao pela BASE declarada na receita (PER_DOSE/FIXED_BASIS) — nesses
+  /// componentes a marca e redundante, nunca contraditoria.
+  ///
+  /// `false` e o default e preserva o comportamento anterior: embalagem
+  /// comercial continua atrelada a quantidade liquida.
+  consumedInProduction Boolean @default(false)
+
   externalBarcode String?
   active          Boolean @default(true)
 

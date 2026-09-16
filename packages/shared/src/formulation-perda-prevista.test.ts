@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   baseSegueQuantidadeProduzida,
+  componenteSegueQuantidadeProduzida,
   lerPerdaPrevista,
   quantidadeBrutaPlanejada,
   rendimentoEsperado,
@@ -74,6 +75,67 @@ describe("Perda prevista de produção", () => {
     if (typeof semPerda === "string" || typeof comPerda === "string") return;
     // A bruta muda; a dose não usa a bruta.
     expect(comPerda.greaterThan(semPerda)).toBe(true);
+  });
+});
+
+/**
+ * ESCOPO DA INCIDÊNCIA — quem a perda prevista alcança
+ * (FORMULATION-LOSS-SCOPE-01).
+ *
+ * A base declarada na receita responde pela aritmética da linha; ela não
+ * responde sozinha pela incidência. A CÁPSULA VAZIA é o caso que prova a
+ * diferença: a quantidade dela é naturalmente declarada por unidade acabada
+ * (120 por pote) e, ainda assim, a cápsula perdida no envase leva o invólucro
+ * junto. Quem decide é o domínio — base da receita OU marca do cadastro —,
+ * nunca o nome nem o código do item.
+ */
+describe("Escopo da perda prevista", () => {
+  it("a base que acompanha a produção basta, com ou sem marca no cadastro", () => {
+    for (const consumedInProduction of [undefined, null, false, true] as const) {
+      expect(
+        componenteSegueQuantidadeProduzida({ basis: "PER_DOSE", consumedInProduction }),
+        `PER_DOSE com consumedInProduction=${String(consumedInProduction)}`,
+      ).toBe(true);
+      expect(
+        componenteSegueQuantidadeProduzida({ basis: "FIXED_BASIS", consumedInProduction }),
+        `FIXED_BASIS com consumedInProduction=${String(consumedInProduction)}`,
+      ).toBe(true);
+    }
+  });
+
+  it("a cápsula vazia entra pela marca do cadastro, declarada por unidade acabada", () => {
+    expect(
+      componenteSegueQuantidadeProduzida({
+        basis: "PER_FINISHED_UNIT",
+        consumedInProduction: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("embalagem comercial fica fora: pote, tampa, rótulo e caixa não são marcados", () => {
+    // Todas são a MESMA linha do domínio — `PER_FINISHED_UNIT` sem marca. O
+    // que as distingue do invólucro é o cadastro, e é só isso que é lido.
+    for (const embalagem of ["pote", "tampa", "rótulo", "cartucho", "caixa", "dosador"]) {
+      expect(
+        componenteSegueQuantidadeProduzida({
+          basis: "PER_FINISHED_UNIT",
+          consumedInProduction: false,
+        }),
+        `${embalagem} não pode ser escalado pela perda`,
+      ).toBe(false);
+    }
+  });
+
+  it("marca ausente nunca vira marca — formulação antiga segue como estava", () => {
+    // Item gravado antes da coluna existir chega `undefined`/`null` conforme a
+    // origem da leitura; nenhum dos dois pode ser lido como "sim".
+    expect(componenteSegueQuantidadeProduzida({ basis: "PER_FINISHED_UNIT" })).toBe(false);
+    expect(
+      componenteSegueQuantidadeProduzida({
+        basis: "PER_FINISHED_UNIT",
+        consumedInProduction: null,
+      }),
+    ).toBe(false);
   });
 });
 

@@ -3818,24 +3818,53 @@ que sustenta isso mede ALCANCE: `expectedLossPercent` só pode ser LIDO em
 **Onde a perda entra no custo.** A Veridi calcula CMV antes de produzir, então a
 perda normal do processo é custo real da unidade vendável. Na estimativa de
 custo da Formulação o motor de necessidade é chamado com `aplicarPerdaPrevista`,
-e a escala é decidida **pela base que a própria receita declara** — nunca por
-`total × (1 + perda)`:
-
-- `PER_DOSE` e `FIXED_BASIS` acompanham a quantidade PRODUZIDA e usam a bruta;
-- `PER_FINISHED_UNIT` acompanha a unidade VENDÁVEL e continua na líquida — a
-  perda não vende pote, tampa, rótulo nem caixa.
+e a escala é decidida **linha a linha, pelo domínio** — nunca por
+`total × (1 + perda)`, que aumentaria pote e rótulo junto.
 
 O divisor do custo unitário continua sendo a quantidade líquida da base: o
 material perdido no caminho é custo da unidade boa. A Ordem de Produção e o
-picking **não** aplicam a premissa nesta rodada — a opção é do chamador, e
+picking **não** aplicam a premissa — a opção é do chamador, e
 `computeFormulationRequirements` não a liga sozinho.
 
-**Cápsula vazia declarada como embalagem não é escalada.** Nos dois produtos de
-homologação a cápsula vazia é item `PACKAGING` com base `PER_FINISHED_UNIT`, e
-por isso continua atrelada à unidade vendável. Fisicamente ela poderia
-acompanhar a produção; quem declara a base é a receita, e mudar isso por dentro
-seria o motor decidir sozinho uma regra de custo que ninguém escreveu. **Decisão
-pendente do PO.**
+### Quem a perda alcança (FORMULATION-LOSS-SCOPE-01)
+
+**Decisão do PO, 2026-09-15.** A perda prevista é perda do PROCESSO para
+alcançar a quantidade líquida comercial desejada. Recebe o fator da perda quem é
+consumido **proporcionalmente à quantidade BRUTA que entra no processo**; não
+recebe quem acompanha a **unidade vendável**.
+
+A regra canônica é `componenteSegueQuantidadeProduzida` (`@veridi/shared`), e ela
+tem duas entradas — basta uma:
+
+1. **a base declarada na receita.** `PER_DOSE` e `FIXED_BASIS` dizem quanto de
+   material forma o que é produzido: matéria-prima e ingrediente entram por aqui;
+2. **a marca do cadastro do Item,** `Item.consumedInProduction`. É por ela que
+   entra a **cápsula vazia**, cuja quantidade é naturalmente declarada por
+   unidade acabada (120 por pote) e que, ainda assim, é perdida com o lote — a
+   cápsula perdida no envase leva o invólucro junto.
+
+Ficam de fora, e continuam na quantidade líquida: pote, tampa, rótulo, cartucho,
+caixa de embarque e dosador fornecido pela embalagem comercial. Para 5.000
+unidades vendáveis o planejamento interno parte de 5.051 unidades brutas, mas
+**não** compra 5.051 potes.
+
+**Por que a base não bastava.** A base descreve a ARITMÉTICA da linha, não a
+incidência da perda: a mesma cápsula pode ser declarada por dose ou por unidade
+acabada e as duas formas são corretas, mas só a primeira era escalada. O domínio
+também não distinguia embalagem consumida no processo de embalagem comercial —
+`Item.type` é `PACKAGING` nos dois casos e `packagingSubtype` não tem valor para
+a cápsula (ela cai em `OTHER`, que não é contrato). A marca é a menor mudança que
+separa os dois comportamentos, e é aditiva: `false` por default, que é
+exatamente o comportamento anterior de toda formulação já gravada.
+
+**A decisão vem do cadastro, nunca do nome.** Nenhum ponto do motor olha nome,
+código ou subtipo de embalagem. Uma regra de custo escondida num
+`nome.includes("CAPS")` é invisível para quem confere o custo e falha em
+silêncio no primeiro item renomeado.
+
+**A marca não é a premissa.** `consumedInProduction` diz QUEM a perda alcança;
+ela nunca cria perda. Versão sem `expectedLossPercent`, ou com 0%, não escala
+linha nenhuma — inclusive as marcadas.
 
 ## §53 — Fonte de custo do material: seleção automática, referência manual e substituição por cálculo
 
