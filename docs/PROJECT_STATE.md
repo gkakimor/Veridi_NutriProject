@@ -4819,6 +4819,37 @@ esperando na trava) e a faixa dos módulos afetados (Clientes, Pedidos, Consulta
 Recebimento); web dos módulos afetados; typecheck dos três pacotes. Sem `pnpm test` global, E2E, build ou fresh (FAST).
 `web pages/projects/envio-com-linha-nao-salva.test.tsx` seguiu instável, como já era na `main`.
 
+## Situação cadastral endurecida (CUSTOMER-STATUS-HARDENING-01, 2026-09-16)
+
+**Fecha CUSTOMER-STATUS-PERMISSIONS-01 e CUSTOMER-STATUS-DRAFT-WARNING-01.** Regra durável no fim do §95.
+
+**Permissão.** As quatro ações de situação exigem ADMIN ou COMMERCIAL (`CUSTOMER_STATUS_CHANGE_ROLES`, em
+`packages/shared/src/customer-status.ts`), conferidos antes do corpo e do cliente: os demais perfis recebem 403
+`forbidden` com a frase padrão ("Seu perfil não permite esta ação."), e nada é gravado. Motivo obrigatório,
+`FOR UPDATE` e histórico append-only (situação anterior e nova, motivo, data/hora, usuário e nome congelado) não
+mudaram. A leitura — lista, detalhe, histórico e Visão do Cliente — continua aberta a toda sessão. Na tela, a lista
+de Clientes só mostra o menu "⋯" de situação a quem pode (o "Editar" continua na linha), e o cadastro aberto mostra a
+situação cadastral canônica — antes um bloqueado aparecia como "Ativo" — com o motivo do bloqueio e quem pode mudar.
+
+**Aviso no documento.** `ProjectDTO.customerStatus` e `CustomerOrderDTO.customerStatus` trazem a situação ATUAL,
+derivada por `situacaoCadastral` do `customer` que as duas leituras já carregavam: nenhuma consulta nova, nada gravado
+no documento, o mesmo campo nas listas. O Orçamento lê a do Projeto. `CustomerStatusNotice`
+(`apps/web/src/pages/customers/`) é o componente único — painel `pendency-panel` com `role="status"`, frase por
+documento e link para o Resumo da Visão do Cliente, onde moram motivo e histórico — e os predicados de "ainda avança"
+moram com ele: Orçamento em rascunho, enviado ou aceito sem Pedido (projeto não cancelado), Projeto não cancelado e
+Pedido em rascunho enquanto o campo Cliente é o gravado. O aviso não desabilita nada; enviar, aceitar, gerar o Pedido,
+criar versão e confirmar continuam recusados pelas guardas de sempre. A opção do cliente que não está entre os ativos,
+no seletor do Pedido, diz "bloqueado" ou "inativo" pela situação real (antes, sempre "inativo").
+
+**Validação.** API: faixa de Clientes (85, 11 novos, com a transição inteira por ADMIN e COMMERCIAL, os quatro perfis
+recusados, a leitura do VIEWER e o Pedido bloqueado que confirma depois do desbloqueio) e Projetos, Pedidos,
+Exportações, Documentos em massa e Visão do Cliente (463). Mutação provada: sem a guarda de perfil caem os 4 casos sem
+permissão; sem a projeção, os 2 de documento. Web: as telas afetadas (89 arquivos, 1.376 testes), com 10 mutações
+pegas — menu por perfil, situação do cadastro, aviso fora de cada tela, troca de cliente, opção sintética e os três
+predicados. Smoke no navegador contra o `veridi_dev`, sem escrita (situação injetada na resposta, Pedido sintético):
+aviso à vista em 1440 nas três telas, fora na releitura depois da reativação, VIEWER sem menu, console limpo.
+Typecheck dos três pacotes. Sem migration; sem `pnpm test` global, E2E, stress, security ou restore (homologação).
+
 ## O Modelo guarda a premissa técnica (FORMULATION-TEMPLATE-WORKBENCH-01, Fatia 1, 2026-09-16)
 
 **`FATIA_1_READY = YES`. A capability NÃO está fechada** — faltam a fatia 2 (bancada visual compartilhada) e a

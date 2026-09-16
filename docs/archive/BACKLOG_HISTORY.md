@@ -1179,6 +1179,23 @@ Registro original (BACKLOG, fila viva, 2026-09-15): posição 4 — "Decisões d
 MANAGEMENT-DASHBOARD-V1-01 (Painel Gerencial)", discovery `EM_ANALISE` com D2–D5 abertas; próxima ação "PO fecha D2–D5;
 implementar a versão 1"; dependência BILLED-VALUE-CANONICAL-01 entregue.
 
+### CUSTOMER-STATUS-PERMISSIONS-01 · CUSTOMER-STATUS-DRAFT-WARNING-01 — follow-ups da situação cadastral — **FECHADOS em 2026-09-16**
+
+Absorvidos por CUSTOMER-STATUS-HARDENING-01 (P1, pré-homologação). Regra durável em
+[`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §95; estado em [`PROJECT_STATE.md`](../PROJECT_STATE.md); proteção em
+[`TEST_COVERAGE_MAP.md`](../TEST_COVERAGE_MAP.md). Sem migration.
+
+Decisão do PO: só ADMIN e COMMERCIAL bloqueiam, desbloqueiam, inativam e reativam; os demais perfis consultam situação,
+motivo e histórico. A API recusa com 403 antes de olhar o corpo, e a lista de Clientes não oferece a ação a quem não
+pode. O aviso de cliente bloqueado ou inativo aparece no Orçamento, no Projeto e no Pedido que ainda podem avançar, a
+partir da situação ATUAL que a própria leitura do documento traz — nada gravado no documento, guardas de venda
+intactas, nenhum documento alterado ou cancelado.
+
+Registro original (BACKLOG, "Abertos fora da fila", 2026-09-15): "Follow-ups de CUSTOMER-STATUS-LIFECYCLE-01 (§95),
+sem posição: quem pode bloquear, desbloquear, inativar e reativar (hoje qualquer sessão autenticada, o mesmo da
+inativação de antes) e o aviso na tela do rascunho cujo cliente foi bloqueado depois da abertura (hoje a recusa aparece
+no enviar/confirmar)".
+
 ## Seção A — linhas fechadas das tabelas
 
 | ID | Título | Sev. | Tam. |

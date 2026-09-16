@@ -17,6 +17,7 @@ import { ProjectCostingSection } from "./ProjectCostingSection";
 import { ProjectProductsSection } from "./ProjectProductsSection";
 import { ApprovalPreviewDialog } from "./ApprovalPreviewDialog";
 import { CancelProjectDialog } from "./CancelProjectDialog";
+import { CustomerStatusNotice, projetoAindaAvanca } from "../customers/CustomerStatusNotice";
 import { QuoteVersionsSection } from "./QuoteVersionsSection";
 import { FlowContext } from "../../components/FlowContext";
 import {
@@ -286,6 +287,15 @@ function ProjectDetail() {
               Tentar novamente
             </button>
           </p>
+        )}
+
+        {/* Cliente bloqueado ou inativado depois que o projeto começou (§95). */}
+        {projetoAindaAvanca(project.status) && (
+          <CustomerStatusNotice
+            documento="project"
+            customerId={project.customerId}
+            status={project.customerStatus}
+          />
         )}
 
         {/* A ficha reúne quatro assuntos que a pessoa costuma tratar como

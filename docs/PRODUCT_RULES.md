@@ -6235,6 +6235,32 @@ filtro devolve todos; os seletores de venda pedem `status=ACTIVE`.
 **Visão do Cliente:** situação atual, motivo e autor do bloqueio em vigor,
 aviso explícito de arquivado quando inativo, e o histórico inteiro.
 
+**Quem muda a situação** (CUSTOMER-STATUS-HARDENING-01, 2026-09-16, decisão
+do PO): bloquear, desbloquear, inativar e reativar são de **Comercial e
+Administrador** (`CUSTOMER_STATUS_CHANGE_ROLES`). Produção, Qualidade, Compras
+e Consulta continuam lendo situação, motivo e histórico onde já leem o
+Cliente, e recebem 403 nas quatro ações. A API confere o perfil antes do corpo
+e da existência do cliente — esconder a ação na tela é conveniência, não
+autoridade —, e o PATCH do cadastro não muda situação.
+
+**Documento em andamento avisa** (mesma rodada). O cliente pode mudar de
+situação depois que o documento nasceu, e quem abre o documento precisa saber
+antes de tentar o próximo passo. Projeto e Pedido trazem a situação ATUAL do
+cliente em cada leitura (`customerStatus`, fora do snapshot), e a tela mostra
+um aviso discreto — sem modal, sem desabilitar nada — quando ele está
+Bloqueado ou Inativo:
+
+- Orçamento em rascunho, enviado ou aceito sem Pedido, em projeto não
+  cancelado;
+- Projeto não cancelado — aprovado ainda recebe negociação nova;
+- Pedido em rascunho, enquanto o cliente do campo for o gravado.
+
+Documento encerrado não avisa: versão recusada, substituída, arquivada ou
+aceita com Pedido; Pedido confirmado em diante, cujo atendimento a situação
+não interrompe; Projeto cancelado. O aviso é derivado e nunca gravado: o
+cliente volta a Ativo e a leitura seguinte já não o mostra. Quem recusa o
+passo continua sendo a guarda de venda acima, e nada é cancelado.
+
 ## §96 — O Modelo de Formulação guarda a premissa técnica, e só ela
 
 FORMULATION-TEMPLATE-WORKBENCH-01, fatia 1, 2026-09-16.

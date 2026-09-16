@@ -515,6 +515,7 @@ const PROJETO: ProjectDTO = {
   customerName: "Cliente Teste",
   customerPhone: null,
   customerEmail: null,
+  customerStatus: "ACTIVE",
   name: "Linha Performance",
   concept: null,
   channel: null,

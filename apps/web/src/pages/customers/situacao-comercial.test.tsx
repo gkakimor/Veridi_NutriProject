@@ -18,6 +18,10 @@ vi.mock("../../lib/customers-api", () => ({
   createCustomer: vi.fn(),
   updateCustomer: vi.fn(),
 }));
+// A lista lê a sessão para decidir as ações de situação cadastral.
+vi.mock("../../app/AuthProvider", () => ({
+  useAuth: () => ({ user: { id: "u-1", name: "Admin", role: "ADMIN" } }),
+}));
 
 import { listCustomers } from "../../lib/customers-api";
 import { CustomersPage } from "./CustomersPage";

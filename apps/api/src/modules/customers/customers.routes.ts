@@ -1,7 +1,10 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
+import type { User } from "@prisma/client";
 import type { ZodError } from "zod";
 import type { CustomerStatusAction, CustomerStatusHistoryResponse } from "@veridi/shared";
-import { requireCurrentUser } from "../../lib/current-user.js";
+import { CUSTOMER_STATUS_CHANGE_ROLES } from "@veridi/shared";
+import { requireCurrentUser, requireRole } from "../../lib/current-user.js";
+import { ForbiddenError } from "../auth/auth.errors.js";
 import {
   createCustomer,
   getCustomerById,
@@ -32,10 +35,11 @@ function formatZodError(error: ZodError) {
  * `GET /customers`, `GET /customers/:id`, `POST /customers`,
  * `PATCH /customers/:id`, `GET /customers/:id/status-history` e as quatro
  * ações de situação cadastral (§95): `POST /customers/:id/block`,
- * `/unblock`, `/deactivate` e `/activate`, todas com motivo obrigatório.
+ * `/unblock`, `/deactivate` e `/activate`, todas com motivo obrigatório e só
+ * para Comercial e Administrador (`CUSTOMER_STATUS_CHANGE_ROLES`).
  *
  * Sem exclusão física: clientes bloqueados e inativos permanecem consultáveis,
- * com o histórico inteiro.
+ * com o histórico inteiro — a leitura segue aberta a toda sessão.
  */
 export const customersRoutes: FastifyPluginAsync = async (app) => {
   app.get("/customers", async (request, reply) => {
@@ -114,6 +118,23 @@ export const customersRoutes: FastifyPluginAsync = async (app) => {
     action: CustomerStatusAction,
   ) {
     const { id } = request.params as { id: string };
+
+    /*
+     * O perfil é conferido ANTES do corpo e do cliente: quem não pode mudar a
+     * situação recebe 403 — nunca o 400 do motivo, nem o 404 que diria se o
+     * cliente existe. Esconder a ação na tela é conveniência; a autoridade é
+     * esta rota.
+     */
+    let actor: User;
+    try {
+      actor = requireRole(request, ...CUSTOMER_STATUS_CHANGE_ROLES);
+    } catch (error) {
+      if (error instanceof ForbiddenError) {
+        return reply.status(403).send({ error: "forbidden", message: error.message });
+      }
+      throw error;
+    }
+
     const parsed = customerStatusChangeSchema.safeParse(request.body ?? {});
     if (!parsed.success) {
       return reply
@@ -122,7 +143,7 @@ export const customersRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      await changeCustomerStatus(id, action, parsed.data.reason, requireCurrentUser(request));
+      await changeCustomerStatus(id, action, parsed.data.reason, actor);
       return reply.send(await getCustomerById(id));
     } catch (error) {
       if (error instanceof CustomerNotFoundError) {

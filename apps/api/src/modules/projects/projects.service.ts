@@ -7,7 +7,7 @@ import type {
   ProjectVocabularyResponse,
   QuoteVersionDTO,
 } from "@veridi/shared";
-import { PROJECT_CODE_PREFIX } from "@veridi/shared";
+import { PROJECT_CODE_PREFIX, situacaoCadastral } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import {
   assertPreparable,
@@ -181,6 +181,9 @@ export function toProjectDTO(project: ProjectWithRelations, includePricing = fal
     // Customer inteiro, então nada aqui custa consulta a mais.
     customerPhone: project.customer.phone,
     customerEmail: project.customer.email,
+    // A situação cadastral de AGORA (§95), dos mesmos dois fatos do cadastro —
+    // o aviso da ficha some sozinho na leitura seguinte à reativação.
+    customerStatus: situacaoCadastral(project.customer),
     name: project.name,
     concept: project.concept,
     channel: project.channel,
