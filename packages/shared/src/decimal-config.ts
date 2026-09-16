@@ -75,4 +75,23 @@ export type DecimalValue = DecimalJs.Value;
 /** A instância, para quem precisa do tipo do valor e não do construtor. */
 export type DecimalInstance = DecimalJs;
 
+/**
+ * O resultado do motor em TEXTO decimal, como o resto do sistema o troca.
+ *
+ * `toString()` cai em notação exponencial fora da faixa `toExpNeg`/`toExpPos`
+ * ("1e-8"), e nenhum formatador de tela, DTO ou documento lê isso: o número
+ * viraria travessão, ou pior, texto científico no papel. `toFixed()` sem
+ * argumento escreve todas as casas que o valor tem, sem expoente e sem
+ * arredondar — é o que a API já faz ao montar DTO e o que a tela faz ao somar
+ * a dose.
+ *
+ * Existe como função exportada porque converter Decimal em texto é
+ * conhecimento do MOTOR, não de quem desenha: um documento que chame
+ * `.toFixed()` por conta própria está a um argumento de distância de arredondar
+ * silenciosamente o que deveria só transcrever.
+ */
+export function textoDecimal(valor: DecimalInstance): string {
+  return valor.toFixed();
+}
+
 export default Decimal;

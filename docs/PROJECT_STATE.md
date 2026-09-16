@@ -89,8 +89,11 @@ estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0
   quanto precisa entrar na produção para sair 1.000 vendáveis — com 4% de perda, 1.042 un, arredondado para cima em
   unidade contável. As linhas da fórmula podem ser REORDENADAS pela tela (setas na coluna de ações, dentro da própria
   seção) — a ordem já viajava como `position` e faltava poder mudá-la —, o remover ficou vermelho e "Salvar como
-  template" usa o botão primário. **Falta a avaliação
-  visual do PO** — é dela que depende o fechamento;
+  template" usa o botão primário. Em 2026-09-15 a versão ganhou também a
+  **Ficha técnica (PDF)** (FORMULATION-TECHNICAL-SHEET-PDF-01, sem migration) —
+  documento técnico da versão, sem custo nem preço, [detalhado
+  abaixo](#ficha-técnica-do-produto--formulação-formulation-technical-sheet-pdf-01-2026-09-15).
+  **Falta a avaliação visual do PO** — é dela que depende o fechamento;
 - **Formulação — escopo da perda prevista:** FECHADO em 2026-09-15 (FORMULATION-LOSS-SCOPE-01), migration aditiva
   `20260925093030`. Decisão do PO: a perda é do PROCESSO, então recebe o fator quem é consumido proporcionalmente à
   quantidade BRUTA — matéria-prima, ingrediente e a **cápsula vazia** —, e não a embalagem comercial, que continua na
@@ -1124,6 +1127,59 @@ Findings de dado registrados, sem correção nesta capability:
 
 Três suítes E2E passaram a ler o PDF (`scripts/e2e/lib/pdf.mjs`) e ainda não
 rodaram.
+
+## Ficha Técnica do Produto — Formulação (FORMULATION-TECHNICAL-SHEET-PDF-01, 2026-09-15)
+
+A versão da formulação ganhou documento próprio: **Ficha técnica (PDF)**, ação
+no cabeçalho da bancada
+(`/producao/formulacoes/:productId/versoes/:versionId/ficha-tecnica`, fora do
+`AppShell`). Não é a tela impressa — é a MESMA fundação PDF dos outros 22
+documentos (`apps/web/src/pdf`): A4 retrato, logo, cabeçalho corrido, rodapé com
+código, versão, "Página X de Y" e carimbo de geração, cabeçalho de tabela
+repetido a cada página e linha de ingrediente que não se parte. **Zero
+migration, zero endpoint novo**: a tela carrega a versão e as unidades pela API
+autenticada e monta o arquivo no navegador.
+
+A ficha representa a VERSÃO, não o cadastro de hoje. Forma, apresentação,
+cápsulas por dose, dose, conteúdo, perda prevista, pureza aplicada, reserva,
+base e fornecimento são os snapshots da versão; alvo e física por dose, por
+cápsula e por embalagem vêm calculados do DTO, e o que o papel ainda soma —
+massa da dose, cápsulas por embalagem, rendimento — sai dos helpers canônicos de
+`@veridi/shared`. **Nenhuma conta nasce no documento.** A pureza impressa é
+sempre a da versão; quando o cadastro do Item mudou desde então, o valor de hoje
+sai como nota ao lado ("hoje 88,7%"), nunca no lugar.
+
+O read model (`pdf/documents/technical-sheet-model.ts`) é NEUTRO: converte uma
+fonte na estrutura que o documento desenha. O Modelo de Formulação ganha a sua
+ficha com um adaptador novo, sem copiar o documento
+(FORMULATION-TEMPLATE-WORKBENCH-01). **Modelos não foram tocados nesta rodada.**
+
+Decisões de conteúdo:
+- **Rascunho** gera ficha, com a marca RASCUNHO no cabeçalho e uma frase
+  dizendo que a receita ainda pode mudar; versão ativa mostra "Status: Ativa",
+  sem marca.
+- **Por forma**: cápsula mostra cápsulas por dose, por embalagem e a coluna
+  "Por cápsula"; pó mostra dose, conteúdo da embalagem e nenhuma delas.
+- **Composição**: código, ingrediente, fonte/função, pureza (%), alvo por dose,
+  física por dose, [por cápsula], unidade, reserva (%) e por embalagem na
+  unidade de ESTOQUE. **Embalagem**: código, item, quantidade, unidade e por
+  embalagem — sem pureza e sem reserva.
+- **Nada de economia**: custo, CMV, R$/kg, preço, margem, markup, frete, valor
+  de fornecedor e preço de venda não entram, e há teste que varre o papel
+  inteiro atrás dessas palavras. Pela mesma razão as **observações da versão
+  não vão ao papel**: é texto livre da bancada, e no dado real ele cita a
+  planilha de CMV e a palavra "overage". Elas seguem inteiras na tela.
+- **Propriedade do material** (Veridi/Cliente) aparece na linha só quando é do
+  cliente, com essa palavra — nunca nome nem condição de fornecedor.
+- Faixa etária, lote mínimo e caixa de embarque saem sob o subtítulo "Do
+  cadastro do produto": não são snapshot da versão, e o papel diz isso.
+- Nome do arquivo: `ficha-tecnica-PROD-000174-v1.pdf`, do código e da versão —
+  nunca do nome do Produto.
+
+Validado com as duas formulações de referência do `veridi_dev`: **PROD-000174**
+(Ácido Fólico, cápsula, 7 matérias-primas e 6 embalagens) e **PROD-000175**
+(Beef Protein, pó, 8 matérias-primas e 5 embalagens), pelo navegador e pelo
+arquivo real. Absorve FORMULATION-PRINT-ADJUSTMENTS-01 no que toca à Formulação.
 
 ## Perfis de Produção — primeira fundação do Planejamento (PLANNING-PRODUCTION-PROFILE-01, 2026-09-11)
 

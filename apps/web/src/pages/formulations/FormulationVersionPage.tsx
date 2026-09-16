@@ -2605,6 +2605,23 @@ export function FormulationVersionPage() {
         </div>
         <div className="table__actions">
           <ProjectOriginLink productId={productId} />
+          {/*
+            A FICHA TÉCNICA da versão, em PDF — documento técnico da receita,
+            sem custo nem preço. Fica junto das ações da versão porque é dela
+            que o papel fala: cada versão tem a sua ficha, e a de um rascunho
+            sai marcada como rascunho.
+          */}
+          <button
+            type="button"
+            className="btn btn--secondary"
+            onClick={() =>
+              navigate(
+                `/producao/formulacoes/${productId}/versoes/${version.id}/ficha-tecnica`,
+              )
+            }
+          >
+            Ficha técnica (PDF)
+          </button>
           <Link
             className="btn btn--ghost"
             to={`/producao/formulacoes/${productId}`}

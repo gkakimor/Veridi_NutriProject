@@ -10,7 +10,13 @@ import { FUSO_COMERCIAL, formatCnpj } from "@veridi/shared";
 export { formatBRL, formatUnitPriceBRL } from "../lib/currency";
 export { formatQuantity, formatQuantityWithUnit } from "../lib/quantity";
 export { formatPercent } from "../lib/percent";
-export { formatIntegerPtBr } from "../lib/numeric-ptbr";
+export { formatIntegerPtBr, formatPercentPtBr } from "../lib/numeric-ptbr";
+/*
+ * Pureza e reserva de matéria-prima são `DECIMAL(9,6)`: na ficha técnica o
+ * papel mostra as mesmas casas que a Formulação mostra na tela — `formatPercent`
+ * corta em duas e transformaria 0,000125% em 0%.
+ */
+export { OPCOES_PERCENTUAL_TECNICO } from "../lib/numeric-scales";
 export { formatDate } from "../lib/dates";
 export { emDias } from "../lib/duration";
 export { formatCnpj };

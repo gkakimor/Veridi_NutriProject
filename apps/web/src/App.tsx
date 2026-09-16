@@ -52,6 +52,7 @@ import {
   QuotePricingAuditReportPage,
 } from "./pages/reports/CostReports";
 import { CostCalculationPrintPage } from "./pages/print/CostCalculationPrintPage";
+import { TechnicalSheetPrintPage } from "./pages/print/TechnicalSheetPrintPage";
 import { ProductionCostPrintPage } from "./pages/print/ProductionCostPrintPage";
 import { IndustrialResourceDetailPage } from "./pages/industrial-resources/IndustrialResourceDetailPage";
 import { IndustrialResourcesPage } from "./pages/industrial-resources/IndustrialResourcesPage";
@@ -179,6 +180,11 @@ const router = createBrowserRouter(
       <Route path="/print/relatorios/R-14" element={<OrderOperationPrintPage />} />
       <Route path="/print/relatorios/:reportCode" element={<ReportPrintPage />} />
       <Route path="/print/estrutura-custos/:id" element={<IndustrialCostPrintPage />} />
+      {/* Ficha técnica da versão da formulação — documento técnico, sem custo. */}
+      <Route
+        path="/producao/formulacoes/:productId/versoes/:versionId/ficha-tecnica"
+        element={<TechnicalSheetPrintPage />}
+      />
       <Route path="/print/calculo-custo/:id" element={<CostCalculationPrintPage />} />
       <Route path="/print/cmv/:productId" element={<CmvPrintPage />} />
       <Route path="/print/custo-producao/:id" element={<ProductionCostPrintPage />} />
