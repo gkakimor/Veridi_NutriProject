@@ -6,6 +6,7 @@ import type {
   FormulationTemplateUpdateAvailableDTO,
   FormulationVersionDTO,
 } from "@veridi/shared";
+import { capsulasPorEmbalagem } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { CASAS_QUANTIDADE } from "../../lib/decimal-schema.js";
 import { convertUomDecimal, isUomCompatible } from "../items/uom.js";
@@ -168,6 +169,32 @@ export async function applyTemplateToProduct(
       basisQuantity,
       calculationMode: template.calculationMode,
       dosesPerPackage: template.dosesPerPackage,
+      /*
+       * PREMISSAS TECNICAS — copiadas como SNAPSHOT/DEFAULT
+       * (FORMULATION-TEMPLATE-WORKBENCH-01).
+       *
+       * Sao a intencao tecnica da matriz: sem elas, a Formulacao nascia com as
+       * quantidades certas e a leitura em branco — linha por dose sem forma nao
+       * tem como ser lida por dose. Copia, nunca vinculo: dai em diante a
+       * Formulacao DRAFT edita o que quiser, e o Modelo pode ganhar V4 sem
+       * tocar no que ja nasceu.
+       *
+       * Premissa nula do Modelo entra nula: `null` e NAO INFORMADA, e inventar
+       * forma na copia seria decidir pelo usuario o que ele nao declarou.
+       */
+      dosageForm: template.dosageForm,
+      presentationType: template.presentationType,
+      capsulesPerDose: template.capsulesPerDose,
+      doseAmount: template.doseAmount,
+      doseUomCode: template.doseUomCode,
+      packageContentAmount: template.packageContentAmount,
+      packageContentUomCode: template.packageContentUomCode,
+      /*
+       * A perda prevista tambem e DEFAULT: a Formulacao DRAFT pode altera-la, e
+       * dai em diante ela e da versao. Continua interna — nao altera quantidade
+       * comercial nenhuma.
+       */
+      expectedLossPercent: template.expectedLossPercent,
       notes: template.notes,
       // PROVENIÊNCIA — código e número gravados junto para o rótulo
       // sobreviver mesmo se o template sumir depois.
@@ -359,8 +386,39 @@ export async function createTemplateFromFormulation(
   );
 
   const rascunho = template.draftVersion;
-  if (rascunho && version.components.length > 0) {
+  if (rascunho) {
+    /*
+     * PREMISSAS TECNICAS — vao junto (FORMULATION-TEMPLATE-WORKBENCH-01).
+     *
+     * A matriz que nascesse sem forma perdia a leitura da receita: "500 mg por
+     * dose" sem saber se a dose sao duas capsulas ou cinco gramas nao se
+     * reproduz em produto nenhum. Passam pela MESMA gravacao do Modelo, que
+     * deriva as doses por embalagem das premissas — e recusa divisao que nao
+     * fecha, em vez de gravar a matriz pela metade.
+     *
+     * `capsulesPerPackage` e ENTRADA: sai do produto de capsulas por dose e
+     * doses por embalagem da Formulacao, os mesmos numeros que a originaram.
+     *
+     * Nada comercial vem junto: Produto, Cliente, Projeto, Orcamento, custo,
+     * preco, Pedido e faturamento ficam onde estao.
+     */
+    const premissas = {
+      dosageForm: version.dosageForm,
+      presentationType: version.presentationType,
+      capsulesPerDose: version.capsulesPerDose,
+      capsulesPerPackage: capsulasPorEmbalagem(version.capsulesPerDose, version.dosesPerPackage),
+      doseAmount: version.doseAmount ? version.doseAmount.toString() : null,
+      doseUomCode: version.doseUomCode,
+      packageContentAmount: version.packageContentAmount
+        ? version.packageContentAmount.toString()
+        : null,
+      packageContentUomCode: version.packageContentUomCode,
+      expectedLossPercent: version.expectedLossPercent
+        ? version.expectedLossPercent.toString()
+        : null,
+    };
     await updateFormulationTemplateVersion(rascunho.id, {
+      ...premissas,
       notes: version.notes,
       components: version.components.map((component) => ({
         itemId: component.itemId,

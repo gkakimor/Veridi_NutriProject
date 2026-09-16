@@ -16,6 +16,7 @@ import type {
   ItemType,
   PackagingSubtype,
   PresentationType,
+  SecaoDaFormula,
   SupplyResponsibility,
   UnitOfMeasureDTO,
 } from "@veridi/shared";
@@ -31,6 +32,7 @@ import {
   SUPPLY_RESPONSIBILITY_LABELS,
   DOSAGE_FORM_LABELS,
   FORMAS_DA_BANCADA,
+  SECAO_DO_TIPO_DE_ITEM,
   ITEM_FAMILY_LABELS,
   MENSAGENS_DA_APRESENTACAO,
   PACKAGING_SUBTYPE_LABELS,
@@ -104,15 +106,14 @@ import { TableEmptyRow } from "../../components/TableEmptyRow";
  * cadastro: "Cápsula" é matéria-prima num produto e embalagem em outro, e quem
  * responde isso é o tipo, não o nome.
  */
-type SecaoDaFormula = "COMPOSICAO" | "EMBALAGEM";
-
-const SECAO_DO_TIPO: Record<ItemType, SecaoDaFormula> = {
-  RAW_MATERIAL: "COMPOSICAO",
-  PACKAGING: "EMBALAGEM",
-  // Produto acabado não é componente válido; fica visível na composição, onde
-  // `componentIssues` explica por que a versão não ativa.
-  FINISHED_PRODUCT: "COMPOSICAO",
-};
+/*
+ * A tabela mora no shared (FORMULATION-TEMPLATE-WORKBENCH-01): a Formulação e o
+ * Modelo mostram a MESMA divisão, e duas cópias divergiriam no primeiro tipo de
+ * Item reclassificado. O mapa é idêntico ao que estava aqui — produto acabado
+ * segue visível na composição, onde `componentIssues` explica por que a versão
+ * não ativa.
+ */
+const SECAO_DO_TIPO = SECAO_DO_TIPO_DE_ITEM;
 
 interface ItemOption {
   id: string;

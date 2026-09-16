@@ -20,7 +20,7 @@ zero BLOCKER. O MVP foi entregue; o que está aqui é evolução do produto.
 |---|---|---|---|---|---|
 | 1 | P0 | **FORMULATION-WORKBENCH-01** — Formulação como bancada interativa (forma × apresentação, física por dose e por cápsula, composição × embalagem) | **EM HOMOLOGAÇÃO** · motor e migration aditiva `20260925093028` entregues em 2026-09-15 · ajustes de UX da homologação entregues em 2026-09-15 (pureza e reserva de produção como colunas, painel de ajustes fora da Formulação, forma restrita a Pó/Cápsula, resumo de premissas no topo) · refinamento final de UX entregue em 2026-09-15 (rótulos Pureza (%) e Reserva de matéria-prima (%), premissa global Perda prevista de produção (%) com Rendimento esperado derivado, quantidade bruta no custo estimado interno sem tocar quantidade comercial, grade modernizada, Apresentação comercial condicionada à Forma, explicações em ⓘ) · migration aditiva `20260925093029` | Avaliação visual do PO nos dois produtos de homologação do `veridi_dev`; o fechamento depende de aprovação explícita | — |
 | 1b | P1 | ~~**FORMULATION-TECHNICAL-SHEET-PDF-01**~~ — Ficha Técnica do Produto (Formulação) em PDF real | **FECHADO em 2026-09-15** · ação "Ficha técnica (PDF)" no cabeçalho da versão, documento sobre a fundação `apps/web/src/pdf`, read model neutro reaproveitável pelo Modelo · **sem migration** · absorve FORMULATION-PRINT-ADJUSTMENTS-01 no que toca à Formulação | — (detalhe em [`PROJECT_STATE.md`](PROJECT_STATE.md)) | — |
-| 2 | P0 | **FORMULATION-TEMPLATE-WORKBENCH-01** — levar a bancada para o Modelo de Formulação (catálogo, aplicação e promoção de Formulação para Modelo) | **PRÓXIMA ETAPA, NÃO INICIADA** · a Formulação e o Modelo compartilham a configuração de ajustes, e só a Formulação saiu do painel | Começar DEPOIS da aprovação do PO em (1) | FORMULATION-WORKBENCH-01 homologado |
+| 2 | P0 | **FORMULATION-TEMPLATE-WORKBENCH-01** — levar a bancada para o Modelo de Formulação (catálogo, aplicação e promoção de Formulação para Modelo) | **FATIA 1 ENTREGUE em 2026-09-16** (`FATIA_1_READY = YES`, capability NÃO fechada) · o Modelo guarda, valida e versiona as MESMAS premissas técnicas da Formulação — forma, apresentação, cápsulas por dose, dose e conteúdo, perda prevista —, deriva as doses por embalagem pela MESMA função (`apps/api/src/lib/formulation-premises.ts`), copia as premissas nos dois sentidos (Formulação → Modelo e Modelo → Formulação, sempre snapshot) e traz a pureza do cadastro do Item como ponto de partida da linha · migration aditiva `20260925093031_formulation_template_version_premises` · UI mínima: a bancada visual compartilhada NÃO foi feita | **Fatia 2** — bancada visual compartilhada (cirurgia W1..W8 em `FormulationVersionPage.tsx`); depois **Fatia 3** — aplicar/salvar, pré-check de itens problemáticos, diff e acabamento | FORMULATION-WORKBENCH-01 homologado |
 | 3 | P1 | ~~**BILLED-VALUE-CANONICAL-01**~~ — "Valor faturado" do Painel, R-15 e R-14 igual ao valor do documento | **FECHADO em 2026-09-15** · D1 decidida pelo PO: `Billing.totalAmount` · sem migration | — (entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
 | 4 | P1 | **E2E-BASELINE-REDESIGN-WAVE-04** — grupo C das E2E com massa própria | Discovery `EM_ANALISE`; P1 e a espera da 4E resolvidas pelo estado posterior | PO fecha P2–P8 ([abaixo](#wave-4--decisões-ainda-reais)); 4A pode começar | — |
 | 5 | P1 | **INVENTORY-PHYSICAL-COUNT-01** — Inventário Físico em sessões de inventário | Discovery `DECIDIDO` · **Fatia 1 (domínio e API) entregue em 2026-09-15** | Fatia 2 — telas (home, novo inventário com preview, grade, revisão, encerramento, Contagem rápida renomeada); depois Fatia 3 — FO-01 de sessão e CSV ([discovery](discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md)) | — |
@@ -192,7 +192,8 @@ mudou.
 | **QUOTE-SUGGESTION-390-01** | Em 390px a frase "Existe uma precificação vigente…" da linha do Orçamento fica cortada dentro da tabela rolável (já cortava o preço; a explicação de F-05-1 alonga a frase). Conferido no código em 2026-09-15: a frase segue em `QuoteWorkspace.tsx` | UX | — |
 | **LISTS-CUSTOM-PERIOD-PAGE-RESET-01** | "Personalizado" clicado fora da página 1 (Faturamento, Recebimentos, OC, Produto Acabado) volta para a página 1 do MESMO recorte e consulta uma vez: semear grava `period`/datas na URL, e `useListFilters.set` sempre volta à página 1. Existe desde FILTER-FOUNDATION-01. Decidir se abrir o Personalizado é trocar filtro | UX | — |
 | ~~**FORMULATION-PRINT-ADJUSTMENTS-01**~~ | **ABSORVIDO por FORMULATION-TECHNICAL-SHEET-PDF-01 (2026-09-15).** O achado era que nenhum impresso lia a pureza, a reserva (o antigo *overage*) nem o físico por unidade da Formulação. A Ficha Técnica do Produto lê os três direto da VERSÃO — pureza aplicada com nota quando o cadastro divergiu desde então, reserva por linha e "Por embalagem" na unidade de estoque — e diz "não aplicada" quando a versão histórica registrou pureza sem autorizar a correção, que é o que o modo da quantidade significa no papel. Fora da Formulação (Folha de Receita, OP, CMV, Cálculo) o achado do PDF-DOCUMENT-SYSTEM-01 segue como está: aqueles DTOs não trazem os ajustes, e levá-los é decisão de outro item | UX | — |
-| **FORMULATION-TEMPLATE-BASIS-EDIT-01** | A tela do Modelo de Formulação preserva a base de cada componente ao salvar, mas não oferece seletor para mudá-la | UX | — |
+| ~~**FORMULATION-TEMPLATE-BASIS-EDIT-01**~~ | **ABSORVIDO por FORMULATION-TEMPLATE-WORKBENCH-01 (2026-09-16).** O achado era a falta de seletor de base na linha do Modelo. A base deixou de ser um campo genérico a oferecer: ela é consequência da SEÇÃO — embalagem conta por unidade acabada, composição conta por dose quando a receita é por dose (`baseSugeridaDaSecao`, `packages/shared`) —, e a fatia 1 já a sugere na linha nova pelo tipo real do Item. A linha que já declarou base não é tocada, e `FIXED_BASIS` continua existindo: matriz histórica escrita sobre a base continua sobre a base. O acabamento visual das duas seções é da fatia 2 | UX | — |
+| **UI-NUMERIC-FIELD-STANDARD-01** | Aplicar ao sistema inteiro o padrão de campo numérico homologado na Formulação: caixa compacta, borda única, canto arredondado, número à direita, pt-BR, setas de incremento/decremento respeitando a última casa escrita e limites conforme o domínio. Pedido do PO em 2026-09-16, registrado sem implementar: é varredura de tela por tela, e entra na estabilização final (10) ou numa rodada própria | UX | — |
 | **NAV-TWO-SEARCHES-01** | Convivem "Buscar ou escanear lote" no topo e "Buscar telas…" na coluna; unificar é assunto da busca global de registros. Conferido no código em 2026-09-15: as duas seguem | UX | — |
 | **NAV-TEMPLATE-WORDING-01** | As telas se chamam Modelos de Formulação e Modelos de Estrutura de Custo, mas botões, campos e diálogos seguem dizendo "template" ("Novo template", "Usar template", "Nome do template"). Trocar a palavra da entidade é decisão do PO. Conferido no código em 2026-09-15: segue | UX | — |
 
@@ -314,6 +315,40 @@ cadastrados nascem `false`, que é o comportamento anterior. Marcá-los é gesto
 quem cadastra, no formulário do Item — nenhum backfill por nome ou código foi
 feito, e nenhum será: uma regra de custo decidida por `nome.includes("CAPS")` é
 invisível para quem confere o custo.
+
+### FORMULATION-TEMPLATE-WORKBENCH-01 — decisões do PO, e o que sobrou para as fatias 2 e 3
+
+Decididas em 2026-09-16, sobre `FORMULATION-TEMPLATE-WORKBENCH-DISCOVERY-01`, e já **em vigor** na fatia 1:
+
+- **D-1 · forma é premissa técnica da receita.** O Modelo guarda `dosageForm` e o que cada forma usa: cápsulas
+  por dose na cápsula; dose e conteúdo da embalagem no pó. Nenhum enum novo.
+- **D-2 · apresentação comercial é DEFAULT, não vínculo.** O Modelo pode guardar `presentationType`, conteúdo e
+  unidade; a Formulação nasce com eles e segue editável enquanto rascunho. Mudar o Modelo depois não alcança
+  formulação nenhuma.
+- **D-3 · composição e embalagem, sem schema novo.** A seção sai do TIPO REAL do Item
+  (`SECAO_DO_TIPO_DE_ITEM`, `packages/shared`): matéria-prima é composição, embalagem é embalagem. O Modelo
+  continua usando Item REAL — nenhuma categoria genérica, nenhum placeholder, nenhum `PackagingSpec`.
+- **D-4 · perda prevista no Modelo.** `expectedLossPercent Decimal(9,6)?`, `null` = NÃO INFORMADA (nunca 0%
+  presumido), copiada como default ao aplicar. Continua interna: nunca altera quantidade comercial.
+- **D-5 · pureza padrão do Item, congelada na versão.** Escolher a matéria-prima traz
+  `Item.defaultPurityPercent` como ponto de partida da linha; salvar congela o valor; aplicar copia o que a
+  matriz declarou. A aplicação **não** relê o cadastro do Item — Modelo precisa ser reproduzível.
+- **D-8 · vocabulário.** Na tela, MODELO e MODELO DE FORMULAÇÃO. Classes, tabelas e rotas continuam
+  `Template` — nenhum rename estrutural foi feito (o achado de palavra na UI segue em NAV-TEMPLATE-WORDING-01).
+- **D-9 · reserva.** A experiência alvo do Modelo é a mesma da Formulação, com Reserva (%) como coluna.
+  `overagePercent` continua interno. O painel antigo "O que a quantidade informada significa" não volta.
+
+**Aprovado conceitualmente, ainda NÃO implementado:**
+
+- **D-6 · itens problemáticos ao aplicar** (item inativo, produto acabado, unidade incompatível): avisar antes
+  de aplicar e ainda assim permitir gerar rascunho para correção, com a ativação continuando fail-closed. O
+  pré-check e o diálogo são da **fatia 3**; hoje a recusa continua aparecendo na ativação, como sempre foi.
+
+**O que a fatia 1 deliberadamente NÃO fez:** a cirurgia visual em `FormulationVersionPage.tsx` (tabela
+compartilhada, W1..W8) — é a **fatia 2**, e a Formulação está em homologação final com o comportamento visual
+preservado *integralmente*. O Modelo também não ganhou custo, preço, margem, markup, fornecedor com preço nem
+PDF próprio: a matriz guarda premissa técnica, e a Ficha Técnica do Modelo fica para depois, sobre o mesmo read
+model.
 
 ### FORMULATION-PRESENTATION-BY-FORM-01 — a tabela Forma × Apresentação — aguardando o PO
 

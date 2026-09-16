@@ -78,6 +78,13 @@ function componente(de: ItemDTO, unitCode: string, quantity = "1"): FormulationT
     itemName: de.name,
     itemType: "RAW_MATERIAL",
     itemActive: true,
+    stockUnitCode: "kg",
+    itemSourceName: null,
+    itemDeclaredNutrient: null,
+    itemFamily: null,
+    itemPackagingSubtype: null,
+    itemDefaultPurityPercent: null,
+    itemExternalCode: null,
     quantity,
     unitCode,
     basis: "FIXED_BASIS",
@@ -101,6 +108,15 @@ function comRascunho(componentes: FormulationTemplateComponentDTO[] = []): Formu
     basisQuantity: "1",
     calculationMode: "FIXED_BASIS",
     dosesPerPackage: null,
+    dosageForm: null,
+    presentationType: null,
+    capsulesPerDose: null,
+    capsulesPerPackage: null,
+    doseAmount: null,
+    doseUomCode: null,
+    packageContentAmount: null,
+    packageContentUomCode: null,
+    expectedLossPercent: null,
     outputUnitCode: "un",
     notes: null,
     components: componentes,
@@ -163,8 +179,18 @@ async function escolherItem(linha: number, termo: string, nome: RegExp) {
   if (!campo) throw new Error(`linha ${linha} sem campo de Item`);
   fireEvent.focus(campo);
   fireEvent.change(campo, { target: { value: termo } });
-  // A lista local e o resultado da busca no servidor podem trazer o mesmo Item.
-  const [opcao] = await screen.findAllByRole("option", { name: nome });
+  /*
+   * A opção sai da LISTA DESTE campo, não da tela.
+   *
+   * A página tem outros `option` — o seletor de forma oferece "Cápsula" e "Pó",
+   * que são nomes de Item plausíveis —, e procurar na tela inteira pegava o
+   * primeiro do documento, que não é o do componente.
+   *
+   * A lista local e o resultado da busca no servidor podem trazer o mesmo Item.
+   */
+  const lista = document.getElementById(campo.getAttribute("aria-controls") ?? "");
+  if (!lista) throw new Error(`campo de Item da linha ${linha} sem lista aberta`);
+  const [opcao] = await within(lista).findAllByRole("option", { name: nome });
   if (!opcao) throw new Error(`sem opção para ${termo}`);
   fireEvent.mouseDown(opcao);
 }

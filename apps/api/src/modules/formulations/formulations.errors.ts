@@ -103,15 +103,13 @@ export class IncompatibleComponentUnitError extends Error {
  * seria pior que recusar — mudaria em silêncio o material de toda linha por
  * dose.
  */
-export class InvalidFormulationPresentationError extends Error {
-  constructor(
-    readonly path: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = "InvalidFormulationPresentationError";
-  }
-}
+/*
+ * A recusa de premissa nasce em `lib/formulation-premises`, onde a derivacao
+ * mora: Formulacao e Modelo recusam pelo MESMO motivo e com a MESMA classe, e
+ * um `instanceof` que dependesse de qual modulo importou a classe deixaria uma
+ * das duas rotas devolvendo 500.
+ */
+export { InvalidFormulationPresentationError } from "../../lib/formulation-premises.js";
 
 /** Motivo já vem pronto em português — reúne todas as falhas do gate de ativação (seção 16). */
 export class FormulationActivationError extends Error {

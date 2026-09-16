@@ -2008,6 +2008,8 @@ model UnitOfMeasure {
   productionProfileBases     ProductionProfileVersion[]      @relation("ProductionProfileReferenceUom")
   formulationVersionDoses    FormulationVersion[]            @relation("FormulationVersionDoseUom")
   formulationVersionContents FormulationVersion[]            @relation("FormulationVersionPackageContentUom")
+  templateVersionDoses       FormulationTemplateVersion[]    @relation("FormulationTemplateVersionDoseUom")
+  templateVersionContents    FormulationTemplateVersion[]    @relation("FormulationTemplateVersionPackageContentUom")
 
   @@map("units_of_measure")
 }
@@ -4485,6 +4487,40 @@ model FormulationTemplateVersion {
   /// Unidade do produto acabado a que a base se refere ("un", "kg").
   outputUnitCode  String
   outputUnit      UnitOfMeasure              @relation("FormulationTemplateOutputUom", fields: [outputUnitCode], references: [code])
+
+  /// PREMISSAS TECNICAS DA RECEITA — as MESMAS da FormulationVersion
+  /// (FORMULATION-TEMPLATE-WORKBENCH-01, fatia 1).
+  ///
+  /// A matriz guarda a INTENCAO tecnica, e forma e premissa tecnica: "1 capsula
+  /// por dose" e "5 g por dose" mudam o que cada linha por dose significa. Sem
+  /// elas, aplicar o Modelo entregava as quantidades sem a premissa que as
+  /// interpreta, e a Formulacao nascia com a receita certa e a leitura em branco.
+  ///
+  /// Nulas em todo Modelo gravado antes desta bancada: `null` e NAO INFORMADA,
+  /// nunca po nem capsula presumidos.
+  dosageForm       DosageForm?
+  presentationType PresentationType?
+
+  /// Capsulas por dose (forma CAPSULE). Capsulas por embalagem nao e coluna aqui
+  /// tambem: e capsulesPerDose x dosesPerPackage, exatamente como na Formulacao.
+  capsulesPerDose Int?
+
+  /// Dose e conteudo da embalagem (forma POWDER), em unidade de massa.
+  /// dosesPerPackage = conteudo / dose, inteiro, ou a gravacao e recusada.
+  doseAmount            Decimal?       @db.Decimal(24, 12)
+  doseUomCode           String?
+  doseUom               UnitOfMeasure? @relation("FormulationTemplateVersionDoseUom", fields: [doseUomCode], references: [code], onDelete: Restrict)
+  packageContentAmount  Decimal?       @db.Decimal(24, 12)
+  packageContentUomCode String?
+  packageContentUom     UnitOfMeasure? @relation("FormulationTemplateVersionPackageContentUom", fields: [packageContentUomCode], references: [code], onDelete: Restrict)
+
+  /// PERDA PREVISTA DE PRODUCAO (%) — premissa da versao do Modelo, copiada
+  /// como DEFAULT para a Formulacao que nascer dele.
+  ///
+  /// `null` = NAO INFORMADA, e nao zero: Modelo gravado antes desta coluna nao
+  /// declarou premissa nenhuma, e inventar 0% silencioso seria reescrever
+  /// historia. Quem calcula trata ausencia como "sem correcao".
+  expectedLossPercent Decimal? @db.Decimal(9, 6)
 
   notes String?
 
