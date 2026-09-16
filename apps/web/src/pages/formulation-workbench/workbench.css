@@ -295,6 +295,24 @@
   box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--v-green-700);
 }
 
+/*
+ * BASE E FORNECIMENTO, UM SOBRE O OUTRO.
+ *
+ * Na receita por base fixa a célula "Base · Fornecimento" recebe DOIS
+ * seletores, e cada um tem `width: 100%` da coluna. `.table td` declara
+ * `white-space: nowrap`, então os dois ficavam na mesma linha: o de
+ * Fornecimento saía ~90px para fora da célula e era pintado por baixo do campo
+ * da Reserva — a coluna parecia sobrescrita, e o seletor não recebia clique.
+ * Dividir em duas colunas dentro dos mesmos 100px deixaria ~50px para cada
+ * seletor. O segundo desce para a linha de baixo: a coluna mantém a largura
+ * declarada, nenhuma outra coluna muda, e com um seletor só (Por dose) nada
+ * muda na célula.
+ */
+.table--formulacao .col-regras__campos select + select {
+  display: block;
+  margin-top: var(--sp-1);
+}
+
 /* Percentual é número: alinha à direita, como as colunas de resultado ao lado. */
 .table--formulacao .col-pureza input[type="text"],
 .table--formulacao .col-reserva input[type="text"] {
