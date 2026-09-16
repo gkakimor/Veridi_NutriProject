@@ -13,27 +13,32 @@ import {
   textoDecimal,
 } from "@veridi/shared";
 import type {
-  DosageForm,
   FormulationComponentDTO,
   FormulationVersionDTO,
   UnitOfMeasureDTO,
 } from "@veridi/shared";
+import { formatIntegerPtBr, formatPdfDateTime, formatQuantityWithUnit } from "../format";
 
 /**
- * O READ MODEL da Ficha Técnica do Produto — Formulação.
+ * O READ MODEL da Ficha Técnica — neutro de propósito.
  *
- * O documento não conhece `FormulationVersionDTO`: conhece esta estrutura, que
- * já é a ficha pronta para desenhar — rótulos resolvidos, linhas separadas por
- * seção, grandezas na forma em que o papel as escreve. Quem produz a estrutura
- * é o adaptador da fonte (`fichaTecnicaDaVersao`); o Modelo de Formulação, que
- * é outra entidade com as mesmas perguntas técnicas, ganha o seu adaptador sem
- * copiar uma linha do documento (FORMULATION-TEMPLATE-WORKBENCH-01).
+ * O documento (`TechnicalSheetPdf`) não conhece `FormulationVersionDTO` nem
+ * `FormulationTemplateVersionDTO`: conhece esta estrutura, que já é a ficha
+ * pronta para desenhar. Ela tem duas partes.
+ *
+ * - A MOLDURA diz o que o papel é: título, cabeçalho, rodapé, identificação,
+ *   avisos e nome do arquivo. Quem decide é o adaptador da fonte — a ficha do
+ *   Produto (`fichaTecnicaDaVersao`, aqui) e a do Modelo de Formulação
+ *   (`fichaTecnicaDoModelo`, em `technical-sheet-template-model.ts`). O
+ *   documento não escreve "produto" nem "modelo" por conta própria.
+ * - O CORPO TÉCNICO é o mesmo nas duas: forma e apresentação, premissas de
+ *   produção, composição, embalagem e resumo da dose (`corpoTecnico`).
  *
  * NENHUMA CONTA NASCE AQUI. Alvo, física por dose, por cápsula e por embalagem
- * vêm calculados pelo motor canônico no DTO; o que a ficha ainda soma — massa
- * da dose, cápsulas por embalagem, rendimento — sai dos MESMOS helpers de
- * `@veridi/shared` que a tela e a API usam. O PDF não é uma segunda autoridade
- * matemática.
+ * vêm do motor canônico de `@veridi/shared` — no DTO da Formulação, calculados
+ * pela API; no Modelo, pelas mesmas funções que a bancada e a API chamam. O
+ * que a ficha ainda soma — massa da dose, cápsulas por embalagem, rendimento —
+ * sai dos MESMOS helpers. O PDF não é uma segunda autoridade matemática.
  *
  * E nenhum custo entra: ficha técnica é técnica. Preço, CMV, margem e
  * fornecedor comercial têm os seus próprios documentos.
@@ -81,17 +86,64 @@ export interface FichaTecnicaGrandeza {
   unidade: string | null;
 }
 
+/** Um campo rotulado que a FONTE decide — já escrito como o papel o mostra. */
+export interface CampoDaFicha {
+  rotulo: string;
+  /** `null` é dado ausente: sai "—", ou some do papel quando `opcional`. */
+  valor: string | null;
+  /** Largura em colunas de 12. */
+  largura: number;
+  opcional?: boolean;
+}
+
+/** Uma frase no topo da folha: rascunho, versão histórica, modelo fora da biblioteca. */
+export interface AvisoDaFicha {
+  destaque: string;
+  texto: string;
+}
+
+/**
+ * O que o papel É — decidido por quem adapta a fonte.
+ *
+ * Folha solta circula: o título, a primeira linha do cabeçalho e o rodapé têm
+ * de dizer, sem ambiguidade, de que entidade a ficha fala.
+ */
+export interface MolduraDaFicha {
+  titulo: string;
+  /** Código que nomeia a fonte: "PROD-000174", "FT-000001". */
+  codigo: string;
+  /** Linhas curtas do cabeçalho, antes do carimbo da geração. */
+  linhasDoCabecalho: string[];
+  /** Natureza do documento, no rodapé de toda folha. */
+  rodape: string;
+  /** Prefixo do arquivo baixado: "ficha-tecnica", "ficha-tecnica-modelo". */
+  prefixoDoArquivo: string;
+  avisos: AvisoDaFicha[];
+  identificacao: CampoDaFicha[];
+  /** Campos só da fonte que fecham "Forma e apresentação" (faixa etária do Produto). */
+  apresentacaoExtra: CampoDaFicha[];
+  /** O que NÃO é snapshot da versão, sob um subtítulo que diz de onde vem. */
+  foraDaVersao: { titulo: string; campos: CampoDaFicha[] } | null;
+}
+
+/**
+ * Quais campos da forma o papel mostra.
+ *
+ * - `capsula`: cápsulas por dose e por embalagem, e a coluna "Por cápsula";
+ * - `po`: dose e conteúdo da embalagem. É também o que a ficha do Produto
+ *   mostra quando a versão não registrou forma — é o papel homologado;
+ * - `omitida`: a forma não foi informada, e nada que dependa dela sai.
+ */
+export type CamposDaForma = "capsula" | "po" | "omitida";
+
 export interface FichaTecnica {
-  produtoCodigo: string;
-  produtoNome: string;
+  moldura: MolduraDaFicha;
   versaoLabel: string;
   versaoNumero: number;
   statusLabel: string;
   isDraft: boolean;
-  /** Item de saída da versão — snapshot, nunca a associação atual do Produto. */
-  itemDeSaida: string;
-  unidadeDeSaida: string;
 
+  camposDaForma: CamposDaForma;
   formaLabel: string | null;
   apresentacaoLabel: string | null;
   /** `true` só na forma cápsula: é o que liga as colunas e campos por cápsula. */
@@ -106,16 +158,6 @@ export interface FichaTecnica {
   perdaPrevistaPercent: string | null;
   rendimentoEsperadoPercent: string | null;
 
-  /*
-   * DO CADASTRO DO PRODUTO, não da versão — e o papel diz isso onde as
-   * escreve. Elas não são snapshot: mudar o cadastro do Produto muda o que
-   * uma ficha gerada amanhã vai mostrar, e afirmá-las ao lado das premissas
-   * congeladas, sem distinção, faria o documento prometer o que não cumpre.
-   */
-  faixaEtaria: string | null;
-  loteMinimo: FichaTecnicaGrandeza | null;
-  unidadesPorCaixaDeEmbarque: number | null;
-
   composicao: FichaTecnicaLinha[];
   embalagem: FichaTecnicaLinha[];
 
@@ -125,19 +167,70 @@ export interface FichaTecnica {
   massaPorCapsula: string | null;
   /** Linhas por dose que ficaram fora da soma — unidade que não é massa. */
   linhasForaDaSoma: number;
-
-  criadaEm: string;
-  ativadaEm: string | null;
-  inativadaEm: string | null;
-  /** Origem: versão ou modelo que serviu de molde. */
-  origem: string | null;
 }
+
+/** O corpo técnico — a parte que a Formulação e o Modelo desenham igual. */
+export type CorpoTecnico = Omit<
+  FichaTecnica,
+  "moldura" | "versaoLabel" | "versaoNumero" | "statusLabel" | "isDraft"
+>;
+
+/**
+ * A linha como as duas fontes a entregam: o componente da Formulação já é
+ * este contrato (a API calculou os derivados); o do Modelo chega a ele com os
+ * derivados do mesmo motor. Os nomes são os do DTO — a bancada compartilhada
+ * lê um contrato só, e a ficha também.
+ */
+export type ComponenteDaFicha = Pick<
+  FormulationComponentDTO,
+  | "id"
+  | "itemCode"
+  | "itemName"
+  | "itemType"
+  | "itemActive"
+  | "itemSourceName"
+  | "itemDeclaredNutrient"
+  | "itemFamily"
+  | "itemDefaultPurityPercent"
+  | "quantity"
+  | "unitCode"
+  | "stockUnitCode"
+  | "basis"
+  | "supplyResponsibility"
+  | "purityPercentApplied"
+  | "overagePercent"
+  | "quantityMode"
+  | "applyPurityAdjustment"
+  | "applyOverageAdjustment"
+  | "position"
+  | "theoreticalPerDose"
+  | "physicalPerDose"
+  | "physicalPerCapsule"
+  | "physicalPerUnit"
+>;
+
+/** As premissas técnicas que a Formulação e o Modelo gravam com os MESMOS nomes. */
+export type PremissasDaFicha = Pick<
+  FormulationVersionDTO,
+  | "dosageForm"
+  | "presentationType"
+  | "capsulesPerDose"
+  | "doseAmount"
+  | "doseUomCode"
+  | "packageContentAmount"
+  | "packageContentUomCode"
+  | "dosesPerPackage"
+  | "expectedLossPercent"
+>;
 
 /** Unidade de massa em que o resumo da dose é somado — a mesma da bancada. */
 const UNIDADE_DO_RESUMO = "mg";
 
+export const TECHNICAL_SHEET_FOOTER_NOTE =
+  "Documento interno — descreve a versão da formulação registrada no sistema.";
+
 /** As unidades como o motor compartilhado as consome. */
-function unidadesDoMotor(units: readonly UnitOfMeasureDTO[]) {
+export function unidadesDoMotor(units: readonly UnitOfMeasureDTO[]) {
   return units.map((unit) => ({
     code: unit.code,
     dimension: unit.dimension,
@@ -153,12 +246,12 @@ function unidadesDoMotor(units: readonly UnitOfMeasureDTO[]) {
  * receita é erro de versão em rascunho; fica na composição, onde a tela já
  * explica por que a versão não ativa.
  */
-function ehEmbalagem(component: FormulationComponentDTO): boolean {
+function ehEmbalagem(component: ComponenteDaFicha): boolean {
   return component.itemType === "PACKAGING";
 }
 
 /** Texto que o papel escreve, ou `null` quando não há dado. */
-function texto(valor: string | null | undefined): string | null {
+export function texto(valor: string | null | undefined): string | null {
   return valor !== null && valor !== undefined && valor.trim() !== "" ? valor : null;
 }
 
@@ -172,7 +265,7 @@ function texto(valor: string | null | undefined): string | null {
  * A comparação é por TEXTO normalizado: "70" e "70.000000" são o mesmo número
  * e não podem virar divergência.
  */
-function purezaDivergente(component: FormulationComponentDTO): string | null {
+function purezaDivergente(component: ComponenteDaFicha): string | null {
   const hoje = texto(component.itemDefaultPurityPercent);
   const aplicada = texto(component.purityPercentApplied);
   if (hoje === null) return null;
@@ -196,7 +289,7 @@ function mesmoNome(a: string | null, b: string): boolean {
   return a !== null && a.trim().toLocaleLowerCase("pt-BR") === b.trim().toLocaleLowerCase("pt-BR");
 }
 
-function linhaDaFicha(component: FormulationComponentDTO, comCapsula: boolean): FichaTecnicaLinha {
+function linhaDaFicha(component: ComponenteDaFicha, comCapsula: boolean): FichaTecnicaLinha {
   const familia = component.itemFamily ? ITEM_FAMILY_LABELS[component.itemFamily] : null;
   /*
    * O nutriente declarado só entra quando DIZ algo além do nome do
@@ -241,45 +334,40 @@ function linhaDaFicha(component: FormulationComponentDTO, comCapsula: boolean): 
   };
 }
 
-/** A origem declarada da versão: outra versão do produto ou um modelo. */
-function origemDaVersao(version: FormulationVersionDTO): string | null {
-  if (version.originTemplateCode) {
-    const nome = texto(version.originTemplateName);
-    const versao =
-      version.originTemplateVersionNumber === null
-        ? ""
-        : ` V${version.originTemplateVersionNumber}`;
-    return `Modelo ${version.originTemplateCode}${versao}${nome ? ` — ${nome}` : ""}`;
-  }
-  if (version.sourceVersionNumber !== null) return `Versão V${version.sourceVersionNumber}`;
-  return null;
-}
-
 /**
- * A versão da formulação vista como ficha técnica.
+ * O CORPO TÉCNICO de uma versão — da Formulação ou do Modelo.
  *
- * Tudo que descreve a receita vem da VERSÃO — forma, apresentação, cápsulas
- * por dose, dose, conteúdo, perda prevista, pureza aplicada, reserva, base e
- * fornecimento são snapshots gravados nela, e mudar o cadastro do Produto ou
- * do Item depois não reescreve nenhum deles. É isso que torna o documento
+ * Tudo que descreve a receita vem da VERSÃO: forma, apresentação, cápsulas por
+ * dose, dose, conteúdo, perda prevista, pureza aplicada, reserva, base e
+ * fornecimento são snapshots gravados nela, e mudar o cadastro do Produto ou do
+ * Item depois não reescreve nenhum deles. É isso que torna o documento
  * reproduzível: gerar a ficha de uma versão hoje e daqui a um ano dá o mesmo
  * papel.
  *
- * O que NÃO é da versão sai separado e rotulado como do cadastro do Produto
- * (faixa etária, lote mínimo, caixa de embarque) — misturar as duas origens
- * numa lista só faria o papel afirmar como congelado o que não é.
+ * `formaNaoInformada` é a única escolha da fonte: a ficha do Produto mostra os
+ * campos do pó quando a versão não registrou forma (é o papel homologado); a
+ * do Modelo legado omite o que depende da forma.
  */
-export function fichaTecnicaDaVersao(
-  version: FormulationVersionDTO,
+export function corpoTecnico(
+  premissas: PremissasDaFicha,
+  componentes: readonly ComponenteDaFicha[],
   units: readonly UnitOfMeasureDTO[],
-): FichaTecnica {
-  const forma: DosageForm | null = version.dosageForm;
+  formaNaoInformada: "po" | "omitida",
+): CorpoTecnico {
+  const forma = premissas.dosageForm;
   const comCapsula = forma === "CAPSULE";
-  const capsulasNaDose = comCapsula ? version.capsulesPerDose : null;
+  const capsulasNaDose = comCapsula ? premissas.capsulesPerDose : null;
+  const camposDaForma: CamposDaForma = comCapsula
+    ? "capsula"
+    : forma === "POWDER"
+      ? "po"
+      : forma === null
+        ? formaNaoInformada
+        : "po";
 
-  const componentes = [...version.components].sort((a, b) => a.position - b.position);
-  const composicao = componentes.filter((component) => !ehEmbalagem(component));
-  const embalagem = componentes.filter((component) => ehEmbalagem(component));
+  const ordenados = [...componentes].sort((a, b) => a.position - b.position);
+  const composicao = ordenados.filter((component) => !ehEmbalagem(component));
+  const embalagem = ordenados.filter((component) => ehEmbalagem(component));
 
   /*
    * Totais técnicos da dose pelo MESMO motor das linhas: soma em mg só o que é
@@ -303,54 +391,37 @@ export function fichaTecnicaDaVersao(
     unidadesDoMotor(units),
   );
 
-  const rendimento = rendimentoEsperado(version.expectedLossPercent);
-
-  const perfil = version.productProfile;
+  const rendimento = rendimentoEsperado(premissas.expectedLossPercent);
 
   return {
-    produtoCodigo: version.productCode,
-    produtoNome: version.productName,
-    versaoLabel: version.versionLabel,
-    versaoNumero: version.versionNumber,
-    statusLabel: FORMULATION_VERSION_STATUS_LABELS[version.status],
-    isDraft: version.status === "DRAFT",
-    itemDeSaida: `${version.outputItemCode} — ${version.outputItemName}`,
-    unidadeDeSaida: version.outputUnitCode,
-
+    camposDaForma,
     formaLabel: forma ? DOSAGE_FORM_LABELS[forma] : null,
-    apresentacaoLabel: version.presentationType
-      ? PRESENTATION_TYPE_LABELS[version.presentationType]
+    apresentacaoLabel: premissas.presentationType
+      ? PRESENTATION_TYPE_LABELS[premissas.presentationType]
       : null,
     porCapsula: comCapsula,
     capsulasPorDose: capsulasNaDose,
-    capsulasPorEmbalagem: capsulasPorEmbalagem(capsulasNaDose, version.dosesPerPackage),
+    capsulasPorEmbalagem: capsulasPorEmbalagem(capsulasNaDose, premissas.dosesPerPackage),
     /*
      * Dose e conteúdo são a leitura do PÓ. Na cápsula eles não descrevem nada
      * que a pessoa reconheça — e a ficha da cápsula não os mostra.
      */
     dose:
-      forma === "POWDER" && texto(version.doseAmount) !== null
-        ? { quantidade: version.doseAmount as string, unidade: version.doseUomCode }
+      forma === "POWDER" && texto(premissas.doseAmount) !== null
+        ? { quantidade: premissas.doseAmount as string, unidade: premissas.doseUomCode }
         : null,
     conteudoDaEmbalagem:
-      forma === "POWDER" && texto(version.packageContentAmount) !== null
+      forma === "POWDER" && texto(premissas.packageContentAmount) !== null
         ? {
-            quantidade: version.packageContentAmount as string,
-            unidade: version.packageContentUomCode,
+            quantidade: premissas.packageContentAmount as string,
+            unidade: premissas.packageContentUomCode,
           }
         : null,
-    dosesPorEmbalagem: version.dosesPerPackage,
+    dosesPorEmbalagem: premissas.dosesPerPackage,
 
-    perdaPrevistaPercent: texto(version.expectedLossPercent),
+    perdaPrevistaPercent: texto(premissas.expectedLossPercent),
     rendimentoEsperadoPercent:
       rendimento === null || typeof rendimento === "string" ? null : textoDecimal(rendimento),
-
-    faixaEtaria: perfil.targetAgeGroup ? TARGET_AGE_GROUP_LABELS[perfil.targetAgeGroup] : null,
-    loteMinimo:
-      texto(perfil.minimumBatchQuantity) !== null
-        ? { quantidade: perfil.minimumBatchQuantity as string, unidade: version.outputUnitCode }
-        : null,
-    unidadesPorCaixaDeEmbarque: perfil.unitsPerShippingBox,
 
     composicao: composicao.map((component) => linhaDaFicha(component, comCapsula)),
     embalagem: embalagem.map((component) => linhaDaFicha(component, false)),
@@ -360,10 +431,128 @@ export function fichaTecnicaDaVersao(
     massaPorCapsula:
       resumo.somadas > 0 && resumo.porCapsulaTotal ? textoDecimal(resumo.porCapsulaTotal) : null,
     linhasForaDaSoma: resumo.foraDaSoma,
+  };
+}
 
-    criadaEm: version.createdAt,
-    ativadaEm: version.activatedAt,
-    inativadaEm: version.inactivatedAt,
+/** Instante do domínio escrito como o papel o mostra; ausente continua ausente. */
+export function dataDaFicha(instante: string | null): string | null {
+  return instante === null ? null : formatPdfDateTime(instante);
+}
+
+/** A origem declarada da versão: outra versão do produto ou um modelo. */
+function origemDaVersao(version: FormulationVersionDTO): string | null {
+  if (version.originTemplateCode) {
+    const nome = texto(version.originTemplateName);
+    const versao =
+      version.originTemplateVersionNumber === null
+        ? ""
+        : ` V${version.originTemplateVersionNumber}`;
+    return `Modelo ${version.originTemplateCode}${versao}${nome ? ` — ${nome}` : ""}`;
+  }
+  if (version.sourceVersionNumber !== null) return `Versão V${version.sourceVersionNumber}`;
+  return null;
+}
+
+/**
+ * A versão da formulação vista como FICHA TÉCNICA DO PRODUTO.
+ *
+ * O corpo é o técnico, snapshot da versão. O que NÃO é da versão sai separado
+ * e rotulado como do cadastro do Produto (faixa etária, lote mínimo, caixa de
+ * embarque) — misturar as duas origens numa lista só faria o papel afirmar como
+ * congelado o que não é.
+ */
+export function fichaTecnicaDaVersao(
+  version: FormulationVersionDTO,
+  units: readonly UnitOfMeasureDTO[],
+): FichaTecnica {
+  const isDraft = version.status === "DRAFT";
+  const statusLabel = FORMULATION_VERSION_STATUS_LABELS[version.status];
+  const perfil = version.productProfile;
+
+  /*
+   * DO CADASTRO DO PRODUTO, não da versão — e o papel diz isso onde as
+   * escreve. Elas não são snapshot: mudar o cadastro do Produto muda o que
+   * uma ficha gerada amanhã vai mostrar, e afirmá-las ao lado das premissas
+   * congeladas, sem distinção, faria o documento prometer o que não cumpre.
+   */
+  const loteMinimo =
+    texto(perfil.minimumBatchQuantity) !== null
+      ? formatQuantityWithUnit(perfil.minimumBatchQuantity as string, version.outputUnitCode)
+      : null;
+  const caixaDeEmbarque =
+    perfil.unitsPerShippingBox === null
+      ? null
+      : `${formatIntegerPtBr(perfil.unitsPerShippingBox)} por caixa`;
+
+  return {
+    moldura: {
+      titulo: "Ficha técnica do produto",
+      codigo: version.productCode,
+      linhasDoCabecalho: [`Formulação · ${version.productName}`],
+      rodape: TECHNICAL_SHEET_FOOTER_NOTE,
+      prefixoDoArquivo: "ficha-tecnica",
+      /*
+       * RASCUNHO não é só um carimbo no canto: quem recebe a folha solta
+       * precisa ler, em uma frase, o que ela significa. A marca do cabeçalho
+       * continua lá — esta é a leitura dela.
+       */
+      avisos: isDraft
+        ? [
+            {
+              destaque: "Versão em rascunho.",
+              texto:
+                "A receita ainda pode mudar até a ativação — esta ficha não representa uma formulação validada.",
+            },
+          ]
+        : [],
+      identificacao: [
+        {
+          rotulo: "Produto",
+          valor: `${version.productCode} — ${version.productName}`,
+          largura: 6,
+        },
+        /* Item de saída da versão — snapshot, nunca a associação atual do Produto. */
+        {
+          rotulo: "Item de saída",
+          valor: `${version.outputItemCode} — ${version.outputItemName}`,
+          largura: 4,
+        },
+        { rotulo: "Unidade", valor: version.outputUnitCode, largura: 2 },
+        { rotulo: "Versão da formulação", valor: version.versionLabel, largura: 2 },
+        { rotulo: "Situação", valor: statusLabel, largura: 2 },
+        { rotulo: "Criada em", valor: formatPdfDateTime(version.createdAt), largura: 3 },
+        { rotulo: "Ativada em", valor: dataDaFicha(version.activatedAt), largura: 3, opcional: true },
+        {
+          rotulo: "Inativada em",
+          valor: dataDaFicha(version.inactivatedAt),
+          largura: 3,
+          opcional: true,
+        },
+        { rotulo: "Origem", valor: origemDaVersao(version), largura: 4, opcional: true },
+      ],
+      apresentacaoExtra: [
+        {
+          rotulo: "Faixa etária",
+          valor: perfil.targetAgeGroup ? TARGET_AGE_GROUP_LABELS[perfil.targetAgeGroup] : null,
+          largura: 2,
+          opcional: true,
+        },
+      ],
+      foraDaVersao:
+        loteMinimo !== null || caixaDeEmbarque !== null
+          ? {
+              titulo: "Do cadastro do produto",
+              campos: [
+                { rotulo: "Lote mínimo", valor: loteMinimo, largura: 4, opcional: true },
+                { rotulo: "Caixa de embarque", valor: caixaDeEmbarque, largura: 4, opcional: true },
+              ],
+            }
+          : null,
+    },
+    versaoLabel: version.versionLabel,
+    versaoNumero: version.versionNumber,
+    statusLabel,
+    isDraft,
     /*
      * AS OBSERVAÇÕES DA VERSÃO NÃO ENTRAM NA FICHA.
      *
@@ -374,7 +563,7 @@ export function fichaTecnicaDaVersao(
      * escrever qualquer coisa. Elas continuam inteiras na tela da Formulação,
      * que é onde quem monta a receita as lê.
      */
-    origem: origemDaVersao(version),
+    ...corpoTecnico(version, version.components, units, "po"),
   };
 }
 

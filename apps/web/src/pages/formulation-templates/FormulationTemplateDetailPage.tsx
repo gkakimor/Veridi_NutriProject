@@ -359,6 +359,14 @@ function lerChaveDaLinha(contexto: Record<string, unknown> | null | undefined): 
   return typeof chave === "string" && chave.length > 0 ? chave : null;
 }
 
+/**
+ * A Ficha Técnica de UMA versão do Modelo. A rota guarda o nome técnico
+ * `templates-formulacao`, que já é o endereço da biblioteca; a tela diz Modelo.
+ */
+function rotaDaFichaTecnica(templateId: string, versionId: string): string {
+  return `/producao/templates-formulacao/${templateId}/versoes/${versionId}/ficha-tecnica`;
+}
+
 export function FormulationTemplateDetailPage() {
   const { templateId } = useParams<{ templateId: string }>();
   const navigate = useNavigate();
@@ -1160,6 +1168,25 @@ export function FormulationTemplateDetailPage() {
           </h1>
           {template.description && <p className="page__subtitle">{template.description}</p>}
         </div>
+        {/*
+          A FICHA TÉCNICA do Modelo, em PDF — documento técnico da matriz, sem
+          custo. Fica no cabeçalho, como na Formulação, e é da versão que a
+          bancada mostra: o rascunho quando há, senão a ativa. As outras versões
+          têm a ficha delas no histórico.
+        */}
+        {versaoExibida && (
+          <div className="table__actions">
+            <button
+              type="button"
+              className="btn btn--secondary"
+              aria-label={`Ficha técnica (PDF) da ${versaoExibida.versionLabel}`}
+              title={`Ficha técnica da ${versaoExibida.versionLabel}`}
+              onClick={() => navigate(rotaDaFichaTecnica(template.id, versaoExibida.id))}
+            >
+              Ficha técnica (PDF)
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="doc-body">
@@ -1421,28 +1448,39 @@ export function FormulationTemplateDetailPage() {
                     <td className="is-numeric">{formatIntegerPtBr(version.usageCount)}</td>
                     <td>{formatDateTime(version.createdAt)}</td>
                     <td>
-                      {version.sourceVersionId && (
+                      <div className="table__actions">
+                        {/* Toda versão tem ficha — a arquivada sai marcada como histórica. */}
                         <button
                           type="button"
                           className="btn btn--ghost btn--sm"
-                          disabled={saving}
-                          onClick={() =>
-                            void (async () => {
-                              try {
-                                setDiff(
-                                  await compareTemplateVersions(version.sourceVersionId!, version.id),
-                                );
-                              } catch (err) {
-                                setError(
-                                  err instanceof Error ? err.message : "Falha ao comparar",
-                                );
-                              }
-                            })()
-                          }
+                          aria-label={`Ficha técnica (PDF) da ${version.versionLabel}`}
+                          onClick={() => navigate(rotaDaFichaTecnica(template.id, version.id))}
                         >
-                          Comparar versões
+                          Ficha técnica (PDF)
                         </button>
-                      )}
+                        {version.sourceVersionId && (
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--sm"
+                            disabled={saving}
+                            onClick={() =>
+                              void (async () => {
+                                try {
+                                  setDiff(
+                                    await compareTemplateVersions(version.sourceVersionId!, version.id),
+                                  );
+                                } catch (err) {
+                                  setError(
+                                    err instanceof Error ? err.message : "Falha ao comparar",
+                                  );
+                                }
+                              })()
+                            }
+                          >
+                            Comparar versões
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

@@ -517,8 +517,9 @@ describe("Bancada do Modelo — barra fixa de ações", () => {
     // "Salvar como template" é ação da Formulação: promover a matriz a partir
     // dela mesma não significa nada.
     expect(screen.queryByRole("button", { name: /Salvar como template/ })).toBeNull();
-    // Ficha técnica do Modelo é fatia 3: não existe ainda.
-    expect(screen.queryByRole("button", { name: /Ficha técnica/ })).toBeNull();
+    // A Ficha técnica do Modelo é ação de DOCUMENTO: mora no cabeçalho e no
+    // histórico (`ficha-tecnica-do-modelo.test.tsx`), nunca na barra de edição.
+    expect(within(barra as HTMLElement).queryByRole("button", { name: /Ficha técnica/ })).toBeNull();
   });
 
   it("os botões continuam aparecendo com a página inteira rolada — a barra é a única superfície", async () => {

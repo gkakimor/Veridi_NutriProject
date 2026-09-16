@@ -23,32 +23,31 @@ import {
 } from "../format";
 import {
   UNIDADE_DO_RESUMO,
+  type CampoDaFicha,
   type FichaTecnica,
   type FichaTecnicaGrandeza,
   type FichaTecnicaLinha,
 } from "./technical-sheet-model";
 
 /**
- * FICHA TÉCNICA DO PRODUTO — FORMULAÇÃO.
+ * FICHA TÉCNICA — o documento técnico de uma versão de receita.
  *
- * O documento técnico da versão: o que a receita É, na forma em que a fábrica
- * e a Qualidade a leem. Não é a tela impressa — é um A4 com a identidade da
- * casa, cabeçalho de tabela que se repete a cada página e linha de ingrediente
- * que nunca se parte no meio.
+ * Não é a tela impressa — é um A4 com a identidade da casa, cabeçalho de
+ * tabela que se repete a cada página e linha de ingrediente que nunca se parte
+ * no meio. O MESMO documento serve à Ficha Técnica do Produto (Formulação) e à
+ * do Modelo de Formulação: o que muda entre as duas — título, cabeçalho,
+ * identificação, avisos, rodapé e nome do arquivo — chega pronto na MOLDURA do
+ * read model (`technical-sheet-model`), decidida pelo adaptador de cada fonte.
+ * Este arquivo não escreve "produto" nem "modelo" por conta própria.
  *
  * TÉCNICA quer dizer sem economia: nenhum custo, CMV, R$/kg, preço, margem,
  * markup, frete, valor de fornecedor ou preço de venda entra aqui — esses têm
  * os seus próprios documentos, e misturá-los faria a ficha circular onde o
  * preço não deve circular.
  *
- * Desenha o que o read model (`technical-sheet-model`) entregou e nada mais:
- * nenhuma conta nasce neste arquivo. O modelo é neutro de propósito — o Modelo
- * de Formulação ganha a sua ficha com um adaptador novo e ZERO linha copiada
- * daqui (FORMULATION-TEMPLATE-WORKBENCH-01).
+ * Desenha o que o read model entregou e nada mais: nenhuma conta nasce neste
+ * arquivo.
  */
-
-export const TECHNICAL_SHEET_FOOTER_NOTE =
-  "Documento interno — descreve a versão da formulação registrada no sistema.";
 
 /**
  * Colunas da composição, em A4 RETRATO.
@@ -96,11 +95,28 @@ const COLUNAS_DA_EMBALAGEM: PdfColumn[] = [
   { header: "Por embalagem", width: 84, align: "right" },
 ];
 
-/** "ficha-tecnica-PROD-000174-v1.pdf" — do código do produto e da versão. */
+/**
+ * Nome do arquivo, do CÓDIGO da fonte e da versão — nunca do nome longo:
+ * "ficha-tecnica-PROD-000174-v1.pdf", "ficha-tecnica-modelo-FT-000001-v1.pdf".
+ */
 export function technicalSheetPdfFileName(
-  ficha: Pick<FichaTecnica, "produtoCodigo" | "versaoNumero">,
+  ficha: Pick<FichaTecnica, "moldura" | "versaoNumero">,
 ): string {
-  return pdfFileName("ficha-tecnica", ficha.produtoCodigo, `v${ficha.versaoNumero}`);
+  return pdfFileName(
+    ficha.moldura.prefixoDoArquivo,
+    ficha.moldura.codigo,
+    `v${ficha.versaoNumero}`,
+  );
+}
+
+/** O campo que a fonte decidiu, no formato da grade do papel. */
+function campoDoPapel(campo: CampoDaFicha): PdfField {
+  return {
+    label: campo.rotulo,
+    value: campo.valor,
+    span: campo.largura,
+    ...(campo.opcional ? { optional: true } : {}),
+  };
 }
 
 function grandeza(valor: FichaTecnicaGrandeza | null): string | null {
@@ -178,51 +194,42 @@ export function TechnicalSheetPdf({
   ficha: FichaTecnica;
   generatedAt: Date;
 }) {
-  const identificacao: (PdfField | false)[] = [
-    { label: "Produto", value: `${ficha.produtoCodigo} — ${ficha.produtoNome}`, span: 6 },
-    { label: "Item de saída", value: ficha.itemDeSaida, span: 4 },
-    { label: "Unidade", value: ficha.unidadeDeSaida, span: 2 },
-    { label: "Versão da formulação", value: ficha.versaoLabel, span: 2 },
-    { label: "Situação", value: ficha.statusLabel, span: 2 },
-    { label: "Criada em", value: formatPdfDateTime(ficha.criadaEm), span: 3 },
-    {
-      label: "Ativada em",
-      value: ficha.ativadaEm === null ? null : formatPdfDateTime(ficha.ativadaEm),
-      span: 3,
-      optional: true,
-    },
-    {
-      label: "Inativada em",
-      value: ficha.inativadaEm === null ? null : formatPdfDateTime(ficha.inativadaEm),
-      span: 3,
-      optional: true,
-    },
-    { label: "Origem", value: ficha.origem, span: 4, optional: true },
-  ];
+  const { moldura } = ficha;
+  const formaOmitida = ficha.camposDaForma === "omitida";
 
   /*
    * A APRESENTAÇÃO POR FORMA — cápsula e pó respondem perguntas diferentes.
    *
    * O pó não tem cápsula por dose, e a cápsula não tem dose em gramas nem
    * conteúdo da embalagem: mostrar o campo da outra forma, vazio, convidaria a
-   * preencher o que aquele produto não tem.
+   * preencher o que aquele produto não tem. Forma não informada (Modelo
+   * legado) diz isso uma vez e não mostra nada que dependa dela.
    */
   const apresentacao: (PdfField | false)[] = [
-    { label: "Forma do produto", value: ficha.formaLabel, span: 3 },
-    { label: "Apresentação comercial", value: ficha.apresentacaoLabel, span: 3 },
-    ficha.porCapsula && {
+    {
+      label: "Forma do produto",
+      value: formaOmitida ? "Não informada" : ficha.formaLabel,
+      span: 3,
+    },
+    {
+      label: "Apresentação comercial",
+      value: ficha.apresentacaoLabel,
+      span: 3,
+      ...(formaOmitida ? { optional: true } : {}),
+    },
+    ficha.camposDaForma === "capsula" && {
       label: "Cápsulas por dose",
       value: ficha.capsulasPorDose === null ? null : formatIntegerPtBr(ficha.capsulasPorDose),
       span: 2,
     },
-    ficha.porCapsula && {
+    ficha.camposDaForma === "capsula" && {
       label: "Cápsulas por embalagem",
       value:
         ficha.capsulasPorEmbalagem === null ? null : formatIntegerPtBr(ficha.capsulasPorEmbalagem),
       span: 2,
     },
-    !ficha.porCapsula && { label: "Dose", value: grandeza(ficha.dose), span: 2 },
-    !ficha.porCapsula && {
+    ficha.camposDaForma === "po" && { label: "Dose", value: grandeza(ficha.dose), span: 2 },
+    ficha.camposDaForma === "po" && {
       label: "Conteúdo da embalagem",
       value: grandeza(ficha.conteudoDaEmbalagem),
       span: 3,
@@ -231,39 +238,37 @@ export function TechnicalSheetPdf({
       label: "Doses por embalagem",
       value: ficha.dosesPorEmbalagem === null ? null : formatIntegerPtBr(ficha.dosesPorEmbalagem),
       span: 2,
+      ...(formaOmitida ? { optional: true } : {}),
     },
-    { label: "Faixa etária", value: ficha.faixaEtaria, span: 2, optional: true },
+    ...moldura.apresentacaoExtra.map(campoDoPapel),
   ];
-
-  const temPremissasDoCadastro = ficha.loteMinimo !== null || ficha.unidadesPorCaixaDeEmbarque !== null;
 
   return (
     <PdfDocument
-      title="Ficha técnica do produto"
-      code={`${ficha.produtoCodigo} · ${ficha.versaoLabel}`}
+      title={moldura.titulo}
+      code={`${moldura.codigo} · ${ficha.versaoLabel}`}
       status={ficha.statusLabel}
       isDraft={ficha.isDraft}
       headerLines={[
-        `Formulação · ${ficha.produtoNome}`,
+        ...moldura.linhasDoCabecalho,
         `Ficha gerada em ${formatPdfDateTime(generatedAt)}`,
       ]}
-      footerNote={TECHNICAL_SHEET_FOOTER_NOTE}
+      footerNote={moldura.rodape}
       generatedAt={generatedAt}
     >
       {/*
-        RASCUNHO não é só um carimbo no canto: quem recebe a folha solta precisa
-        ler, em uma frase, o que ela significa. A marca do cabeçalho continua lá
-        — esta é a leitura dela.
+        O aviso não é só um carimbo no canto: quem recebe a folha solta precisa
+        ler, em uma frase, o que ela significa — rascunho que ainda muda,
+        versão que já não vale. A marca do cabeçalho continua lá.
       */}
-      {ficha.isDraft ? (
-        <PdfNotice>
-          <PdfText bold>Versão em rascunho.</PdfText> A receita ainda pode mudar até a ativação —
-          esta ficha não representa uma formulação validada.
+      {moldura.avisos.map((aviso) => (
+        <PdfNotice key={aviso.destaque}>
+          <PdfText bold>{aviso.destaque}</PdfText> {aviso.texto}
         </PdfNotice>
-      ) : null}
+      ))}
 
       <PdfSection title="Identificação">
-        <PdfDataGrid fields={identificacao} />
+        <PdfDataGrid fields={moldura.identificacao.map(campoDoPapel)} />
       </PdfSection>
 
       <PdfSection title="Forma e apresentação">
@@ -287,34 +292,15 @@ export function TechnicalSheetPdf({
         />
 
         {/*
-          LOTE MÍNIMO e CAIXA DE EMBARQUE vêm do cadastro do PRODUTO, e não da
-          versão: mudar o cadastro amanhã muda o que uma ficha gerada amanhã
-          mostra. Escrevê-los na mesma lista das premissas congeladas faria o
-          papel prometer historicidade que eles não têm — por isso saem
-          separados, e o subtítulo diz de onde vêm.
+          O que NÃO é da versão — no Produto, lote mínimo e caixa de embarque,
+          do cadastro — sai separado, com o subtítulo que diz de onde vem.
+          Escrevê-lo na mesma lista das premissas congeladas faria o papel
+          prometer historicidade que ele não tem.
         */}
-        {temPremissasDoCadastro ? (
+        {moldura.foraDaVersao ? (
           <>
-            <PdfSubheading title="Do cadastro do produto" />
-            <PdfDataGrid
-              fields={[
-                {
-                  label: "Lote mínimo",
-                  value: grandeza(ficha.loteMinimo),
-                  span: 4,
-                  optional: true,
-                },
-                {
-                  label: "Caixa de embarque",
-                  value:
-                    ficha.unidadesPorCaixaDeEmbarque === null
-                      ? null
-                      : `${formatIntegerPtBr(ficha.unidadesPorCaixaDeEmbarque)} por caixa`,
-                  span: 4,
-                  optional: true,
-                },
-              ]}
-            />
+            <PdfSubheading title={moldura.foraDaVersao.titulo} />
+            <PdfDataGrid fields={moldura.foraDaVersao.campos.map(campoDoPapel)} />
           </>
         ) : null}
       </PdfSection>

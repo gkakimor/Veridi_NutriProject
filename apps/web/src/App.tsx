@@ -53,6 +53,7 @@ import {
 } from "./pages/reports/CostReports";
 import { CostCalculationPrintPage } from "./pages/print/CostCalculationPrintPage";
 import { TechnicalSheetPrintPage } from "./pages/print/TechnicalSheetPrintPage";
+import { FormulationTemplateTechnicalSheetPrintPage } from "./pages/print/FormulationTemplateTechnicalSheetPrintPage";
 import { ProductionCostPrintPage } from "./pages/print/ProductionCostPrintPage";
 import { IndustrialResourceDetailPage } from "./pages/industrial-resources/IndustrialResourceDetailPage";
 import { IndustrialResourcesPage } from "./pages/industrial-resources/IndustrialResourcesPage";
@@ -184,6 +185,11 @@ const router = createBrowserRouter(
       <Route
         path="/producao/formulacoes/:productId/versoes/:versionId/ficha-tecnica"
         element={<TechnicalSheetPrintPage />}
+      />
+      {/* Ficha técnica da versão do Modelo de Formulação — matriz de biblioteca. */}
+      <Route
+        path="/producao/templates-formulacao/:templateId/versoes/:versionId/ficha-tecnica"
+        element={<FormulationTemplateTechnicalSheetPrintPage />}
       />
       <Route path="/print/calculo-custo/:id" element={<CostCalculationPrintPage />} />
       <Route path="/print/cmv/:productId" element={<CmvPrintPage />} />
