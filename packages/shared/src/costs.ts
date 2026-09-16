@@ -89,6 +89,15 @@ export interface FormulationCostComponentDTO {
   customerSupplied: boolean;
   /** `requiredQuantity × unitCost`; `null` quando o componente não tem custo. */
   estimatedComponentCost: string | null;
+  /**
+   * A perda prevista da versão entrou na quantidade desta linha?
+   *
+   * `true` só nas bases que acompanham a quantidade PRODUZIDA (`PER_DOSE`,
+   * `FIXED_BASIS`) e só quando a versão declara perda. Embalagem comercial
+   * (`PER_FINISHED_UNIT`) continua na quantidade vendável e sai `false` — a
+   * perda não vende pote, tampa nem rótulo.
+   */
+  expectedLossApplied: boolean;
 }
 
 /**
@@ -110,8 +119,26 @@ export interface FormulationCostEstimateDTO {
   quality: Extract<CostQuality, "ESTIMATED" | "PARTIAL" | "NO_COST">;
   /** Só existe quando TODOS os componentes Veridi têm custo — `PARTIAL` nunca preenche isto. */
   estimatedMaterialCost: string | null;
-  /** `estimatedMaterialCost / basisQuantity`. */
+  /**
+   * `estimatedMaterialCost / basisQuantity` — custo por unidade VENDÁVEL.
+   *
+   * O divisor é a quantidade líquida da base, nunca a bruta planejada: o que
+   * se vende é a unidade boa, e o material perdido no caminho é custo dela.
+   */
   estimatedMaterialUnitCost: string | null;
+  /**
+   * PERDA PREVISTA DE PRODUÇÃO desta versão (%) e o que ela produziu.
+   *
+   * `null` quando a versão não declara a premissa — e aí a estimativa é
+   * exatamente a de antes desta capacidade. Quando declarada, `grossPlannedQuantity`
+   * é `basisQuantity ÷ (1 − perda/100)`, e é ela que quantifica as linhas
+   * marcadas com `expectedLossApplied`.
+   */
+  expectedLossPercent: string | null;
+  /** `100 − expectedLossPercent`. Derivado, nunca digitado. */
+  expectedYieldPercent: string | null;
+  /** Quantidade bruta planejada para entregar `basisQuantity` líquidos. */
+  grossPlannedQuantity: string | null;
   /** Soma do que é conhecido — útil em `PARTIAL`, nunca apresentado como total. */
   knownCostSubtotal: string | null;
   /** Códigos dos itens Veridi sem fonte nenhuma de custo. */

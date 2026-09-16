@@ -86,8 +86,8 @@ export function errosDosAjustes(
    *
    * A regra é a mesma nos dois lugares — não negativo, seis casas — e por isso
    * vive numa função só. O NOME não é: a Formulação o chama de reserva de
-   * produção, e uma recusa que nomeia um campo que a pessoa não vê na tela
-   * manda procurar o que não existe.
+   * matéria-prima, e uma recusa que nomeia um campo que a pessoa não vê na
+   * tela manda procurar o que não existe.
    */
   rotuloDoOverage = "Overage %",
 ): Partial<Record<CampoDeAjuste, string>> {

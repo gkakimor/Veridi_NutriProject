@@ -16,6 +16,44 @@ import type { DosageForm, PresentationType, TargetAgeGroup } from "./products.js
  */
 export const FORMAS_DA_BANCADA: readonly DosageForm[] = ["CAPSULE", "POWDER"];
 
+/**
+ * Apresentações comerciais coerentes com cada forma da bancada.
+ *
+ * A Veridi entrega Produto Acabado em PÓ ou em CÁPSULA, e a apresentação não é
+ * necessariamente pote: o mesmo pó sai em sachê, em cartucho ou a granel. O que
+ * esta tabela faz é impedir o par que não descreve produto nenhum — pó em
+ * frasco, que na linguagem do cadastro é a embalagem de cápsula e de líquido.
+ *
+ * Ela restringe a ESCOLHA da tela, nunca o enum nem o que já está gravado:
+ * `apresentacoesDaForma` devolve junto a apresentação atual da versão mesmo
+ * quando ela está fora da lista, para que uma versão histórica continue
+ * legível e para que nenhuma gravação antiga seja reescrita.
+ */
+export const APRESENTACOES_POR_FORMA: Partial<Record<DosageForm, readonly PresentationType[]>> = {
+  CAPSULE: ["POT", "BOTTLE", "POUCH", "CARTON", "BULK", "OTHER"],
+  POWDER: ["POT", "POUCH", "CARTON", "BULK", "OTHER"],
+};
+
+/**
+ * As apresentações que a tela oferece para uma forma, preservando a atual.
+ *
+ * Forma em branco ou fora da bancada devolve a lista inteira: restringir o que
+ * não se sabe classificar esconderia opção legítima.
+ */
+export function apresentacoesDaForma(
+  forma: DosageForm | null | undefined,
+  atual: PresentationType | null | undefined,
+  todas: readonly PresentationType[],
+): readonly PresentationType[] {
+  const coerentes = forma ? APRESENTACOES_POR_FORMA[forma] : undefined;
+  if (!coerentes) return todas;
+  if (atual && !coerentes.includes(atual)) {
+    // A ordem da lista canônica manda, para a opção histórica não brotar no fim.
+    return todas.filter((tipo) => coerentes.includes(tipo) || tipo === atual);
+  }
+  return coerentes;
+}
+
 export type FormulationVersionStatus = "DRAFT" | "ACTIVE" | "INACTIVE";
 
 export const FORMULATION_VERSION_STATUSES: readonly FormulationVersionStatus[] = [
@@ -220,6 +258,15 @@ export interface FormulationVersionDTO {
   packageContentAmount: string | null;
   packageContentUomCode: string | null;
   /**
+   * PERDA PREVISTA DE PRODUÇÃO (%) — premissa GLOBAL desta versão, snapshot.
+   *
+   * Perda normal esperada do processo. Não altera a composição da dose nem da
+   * cápsula, e nunca altera quantidade comercial: o que ela muda é a
+   * quantidade BRUTA planejada e, por ela, o custo estimado interno por
+   * unidade vendável. `null` = não informada (nunca 0% presumido).
+   */
+  expectedLossPercent: string | null;
+  /**
    * Perfil industrial do Produto HOJE — referência para conferir a versão,
    * nunca premissa dela: mudar o cadastro não reescreve versão nenhuma.
    */
@@ -378,6 +425,11 @@ export interface UpdateFormulationVersionInput {
   doseUomCode?: string | null;
   packageContentAmount?: string | null;
   packageContentUomCode?: string | null;
+  /**
+   * Perda prevista de produção (%) — premissa da VERSÃO. `null` limpa a
+   * premissa (volta a "não informada"); ausente deixa como está.
+   */
+  expectedLossPercent?: string | null;
   notes?: string;
   components?: FormulationComponentInput[];
 }

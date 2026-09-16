@@ -38,6 +38,19 @@ import { getFormulationVersion } from "../../lib/formulations-api";
 import { FormulationVersionPage } from "./FormulationVersionPage";
 
 /**
+ * A busca por rótulo precisa achar o CAMPO, não o ícone de ajuda.
+ *
+ * As premissas da bancada passaram a explicar-se num ⓘ dentro do próprio
+ * `<label>` (FORMULATION-WORKBENCH-01), e o gatilho da dica é um `<button>`
+ * chamado "Ajuda sobre Cápsulas por dose". Para `getByLabelText` os dois
+ * respondem pelo mesmo nome, e a busca passou a achar dois elementos. O
+ * seletor prende a resposta ao controle de formulário — o ⓘ continua
+ * acessível, e continua fora desta pergunta.
+ */
+const CAMPO_DO_FORMULARIO = { selector: "input, select, textarea" } as const;
+
+
+/**
  * O catálogo que o seletor de item oferece.
  *
  * `MP-000030` tem pureza de referência no cadastro (88,7%) — é dele que a linha
@@ -259,7 +272,7 @@ describe("Bancada — cápsula responde ao vivo", () => {
     await abrir(versao());
     expect(screen.getByTestId("doses-derivadas").textContent).toBe("120");
 
-    fireEvent.change(screen.getByLabelText(/Cápsulas por dose/), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText(/Cápsulas por dose/, CAMPO_DO_FORMULARIO), { target: { value: "2" } });
 
     await waitFor(() => expect(screen.getByTestId("doses-derivadas").textContent).toBe("60"));
     const mp = linha("MP-000030");
@@ -276,7 +289,7 @@ describe("Bancada — cápsula responde ao vivo", () => {
 
   it("cápsulas por embalagem que não fecham dose inteira são recusadas antes de salvar", async () => {
     await abrir(versao());
-    fireEvent.change(screen.getByLabelText(/Cápsulas por dose/), { target: { value: "7" } });
+    fireEvent.change(screen.getByLabelText(/Cápsulas por dose/, CAMPO_DO_FORMULARIO), { target: { value: "7" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar rascunho" }));
 
     await waitFor(() =>
@@ -379,12 +392,12 @@ describe("Bancada — separação e dados do Item", () => {
     const antes = linha("MP-000030").textContent ?? "";
     expect(antes).toContain("0,571429");
 
-    fireEvent.change(screen.getByRole("textbox", { name: /Reserva de produção de MP-000030/ }), {
+    fireEvent.change(screen.getByRole("textbox", { name: /Reserva de matéria-prima de MP-000030/ }), {
       target: { value: "10" },
     });
 
     await waitFor(() =>
-      expect(screen.getByRole("textbox", { name: /Reserva de produção de MP-000030/ })).toHaveValue(
+      expect(screen.getByRole("textbox", { name: /Reserva de matéria-prima de MP-000030/ })).toHaveValue(
         "10",
       ),
     );
@@ -399,17 +412,17 @@ describe("Bancada — separação e dados do Item", () => {
       (th) => th.textContent?.trim() ?? "",
     );
     expect(cabecalhos.some((texto) => texto.startsWith("Por cápsula"))).toBe(true);
-    expect(screen.getByLabelText(/Cápsulas por dose/)).toBeTruthy();
-    expect(screen.getByLabelText(/Cápsulas por embalagem/)).toBeTruthy();
+    expect(screen.getByLabelText(/Cápsulas por dose/, CAMPO_DO_FORMULARIO)).toBeTruthy();
+    expect(screen.getByLabelText(/Cápsulas por embalagem/, CAMPO_DO_FORMULARIO)).toBeTruthy();
     // Dose e conteúdo são premissas do pó: na cápsula quem manda são as cápsulas.
-    expect(screen.queryByLabelText(/^Dose$/)).toBeNull();
-    expect(screen.queryByLabelText(/Conteúdo da embalagem/)).toBeNull();
+    expect(screen.queryByLabelText(/^Dose$/, CAMPO_DO_FORMULARIO)).toBeNull();
+    expect(screen.queryByLabelText(/Conteúdo da embalagem/, CAMPO_DO_FORMULARIO)).toBeNull();
   });
 
   it("a forma do produto oferece só Pó e Cápsula", async () => {
     await abrir(versao());
 
-    const forma = screen.getByLabelText(/Forma do produto/) as HTMLSelectElement;
+    const forma = screen.getByLabelText(/Forma do produto/, CAMPO_DO_FORMULARIO) as HTMLSelectElement;
     expect(Array.from(forma.options).map((opcao) => opcao.textContent)).toEqual([
       "—",
       "Cápsula",
@@ -422,7 +435,7 @@ describe("Bancada — separação e dados do Item", () => {
     // apagar a premissa da versão no primeiro salvamento.
     await abrir(versao({ dosageForm: "TABLET", capsulesPerDose: null } as Partial<FormulationVersionDTO>));
 
-    const forma = screen.getByLabelText(/Forma do produto/) as HTMLSelectElement;
+    const forma = screen.getByLabelText(/Forma do produto/, CAMPO_DO_FORMULARIO) as HTMLSelectElement;
     expect(forma.value).toBe("TABLET");
     expect(Array.from(forma.options).map((opcao) => opcao.textContent)).toContain("Comprimido");
   });
@@ -451,7 +464,7 @@ describe("Bancada — separação e dados do Item", () => {
     expect(premissas.textContent).toContain("Lote mínimo");
     expect(premissas.textContent).toContain("Caixa de embarque");
     // A reserva de referência sai das LINHAS, e só quando todas concordam.
-    expect(premissas.textContent).toContain("Reserva de produção");
+    expect(premissas.textContent).toContain("Reserva de matéria-prima");
     expect(premissas.textContent).toContain("10%");
   });
 
@@ -507,14 +520,14 @@ describe("Bancada — pó", () => {
   it("dose e conteúdo fecham as doses da embalagem", async () => {
     await abrirPo();
     expect(screen.getByTestId("doses-derivadas").textContent).toBe("30");
-    expect(screen.getByLabelText(/^Dose$/)).toBeTruthy();
-    expect(screen.getByLabelText(/Conteúdo da embalagem/)).toBeTruthy();
+    expect(screen.getByLabelText(/^Dose$/, CAMPO_DO_FORMULARIO)).toBeTruthy();
+    expect(screen.getByLabelText(/Conteúdo da embalagem/, CAMPO_DO_FORMULARIO)).toBeTruthy();
   });
 
   it("não fala em cápsula, e a física por dose é a da planilha", async () => {
     await abrirPo();
     expect(screen.queryByText("Por cápsula")).toBeNull();
-    expect(screen.queryByLabelText(/Cápsulas por dose/)).toBeNull();
+    expect(screen.queryByLabelText(/Cápsulas por dose/, CAMPO_DO_FORMULARIO)).toBeNull();
     expect(linha("MP-000628").textContent).toContain("27.368,421053");
   });
 
@@ -528,14 +541,14 @@ describe("Bancada — pó", () => {
     // Coluna inútil com valor zero é pior que coluna ausente: no pó não existe
     // "por cápsula", e a tabela não finge que existe.
     expect(cabecalhos.some((texto) => texto.startsWith("Por cápsula"))).toBe(false);
-    expect(cabecalhos.some((texto) => texto.startsWith("Reserva de produção"))).toBe(true);
-    expect(screen.queryByLabelText(/Cápsulas por embalagem/)).toBeNull();
-    expect(screen.getByLabelText(/^Dose$/)).toBeTruthy();
+    expect(cabecalhos.some((texto) => texto.startsWith("Reserva de matéria-prima"))).toBe(true);
+    expect(screen.queryByLabelText(/Cápsulas por embalagem/, CAMPO_DO_FORMULARIO)).toBeNull();
+    expect(screen.getByLabelText(/^Dose$/, CAMPO_DO_FORMULARIO)).toBeTruthy();
   });
 
   it("conteúdo que não dá doses inteiras é recusado, não arredondado", async () => {
     await abrirPo();
-    fireEvent.change(screen.getByLabelText(/^Dose$/), { target: { value: "35" } });
+    fireEvent.change(screen.getByLabelText(/^Dose$/, CAMPO_DO_FORMULARIO), { target: { value: "35" } });
     fireEvent.change(screen.getByLabelText(/Unidade da dose/), { target: { value: "g" } });
 
     await waitFor(() => expect(screen.getByTestId("doses-derivadas").textContent).toBe("—"));

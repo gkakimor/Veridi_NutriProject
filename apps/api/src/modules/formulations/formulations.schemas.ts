@@ -40,6 +40,36 @@ const optionalOveragePercent = z
     { message: mensagemCasasPercentualTecnico() },
   );
 
+/**
+ * Perda prevista de produção (%): premissa GLOBAL da versão.
+ *
+ * `0` é legítimo — declarar "sem perda" é uma decisão. O teto é EXCLUSIVO em
+ * 100: com 100% de perda nada sai da produção e a quantidade bruta não existe
+ * (divisão por zero), então recusar é a única resposta honesta. Casas
+ * limitadas pelo mesmo motivo da pureza: acima de seis o PostgreSQL
+ * arredondaria em silêncio.
+ */
+const optionalExpectedLossPercent = z
+  .union([z.string(), z.number()])
+  .nullish()
+  .transform((value) => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    const text = String(value).trim();
+    return text.length === 0 ? null : text;
+  })
+  .refine((value) => value === undefined || value === null || /^\d+(\.\d+)?$/.test(value), {
+    message: "Perda prevista de produção inválida",
+  })
+  .refine((value) => value === undefined || value === null || Number(value) < 100, {
+    message: "Perda prevista de produção deve ser menor que 100%",
+  })
+  .refine(
+    (value) =>
+      value === undefined || value === null || casasDecimais(value) <= CASAS_PERCENTUAL_TECNICO,
+    { message: mensagemCasasPercentualTecnico() },
+  );
+
 const optionalLegacyDecimal = z
   .union([z.string(), z.number()])
   .nullish()
@@ -112,6 +142,13 @@ export const updateFormulationVersionSchema = z.object({
   doseUomCode: optionalNullableText(20),
   packageContentAmount: optionalPositiveDecimal("Conteúdo da embalagem deve ser maior que zero"),
   packageContentUomCode: optionalNullableText(20),
+  /*
+   * PERDA PREVISTA DE PRODUÇÃO — premissa da VERSÃO, não da linha.
+   *
+   * Distinta da reserva de matéria-prima (`overagePercent`), que continua por
+   * componente: a reserva é de UM insumo, a perda é do processo inteiro.
+   */
+  expectedLossPercent: optionalExpectedLossPercent,
   notes: optionalNullableText(2000),
   components: z.array(formulationComponentInputSchema).optional(),
 });

@@ -158,14 +158,14 @@ describe("Pureza e reserva de produção — colunas da linha", () => {
     expect(screen.queryByText(/O que a quantidade informada significa/)).toBeNull();
   });
 
-  it("o termo Overage não aparece na tela — é Reserva de produção", async () => {
+  it("o termo Overage não aparece na tela — é Reserva de matéria-prima", async () => {
     await abrir();
 
     expect(document.body.textContent ?? "").not.toMatch(/overage/i);
     expect(
-      screen.getByRole("textbox", { name: "Reserva de produção de MP-000003" }),
+      screen.getByRole("textbox", { name: "Reserva de matéria-prima de MP-000003" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: /Reserva de produção/ })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /Reserva de matéria-prima/ })).toBeInTheDocument();
   });
 
   it("pureza digitada na coluna corrige a quantidade física na hora", async () => {
@@ -196,14 +196,14 @@ describe("Pureza e reserva de produção — colunas da linha", () => {
     await abrir();
     const antes = celula("fisico");
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Reserva de produção de MP-000003" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Reserva de matéria-prima de MP-000003" }), {
       target: { value: "10" },
     });
 
     // O número tem de continuar o MESMO: a reserva é previsão de lote, e
     // multiplicá-la pela dose inflaria a receita em silêncio.
     await waitFor(() =>
-      expect(screen.getByRole("textbox", { name: "Reserva de produção de MP-000003" })).toHaveValue(
+      expect(screen.getByRole("textbox", { name: "Reserva de matéria-prima de MP-000003" })).toHaveValue(
         "10",
       ),
     );
@@ -215,7 +215,7 @@ describe("Pureza e reserva de produção — colunas da linha", () => {
     const user = userEvent.setup();
     await abrir();
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Reserva de produção de MP-000003" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Reserva de matéria-prima de MP-000003" }), {
       target: { value: "10" },
     });
     await user.click(screen.getByRole("button", { name: /Salvar rascunho/i }));
@@ -366,11 +366,11 @@ describe("Coluna Por embalagem — físico e equivalente na mesma célula", () =
     );
     expect(rotulos).toEqual([
       "Fonte / Função",
-      "Pureza",
+      "Pureza (%)",
       "Alvo por dose",
       "Física por dose",
       "Base · Fornecimento",
-      "Reserva de produção",
+      "Reserva de matéria-prima (%)",
       "Por embalagem",
     ]);
   });

@@ -355,12 +355,12 @@ export const baseHints = {
   "formulacao.base": {
     module: "producao",
     label: "Base da formulação",
-    text: "A quantidade de produto acabado que a receita abaixo produz. Tudo o que for declarado nos componentes se refere a essa quantidade.",
+    text: "A quantidade de produto acabado que a receita abaixo produz. No modo Por dose, em que cada linha declara o que entra numa dose, ela não decide composição nenhuma: fica valendo como a quantidade sobre a qual o custo estimado é apresentado, e por isso aparece só como referência. Ela volta a ser editável quando alguma linha é declarada por base fixa, que é quando a base realmente multiplica material.",
   },
   "formulacao.modoCalculo": {
     module: "producao",
     label: "Modo de cálculo",
-    text: "Base fixa: as quantidades declaradas produzem a base informada. Por dose: a quantidade é declarada para UMA dose e multiplicada pelas doses por embalagem. Embalagem continua por unidade acabada — não se multiplica por dose.",
+    text: "Base fixa: as quantidades declaradas produzem a base informada. Por dose: a quantidade é declarada para UMA dose. Embalagem continua por unidade acabada — não se multiplica por dose. A matemática do modo Por dose: quantidade física por dose = alvo por dose ÷ (pureza ÷ 100); quantidade por cápsula = quantidade física por dose ÷ cápsulas por dose; doses por embalagem = cápsulas por embalagem ÷ cápsulas por dose na cápsula, e conteúdo da embalagem ÷ dose no pó.",
   },
   "formulacao.fornecimento": {
     module: "producao",
@@ -369,13 +369,73 @@ export const baseHints = {
   },
   "formulacao.pureza": {
     module: "producao",
-    label: "Pureza",
+    label: "Pureza (%)",
     text: "Teor real do insumo, em porcentagem. Com 70% de pureza é preciso pesar mais para entregar a mesma quantidade ativa: a quantidade física é o alvo dividido pela pureza. Ela vem do cadastro do Item quando ele a informa e pode ser trocada aqui; o valor usado fica congelado na versão, e mudar o Item depois não reescreve formulação nenhuma. Vazio significa desconhecida, nunca 100% — e aí a quantidade informada é usada como está, que é o certo quando ela já vem corrigida de origem.",
   },
   "formulacao.overage": {
     module: "producao",
-    label: "Reserva de produção",
-    text: "Percentual adicional previsto para produção/lote. Não altera a dose formulada: a quantidade física por dose e por cápsula continua a mesma depois de preenchê-lo. Nunca entra no que é declarado ao cliente.",
+    label: "Reserva de matéria-prima (%)",
+    text: "Percentual adicional previsto para o lote, POR LINHA: um ingrediente pode ter 10% e o seguinte 0%. Não altera a dose formulada — a quantidade física por dose e por cápsula continua a mesma depois de preenchê-lo — e nunca entra no que é declarado ao cliente. É diferente da pureza, que corrige o teor do próprio insumo, e da perda prevista de produção, que é do processo inteiro e não de um material.",
+  },
+  "formulacao.perdaPrevista": {
+    module: "producao",
+    label: "Perda prevista de produção (%)",
+    text: "Percentual estimado de perda normal durante o processo produtivo. É utilizado no planejamento e no custo estimado interno, sem alterar a quantidade comercial vendida ao cliente.",
+  },
+  "formulacao.rendimentoEsperado": {
+    module: "producao",
+    label: "Rendimento esperado",
+    text: "100% menos a perda prevista de produção — quanto do que entra na produção se espera que saia como produto vendável. É calculado, nunca digitado: dois campos para a mesma premissa divergem no primeiro que alguém esquecer de atualizar.",
+  },
+  "formulacao.forma": {
+    module: "producao",
+    label: "Forma do produto",
+    text: "O Produto Acabado da Veridi é pó ou cápsula, e a bancada calcula por dose nas duas: mostra a quantidade física de cada ingrediente por dose e, na cápsula, por cápsula.",
+  },
+  "formulacao.apresentacaoComercial": {
+    module: "producao",
+    label: "Apresentação comercial",
+    text: "A embalagem em que o produto chega ao cliente — não confundir com os itens de embalagem da fórmula, que ficam na seção Embalagem. A lista mostra as apresentações coerentes com a forma escolhida; a apresentação já gravada numa versão histórica continua aparecendo mesmo fora dessa lista.",
+  },
+  "formulacao.capsulasPorDose": {
+    module: "producao",
+    label: "Cápsulas por dose",
+    text: "Quantas cápsulas a pessoa toma de uma vez. Divide a quantidade física da dose para dar o valor por cápsula, e divide as cápsulas por embalagem para dar as doses por embalagem.",
+  },
+  "formulacao.capsulasPorEmbalagem": {
+    module: "producao",
+    label: "Cápsulas por embalagem",
+    text: "Quantas cápsulas o pote entrega. Dividido por cápsulas por dose dá as doses por embalagem — a divisão precisa ser exata, senão a gravação é recusada em vez de arredondar doses em silêncio.",
+  },
+  "formulacao.dose": {
+    module: "producao",
+    label: "Dose",
+    text: "Quanto de pó a pessoa toma de uma vez, em unidade de massa. É o divisor do conteúdo da embalagem para dar as doses por embalagem.",
+  },
+  "formulacao.conteudo": {
+    module: "producao",
+    label: "Conteúdo da embalagem",
+    text: "Quanto de pó a embalagem entrega, em unidade de massa. Dividido pela dose dá as doses por embalagem — a divisão precisa ser exata.",
+  },
+  "formulacao.dosesPorEmbalagem": {
+    module: "producao",
+    label: "Doses por embalagem",
+    text: "Quantas doses a embalagem entrega. Na cápsula e no pó é RESULTADO das premissas (cápsulas por embalagem ÷ cápsulas por dose; conteúdo ÷ dose) e por isso não é digitado. É a premissa que multiplica toda linha declarada por dose.",
+  },
+  "formulacao.loteMinimo": {
+    module: "producao",
+    label: "Lote mínimo",
+    text: "Valor herdado do cadastro do Produto. Não participa do cálculo da dose.",
+  },
+  "formulacao.caixaEmbarque": {
+    module: "producao",
+    label: "Caixa de embarque",
+    text: "Informação logística herdada do cadastro do Produto. Não participa do cálculo da dose.",
+  },
+  "formulacao.faixaEtaria": {
+    module: "producao",
+    label: "Faixa etária",
+    text: "Público-alvo herdado do cadastro do Produto. Não participa do cálculo da dose.",
   },
   "formulacao.equivalenteEstoque": {
     module: "producao",

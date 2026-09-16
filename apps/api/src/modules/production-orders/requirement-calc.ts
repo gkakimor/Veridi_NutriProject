@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { PrismaClient, ItemType, SupplyResponsibility } from "@prisma/client";
 import { computeComponentRequirement } from "../../lib/formulation-math.js";
+import { baseSegueQuantidadeProduzida, quantidadeBrutaPlanejada } from "@veridi/shared";
 
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -21,6 +22,33 @@ export interface ComputedRequirementRow {
   requiredQuantity: Prisma.Decimal;
   stockUnitCode: string;
   position: number;
+  /**
+   * A perda prevista da versão entrou na quantidade desta linha?
+   *
+   * Só quem pediu `aplicarPerdaPrevista` vê `true` aqui, e só nas bases que
+   * acompanham a quantidade produzida. Existe para a tela poder DIZER quais
+   * linhas carregam a premissa e quais não — um custo que subiu sem a lista
+   * de quem subiu é um número sem auditoria.
+   */
+  expectedLossApplied: boolean;
+}
+
+/**
+ * Opções de quem CHAMA o motor — nunca do motor.
+ *
+ * A perda prevista é premissa de PLANEJAMENTO e de CUSTO ESTIMADO. Aplicá-la
+ * por padrão mudaria em silêncio o que a Ordem de Produção congela e o que o
+ * picking separa, e nada nesta rodada autorizou isso. Por isso ela é opt-in:
+ * quem quer a quantidade bruta pede.
+ */
+export interface RequirementCalcOptions {
+  /**
+   * Escalar para a quantidade BRUTA planejada as linhas cuja base acompanha a
+   * quantidade produzida (`PER_DOSE`, `FIXED_BASIS`). As linhas
+   * `PER_FINISHED_UNIT` continuam na quantidade vendável — um pote por pote
+   * vendido, e a perda não vende pote.
+   */
+  aplicarPerdaPrevista?: boolean;
 }
 
 /**
@@ -35,6 +63,7 @@ export async function computeFormulationRequirements(
   tx: PrismaOrTx,
   formulationVersionId: string,
   plannedQuantity: Prisma.Decimal,
+  options: RequirementCalcOptions = {},
 ): Promise<ComputedRequirementRow[]> {
   const version = await tx.formulationVersion.findUnique({
     where: { id: formulationVersionId },
@@ -48,8 +77,30 @@ export async function computeFormulationRequirements(
     dosesPerPackage: version.dosesPerPackage,
   };
 
+  /*
+   * A quantidade BRUTA planejada, quando pedida: líquida ÷ (1 − perda/100),
+   * pela mesma função que a tela usa. Perda não declarada devolve a própria
+   * líquida — ausência de premissa não inventa correção. Percentual fora de
+   * faixa não passa pela validação da API, e aqui degrada para a líquida em
+   * vez de derrubar o cálculo inteiro.
+   */
+  const bruta = options.aplicarPerdaPrevista
+    ? quantidadeBrutaPlanejada(
+        plannedQuantity.toString(),
+        version.expectedLossPercent ? version.expectedLossPercent.toString() : null,
+      )
+    : null;
+  const quantidadeBruta =
+    bruta === null || typeof bruta === "string"
+      ? plannedQuantity
+      : new Prisma.Decimal(bruta.toString());
+
   return version.components.map((component, index) => {
     const item = component.item;
+    // Quem acompanha o que é PRODUZIDO usa a bruta; quem acompanha a unidade
+    // VENDÁVEL continua na líquida.
+    const segueProducao = baseSegueQuantidadeProduzida(component.basis);
+    const quantidadeDaLinha = segueProducao ? quantidadeBruta : plannedQuantity;
     const requirement = computeComponentRequirement(
       {
         basis: component.basis,
@@ -62,7 +113,7 @@ export async function computeFormulationRequirements(
         applyPurityAdjustment: component.applyPurityAdjustment,
         applyOverageAdjustment: component.applyOverageAdjustment,
       },
-      plannedQuantity,
+      quantidadeDaLinha,
       context,
       units,
     );
@@ -81,6 +132,7 @@ export async function computeFormulationRequirements(
       requiredQuantity: requirement.requiredQuantity,
       stockUnitCode: item.unitCode,
       position: index,
+      expectedLossApplied: segueProducao && !quantidadeDaLinha.equals(plannedQuantity),
     };
   });
 }

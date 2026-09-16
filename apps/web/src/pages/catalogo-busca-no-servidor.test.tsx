@@ -317,6 +317,7 @@ function versaoDTO(): FormulationVersionDTO {
     doseUomCode: null,
     packageContentAmount: null,
     packageContentUomCode: null,
+    expectedLossPercent: null,
     productProfile: {
       dosageForm: null,
       presentationType: null,

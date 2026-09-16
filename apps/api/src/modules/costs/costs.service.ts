@@ -19,6 +19,11 @@ import type { CostReference } from "../../lib/cost-reference.js";
 import { selectItemCostSource } from "../../lib/cost-source-selection.js";
 import type { CostSourceResolution } from "../../lib/cost-source-selection.js";
 import { FormulationContextIncompleteError } from "../../lib/formulation-math.js";
+import {
+  lerPerdaPrevista,
+  quantidadeBrutaPlanejada,
+  rendimentoEsperado,
+} from "@veridi/shared";
 import { computeFormulationRequirements } from "../production-orders/requirement-calc.js";
 import { ItemNotFoundError } from "../inventory/inventory.errors.js";
 import { FormulationVersionNotFoundError } from "./costs.errors.js";
@@ -118,7 +123,24 @@ export async function getFormulationCostEstimate(
   let requirements: Awaited<ReturnType<typeof computeFormulationRequirements>> = [];
   let missingContext: FormulationCostEstimateDTO["missingContext"] = null;
   try {
-    requirements = await computeFormulationRequirements(prisma, version.id, version.basisQuantity);
+    /*
+     * PERDA PREVISTA DE PRODUÇÃO entra AQUI, e só aqui (FORMULATION-WORKBENCH-01).
+     *
+     * O custo é calculado ANTES de produzir, então a perda normal do processo é
+     * custo real da unidade vendável: para entregar `basisQuantity` líquidos a
+     * fábrica precisa partir da quantidade BRUTA. Quem escala é o motor, linha
+     * a linha, pela base que a própria receita declara — nunca
+     * `total × (1 + perda)`, que aumentaria pote, tampa e rótulo junto.
+     *
+     * O DIVISOR do custo unitário continua sendo `basisQuantity`, a quantidade
+     * líquida: o custo do que se perdeu é custo do que se vende.
+     */
+    requirements = await computeFormulationRequirements(
+      prisma,
+      version.id,
+      version.basisQuantity,
+      { aplicarPerdaPrevista: true },
+    );
   } catch (error) {
     if (!(error instanceof FormulationContextIncompleteError)) throw error;
     missingContext = error.missing;
@@ -192,6 +214,7 @@ export async function getFormulationCostEstimate(
       costSourceDetails: resolution.details,
       customerSupplied: isCustomerSupplied,
       estimatedComponentCost: componentCost ? formatAmount(componentCost) : null,
+      expectedLossApplied: requirement.expectedLossApplied,
     });
   });
 
@@ -213,6 +236,21 @@ export async function getFormulationCostEstimate(
       ? estimatedMaterialCost.dividedBy(version.basisQuantity)
       : null;
 
+  /*
+   * A premissa e o que ela derivou, ditas no DTO: a tela precisa poder mostrar
+   * o rendimento e a quantidade bruta ao lado do custo, e conferir um custo
+   * maior sem ver a premissa que o aumentou não é conferência.
+   */
+  const perda = lerPerdaPrevista(
+    version.expectedLossPercent ? version.expectedLossPercent.toString() : null,
+  );
+  const perdaValida = perda !== null && typeof perda !== "string" ? perda : null;
+  const rendimento = perdaValida === null ? null : rendimentoEsperado(perdaValida.toString());
+  const bruta =
+    perdaValida === null
+      ? null
+      : quantidadeBrutaPlanejada(version.basisQuantity.toString(), perdaValida.toString());
+
   return {
     formulationVersionId: version.id,
     basisQuantity: version.basisQuantity.toString(),
@@ -222,6 +260,10 @@ export async function getFormulationCostEstimate(
     quality,
     estimatedMaterialCost: estimatedMaterialCost ? formatAmount(estimatedMaterialCost) : null,
     estimatedMaterialUnitCost: estimatedMaterialUnitCost ? formatUnitCost(estimatedMaterialUnitCost) : null,
+    expectedLossPercent: perdaValida === null ? null : perdaValida.toString(),
+    expectedYieldPercent:
+      rendimento === null || typeof rendimento === "string" ? null : rendimento.toString(),
+    grossPlannedQuantity: bruta === null || typeof bruta === "string" ? null : bruta.toString(),
     knownCostSubtotal: veridiWithCost > 0 ? formatAmount(knownSubtotal) : null,
     missingCostItems,
     ambiguousCostItems,

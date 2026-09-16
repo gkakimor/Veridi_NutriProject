@@ -63,8 +63,17 @@ estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0
   oferece só Pó e Cápsula — a forma de uma versão histórica continua na lista enquanto for a dela —, as colunas por
   cápsula só existem na cápsula, e o topo virou resumo de premissas em grade, com faixa etária, lote mínimo e caixa de
   embarque lidos do cadastro do Produto. Rascunho gravado sob o contrato antigo (pureza registrada sem autorizar a
-  correção) entra corrigido e a tela DIZ quais linhas mudaram; versão ativa ou inativa entra como está gravada. Custos
-  seguem fora da Formulação. **Falta a avaliação visual do PO** — é dela que depende o fechamento;
+  correção) entra corrigido e a tela DIZ quais linhas mudaram; versão ativa ou inativa entra como está gravada.
+  A rodada final de UX (2026-09-15, migration aditiva `20260925093029`) fechou o refinamento: a UI diz **Pureza (%)** e
+  **Reserva de matéria-prima (%)** — a palavra *overage* não aparece na tela —, a reserva continua POR LINHA, e a versão
+  ganhou a premissa GLOBAL **Perda prevista de produção (%)** com o **Rendimento esperado** derivado (100 − perda) num
+  bloco compacto "Premissas de produção", fora da grade. A perda não altera dose nem cápsula, não altera quantidade
+  comercial nenhuma (guarda de alcance no repositório) e entra só no custo estimado interno: quantidade bruta = líquida ÷
+  (1 − perda/100), aplicada pela base que a receita declara — `PER_DOSE`/`FIXED_BASIS` escalam, `PER_FINISHED_UNIT` não —
+  com o custo unitário ainda dividido pela quantidade vendável. A grade ficou mais enxuta (resultado não parece campo,
+  Base sai da linha quando não decide material, embalagem redistribuída com o Item em ~50%), a "Apresentação" virou
+  **Apresentação comercial** com as opções coerentes com a Forma, e as frases fixas viraram ⓘ. **Falta a avaliação
+  visual do PO** — é dela que depende o fechamento;
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 
 Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).

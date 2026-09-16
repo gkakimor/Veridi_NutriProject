@@ -219,6 +219,14 @@ function toVersionDTO(
       ? version.packageContentAmount.toString()
       : null,
     packageContentUomCode: version.packageContentUomCode,
+    /*
+     * PERDA PREVISTA — snapshot da versão, como as demais premissas. `null` nas
+     * versões gravadas antes desta coluna: ausência é "não informada", e quem
+     * calcula trata isso como "sem correção", nunca como 0% declarado.
+     */
+    expectedLossPercent: version.expectedLossPercent
+      ? version.expectedLossPercent.toString()
+      : null,
     productProfile: {
       dosageForm: version.product.dosageForm,
       presentationType: version.product.presentationType,
@@ -613,6 +621,9 @@ export async function createNewVersionFrom(
         doseUomCode: source.doseUomCode,
         packageContentAmount: source.packageContentAmount,
         packageContentUomCode: source.packageContentUomCode,
+        // Perda prevista tambem e copia FIEL: a versao nova comeca com a
+        // premissa de producao que a de origem declarava.
+        expectedLossPercent: source.expectedLossPercent,
         outputItemId: source.outputItemId,
         outputItemCode: source.outputItemCode,
         outputItemName: source.outputItemName,
@@ -907,6 +918,9 @@ export async function updateFormulationVersion(
           : input.dosesPerPackage !== undefined
             ? { dosesPerPackage: input.dosesPerPackage }
             : {}),
+        ...(input.expectedLossPercent !== undefined
+          ? { expectedLossPercent: input.expectedLossPercent }
+          : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
       },
     });

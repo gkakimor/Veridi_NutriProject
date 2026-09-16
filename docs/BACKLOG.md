@@ -18,7 +18,7 @@ zero BLOCKER. O MVP foi entregue; o que está aqui é evolução do produto.
 
 | Ordem | Prioridade | Item | Estado | Próxima ação | Dependência |
 |---|---|---|---|---|---|
-| 1 | P0 | **FORMULATION-WORKBENCH-01** — Formulação como bancada interativa (forma × apresentação, física por dose e por cápsula, composição × embalagem) | **EM HOMOLOGAÇÃO** · motor e migration aditiva `20260925093028` entregues em 2026-09-15 · ajustes de UX da homologação entregues em 2026-09-15 (pureza e reserva de produção como colunas, painel de ajustes fora da Formulação, forma restrita a Pó/Cápsula, resumo de premissas no topo) · **sem migration nesta rodada** | Avaliação visual do PO nos dois produtos de homologação do `veridi_dev`; o fechamento depende de aprovação explícita | — |
+| 1 | P0 | **FORMULATION-WORKBENCH-01** — Formulação como bancada interativa (forma × apresentação, física por dose e por cápsula, composição × embalagem) | **EM HOMOLOGAÇÃO** · motor e migration aditiva `20260925093028` entregues em 2026-09-15 · ajustes de UX da homologação entregues em 2026-09-15 (pureza e reserva de produção como colunas, painel de ajustes fora da Formulação, forma restrita a Pó/Cápsula, resumo de premissas no topo) · refinamento final de UX entregue em 2026-09-15 (rótulos Pureza (%) e Reserva de matéria-prima (%), premissa global Perda prevista de produção (%) com Rendimento esperado derivado, quantidade bruta no custo estimado interno sem tocar quantidade comercial, grade modernizada, Apresentação comercial condicionada à Forma, explicações em ⓘ) · migration aditiva `20260925093029` | Avaliação visual do PO nos dois produtos de homologação do `veridi_dev`; o fechamento depende de aprovação explícita | — |
 | 2 | P0 | **FORMULATION-TEMPLATE-WORKBENCH-01** — levar a bancada para o Modelo de Formulação (catálogo, aplicação e promoção de Formulação para Modelo) | **PRÓXIMA ETAPA, NÃO INICIADA** · a Formulação e o Modelo compartilham a configuração de ajustes, e só a Formulação saiu do painel | Começar DEPOIS da aprovação do PO em (1) | FORMULATION-WORKBENCH-01 homologado |
 | 3 | P1 | ~~**BILLED-VALUE-CANONICAL-01**~~ — "Valor faturado" do Painel, R-15 e R-14 igual ao valor do documento | **FECHADO em 2026-09-15** · D1 decidida pelo PO: `Billing.totalAmount` · sem migration | — (entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
 | 4 | P1 | **E2E-BASELINE-REDESIGN-WAVE-04** — grupo C das E2E com massa própria | Discovery `EM_ANALISE`; P1 e a espera da 4E resolvidas pelo estado posterior | PO fecha P2–P8 ([abaixo](#wave-4--decisões-ainda-reais)); 4A pode começar | — |
@@ -287,6 +287,30 @@ rastreabilidade adicional.
 considera regra/configuração por tipo ou por Item — hipótese de modelagem:
 "exige lote do fabricante" e "exige validade" —, mas defaults e obrigatoriedade
 operacional precisam ser validados com a Veridi. Relacionado ao #7.
+
+### FORMULATION-LOSS-SCOPE-01 — a cápsula vazia entra na perda prevista? — aguardando o PO
+
+Registrado no refinamento final de FORMULATION-WORKBENCH-01 (2026-09-15). A
+perda prevista de produção escala as linhas cuja base acompanha a quantidade
+PRODUZIDA (`PER_DOSE`, `FIXED_BASIS`) e deixa `PER_FINISHED_UNIT` na quantidade
+vendável — pote, tampa, rótulo e caixa não são perdidos com o lote.
+
+Nos dois produtos de homologação a **cápsula vazia** é item `PACKAGING` com base
+`PER_FINISHED_UNIT` (120 un por embalagem), então hoje ela NÃO é escalada.
+Fisicamente uma cápsula perdida no envase leva o invólucro junto. O domínio não
+tem, hoje, nenhuma marca que separe "embalagem consumida na produção" de
+"embalagem comercial": `packagingSubtype` tem `OTHER` para a cápsula, o que não
+é contrato. Decidir isso é decisão de custo do PO — nada foi inventado.
+
+### FORMULATION-PRESENTATION-BY-FORM-01 — a tabela Forma × Apresentação — aguardando o PO
+
+Também de 2026-09-15. O domínio não tinha nenhuma regra de compatibilidade entre
+`DosageForm` e `PresentationType`, e o dado real só usa `POT` nas duas formas. A
+tela passou a oferecer as apresentações coerentes com a forma, com a primeira
+versão declarada da tabela em `APRESENTACOES_POR_FORMA` (`packages/shared`):
+cápsula oferece tudo; pó oferece tudo menos **Frasco**. A apresentação já
+gravada numa versão continua na lista mesmo fora da tabela, e nenhuma migration
+destrutiva foi feita. Confirmar ou corrigir a tabela é decisão do PO.
 
 ### PRODUCTION-LOT-PURITY-RECONCILIATION-01 — pureza da Formulação × pureza do lote — futuro
 
