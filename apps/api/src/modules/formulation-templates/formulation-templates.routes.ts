@@ -11,6 +11,7 @@ import {
   InactiveComponentItemError,
   InvalidComponentItemTypeError,
   InvalidComponentQuantityError,
+  InvalidFormulationPresentationError,
   MissingFinishedItemError,
   ProductNotFoundError,
 } from "../formulations/formulations.errors.js";
@@ -73,7 +74,7 @@ function formatZodError(error: ZodError) {
 
 function mapDomainError(
   error: unknown,
-): { status: number; body: { error: string; message: string } } | null {
+): { status: number; body: Record<string, unknown> } | null {
   if (error instanceof ForbiddenError) {
     return { status: 403, body: { error: "forbidden", message: error.message } };
   }
@@ -123,6 +124,20 @@ function mapDomainError(
   // Unidade fora do catálogo tem recusa com nome, não erro cru de chave estrangeira.
   if (error instanceof UomNotFoundError) {
     return { status: 400, body: { error: "invalid_unit", message: error.message } };
+  }
+  if (error instanceof InvalidFormulationPresentationError) {
+    /*
+     * Recusa com ENDEREÇO, na MESMA forma da Formulação: a tela marca o campo
+     * em vez de mostrar a frase solta na faixa do topo, onde ela obrigaria a
+     * procurar qual das premissas não fechou.
+     */
+    return {
+      status: 400,
+      body: {
+        error: "validation_error",
+        issues: [{ path: error.path, message: error.message }],
+      },
+    };
   }
   return null;
 }

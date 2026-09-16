@@ -17,7 +17,8 @@ import type {
   FormulationComponentQuantityMode,
 } from "./formulations.js";
 import type { SupplyResponsibility } from "./ownership.js";
-import type { ItemType } from "./items.js";
+import type { ItemFamily, ItemType, PackagingSubtype } from "./items.js";
+import type { DosageForm, PresentationType } from "./products.js";
 
 export const FORMULATION_TEMPLATE_CODE_PREFIX = "FT";
 
@@ -62,6 +63,21 @@ export interface FormulationTemplateComponentDTO {
   applyOverageAdjustment: boolean;
   notes: string | null;
   position: number;
+  /**
+   * Dados técnicos do cadastro ATUAL do Item — leitura para quem monta a
+   * matriz, nunca entrada de cálculo. O que a conta usa e a versão congela
+   * continua sendo `purityPercentApplied`. Os MESMOS nomes do componente da
+   * Formulação: a bancada compartilhada lê um contrato só.
+   */
+  stockUnitCode: string;
+  itemSourceName: string | null;
+  itemDeclaredNutrient: string | null;
+  itemFamily: ItemFamily | null;
+  itemPackagingSubtype: PackagingSubtype | null;
+  /** Pureza padrão do cadastro HOJE — pode diferir da aplicada nesta versão. */
+  itemDefaultPurityPercent: string | null;
+  /** Código legado do Item (planilhas). `null` quando não há legado. */
+  itemExternalCode: string | null;
 }
 
 export interface FormulationTemplateVersionDTO {
@@ -77,6 +93,28 @@ export interface FormulationTemplateVersionDTO {
   calculationMode: FormulationCalculationMode;
   /** Obrigatório no modo `PER_DOSE`; `null` no `FIXED_BASIS`. */
   dosesPerPackage: number | null;
+  /**
+   * PREMISSAS TÉCNICAS DA MATRIZ — os MESMOS nomes da Formulação.
+   *
+   * `null` em todo Modelo gravado antes da bancada: ausência é NÃO INFORMADA,
+   * nunca pó nem cápsula presumidos. Nas formas cápsula e pó, `dosesPerPackage`
+   * é derivado delas pelo mesmo motor da Formulação.
+   */
+  dosageForm: DosageForm | null;
+  presentationType: PresentationType | null;
+  capsulesPerDose: number | null;
+  /** Derivado: cápsulas por dose × doses por embalagem. Não é coluna. */
+  capsulesPerPackage: number | null;
+  doseAmount: string | null;
+  doseUomCode: string | null;
+  packageContentAmount: string | null;
+  packageContentUomCode: string | null;
+  /**
+   * PERDA PREVISTA DE PRODUÇÃO (%) — premissa da matriz, copiada como DEFAULT
+   * para a Formulação que nascer dela. `null` = não informada (nunca 0%
+   * presumido).
+   */
+  expectedLossPercent: string | null;
   /** Unidade do produto acabado a que a base se refere. */
   outputUnitCode: string;
   notes: string | null;
@@ -171,7 +209,26 @@ export interface UpdateFormulationTemplateVersionInput {
   basisQuantity?: string;
   outputUnitCode?: string;
   calculationMode?: FormulationCalculationMode;
-  dosesPerPackage?: number | null;
+  dosesPerPackage?: number | string | null;
+  /**
+   * Premissas técnicas da matriz. Nas formas cápsula e pó o servidor DERIVA
+   * `dosesPerPackage` delas, pela mesma função da Formulação, e divisão que
+   * não fecha é recusada com o campo junto.
+   */
+  dosageForm?: DosageForm | null;
+  presentationType?: PresentationType | null;
+  capsulesPerDose?: number | string | null;
+  /** Entrada, não coluna: com cápsulas por dose, fecha as doses por embalagem. */
+  capsulesPerPackage?: number | string | null;
+  doseAmount?: string | null;
+  doseUomCode?: string | null;
+  packageContentAmount?: string | null;
+  packageContentUomCode?: string | null;
+  /**
+   * Perda prevista de produção (%) — premissa da matriz. `null` limpa (volta a
+   * "não informada"); ausente deixa como está.
+   */
+  expectedLossPercent?: string | null;
   notes?: string | null;
   components?: FormulationTemplateComponentInput[];
 }

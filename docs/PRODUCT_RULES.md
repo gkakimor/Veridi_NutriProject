@@ -6234,3 +6234,46 @@ filtro devolve todos; os seletores de venda pedem `status=ACTIVE`.
 
 **Visão do Cliente:** situação atual, motivo e autor do bloqueio em vigor,
 aviso explícito de arquivado quando inativo, e o histórico inteiro.
+
+## §96 — O Modelo de Formulação guarda a premissa técnica, e só ela
+
+FORMULATION-TEMPLATE-WORKBENCH-01, fatia 1, 2026-09-16.
+
+**Forma é premissa técnica da receita, não decoração do cadastro.** A versão do
+Modelo guarda as MESMAS premissas da versão da Formulação, com os MESMOS nomes:
+`dosageForm`, `presentationType`, `capsulesPerDose`, `doseAmount`/`doseUomCode`,
+`packageContentAmount`/`packageContentUomCode` e `expectedLossPercent`. Sem elas
+a matriz entregava quantidades sem a leitura que as interpreta — "500 mg por
+dose" não descreve produto nenhum enquanto não se sabe se a dose são duas
+cápsulas ou cinco gramas.
+
+- **Uma autoridade só para derivar doses.** Cápsula e pó DERIVAM
+  `dosesPerPackage` (cápsulas por embalagem ÷ cápsulas por dose; conteúdo ÷
+  dose, convertendo unidade) pela mesma função que a Formulação usa
+  (`lib/formulation-premises.ts`, sobre o motor de `@veridi/shared`). Divisão
+  que não fecha é RECUSADA com o campo junto — arredondar doses mudaria em
+  silêncio o material de toda linha por dose. Cada forma guarda só o que usa.
+- **Ausência é ausência.** `null` é NÃO INFORMADA, nunca 0% nem forma
+  presumida. Modelo gravado antes desta bancada continua com tudo nulo, e
+  continua abrindo, ativando e sendo aplicado como antes.
+- **Cópia, nunca vínculo — nos dois sentidos.** "Salvar como Modelo" leva as
+  premissas; "Aplicar Modelo" as copia como DEFAULT da versão nova, que segue
+  editável enquanto rascunho. Versão nova do Modelo não alcança formulação já
+  criada.
+- **Pureza reprodutível.** Escolher a matéria-prima traz
+  `Item.defaultPurityPercent` como ponto de partida; salvar congela na versão;
+  aplicar copia o que a matriz declarou. A aplicação NÃO relê o cadastro do
+  Item — um Modelo que muda de resultado conforme o dia em que é aplicado não é
+  um modelo.
+- **Composição e embalagem saem do TIPO do Item**, não de uma marcação nova:
+  `SECAO_DO_TIPO_DE_ITEM` em `@veridi/shared` serve as duas telas. A base da
+  linha NOVA sai da seção (embalagem por unidade acabada; composição por dose
+  quando a receita é por dose); linha que já declarou base não é tocada, e
+  `FIXED_BASIS` continua existindo.
+- **Nada comercial atravessa.** O Modelo não tem custo, preço, margem, markup
+  nem fornecedor com preço, e promover uma Formulação a Modelo não leva Produto,
+  Cliente, Projeto, Orçamento, Pedido nem faturamento. A perda prevista é
+  premissa interna: não altera quantidade comercial em lugar nenhum — a regra
+  da perda prevista (§52, "Perda prevista de produção") continua valendo tal
+  como está, e o Modelo entrou na lista de quem PODE lê-la justamente porque
+  não calcula com ela.

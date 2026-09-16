@@ -6,7 +6,12 @@ import {
   casasDecimais,
   mensagemCasasPercentualTecnico,
 } from "../../lib/decimal-schema.js";
-import { optionalPurityPercent } from "../../lib/industrial-schema.js";
+import {
+  optionalEnum,
+  optionalPositiveDecimal,
+  optionalPositiveInt,
+  optionalPurityPercent,
+} from "../../lib/industrial-schema.js";
 import { inteiroDeConsultaSchema, inteiroDecimalSchema } from "../../lib/integer-schema.js";
 
 /** Doses por embalagem: inteiro estrito (API-INT-COERCION-01), maior que zero. */
@@ -71,11 +76,65 @@ export const updateFormulationTemplateSchema = z.object({
   description: optionalNullableText(1000),
 });
 
+/**
+ * Perda prevista de producao (%) do Modelo — a MESMA regra da Formulacao.
+ *
+ * `0` e legitimo (declarar "sem perda"); o teto e EXCLUSIVO em 100, porque com
+ * 100% de perda nada sai da producao e a quantidade bruta nao existe. Vazio e
+ * `null` sao NAO INFORMADA, que nunca vira 0% em silencio.
+ */
+const expectedLossPercent = z
+  .union([z.string(), z.number()])
+  .nullish()
+  .transform((value) => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    const text = String(value).trim();
+    return text.length === 0 ? null : text;
+  })
+  .refine((value) => value === undefined || value === null || /^\d+(\.\d+)?$/.test(value), {
+    message: "Perda prevista de produção inválida",
+  })
+  .refine((value) => value === undefined || value === null || Number(value) < 100, {
+    message: "Perda prevista de produção deve ser menor que 100%",
+  })
+  .refine(
+    (value) =>
+      value === undefined || value === null || casasDecimais(value) <= CASAS_PERCENTUAL_TECNICO,
+    { message: mensagemCasasPercentualTecnico() },
+  );
+
 export const updateFormulationTemplateVersionSchema = z.object({
   basisQuantity: decimalString.optional(),
   outputUnitCode: z.string().trim().min(1).max(20).optional(),
   calculationMode: z.enum(["FIXED_BASIS", "PER_DOSE"]).optional(),
   dosesPerPackage,
+  /*
+   * PREMISSAS TECNICAS DA MATRIZ — os MESMOS validadores da Formulacao: enum
+   * (ou "" para limpar), inteiro positivo, decimal positivo.
+   *
+   * Nas formas capsula e po o servico DERIVA `dosesPerPackage` delas, pela
+   * mesma funcao da Formulacao, e o numero que o cliente mandar nao substitui a
+   * divisao: duas fontes para a mesma premissa divergem no primeiro campo que
+   * alguem esquecer de atualizar.
+   *
+   * `capsulesPerPackage` e ENTRADA, nao coluna — volta no DTO como produto de
+   * capsulas por dose e doses por embalagem.
+   */
+  dosageForm: optionalEnum(["CAPSULE", "POWDER", "TABLET", "LIQUID", "OTHER"]),
+  presentationType: optionalEnum(["POT", "POUCH", "CARTON", "BULK", "BOTTLE", "OTHER"]),
+  capsulesPerDose: optionalPositiveInt("Cápsulas por dose deve ser maior que zero"),
+  capsulesPerPackage: optionalPositiveInt("Cápsulas por embalagem deve ser maior que zero"),
+  doseAmount: optionalPositiveDecimal("Dose deve ser maior que zero"),
+  doseUomCode: optionalNullableText(20),
+  packageContentAmount: optionalPositiveDecimal("Conteúdo da embalagem deve ser maior que zero"),
+  packageContentUomCode: optionalNullableText(20),
+  /*
+   * PERDA PREVISTA DE PRODUCAO — premissa da VERSAO do Modelo, distinta da
+   * reserva de materia-prima (`overagePercent`), que continua por componente: a
+   * reserva e de UM insumo, a perda e do processo inteiro.
+   */
+  expectedLossPercent,
   notes: optionalNullableText(1000),
   components: z.array(componentSchema).optional(),
 });

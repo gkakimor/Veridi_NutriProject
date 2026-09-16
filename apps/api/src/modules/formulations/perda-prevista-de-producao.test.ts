@@ -694,12 +694,22 @@ describe("Escopo da perda prevista — a cápsula vazia e a embalagem comercial"
 const RAIZ_DA_API = join(import.meta.dirname, "..", "..");
 
 /**
- * Onde a premissa PODE ser lida: a formulação que a edita, a estimativa de
+ * Onde a premissa PODE ser lida: a formulação que a edita, o Modelo que a
+ * guarda como premissa técnica e a copia para a Formulação, a estimativa de
  * custo que a usa e o motor de necessidade que a aplica quando pedido.
+ *
+ * O Modelo entrou nesta lista com a bancada compartilhada
+ * (FORMULATION-TEMPLATE-WORKBENCH-01): a matriz guarda a perda como DEFAULT
+ * técnico da receita e nunca calcula com ela — não há custo, preço nem
+ * quantidade comercial no Modelo. É por isso que ele cabe aqui e nenhum módulo
+ * comercial cabe.
  */
 const MODULOS_AUTORIZADOS = [
   "modules/formulations/formulations.service.ts",
   "modules/formulations/formulations.schemas.ts",
+  "modules/formulation-templates/formulation-templates.service.ts",
+  "modules/formulation-templates/formulation-templates.schemas.ts",
+  "modules/formulation-templates/apply-template.service.ts",
   "modules/costs/costs.service.ts",
   "modules/production-orders/requirement-calc.ts",
 ];

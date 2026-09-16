@@ -130,6 +130,53 @@ export const FORMULATION_COMPONENT_BASIS_LABELS: Record<FormulationComponentBasi
   PER_FINISHED_UNIT: "Por unidade acabada",
 };
 
+/**
+ * As duas seções da bancada: o que entra na dose e o que embala o produto.
+ *
+ * Quem responde é o TIPO REAL do Item, nunca o nome nem uma marcação nova na
+ * linha — não existe coluna de seção no banco, e inventar uma criaria uma
+ * segunda verdade que diverge do cadastro no primeiro item reclassificado.
+ *
+ * Mora no shared porque a Formulação e o Modelo mostram a MESMA divisão: a
+ * matriz que leva pote, tampa e rótulo precisa separá-los da composição
+ * exatamente como a receita do Produto separa.
+ */
+export type SecaoDaFormula = "COMPOSICAO" | "EMBALAGEM";
+
+export const SECAO_DA_FORMULA_LABELS: Record<SecaoDaFormula, string> = {
+  COMPOSICAO: "Composição",
+  EMBALAGEM: "Embalagem",
+};
+
+export const SECAO_DO_TIPO_DE_ITEM: Record<ItemType, SecaoDaFormula> = {
+  RAW_MATERIAL: "COMPOSICAO",
+  PACKAGING: "EMBALAGEM",
+  // Produto acabado não é componente válido; fica visível na composição, onde
+  // o bloqueio de ativação explica por que a versão não ativa.
+  FINISHED_PRODUCT: "COMPOSICAO",
+};
+
+/** A seção de um Item pelo tipo; sem tipo conhecido, composição. */
+export function secaoDoItem(tipo: ItemType | null | undefined): SecaoDaFormula {
+  return tipo ? (SECAO_DO_TIPO_DE_ITEM[tipo] ?? "COMPOSICAO") : "COMPOSICAO";
+}
+
+/**
+ * A base que a seção SUGERE para uma linha nova — sugestão, nunca imposição.
+ *
+ * Embalagem conta por unidade acabada (uma tampa por pote), composição conta
+ * por dose quando a receita é por dose. `FIXED_BASIS` continua existindo e
+ * continua editável: o dado real tem matriz histórica escrita sobre a base, e
+ * apagar essa capacidade reescreveria receita gravada.
+ */
+export function baseSugeridaDaSecao(
+  secao: SecaoDaFormula,
+  receitaPorDose: boolean,
+): FormulationComponentBasis {
+  if (secao === "EMBALAGEM") return "PER_FINISHED_UNIT";
+  return receitaPorDose ? "PER_DOSE" : "FIXED_BASIS";
+}
+
 export interface FormulationComponentDTO {
   id: string;
   itemId: string;

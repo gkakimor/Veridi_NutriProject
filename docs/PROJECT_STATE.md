@@ -1153,6 +1153,9 @@ O read model (`pdf/documents/technical-sheet-model.ts`) é NEUTRO: converte uma
 fonte na estrutura que o documento desenha. O Modelo de Formulação ganha a sua
 ficha com um adaptador novo, sem copiar o documento
 (FORMULATION-TEMPLATE-WORKBENCH-01). **Modelos não foram tocados nesta rodada.**
+A fatia 1 daquela capability (2026-09-16) deu ao Modelo as premissas com os
+MESMOS nomes que este read model lê — e **não** criou PDF do Modelo: o
+adaptador continua sendo trabalho futuro.
 
 Decisões de conteúdo:
 - **Rascunho** gera ficha, com a marca RASCUNHO no cabeçalho e uma frase
@@ -4815,6 +4818,59 @@ inativo, e o histórico dele começa vazio — inventar autor e motivo seria pio
 esperando na trava) e a faixa dos módulos afetados (Clientes, Pedidos, Consulta, Projetos, Exportações, Produtos,
 Recebimento); web dos módulos afetados; typecheck dos três pacotes. Sem `pnpm test` global, E2E, build ou fresh (FAST).
 `web pages/projects/envio-com-linha-nao-salva.test.tsx` seguiu instável, como já era na `main`.
+
+## O Modelo guarda a premissa técnica (FORMULATION-TEMPLATE-WORKBENCH-01, Fatia 1, 2026-09-16)
+
+**`FATIA_1_READY = YES`. A capability NÃO está fechada** — faltam a fatia 2 (bancada visual compartilhada) e a
+fatia 3 (aplicar/salvar, pré-check, diff e acabamento).
+
+O Modelo de Formulação já copiava quantidade, pureza, reserva e intenção de ajuste, mas não a premissa que dá
+sentido a tudo isso. Aplicar o Modelo entregava a receita certa com a leitura em branco: "500 mg por dose" sem
+saber se a dose são duas cápsulas ou cinco gramas não se reproduz em produto nenhum. A versão do Modelo passou
+a guardar as MESMAS premissas da Formulação, com os MESMOS nomes: `dosageForm`, `presentationType`,
+`capsulesPerDose`, `doseAmount`/`doseUomCode`, `packageContentAmount`/`packageContentUomCode` e
+`expectedLossPercent`.
+
+**Uma autoridade só para derivar doses.** `resolverApresentacao` saiu de `formulations.service.ts` para
+`apps/api/src/lib/formulation-premises.ts`, e é de lá que a Formulação **e** o Modelo leem o patch, decidem o
+que cada forma guarda, derivam `dosesPerPackage` (cápsulas por embalagem ÷ cápsulas por dose; conteúdo ÷ dose,
+convertendo unidade) e recusam a divisão que não fecha — com o campo junto, em `issues[].path`, como já era na
+Formulação. A conta continua no motor único de `packages/shared/src/formulation-quantity.ts`: o Modelo não
+implementa matemática própria. `InvalidFormulationPresentationError` mudou de casa junto e é reexportada por
+`formulations.errors.ts`, para que `instanceof` continue valendo nas duas rotas. **O comportamento da
+Formulação não mudou** — ela está em homologação final, e a extração foi feita para não mudá-lo.
+
+**Cópia nos dois sentidos, sempre snapshot.** "Salvar como Modelo" leva as premissas (`capsulesPerPackage` sai
+do produto de cápsulas por dose e doses por embalagem, os mesmos números que originaram a receita) e continua
+não levando nada comercial: Produto, Cliente, Projeto, Orçamento, custo, preço, Pedido e faturamento ficam
+onde estão. "Aplicar Modelo" copia as premissas como DEFAULT da versão nova, que segue editável enquanto
+rascunho — e V4 do Modelo não alcança formulação que já nasceu. Premissa nula entra nula: `null` é NÃO
+INFORMADA, e inventar forma na cópia decidiria pelo usuário o que ele não declarou.
+
+**Pureza.** Escolher a matéria-prima na bancada do Modelo traz `Item.defaultPurityPercent` como ponto de
+partida da linha; salvar congela; aplicar copia o que a matriz declarou. A aplicação **não** relê o cadastro do
+Item. Embalagem não recebe pureza — pote e tampa não têm teor a corrigir.
+
+**Seções no contrato, sem schema novo.** `SECAO_DO_TIPO_DE_ITEM`, `secaoDoItem` e `baseSugeridaDaSecao` moram em
+`packages/shared/src/formulations.ts`, e a Formulação passou a ler a mesma tabela que tinha em casa. A base da
+linha NOVA do Modelo sai da seção (embalagem por unidade acabada; composição por dose quando a receita é por
+dose); linha que já declarou base não é tocada, e `FIXED_BASIS` continua existindo. Isso absorve
+FORMULATION-TEMPLATE-BASIS-EDIT-01.
+
+**UI mínima, de propósito.** A página do Modelo ganhou forma, apresentação, os campos condicionais de cada
+forma, doses por embalagem como RESULTADO (nunca um segundo campo) e perda prevista — com a pendência, a guarda
+de saída e o rascunho de "criar item no meio do caminho" cobrindo os campos novos. A grande tabela
+compartilhada é a fatia 2; `FormulationVersionPage.tsx` não foi operada.
+
+**Migration aditiva** `20260925093031_formulation_template_version_premises`: oito colunas nulas em
+`formulation_template_versions` e duas FKs para `units_of_measure(code)`. Nenhum enum novo, nenhum backfill —
+Modelo antigo continua com tudo nulo e continua abrindo, ativando e aplicando como antes.
+
+**Validação.** API: faixas de Formulações, Modelos, Custos e Ordens de Produção (413 testes), mais `src/lib`
+(1.329); web: Modelos, Modelos de Custo e Formulações (271); shared/scripts na raiz (614). Typecheck dos três
+pacotes e `validate:migrations:fresh` (80 migrations, sem drift). Sem `pnpm test` global, E2E, stress, security
+ou restore (modo FAST). A guarda de alcance da perda prevista ganhou os três arquivos do Modelo na lista
+autorizada — o Modelo guarda a premissa e nunca calcula com ela, e nenhum módulo comercial entrou.
 
 ## Próxima prioridade
 

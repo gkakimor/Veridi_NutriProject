@@ -7,7 +7,6 @@ import type {
   FormulationTemplateVersion,
   FormulationVersion,
   Item,
-  PresentationType,
   Product,
   UnitOfMeasure,
 } from "@prisma/client";
@@ -20,19 +19,24 @@ import type {
   FormulationVersionDTO,
   FormulationVersionListResponse,
 } from "@veridi/shared";
-import {
-  MENSAGENS_DA_APRESENTACAO,
-  calcularQuantidadeDaDose,
-  capsulasPorEmbalagem,
-  dosesPorEmbalagemDaApresentacao,
-  formaDerivaDoses,
-} from "@veridi/shared";
-import type { ApresentacaoBlock, PremissasDaApresentacao, UomFactorLike } from "@veridi/shared";
+import { calcularQuantidadeDaDose, capsulasPorEmbalagem } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import {
   missingFormulationContext,
   tryComputeComponentRequirement,
 } from "../../lib/formulation-math.js";
+/*
+ * As premissas da apresentacao moram em `lib/formulation-premises`: a mesma
+ * leitura do patch e a mesma derivacao de doses servem a Formulacao e ao
+ * Modelo (FORMULATION-TEMPLATE-WORKBENCH-01). Duas implementacoes divergiriam
+ * no primeiro caso de borda corrigido de um lado so.
+ */
+import {
+  resolverApresentacao,
+  tocouNaApresentacao,
+  unidadesDoMotor,
+} from "../../lib/formulation-premises.js";
+import type { PremissasGravadas } from "../../lib/formulation-premises.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { isUomCompatible } from "../items/uom.js";
@@ -44,7 +48,6 @@ import {
   FormulationVersionNotFoundError,
   InactiveComponentItemError,
   IncompatibleComponentUnitError,
-  InvalidFormulationPresentationError,
   InvalidComponentItemTypeError,
   InvalidComponentQuantityError,
   MissingFinishedItemError,
@@ -70,15 +73,6 @@ type VersionWithRelations = FormulationVersion & {
     | (FormulationTemplateVersion & { formulationTemplate: FormulationTemplate })
     | null;
 };
-
-/** As unidades como o motor compartilhado as consome. */
-function unidadesDoMotor(units: readonly UnitOfMeasure[]): UomFactorLike[] {
-  return units.map((unit) => ({
-    code: unit.code,
-    dimension: unit.dimension,
-    toBaseFactor: unit.toBaseFactor.toString(),
-  }));
-}
 
 /** O que o componente precisa saber da versao para se quantificar. */
 type ContextoDaVersao = {
@@ -689,18 +683,6 @@ export async function createNewVersionFrom(
   return (await getFormulationVersionById(versionId))!;
 }
 
-/** As premissas da apresentacao como as colunas as guardam. */
-type PremissasGravadas = {
-  dosageForm: DosageForm | null;
-  presentationType: PresentationType | null;
-  capsulesPerDose: number | null;
-  doseAmount: Prisma.Decimal | null;
-  doseUomCode: string | null;
-  packageContentAmount: Prisma.Decimal | null;
-  packageContentUomCode: string | null;
-  dosesPerPackage: number | null;
-};
-
 /**
  * Premissas com que uma versao NOVA nasce: as do cadastro do Produto.
  *
@@ -749,116 +731,6 @@ export function premissasIniciaisDoProduto(
     };
   }
   return base;
-}
-
-/** Campos da apresentacao que o payload pode trazer. */
-const CAMPOS_DA_APRESENTACAO = [
-  "dosageForm",
-  "presentationType",
-  "capsulesPerDose",
-  "capsulesPerPackage",
-  "doseAmount",
-  "doseUomCode",
-  "packageContentAmount",
-  "packageContentUomCode",
-] as const;
-
-function tocouNaApresentacao(input: UpdateFormulationVersionInput): boolean {
-  return CAMPOS_DA_APRESENTACAO.some((campo) => input[campo] !== undefined);
-}
-
-/** Em que campo a recusa da apresentacao deve aparecer. */
-function campoDaRecusa(motivo: ApresentacaoBlock, forma: DosageForm | null): string {
-  if (motivo === "CAPSULAS_NAO_DIVIDEM") return "capsulesPerPackage";
-  if (motivo === "DOSES_NAO_INTEIRAS") return "packageContentAmount";
-  return forma === "POWDER" ? "doseUomCode" : "dosageForm";
-}
-
-/**
- * As premissas depois desta gravacao, com doses por embalagem DERIVADO nas
- * formas que o derivam.
- *
- * Cada forma guarda so o que usa: premissa de outra forma deixada aqui seria
- * dado invisivel, que volta a valer no dia em que alguem trocar a forma.
- *
- * `dosesPerPackage` continua sendo a premissa do motor — a diferenca e que na
- * capsula e no po ela e RESULTADO (capsulas por embalagem / capsulas por dose,
- * conteudo / dose) em vez de um segundo numero digitado, que divergiria do
- * primeiro. Divisao que nao fecha e RECUSADA com o campo junto: arredondar
- * doses mudaria em silencio o material de toda linha por dose.
- */
-function resolverApresentacao(
-  current: FormulationVersion,
-  input: UpdateFormulationVersionInput,
-  units: readonly UnitOfMeasure[],
-): PremissasGravadas {
-  const forma = input.dosageForm !== undefined ? input.dosageForm : current.dosageForm;
-  const apresentacao =
-    input.presentationType !== undefined ? input.presentationType : current.presentationType;
-  const capsulasPorDose =
-    input.capsulesPerDose !== undefined ? input.capsulesPerDose : current.capsulesPerDose;
-  const capsulasNaEmbalagem =
-    input.capsulesPerPackage !== undefined
-      ? input.capsulesPerPackage
-      : capsulasPorEmbalagem(current.capsulesPerDose, current.dosesPerPackage);
-  const dose =
-    input.doseAmount !== undefined
-      ? input.doseAmount
-      : current.doseAmount
-        ? current.doseAmount.toString()
-        : null;
-  const doseUom = input.doseUomCode !== undefined ? input.doseUomCode : current.doseUomCode;
-  const conteudo =
-    input.packageContentAmount !== undefined
-      ? input.packageContentAmount
-      : current.packageContentAmount
-        ? current.packageContentAmount.toString()
-        : null;
-  const conteudoUom =
-    input.packageContentUomCode !== undefined
-      ? input.packageContentUomCode
-      : current.packageContentUomCode;
-
-  const daCapsula = forma === "CAPSULE";
-  const doPo = forma === "POWDER";
-  const premissas: PremissasDaApresentacao = {
-    dosageForm: forma,
-    capsulesPerDose: daCapsula ? capsulasPorDose : null,
-    capsulesPerPackage: daCapsula ? capsulasNaEmbalagem : null,
-    doseAmount: doPo ? dose : null,
-    doseUomCode: doPo ? doseUom : null,
-    packageContentAmount: doPo ? conteudo : null,
-    packageContentUomCode: doPo ? conteudoUom : null,
-  };
-
-  let doses: number | null;
-  if (formaDerivaDoses(forma)) {
-    const derivado = dosesPorEmbalagemDaApresentacao(premissas, unidadesDoMotor(units));
-    if (typeof derivado === "string") {
-      throw new InvalidFormulationPresentationError(
-        campoDaRecusa(derivado, forma),
-        MENSAGENS_DA_APRESENTACAO[derivado],
-      );
-    }
-    doses = derivado;
-  } else {
-    doses = input.dosesPerPackage !== undefined ? input.dosesPerPackage : current.dosesPerPackage;
-  }
-
-  return {
-    dosageForm: forma,
-    presentationType: apresentacao,
-    capsulesPerDose: premissas.capsulesPerDose,
-    doseAmount:
-      premissas.doseAmount === null ? null : new Prisma.Decimal(String(premissas.doseAmount)),
-    doseUomCode: premissas.doseUomCode,
-    packageContentAmount:
-      premissas.packageContentAmount === null
-        ? null
-        : new Prisma.Decimal(String(premissas.packageContentAmount)),
-    packageContentUomCode: premissas.packageContentUomCode,
-    dosesPerPackage: doses,
-  };
 }
 
 /** Valida um array de componentes recebido — dedupe, tipo, ativo (so para itens NOVOS) e unidade. */

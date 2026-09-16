@@ -16,8 +16,17 @@ import type {
   FormulationTemplateSummaryDTO,
   FormulationTemplateVersionDTO,
 } from "@veridi/shared";
-import { FORMULATION_TEMPLATE_CODE_PREFIX } from "@veridi/shared";
+import {
+  FORMULATION_TEMPLATE_CODE_PREFIX,
+  capsulasPorEmbalagem,
+  formaDerivaDoses,
+} from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+/*
+ * A MESMA autoridade da Formulacao para as premissas tecnicas
+ * (FORMULATION-TEMPLATE-WORKBENCH-01): o Modelo nao implementa conta propria.
+ */
+import { resolverApresentacao, tocouNaApresentacao } from "../../lib/formulation-premises.js";
 import {
   basisRequiresDosesPerPackage,
   hasUsableDosesPerPackage,
@@ -111,6 +120,21 @@ function toComponentDTO(component: ComponentWithItem): FormulationTemplateCompon
     applyOverageAdjustment: component.applyOverageAdjustment,
     notes: component.notes,
     position: component.position,
+    /*
+     * Dados tecnicos do cadastro ATUAL do Item — os MESMOS nomes do componente
+     * da Formulacao, porque a bancada compartilhada le um contrato so. Sao
+     * LEITURA: o que a conta usa e a versao congela continua sendo
+     * `purityPercentApplied`, gravado na linha.
+     */
+    stockUnitCode: component.item.unitCode,
+    itemSourceName: component.item.sourceName,
+    itemDeclaredNutrient: component.item.declaredNutrient,
+    itemFamily: component.item.family,
+    itemPackagingSubtype: component.item.packagingSubtype,
+    itemDefaultPurityPercent: component.item.defaultPurityPercent
+      ? component.item.defaultPurityPercent.toString()
+      : null,
+    itemExternalCode: component.item.externalCode,
   };
 }
 
@@ -128,6 +152,24 @@ export function toTemplateVersionDTO(
     basisQuantity: version.basisQuantity.toString(),
     calculationMode: version.calculationMode,
     dosesPerPackage: version.dosesPerPackage,
+    /*
+     * PREMISSAS TECNICAS — as mesmas da Formulacao, com os mesmos nomes.
+     * `capsulesPerPackage` nao e coluna aqui tambem: sai do produto de
+     * capsulas por dose e doses por embalagem, pela funcao do motor.
+     */
+    dosageForm: version.dosageForm,
+    presentationType: version.presentationType,
+    capsulesPerDose: version.capsulesPerDose,
+    capsulesPerPackage: capsulasPorEmbalagem(version.capsulesPerDose, version.dosesPerPackage),
+    doseAmount: version.doseAmount ? version.doseAmount.toString() : null,
+    doseUomCode: version.doseUomCode,
+    packageContentAmount: version.packageContentAmount
+      ? version.packageContentAmount.toString()
+      : null,
+    packageContentUomCode: version.packageContentUomCode,
+    expectedLossPercent: version.expectedLossPercent
+      ? version.expectedLossPercent.toString()
+      : null,
     outputUnitCode: version.outputUnitCode,
     notes: version.notes,
     components: version.components.map(toComponentDTO),
@@ -400,7 +442,29 @@ export async function updateFormulationTemplateVersion(
   if (input.outputUnitCode !== undefined) await exigirUnidadeDoCatalogo(input.outputUnitCode);
 
   const modo = input.calculationMode ?? current.calculationMode;
-  const doses = input.dosesPerPackage !== undefined ? input.dosesPerPackage : current.dosesPerPackage;
+
+  /*
+   * PREMISSAS TECNICAS — resolvidas pela MESMA funcao da Formulacao.
+   *
+   * Recusa ANTES da transacao: divisao que nao fecha nao grava metade da
+   * apresentacao. Nas formas capsula e po as doses por embalagem sao RESULTADO
+   * das premissas, e o numero que o cliente mandar nao substitui a divisao.
+   */
+  const mexeuNaApresentacao = tocouNaApresentacao(input);
+  // Uma leitura do catalogo serve as duas conferencias desta gravacao.
+  const units =
+    mexeuNaApresentacao || input.components
+      ? await getPrisma().unitOfMeasure.findMany()
+      : ([] as UnitOfMeasure[]);
+  const apresentacao = mexeuNaApresentacao
+    ? resolverApresentacao(current, input, units)
+    : null;
+  const forma = apresentacao ? apresentacao.dosageForm : current.dosageForm;
+  const doses = apresentacao
+    ? apresentacao.dosesPerPackage
+    : input.dosesPerPackage !== undefined
+      ? input.dosesPerPackage
+      : current.dosesPerPackage;
   if (modo === "PER_DOSE" && !doses) throw new TemplateDosesRequiredError();
 
   /*
@@ -417,7 +481,6 @@ export async function updateFormulationTemplateVersion(
   if (dependeDeDoses && !hasUsableDosesPerPackage(doses)) throw new TemplateDosesRequiredError();
 
   if (input.components) {
-    const units = await getPrisma().unitOfMeasure.findMany();
     const anteriores = new Set(current.components.map((component) => component.itemId));
     await validateComponents(input.components, anteriores, units);
   }
@@ -431,11 +494,26 @@ export async function updateFormulationTemplateVersion(
           : {}),
         ...(input.outputUnitCode !== undefined ? { outputUnitCode: input.outputUnitCode } : {}),
         ...(input.calculationMode !== undefined ? { calculationMode: input.calculationMode } : {}),
-        ...(input.dosesPerPackage !== undefined ? { dosesPerPackage: input.dosesPerPackage } : {}),
+        // Mexeu na apresentacao? As doses saem dela. Senao, o campo antigo
+        // continua valendo exatamente como valia.
+        ...(apresentacao
+          ? apresentacao
+          : input.dosesPerPackage !== undefined
+            ? { dosesPerPackage: input.dosesPerPackage }
+            : {}),
+        ...(input.expectedLossPercent !== undefined
+          ? { expectedLossPercent: input.expectedLossPercent }
+          : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
         // Modo FIXED_BASIS não carrega doses POR SI — mas um componente por
         // dose carrega. Limpar aqui apagaria a premissa que a fórmula usa.
-        ...(modo === "FIXED_BASIS" && !dependeDeDoses ? { dosesPerPackage: null } : {}),
+        //
+        // A forma que DERIVA doses tambem carrega: na capsula e no po as doses
+        // sao resultado das premissas, e apaga-las aqui desfaria, no mesmo
+        // update, a divisao que acabou de ser aceita.
+        ...(modo === "FIXED_BASIS" && !dependeDeDoses && !formaDerivaDoses(forma)
+          ? { dosesPerPackage: null }
+          : {}),
       },
     });
 
@@ -566,6 +644,19 @@ export async function createTemplateVersionFrom(
         basisQuantity: source.basisQuantity,
         calculationMode: source.calculationMode,
         dosesPerPackage: source.dosesPerPackage,
+        /*
+         * As premissas tecnicas viajam com os numeros. Versao nova que as
+         * perdesse nasceria sem forma — e uma linha por dose sem forma nao tem
+         * como ser lida por dose.
+         */
+        dosageForm: source.dosageForm,
+        presentationType: source.presentationType,
+        capsulesPerDose: source.capsulesPerDose,
+        doseAmount: source.doseAmount,
+        doseUomCode: source.doseUomCode,
+        packageContentAmount: source.packageContentAmount,
+        packageContentUomCode: source.packageContentUomCode,
+        expectedLossPercent: source.expectedLossPercent,
         outputUnitCode: source.outputUnitCode,
         notes: source.notes,
         createdBy: actor.name,
