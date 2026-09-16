@@ -3787,6 +3787,20 @@ dá 5.050, que depois da perda entrega menos de 5.000. O erro é sempre para
 menos, que é o lado em que falta material. Nenhum float participa; o
 arredondamento é de quem planeja, com a unidade e o contexto reais.
 
+**A perda incide sobre o que ENTRA, não sobre o que sai** — é a definição de
+rendimento, e é o que torna a conta uma divisão. Com 1%, entrar com 1.010
+perde 1% DE 1.010 (10,1) e entrega 999,9; entrar com 1.011 perde 10,11 e
+entrega 1.000,89. A intuição de somar 1% sobre a quantidade entregue
+(1.000 + 10 = 1.010) erra por aplicar o percentual à base errada, do mesmo jeito
+que um desconto de 10% seguido de aumento de 10% não volta ao preço original.
+
+**A simulação da tela lê 1.000 como quantidade LÍQUIDA** — decisão do PO em
+2026-09-15. O bloco de premissas mostra "Produzir para entregar 1.000 un", com
+o lote de 1.000 como régua de leitura da perda, e responde "o cliente pediu
+1.000, planejo quanto?". Não é a pergunta inversa ("rodei um lote de 1.000,
+quanto sai?"), que daria 990 e não serve para atender pedido. O arredondamento
+é para CIMA e só em unidade contável: entregar 999 não é entregar 1.000.
+
 **A perda NÃO altera a composição.** A quantidade física por dose e por cápsula
 é a mesma com ou sem perda declarada: o Ácido Fólico continua em 0,571428… mg
 por cápsula com 1% de perda preenchido. A perda muda o tamanho do lote, não a
