@@ -1152,7 +1152,7 @@ export function IndustrialCostPage() {
                                   }
                                 />
                               </div>
-                              <div className="line-actions">
+                              <div className="form-actions">
                                 <button
                                   type="button"
                                   className="btn btn--secondary btn--sm"
