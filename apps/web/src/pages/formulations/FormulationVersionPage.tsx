@@ -2317,12 +2317,24 @@ export function FormulationVersionPage() {
         }
       >
         <div className="table-container">
+          {/*
+            A largura de cada coluna é DECLARADA no CSS, e a declaração depende
+            de três coisas que só a tela sabe: qual seção é, se a forma tem
+            coluna "Por cápsula" e se a linha tem a coluna de ações. São as três
+            variantes da proporção — no pó, os 96px da coluna que não existe vão
+            para o Ingrediente, e fora do rascunho a sobra elástica é maior.
+          */}
           <table
-            className={
-              daComposicao
-                ? "table table--sticky-actions table--formulacao table--formulacao-composicao"
-                : "table table--sticky-actions table--formulacao table--formulacao-embalagem"
-            }
+            className={[
+              "table",
+              "table--sticky-actions",
+              "table--formulacao",
+              daComposicao ? "table--formulacao-composicao" : "table--formulacao-embalagem",
+              daComposicao && mostrarPorCapsula ? "table--com-capsula" : "",
+              isDraft ? "" : "table--sem-acoes",
+            ]
+              .filter(Boolean)
+              .join(" ")}
           >
             <thead>
               <tr>
