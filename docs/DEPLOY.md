@@ -184,7 +184,8 @@ Scripts que falam com o ambiente publicado. Nenhum faz parte do build, do
 deploy ou da suíte de testes: cada um roda à mão, por decisão de quem opera. A
 credencial do banco chega pelo Railway CLI (`railway run -s Postgres`) e nunca
 é copiada nem impressa. A produção publica a partir de `release/prod`;
-rodar um destes scripts não publica nada.
+rodar um destes scripts não publica nada. Cada publicação fica registrada em
+[`RELEASES.md`](RELEASES.md).
 
 ### Somente leitura
 
@@ -194,6 +195,8 @@ rodar um destes scripts não publica nada.
 | `scripts/maintenance/prod-inventory.mjs` | contagem por tabela e marcas de dado artificial | `railway run -s Postgres node scripts/maintenance/prod-inventory.mjs` |
 | `scripts/maintenance/prod-sessions.mjs` | contagem e datas das sessões, sem token | `railway run -s Postgres node scripts/maintenance/prod-sessions.mjs` |
 | `scripts/maintenance/fk-order.mjs` | FKs reais do banco (`pg_constraint`) e a ordem de remoção que impõem; `--json` opcional | `railway run -s Postgres node scripts/maintenance/fk-order.mjs` |
+| `scripts/maintenance/prod-backup-json.mjs` | backup lógico completo em JSON (o `pg_dump` local é mais velho que o servidor). Lê pelo Prisma Client do checkout: rodar de um checkout com o MESMO schema de PROD — de um à frente, lê coluna que ainda não existe e falha. Gravar fora do repositório (`../.local-data/veridi/backups/`) | `railway run -s Postgres -- node scripts/maintenance/prod-backup-json.mjs <arquivo>` |
+| `scripts/maintenance/restore-json-backup-check.mjs` | prova que o backup restaura: banco LOCAL descartável, migrations do checkout, carga e conferência linha a linha; só `RESTAURÁVEL: YES` conta | `pnpm exec dotenv -e .env -- node scripts/maintenance/restore-json-backup-check.mjs <arquivo>` (Git Bash) |
 
 `smoke-prod.mjs` lê a credencial de `.local-data/prod-demo.json` (ignorado pelo
 Git). A perna de **escrita** — cria um cliente "SMOKE" e o inativa — só roda

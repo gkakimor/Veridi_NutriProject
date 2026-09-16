@@ -39,7 +39,8 @@ reconstruído do zero, DEV e produção são a mesma estrutura, campo a campo.
 
 [`BACKLOG.md`](BACKLOG.md) — **zero CRITICAL, zero BLOCKER**. A ordem vive só na fila viva de lá, reconciliada com o
 estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0d81aae` (MAIN-STABILITY-FAST-GATE-01,
-2026-09-15: MAIN_STABLE = YES); PROD em `release/prod` = `2400def`.
+2026-09-15: MAIN_STABLE = YES); PROD em `release/prod` = `5b7c1a3` (tag `homologacao-veridi-2026-09-16-r1`,
+[`RELEASES.md`](RELEASES.md)).
 
 - **E2E:** WAVE 1–2 e WAVE 3 fechadas (merges `9c60845` e `6256ca9`); a próxima é a WAVE 4 (grupo C) e depois a WAVE 5
   (golden path);
@@ -5040,8 +5041,8 @@ model neutro da ficha do Produto. Continua aberto, fora desta capability: FORMUL
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a
-homologação com a Veridi; a atividade imediata seguinte é FORMULATION-TEMPLATE-TECHNICAL-SHEET-PDF-01, a Ficha Técnica
-do Modelo.
+homologação com a Veridi. **Publicado em PROD no mesmo dia** (HOMOLOGATION-RELEASE-RAILWAY-01, `5b7c1a3`, seção
+"Produção"), sem a Ficha Técnica do Modelo: a atividade imediata seguinte é FORMULATION-TEMPLATE-TECHNICAL-SHEET-PDF-01.
 
 **A ordem vive na fila viva do [`BACKLOG.md`](BACKLOG.md)**, reconciliada em 2026-09-15: WAVE 4; Inventário Físico em
 fatias (a próxima é a Fatia 2, telas); decisões de permissões da Produção; WAVE 5; estabilização final. Os parágrafos
@@ -5164,6 +5165,13 @@ Railway; desde 2026-09-14 18:04Z publica só a partir de `release/prod` — push
 formulações e 182 projetos — o que o DEV reproduz. Implantação em [`DEPLOY.md`](DEPLOY.md); limpeza de produção e
 prova de backup em `scripts/maintenance/`.
 
+**Publicação de homologação em 2026-09-16** (HOMOLOGATION-RELEASE-RAILWAY-01, registro em
+[`RELEASES.md`](RELEASES.md)): `release/prod` `2400def` → `3159180` → `5b7c1a3`, tag
+`homologacao-veridi-2026-09-16-r1`. Seis migrations aditivas sobre os dados da Veridi, com dois backups
+restauráveis antes e os dados preservados, tabela a tabela. O PO achou na homologação o seletor de
+Fornecimento coberto na receita por base fixa, e a correção (só CSS) foi publicada na mesma rodada. PROD está
+em uso pela Veridi: contagens mudam por atividade real entre um retrato e outro.
+
 **Pacote de revisão da migração** (PROD-MASTER-MIGRATION-PACK-01,
 2026-09-11): `scripts/veridi-migration-pack/` gera, do legado real, oito
 planilhas para a Veridi revisar (fora do Git, em `handoff/`). A revisão 02, em cópia técnica, foi a carga
@@ -5193,6 +5201,7 @@ resolve por `externalCode` e recusa a linha que não o tiver.
 | Escopo do MVP · valor futuro | [MVP_PLAN.md](MVP_PLAN.md) · [ROADMAP_POST_MVP.md](ROADMAP_POST_MVP.md) |
 | Discoveries do produto: índice e regras | [discovery/README.md](discovery/README.md) |
 | Stack e ambiente · implantação · migração do legado | [TECH_BASELINE.md](TECH_BASELINE.md) · [DEPLOY.md](DEPLOY.md) · [VERIDI_MIGRATION.md](VERIDI_MIGRATION.md) |
+| Publicações em PROD (SHA, deploy, migrations, backup, dados, smoke) | [RELEASES.md](RELEASES.md) |
 | Validação com o cliente · perguntas regulatórias | [ROTEIRO_VALIDACAO_CLIENTE.md](ROTEIRO_VALIDACAO_CLIENTE.md) · [BLOCK_H_VALIDATION.md](BLOCK_H_VALIDATION.md) |
 | Histórico — validações, deliveries e findings | [archive/E2E_VALIDATION_HISTORY.md](archive/E2E_VALIDATION_HISTORY.md) · [archive/DELIVERY_HISTORY.md](archive/DELIVERY_HISTORY.md) · [archive/BACKLOG_HISTORY.md](archive/BACKLOG_HISTORY.md) |
 
