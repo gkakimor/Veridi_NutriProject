@@ -1472,6 +1472,27 @@ Ao construir, auditar onde existem `leadTimeDays`, `plannedDate`,
 **Discovery separado:** se o mesmo calendário global vale para prazo de
 planejamento de COMPRA. Não assumir que "dias do fornecedor" seguem o
 calendário da Veridi — lead time de fornecedor pode ter semântica própria.
+
+## D · #17 — API-PAGINATION-GUARD-STOCK-COUNTS-01
+
+**Fechado em 2026-09-16** por API-PAGINATION-GUARD-STOCK-COUNTS-01, na `main` e fora de PROD (`release/prod` segue
+`5b7c1a3`). Só teste: `listStockCountsQuerySchema` (`GET /stock-counts`) entrou na tabela `CONSULTAS` de
+`paginacao-da-consulta.test.ts` com os valores do schema — teto 100 e padrão 20 no tamanho, padrão 1 na página — e
+passa pela matriz inteira: padrão, inteiro decimal, mínimo e teto e os 21 formatos recusados. A guarda volta a contar 60
+declarações para 30 consultas, e `pnpm --filter @veridi/api test` volta a chegar à faixa serial. Schema, rota e serviço
+intocados; sem migration. Estado em [`PROJECT_STATE.md`](../PROJECT_STATE.md), seção própria.
+
+Registro original (BACKLOG, seção D, 2026-09-16) — "17. A guarda de paginação da API não conhece a consulta do
+Inventário — LOW":
+
+`apps/api/src/modules/paginacao-da-consulta.test.ts`, caso "toda consulta paginada está na tabela acima", falha na
+`main` desde `86e84c1` (INVENTORY-PHYSICAL-COUNT-01): a guarda conta 60 declarações `page`/`pageSize` com
+`inteiroDeConsultaSchema` e a tabela `CONSULTAS` tem 29 (58). A que falta é `listStockCountsQuerySchema`
+(`inventory/stock-count.schemas.ts`, teto 100, padrão 20). A consulta em si está certa — é a leitura estrita —; o que
+quebrou foi o retrato. Efeito colateral: `pnpm --filter @veridi/api test` para no primeiro `vitest run` e não chega à
+faixa serial (`&&`). Visto em CUSTOMER-PAYMENT-DEFAULTS-01 (2026-09-16), sem relação com a rodada. Correção:
+acrescentar a consulta do Inventário à tabela, com teto e padrão.
+
 ## D · #18 — TEST-USERS-LEGACY-RESIDUE-01
 
 Resolvido por estado posterior: o `veridi_dev` foi recriado do zero (drop/create) em DEV-REALDATA-BASELINE-RESET-01,

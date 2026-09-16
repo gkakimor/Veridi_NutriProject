@@ -5200,6 +5200,20 @@ condições viraram dez. Mutação provada: 21 (API 12, web 9). `pnpm validate:m
 sem drift, banco descartável removido). Typecheck dos três pacotes antes e depois do rebase. Sem smoke no navegador,
 E2E, suíte web completa ou Railway.
 
+## A guarda de paginação conhece o Inventário Físico (API-PAGINATION-GUARD-STOCK-COUNTS-01, 2026-09-16)
+
+**Fecha o BACKLOG D-17.** Só teste, na `main` e fora de PROD (`release/prod` segue `5b7c1a3`). A guarda de
+`modules/paginacao-da-consulta.test.ts` falhava desde INVENTORY-PHYSICAL-COUNT-01 (`86e84c1`): 60 declarações
+`page`/`pageSize` com `inteiroDeConsultaSchema` para 29 consultas na tabela. Faltava `listStockCountsQuerySchema`
+(`GET /stock-counts`), que já lia a paginação estrita. Entrou em `CONSULTAS` com os valores do schema — página mínimo 1 e
+padrão 1; tamanho mínimo 1, teto 100 e padrão 20 — e passa pela matriz inteira (padrão, inteiro decimal, mínimo e teto,
+21 formatos recusados). Schema, rota, serviço e comportamento intocados; sem migration.
+
+**Validação.** Falha reproduzida na base `4178c2f` (`expected 60 to be 58`); arquivo focado 731/731; 5 mutações no schema
+derrubadas (teto 101, padrão 25, página mínimo 0, página por `z.coerce`, tamanho sem teto); typecheck da API;
+`pnpm --filter @veridi/api test` inteiro em banco de teste isolado — faixa paralela com 174 arquivos e 4.175 testes, e a
+serial, que esse script não alcançava desde `86e84c1`, com 8 arquivos e 132 testes.
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a
