@@ -21,6 +21,7 @@ import type {
 } from "@veridi/shared";
 import { calcularQuantidadeDaDose, capsulasPorEmbalagem } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { problemasDosComponentes } from "../../lib/formulation-component-issues.js";
 import {
   missingFormulationContext,
   tryComputeComponentRequirement,
@@ -272,44 +273,14 @@ function toVersionDTO(
  * antes, não em paralelo. Uma versão criada a partir de outra de meses atrás
  * pode carregar item inativado, item que virou produto acabado ou unidade que
  * deixou de ser compatível; descobrir isso só no clique de ativar é descobrir
- * tarde.
+ * tarde. A regra mora em `lib/formulation-component-issues.ts`, e o Modelo de
+ * Formulação lê a mesma.
  */
 function componentIssues(
   version: VersionWithRelations,
   units: readonly UnitOfMeasure[],
 ): FormulationComponentIssueDTO[] {
-  const issues: FormulationComponentIssueDTO[] = [];
-  for (const component of version.components) {
-    const item = component.item;
-    const base = { itemId: item.id, itemCode: item.code, itemName: item.name };
-    if (item.type === "FINISHED_PRODUCT") {
-      issues.push({
-        ...base,
-        code: "ITEM_IS_FINISHED_PRODUCT",
-        description: `${item.code} passou a ser produto acabado e não pode ser componente.`,
-      });
-    } else if (!item.active) {
-      issues.push({
-        ...base,
-        code: "ITEM_INACTIVE",
-        description: `${item.code} foi inativado no cadastro de itens.`,
-      });
-    }
-    if (new Prisma.Decimal(component.quantity).lessThanOrEqualTo(0)) {
-      issues.push({
-        ...base,
-        code: "INVALID_QUANTITY",
-        description: `${item.code} está com quantidade inválida.`,
-      });
-    } else if (!isUomCompatible(component.unitCode, item.unitCode, units)) {
-      issues.push({
-        ...base,
-        code: "UOM_INCOMPATIBLE",
-        description: `${item.code} usa ${component.unitCode}, incompatível com a unidade de estoque ${item.unitCode}.`,
-      });
-    }
-  }
-  return issues;
+  return problemasDosComponentes(version.components, units);
 }
 
 const versionInclude = {

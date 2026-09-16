@@ -1,13 +1,13 @@
 export class CostTemplateNotFoundError extends Error {
   constructor(id: string) {
-    super(`Template de estrutura não encontrado: ${id}`);
+    super(`Modelo de estrutura de custo não encontrado: ${id}`);
     this.name = "CostTemplateNotFoundError";
   }
 }
 
 export class CostTemplateVersionNotFoundError extends Error {
   constructor(id: string) {
-    super(`Versão de template de estrutura não encontrada: ${id}`);
+    super(`Versão do modelo de estrutura de custo não encontrada: ${id}`);
     this.name = "CostTemplateVersionNotFoundError";
   }
 }
@@ -134,7 +134,7 @@ export class PricingPolicyCalculationRequiredError extends Error {
 export class CostDraftInUseError extends Error {
   constructor(code: string) {
     super(
-      `A estrutura ${code} já está em rascunho com configuração própria. Ative-a ou descarte antes de aplicar um template — aplicar agora sobrescreveria o que já foi montado.`,
+      `A estrutura ${code} já está em rascunho com configuração própria. Ative-a ou descarte antes de aplicar um modelo — aplicar agora sobrescreveria o que já foi montado.`,
     );
     this.name = "CostDraftInUseError";
   }

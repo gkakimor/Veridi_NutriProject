@@ -14,6 +14,7 @@
 import type {
   FormulationCalculationMode,
   FormulationComponentBasis,
+  FormulationComponentIssueDTO,
   FormulationComponentQuantityMode,
 } from "./formulations.js";
 import type { SupplyResponsibility } from "./ownership.js";
@@ -129,6 +130,22 @@ export interface FormulationTemplateVersionDTO {
   sourceVersionNumber: number | null;
   /** Quantas formulações de produto nasceram desta versão. */
   usageCount: number;
+  /**
+   * O que, nos componentes desta versão, o cadastro do Item mudou desde a
+   * gravação — item inativado, que virou produto acabado, unidade que deixou
+   * de ser compatível, quantidade inválida (FORMULATION-TEMPLATE-WORKBENCH-01,
+   * fatia 3).
+   *
+   * O MESMO contrato de `FormulationVersionDTO.componentIssues`, e MENOR que os
+   * motivos de ativação da Formulação: nada aqui depende de Produto nem de
+   * Cliente, que o Modelo não tem.
+   *
+   * No RASCUNHO, é o que barra a ativação do Modelo. Na versão ATIVA, é o aviso
+   * de quem vai aplicá-la: a Formulação nasce em rascunho com a receita como
+   * está, e só ativa depois da correção. Versão arquivada não é aplicada nem
+   * editada, e volta vazia.
+   */
+  componentIssues: FormulationComponentIssueDTO[];
 }
 
 export interface FormulationTemplateDTO {
@@ -244,17 +261,29 @@ export interface CreateTemplateFromFormulationInput {
 }
 
 /**
- * Uma diferença entre duas versões de template, ou entre a formulação e a
- * versão de template mais recente.
+ * Uma diferença entre duas versões do Modelo, ou entre a formulação e a
+ * versão do Modelo mais recente.
  *
  * Diff específico e pequeno de propósito: um framework genérico de comparação
- * custaria mais do que as sete coisas que realmente mudam numa fórmula.
+ * custaria mais do que as poucas coisas que realmente mudam numa fórmula.
+ *
+ * As PREMISSAS TÉCNICAS entram desde FORMULATION-TEMPLATE-WORKBENCH-01 (fatia
+ * 3): forma, apresentação comercial, cápsulas por dose, dose, conteúdo da
+ * embalagem e perda prevista mudam a leitura da receita tanto quanto um
+ * componente. Quantidade e unidade da dose (e do conteúdo) andam juntas numa
+ * entrada só — "5 g → 10 g" —, porque o número sem a unidade não diz nada.
  */
 export type FormulationTemplateDiffKind =
   | "BASIS"
   | "MODE"
   | "DOSES"
   | "OUTPUT_UOM"
+  | "DOSAGE_FORM"
+  | "PRESENTATION"
+  | "CAPSULES_PER_DOSE"
+  | "DOSE"
+  | "PACKAGE_CONTENT"
+  | "EXPECTED_LOSS"
   | "COMPONENT_ADDED"
   | "COMPONENT_REMOVED"
   | "COMPONENT_CHANGED";

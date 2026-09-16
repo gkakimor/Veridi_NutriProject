@@ -37,7 +37,7 @@ export const archiveTemplateSchema = z.object({ archived: z.boolean() });
 // ───────────────────────────────────────────── Template de Estrutura (TEC)
 
 export const createCostTemplateSchema = z.object({
-  name: z.string().trim().min(1, "Informe o nome do template").max(200),
+  name: z.string().trim().min(1, "Informe o nome do modelo").max(200),
   description: optionalNullableText(1000),
   referenceOutputQuantity: decimalString.optional(),
   referenceOutputUomCode: z.string().trim().min(1).max(20).optional(),
@@ -84,7 +84,7 @@ export const applyCostTemplateSchema = z.object({
 });
 
 export const createCostTemplateFromVersionSchema = z.object({
-  name: z.string().trim().min(1, "Informe o nome do template").max(200),
+  name: z.string().trim().min(1, "Informe o nome do modelo").max(200),
   description: optionalNullableText(1000),
 });
 

@@ -21,6 +21,7 @@ import {
   FormulationTemplateVersionNotFoundError,
   TemplateArchivedError,
   TemplateBaseUnitError,
+  TemplateComponentsNeedReviewError,
   TemplateDosesRequiredError,
   TemplateDraftAlreadyExistsError,
   TemplateVersionNotActiveError,
@@ -109,6 +110,17 @@ function mapDomainError(
   }
   if (error instanceof MissingFinishedItemError) {
     return { status: 409, body: { error: "missing_finished_item", message: error.message } };
+  }
+  /*
+   * Ativação do Modelo com componente que o cadastro invalidou: o MESMO
+   * código de recusa de componente de sempre, agora com CADA item nomeado na
+   * frase e a lista estruturada junto, para a tela apontar a linha.
+   */
+  if (error instanceof TemplateComponentsNeedReviewError) {
+    return {
+      status: 400,
+      body: { error: "invalid_component", message: error.message, componentIssues: error.issues },
+    };
   }
   if (
     error instanceof TemplateDosesRequiredError ||
