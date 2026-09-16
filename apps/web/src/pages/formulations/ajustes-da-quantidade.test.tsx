@@ -1,21 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { FormulationComponentDTO, FormulationVersionDTO } from "@veridi/shared";
 
 /**
- * FORMULATION-ADJUSTMENTS-UX-01 — o painel de ajustes ganhou um fim.
+ * FORMULATION-WORKBENCH-01 (homologação) — o painel de ajustes saiu da
+ * Formulação.
  *
- * Mexer no modo, na pureza, no overage e nas marcas mexe num RASCUNHO da
- * linha. "Aplicar ajustes" confirma — a linha muda, a conta segue e o painel
- * recolhe com um resumo —; "Cancelar" descarta só o que foi mexido desde que
- * o painel abriu. Nada disso salva a versão, e nada disso se perde em
- * silêncio: fechar, salvar ou ativar com alteração aberta é recusado com a
- * linha nomeada.
+ * Pureza e reserva de produção são COLUNAS da linha de matéria-prima. A pureza
+ * informada corrige a quantidade física na hora, sem modo para escolher nem
+ * caixa para marcar; a reserva fica registrada para o lote e nunca multiplica a
+ * dose. "Overage" não é palavra desta tela.
  *
- * E as duas grandezas da linha, "Equivalente estoque" e "Físico / unidade",
- * moram cada uma na SUA coluna, sob o seu cabeçalho.
+ * `resumoDosAjustes` continua testada aqui porque continua viva — quem a usa
+ * agora é o Modelo de Formulação, que mantém o painel.
+ *
+ * E as duas grandezas por embalagem, equivalente e físico, seguem na mesma
+ * célula, sob o cabeçalho que diz de que embalagem se fala.
  */
 
 vi.mock("../../lib/formulations-api", () => ({
@@ -115,9 +117,13 @@ async function abrir(dto = versao()) {
     </MemoryRouter>,
   );
   await waitFor(() => expect(screen.getAllByText(/PROD-000005/).length).toBeGreaterThan(0));
-  await waitFor(() =>
-    expect(document.querySelectorAll("tbody tr select option").length).toBeGreaterThan(1),
-  );
+  // As unidades chegam depois da versao: so o rascunho tem seletor na linha,
+  // e a versao fechada e' so leitura.
+  if (dto.status === "DRAFT") {
+    await waitFor(() =>
+      expect(document.querySelectorAll("tbody tr select option").length).toBeGreaterThan(1),
+    );
+  }
 }
 
 /** Valor de uma das duas colunas da linha do componente, pelo elemento que o carrega. */
@@ -126,7 +132,6 @@ function celula(qual: "equivalente" | "fisico"): string {
 }
 
 const painel = () => document.querySelector("tr.ajuste-quantidade__linha");
-const aplicar = () => screen.getByRole("button", { name: "Aplicar ajustes" });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -134,154 +139,85 @@ beforeEach(() => {
   vi.mocked(activateFormulationVersion).mockResolvedValue(versao({ status: "ACTIVE" }));
 });
 
-describe("Painel de ajustes — rascunho, Aplicar e Cancelar", () => {
-  it("editar o rascunho não muda a linha; Aplicar confirma, recolhe e resume", async () => {
-    const user = userEvent.setup();
-    await abrir();
-    expect(screen.getByRole("button", { name: /Calculada · Pureza 98%/ })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Calculada · Pureza 98%/ }));
-    await user.click(screen.getByRole("radio", { name: "Quantidade física informada" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Overage do componente" }), {
-      target: { value: "2" },
-    });
-
-    // Rascunho: a linha e o resumo continuam os de antes.
-    expect(celula("fisico")).toBe("0,22449 kg");
-    expect(screen.getByRole("button", { name: /Calculada · Pureza 98%/ })).toBeInTheDocument();
-
-    await user.click(aplicar());
-
-    await waitFor(() => expect(celula("fisico")).toBe("0,22 kg"));
-    expect(painel()).toBeNull();
-    // Percentuais em física informada são registro — e o resumo diz isso.
-    expect(
-      screen.getByRole("button", { name: /Física informada · Pureza 98% · Overage 2% · só registro/ }),
-    ).toBeInTheDocument();
-    expect(vi.mocked(updateFormulationVersion)).not.toHaveBeenCalled();
-  });
-
-  it("pureza é COLUNA da linha e vale na hora; o painel só autoriza a correção", async () => {
-    const user = userEvent.setup();
+describe("Pureza e reserva de produção — colunas da linha", () => {
+  it("o painel de ajustes não existe mais na Formulação", async () => {
     await abrir();
 
     /*
-     * FORMULATION-WORKBENCH-01: a pureza saiu do painel para a coluna da linha
-     * de matéria-prima, porque é ela que responde "por que essa quantidade
-     * física". O painel continua dono do MODO e das marcas — e mostra a pureza
-     * vigente sem um segundo campo para editá-la, que seria dois lugares
-     * gravando o mesmo valor.
+     * A homologação da bancada tirou daqui o expansível "O que a quantidade
+     * informada significa". Ele não foi escondido: não há botão de linha, nem
+     * linha de painel, nem modo para escolher, nem caixa para marcar, nem
+     * "Aplicar ajustes" a confirmar. O que a pureza faz está na coluna.
      */
+    expect(painel()).toBeNull();
+    expect(screen.queryByRole("button", { name: /Calculada/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Física informada/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Aplicar ajustes" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "Quantidade física informada" })).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: "Corrigir pela pureza" })).toBeNull();
+    expect(screen.queryByText(/O que a quantidade informada significa/)).toBeNull();
+  });
+
+  it("o termo Overage não aparece na tela — é Reserva de produção", async () => {
+    await abrir();
+
+    expect(document.body.textContent ?? "").not.toMatch(/overage/i);
+    expect(
+      screen.getByRole("textbox", { name: "Reserva de produção de MP-000003" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /Reserva de produção/ })).toBeInTheDocument();
+  });
+
+  it("pureza digitada na coluna corrige a quantidade física na hora", async () => {
+    await abrir();
+    expect(celula("fisico")).toBe("0,22449 kg");
+
     fireEvent.change(screen.getByRole("textbox", { name: "Pureza de MP-000003" }), {
       target: { value: "50" },
     });
 
+    // 220 g ÷ 0,50 = 0,44 kg. Sem painel, sem marca, sem confirmar.
     await waitFor(() => expect(celula("fisico")).toBe("0,44 kg"));
     expect(painel()).toBeNull();
-
-    await user.click(screen.getByRole("button", { name: /Calculada · Pureza 50%/ }));
-    expect(screen.queryByRole("textbox", { name: "Pureza aplicada" })).toBeNull();
-    expect(screen.getByRole("checkbox", { name: "Corrigir pela pureza" })).toBeChecked();
   });
 
-  it("Cancelar descarta só o que mudou desde que o painel abriu", async () => {
-    const user = userEvent.setup();
+  it("pureza apagada devolve a quantidade informada — vazio não é 100% nem 0%", async () => {
     await abrir();
 
-    await user.click(screen.getByRole("button", { name: /Calculada/ }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Overage do componente" }), {
-      target: { value: "5" },
-    });
-    await user.click(screen.getByRole("button", { name: "Cancelar" }));
-
-    expect(painel()).toBeNull();
-    expect(celula("fisico")).toBe("0,22449 kg");
-
-    // Reaberto, o painel parte do que a linha tem — não do que foi cancelado.
-    await user.click(screen.getByRole("button", { name: /Calculada/ }));
-    expect(screen.getByRole("textbox", { name: "Overage do componente" })).toHaveValue("");
-  });
-
-  it("Aplicar fica desabilitado sem alteração e com valor inválido", async () => {
-    const user = userEvent.setup();
-    await abrir();
-    await user.click(screen.getByRole("button", { name: /Calculada/ }));
-
-    expect(aplicar()).toBeDisabled();
-
-    const overage = screen.getByRole("textbox", { name: "Overage do componente" });
-    // Letra nem entra no campo; o ambíguo `1.234` entra e não vira número.
-    fireEvent.change(overage, { target: { value: "1.234" } });
-    expect(aplicar()).toBeDisabled();
-    expect(overage).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByText(/MP-000003 — Overage %/)).toBeInTheDocument();
-
-    fireEvent.change(overage, { target: { value: "2" } });
-    expect(aplicar()).toBeEnabled();
-  });
-
-  it("fechar pelo botão da linha com alteração aberta não descarta: o painel fica e avisa", async () => {
-    const user = userEvent.setup();
-    await abrir();
-    const botaoDaLinha = screen.getByRole("button", { name: /Calculada/ });
-    await user.click(botaoDaLinha);
-    fireEvent.change(screen.getByRole("textbox", { name: "Overage do componente" }), {
-      target: { value: "5" },
+    fireEvent.change(screen.getByRole("textbox", { name: "Pureza de MP-000003" }), {
+      target: { value: "" },
     });
 
-    await user.click(botaoDaLinha);
+    await waitFor(() => expect(celula("fisico")).toBe("0,22 kg"));
+    expect(celula("equivalente")).toBe("0,22 kg");
+  });
 
-    expect(painel()).not.toBeNull();
-    // O aviso é do painel; a barra de ações tem o seu próprio "Alterações não salvas".
-    expect(within(painel() as HTMLElement).getByRole("status")).toHaveTextContent(
-      /Há ajustes não aplicados nesta linha/,
+  it("reserva de produção NÃO altera a quantidade física", async () => {
+    await abrir();
+    const antes = celula("fisico");
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Reserva de produção de MP-000003" }), {
+      target: { value: "10" },
+    });
+
+    // O número tem de continuar o MESMO: a reserva é previsão de lote, e
+    // multiplicá-la pela dose inflaria a receita em silêncio.
+    await waitFor(() =>
+      expect(screen.getByRole("textbox", { name: "Reserva de produção de MP-000003" })).toHaveValue(
+        "10",
+      ),
     );
-    expect(screen.getByRole("textbox", { name: "Overage do componente" })).toHaveValue("5");
+    expect(celula("fisico")).toBe(antes);
+    expect(celula("fisico")).toBe("0,22449 kg");
   });
 
-  it("salvar com ajuste por aplicar é recusado e diz qual linha", async () => {
+  it("o servidor recebe a pureza aplicada e a reserva apenas registrada", async () => {
     const user = userEvent.setup();
     await abrir();
-    await user.click(screen.getByRole("button", { name: /Calculada/ }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Overage do componente" }), {
-      target: { value: "5" },
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Reserva de produção de MP-000003" }), {
+      target: { value: "10" },
     });
-
-    await user.click(screen.getByRole("button", { name: /Salvar rascunho/i }));
-
-    expect(
-      screen.getByText("Aplique ou cancele os ajustes de MP-000003 antes de salvar."),
-    ).toBeInTheDocument();
-    expect(vi.mocked(updateFormulationVersion)).not.toHaveBeenCalled();
-    await waitFor(() => expect(document.activeElement).toBe(aplicar()));
-  });
-
-  it("ativar com ajuste por aplicar também é recusado", async () => {
-    const user = userEvent.setup();
-    await abrir();
-    await user.click(screen.getByRole("button", { name: /Calculada/ }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Overage do componente" }), {
-      target: { value: "5" },
-    });
-
-    await user.click(screen.getByRole("button", { name: /Ativar versão/ }));
-
-    expect(
-      screen.getByText("Aplique ou cancele os ajustes de MP-000003 antes de ativar."),
-    ).toBeInTheDocument();
-    expect(vi.mocked(activateFormulationVersion)).not.toHaveBeenCalled();
-    expect(vi.mocked(updateFormulationVersion)).not.toHaveBeenCalled();
-  });
-
-  it("aplicado e salvo, o servidor recebe a configuração normalizada", async () => {
-    const user = userEvent.setup();
-    await abrir();
-    await user.click(screen.getByRole("button", { name: /Calculada/ }));
-    await user.click(screen.getByRole("checkbox", { name: "Aplicar overage" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Overage do componente" }), {
-      target: { value: "2" },
-    });
-    await user.click(aplicar());
     await user.click(screen.getByRole("button", { name: /Salvar rascunho/i }));
 
     await waitFor(() => expect(vi.mocked(updateFormulationVersion)).toHaveBeenCalled());
@@ -292,22 +228,64 @@ describe("Painel de ajustes — rascunho, Aplicar e Cancelar", () => {
           expect.objectContaining({
             quantityMode: "THEORETICAL_WITH_ADJUSTMENTS",
             applyPurityAdjustment: true,
-            applyOverageAdjustment: true,
+            applyOverageAdjustment: false,
             purityPercentApplied: "98",
-            overagePercent: "2",
+            overagePercent: "10",
           }),
         ],
       }),
     );
   });
 
-  it("o painel serve para configurar: não repete a quantidade que a linha já mostra", async () => {
+  it("salvar não exige mais aplicar ajuste nenhum antes", async () => {
     const user = userEvent.setup();
     await abrir();
-    await user.click(screen.getByRole("button", { name: /Calculada/ }));
 
-    expect(screen.queryByText(/Quantidade informada:/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Quantidade física por unidade:/)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Pureza de MP-000003" }), {
+      target: { value: "70" },
+    });
+    await user.click(screen.getByRole("button", { name: /Salvar rascunho/i }));
+
+    await waitFor(() => expect(vi.mocked(updateFormulationVersion)).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/Aplique ou cancele os ajustes/)).toBeNull();
+  });
+
+  it("rascunho do contrato antigo entra corrigido, e a tela diz qual linha mudou", async () => {
+    /*
+     * A versão herdada guarda pureza SEM a correção ligada — estado que o
+     * contrato de hoje não produz mais. Abrir o rascunho passa a aplicá-la, e
+     * isso muda material: a tela avisa em vez de deixar a diferença aparecer
+     * só depois de salvar.
+     */
+    await abrir(
+      versao({
+        components: [componente({ quantityMode: "PHYSICAL_DIRECT", applyPurityAdjustment: false })],
+      }),
+    );
+
+    await waitFor(() => expect(celula("fisico")).toBe("0,22449 kg"));
+    expect(
+      screen.getByText(/a pureza de MP-000003 estava gravada sem corrigir/i),
+    ).toBeInTheDocument();
+  });
+
+  it("versão ATIVA é documento fechado: pureza registrada e não aplicada continua dizendo isso", async () => {
+    await abrir(
+      versao({
+        status: "ACTIVE",
+        components: [
+          componente({
+            quantityMode: "PHYSICAL_DIRECT",
+            applyPurityAdjustment: false,
+            theoreticalPerUnit: "0.22",
+            physicalPerUnit: "0.22",
+          }),
+        ],
+      }),
+    );
+
+    expect(celula("fisico")).toBe("0,22 kg");
+    expect(screen.getByText("registrada, não aplicada")).toBeInTheDocument();
   });
 });
 
@@ -392,7 +370,7 @@ describe("Coluna Por embalagem — físico e equivalente na mesma célula", () =
       "Alvo por dose",
       "Física por dose",
       "Base · Fornecimento",
-      "Ajustes",
+      "Reserva de produção",
       "Por embalagem",
     ]);
   });

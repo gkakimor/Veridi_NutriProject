@@ -81,6 +81,15 @@ export function ajustesIguais(a: AjustesDaQuantidade, b: AjustesDaQuantidade): b
 export function errosDosAjustes(
   ajustes: AjustesDaQuantidade,
   nome: string,
+  /**
+   * Como o segundo percentual se chama NESTA tela.
+   *
+   * A regra é a mesma nos dois lugares — não negativo, seis casas — e por isso
+   * vive numa função só. O NOME não é: a Formulação o chama de reserva de
+   * produção, e uma recusa que nomeia um campo que a pessoa não vê na tela
+   * manda procurar o que não existe.
+   */
+  rotuloDoOverage = "Overage %",
 ): Partial<Record<CampoDeAjuste, string>> {
   const erros: Partial<Record<CampoDeAjuste, string>> = {};
   const pureza = parsePtBrNumber(ajustes.purityPercentApplied, OPCOES_PERCENTUAL_TECNICO);
@@ -94,7 +103,7 @@ export function errosDosAjustes(
   }
   const overage = parsePtBrNumber(ajustes.overagePercent, OPCOES_PERCENTUAL_TECNICO);
   if (overage.tipo === "invalido") {
-    erros.overagePercent = `${nome} — ${numericInvalidMessage("Overage %", overage.motivo, OPCOES_PERCENTUAL_TECNICO)}`;
+    erros.overagePercent = `${nome} — ${numericInvalidMessage(rotuloDoOverage, overage.motivo, OPCOES_PERCENTUAL_TECNICO)}`;
   }
   return erros;
 }

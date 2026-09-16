@@ -107,6 +107,9 @@ function versao(): FormulationVersionDTO {
       doseAmount: null,
       doseUomCode: null,
       dosesPerPackage: null,
+      targetAgeGroup: null,
+      minimumBatchQuantity: null,
+      unitsPerShippingBox: null,
     },
     outputItemId: "pa-1",
     outputItemCode: "PA-000005",
@@ -197,14 +200,14 @@ describe("Formulação — guarda de alterações não salvas", () => {
     expect(screen.queryByRole("heading", { name: "Pedidos" })).toBeNull();
   });
 
-  it("ajuste configurado e não aplicado usa a MESMA pergunta", async () => {
+  it("reserva de produção digitada na coluna usa a MESMA pergunta", async () => {
     const user = userEvent.setup();
     await abrir();
 
-    await user.click(screen.getByRole("button", { name: /Calculada/ }));
-    // Overage: o que ainda mora no painel e só vale depois de "Aplicar ajustes"
-    // (a pureza virou coluna da linha em FORMULATION-WORKBENCH-01).
-    fireEvent.change(screen.getByRole("textbox", { name: "Overage do componente" }), {
+    // A reserva é coluna da linha desde a homologação da bancada: não há
+    // painel para abrir nem "Aplicar ajustes" para confirmar, e mesmo assim a
+    // alteração é pendência como qualquer outra.
+    fireEvent.change(screen.getByRole("textbox", { name: /Reserva de produção de MP-000003/ }), {
       target: { value: "5" },
     });
 

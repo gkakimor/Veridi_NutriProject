@@ -3613,10 +3613,26 @@ aplicando **somente** os ajustes marcados:
 físico = teórico ÷ (pureza/100) × (1 + overage/100)
 ```
 
-**Registrar um ajuste não é autorizá-lo.** Preencher a pureza deixou de aplicar
-a correção sozinho. A regra existe porque o caminho oposto já causava dupla
-correção em silêncio: num componente cuja quantidade já vinha corrigida de fora,
-preencher a pureza dividia de novo.
+**Registrar um ajuste não é autorizá-lo** — no MODELO de Formulação, que é onde
+a configuração ainda é escolhida campo a campo. A regra existe porque o caminho
+oposto já causava dupla correção em silêncio: num componente cuja quantidade já
+vinha corrigida de fora, preencher a pureza dividia de novo.
+
+**Na FORMULAÇÃO do produto a regra é outra desde a homologação de
+FORMULATION-WORKBENCH-01:** pureza preenchida na linha SEMPRE corrige, e o modo
+do componente é consequência dela, não uma escolha à parte. O motivo é o mesmo
+que criou a regra anterior — ninguém deve ficar em dúvida sobre o que a coluna
+está fazendo —, mas a resposta passou a ser a inversa: uma coluna preenchida que
+pode estar ou não na conta é exatamente a ambiguidade que se queria eliminar, e
+a planilha real da Veridi escreve a pureza como número, não como autorização. A
+proteção contra a dupla correção continua, pelo caminho que a pessoa entende: a
+quantidade que já vem corrigida de origem fica **sem pureza**.
+
+A **reserva de produção** (`overagePercent` no dado; nunca "overage" na tela em
+português) é o outro lado disso: ela é registrada na linha, vale para o
+planejamento do lote e **não multiplica a dose formulada**. As planilhas reais
+trazem 10% no Ácido Fólico e 2% no Beef Protein sem que a massa de uma cápsula
+mude — aplicá-la à dose inflaria a receita.
 
 Pureza ausente nunca vira 100%, pureza zero não divide, e overage ausente nunca
 vira zero implícito — ausência de premissa é cálculo inválido, não resultado
@@ -3655,8 +3671,9 @@ material" é plausível e ninguém confere.
 ### O modo é a autoridade; a marca sozinha não autoriza nada
 
 `applyPurityAdjustment` e `applyOverageAdjustment` só têm efeito sob **teórica
-com ajustes**. Guardar uma marca ligada sob **física direta** é registro que
-mente — o cálculo a ignora, e voltar o modo depois religaria a correção sem
+com ajustes** — o contrato do dado não mudou, e é ele que a Formulação preenche
+a partir da coluna de pureza. Guardar uma marca ligada sob **física direta** é
+registro que mente — o cálculo a ignora, e voltar o modo depois religaria a correção sem
 ninguém ter marcado nada. Por isso a marca é desligada ao sair do modo teórico,
 na tela **e** no servidor: um cliente que mande a combinação incoerente não
 consegue gravá-la. Nenhum resultado de cálculo muda com isso.
@@ -3688,8 +3705,13 @@ FORMA — é a forma que diz o que a bancada calcula por dose. Pote, sachê e
 cartucho são APRESENTAÇÃO. Um enum que misture os dois ("pote/cápsula") não
 descreve nem o produto nem a embalagem.
 
+**O Produto Acabado da Veridi é pó ou cápsula.** A Formulação oferece só essas
+duas formas; o enum `DosageForm` continua inteiro, e uma versão gravada com
+outra forma continua legível e editável — restringir a escolha nova nunca é
+licença para apagar a premissa de uma versão que já existe.
+
 As premissas da apresentação — forma, apresentação, cápsulas por dose, dose e
-conteúdo do pó — são **snapshot da VERSÃO**, ao lado de pureza e overage. O
+conteúdo do pó — são **snapshot da VERSÃO**, ao lado de pureza e reserva. O
 cadastro do Produto preenche a V1 e fica visível como referência, mas mudá-lo
 depois não reescreve versão nenhuma: a quantidade por cápsula de uma versão
 ativa é resultado da receita dela, não do cadastro de hoje.

@@ -55,8 +55,11 @@ function componente(overrides: Partial<FormulationComponentDTO> = {}): Formulati
     supplyResponsibility: "VERIDI",
     purityPercentApplied: "99.9995",
     overagePercent: null,
-    quantityMode: "PHYSICAL_DIRECT",
-    applyPurityAdjustment: false,
+    // Contrato da bancada: pureza preenchida corrige. Uma versão gravada com
+    // pureza e sem a correção ligada seria rascunho do contrato ANTIGO, e a
+    // tela o normaliza ao abrir — aqui o assunto é outro: a representação.
+    quantityMode: "THEORETICAL_WITH_ADJUSTMENTS",
+    applyPurityAdjustment: true,
     applyOverageAdjustment: false,
     legacyTotalQuantity: null,
     legacyTotalUnitCode: null,

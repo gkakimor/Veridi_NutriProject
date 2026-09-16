@@ -52,11 +52,19 @@ estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0
 - **Painel Gerencial:** entregue em 2026-09-15 — BILLED-VALUE-CANONICAL-01 (valor faturado = `Billing.totalAmount` em
   Painel, R-14 e R-15) e MANAGEMENT-DASHBOARD-V1-01 (Gestão → Painel Gerencial, D1–D5); G2, G5 e o G4 residual seguem sem
   posição;
-- **Formulação — bancada:** entregue em 2026-09-15 (FORMULATION-WORKBENCH-01). A versão passou a guardar as premissas
-  da apresentação (forma, apresentação, cápsulas por dose, dose e conteúdo do pó) como SNAPSHOT, e doses por embalagem
-  virou resultado delas — cápsulas por embalagem ÷ cápsulas por dose, conteúdo ÷ dose, divisão que não fecha é recusada.
-  A tela mostra física por dose e por cápsula enquanto se digita, separa composição de embalagem pelo TIPO do Item e traz
-  fonte, família e pureza do cadastro para a linha. Migration aditiva `20260925093028`; custos seguem fora da Formulação;
+- **Formulação — bancada:** EM HOMOLOGAÇÃO (FORMULATION-WORKBENCH-01, não fechada). O motor entrou em 2026-09-15: a
+  versão guarda as premissas da apresentação (forma, apresentação, cápsulas por dose, dose e conteúdo do pó) como
+  SNAPSHOT, e doses por embalagem virou resultado delas — cápsulas por embalagem ÷ cápsulas por dose, conteúdo ÷ dose,
+  divisão que não fecha é recusada. Migration aditiva `20260925093028`. Os ajustes da homologação entraram no mesmo dia,
+  **sem migration**: o painel "O que a quantidade informada significa" saiu da Formulação (segue no Modelo de
+  Formulação, que não foi tocado) e **pureza** e **reserva de produção** — o antigo *overage*, em português — viraram
+  COLUNAS da linha de matéria-prima. O contrato é um só: pureza informada corrige a quantidade física (alvo ÷ pureza/100,
+  pelo mesmo motor de sempre) e a reserva fica registrada para o lote sem nunca multiplicar a dose. A forma do produto
+  oferece só Pó e Cápsula — a forma de uma versão histórica continua na lista enquanto for a dela —, as colunas por
+  cápsula só existem na cápsula, e o topo virou resumo de premissas em grade, com faixa etária, lote mínimo e caixa de
+  embarque lidos do cadastro do Produto. Rascunho gravado sob o contrato antigo (pureza registrada sem autorizar a
+  correção) entra corrigido e a tela DIZ quais linhas mudaram; versão ativa ou inativa entra como está gravada. Custos
+  seguem fora da Formulação. **Falta a avaliação visual do PO** — é dela que depende o fechamento;
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 
 Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
