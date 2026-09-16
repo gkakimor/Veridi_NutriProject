@@ -67,6 +67,23 @@
   color: var(--ink-2);
 }
 
+/* Botão só de ícone: o alvo é quadrado e o glifo manda na altura. */
+.btn--icone {
+  padding: 0;
+  width: 22px;
+  height: 14px;
+  min-height: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn--icone svg {
+  width: 8px;
+  height: 5px;
+  display: block;
+}
+
 .btn--ghost:hover:not(:disabled) {
   background: var(--canvas);
   color: var(--ink);
@@ -75,6 +92,22 @@
 .btn--danger {
   background: var(--surface);
   border-color: var(--err-fg);
+  color: var(--err-fg);
+}
+
+/*
+ * Destrutivo SEM moldura — para a ação que se repete linha a linha.
+ *
+ * `.btn--danger` desenha uma caixa vermelha, e sete delas empilhadas numa grade
+ * viram alarme constante. Aqui a geometria é a do fantasma e só a tinta é de
+ * perigo; o fundo vermelho aparece no hover, quando a pessoa já está mirando.
+ */
+.btn--ghost-danger {
+  color: var(--err-fg);
+}
+
+.btn--ghost-danger:hover:not(:disabled) {
+  background: var(--err-bg);
   color: var(--err-fg);
 }
 
@@ -3605,9 +3638,10 @@ button.help-flow__box:focus-visible {
  * O Alvo é a exceção: a CAIXA tem os mesmos 88px das outras, e a coluna leva
  * 156px para a unidade caber ao LADO dela em vez de descer uma linha — 88 de
  * campo, 56 de seletor, o vão e a folga. Os 60px vieram do Ingrediente.
- * 574 · 211 · 96 · 156 · 110 · 100 · 96 · 104 · 45 = 1492px.
+ * A coluna de ações leva 72px: subir, descer e remover.
+ * 547 · 211 · 96 · 156 · 110 · 100 · 96 · 104 · 72 = 1492px.
  */
-.table--formulacao-composicao .col-item { width: 38.4658%; }
+.table--formulacao-composicao .col-item { width: 36.6562%; }
 .table--formulacao-composicao .col-fonte { width: 14.1421%; }
 .table--formulacao-composicao .col-pureza { width: 6.4343%; text-align: right; }
 .table--formulacao-composicao .col-quantidade { width: 10.4558%; }
@@ -3621,14 +3655,28 @@ button.help-flow__box:focus-visible {
    .col-acoes`. A coluna de ações saía com 15px e os 30px que faltavam iam para
    as outras, deixando cada uma ~2% acima do alvo. */
 .table--formulacao-composicao th.col-acoes,
-.table--formulacao-composicao td.col-acoes { width: 3.0161%; }
+.table--formulacao-composicao td.col-acoes { width: 4.8257%; }
+
+/* Ordem e remoção lado a lado; as setas empilhadas ocupam a altura de um campo. */
+.table--formulacao .col-acoes__grupo {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-1);
+}
+
+.table--formulacao .col-acoes__ordem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 
 /*
  * COMPOSIÇÃO — cápsula: a coluna "Por cápsula" existe e o ingrediente devolve
  * exatamente os 96px dela. 478 · 211 · 96 · 156 · 110 · 96 · 100 · 96 · 104 ·
- * 45 = 1492px. Nenhuma outra coluna muda entre as duas formas.
+ * 72 = 1492px. Nenhuma outra coluna muda entre as duas formas.
  */
-.table--formulacao-composicao.table--com-capsula .col-item { width: 32.0315%; }
+.table--formulacao-composicao.table--com-capsula .col-item { width: 30.2219%; }
 
 .table--formulacao-composicao.table--com-capsula .col-capsula {
   width: 6.4343%;
@@ -3640,12 +3688,12 @@ button.help-flow__box:focus-visible {
  * quantidade e unidade dividem uma célula compacta.
  * 879 · 216 · 204 · 134 · 59 = 1492px.
  */
-.table--formulacao-embalagem .col-item { width: 58.9083%; }
+.table--formulacao-embalagem .col-item { width: 58.037%; }
 .table--formulacao-embalagem .col-quantidade { width: 14.4772%; text-align: right; }
 .table--formulacao-embalagem .col-regras { width: 13.6729%; }
 .table--formulacao-embalagem .col-fisico { width: 8.9812%; text-align: right; }
 .table--formulacao-embalagem th.col-acoes,
-.table--formulacao-embalagem td.col-acoes { width: 3.9544%; }
+.table--formulacao-embalagem td.col-acoes { width: 4.8257%; }
 
 /*
  * CAMPO DA GRADE COM A MESMA CARA DO CAMPO DO INGREDIENTE.

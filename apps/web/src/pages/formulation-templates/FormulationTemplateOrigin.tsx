@@ -187,7 +187,7 @@ export function FormulationTemplateOrigin({ version, canEdit, onChanged }: Props
           ) : (
             <button
               type="button"
-              className="btn btn--ghost btn--sm"
+              className="btn btn--primary btn--sm"
               onClick={() => setSalvandoTemplate(true)}
             >
               Salvar como template

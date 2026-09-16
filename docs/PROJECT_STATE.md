@@ -88,7 +88,9 @@ estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0
   linhas de apoio cabem numa linha só. A coluna do Alvo ficou em 156px para a unidade voltar ao lado da caixa, que
   mantém os 88px das demais. O bloco de premissas ganhou a SIMULAÇÃO: sobre um lote de referência de 1.000 unidades,
   quanto precisa entrar na produção para sair 1.000 vendáveis — com 4% de perda, 1.042 un, arredondado para cima em
-  unidade contável. **Falta a avaliação
+  unidade contável. As linhas da fórmula podem ser REORDENADAS pela tela (setas na coluna de ações, dentro da própria
+  seção) — a ordem já viajava como `position` e faltava poder mudá-la —, o remover ficou vermelho e "Salvar como
+  template" usa o botão primário. **Falta a avaliação
   visual do PO** — é dela que depende o fechamento;
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 
