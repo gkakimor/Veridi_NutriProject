@@ -38,11 +38,13 @@ import {
   PRESENTATION_TYPE_LABELS,
   TARGET_AGE_GROUP_LABELS,
   ajustesAutorizados,
+  apresentacoesDaForma,
   calcularQuantidadeDaDose,
   calcularQuantidadeDoComponente,
   capsulasPorEmbalagem,
   dosesPorEmbalagemDaApresentacao,
   formaDerivaDoses,
+  rendimentoEsperado,
   resumirDoses,
 } from "@veridi/shared";
 import { CalcHint } from "../../components/help/CalcHint";
@@ -297,6 +299,7 @@ function rascunhoDoDTO(dto: FormulationVersionDTO) {
     doseUomCode: dto.doseUomCode ?? null,
     packageContentAmount: dto.packageContentAmount ?? null,
     packageContentUomCode: dto.packageContentUomCode ?? null,
+    expectedLossPercent: dto.expectedLossPercent ?? null,
     notes: (dto.notes ?? "").trim(),
     components: dto.components.map((component) => ({
       itemId: component.itemId,
@@ -324,6 +327,7 @@ function rascunhoComparavel<
     basisQuantity: string;
     doseAmount: string | null;
     packageContentAmount: string | null;
+    expectedLossPercent: string | null;
     components: { quantity: string; purityPercentApplied: string | null; overagePercent: string | null }[];
   },
 >(rascunho: T): unknown {
@@ -332,6 +336,7 @@ function rascunhoComparavel<
     basisQuantity: decimalDaApiComparavel(rascunho.basisQuantity) ?? "",
     doseAmount: decimalDaApiComparavel(rascunho.doseAmount),
     packageContentAmount: decimalDaApiComparavel(rascunho.packageContentAmount),
+    expectedLossPercent: decimalDaApiComparavel(rascunho.expectedLossPercent),
     components: rascunho.components.map((componente) => ({
       ...componente,
       quantity: decimalDaApiComparavel(componente.quantity) ?? "",
@@ -509,7 +514,10 @@ function errosDaLinha(row: ComponentRow): Partial<Record<CampoDoComponente, stri
 
   // Pureza e reserva: as mesmas regras do Modelo de Formulação, num lugar só —
   // só o rótulo da recusa muda, porque o campo se chama outra coisa aqui.
-  return { ...erros, ...errosDosAjustes(ajustesDaLinha(row), nome, "Reserva de produção %") };
+  return {
+    ...erros,
+    ...errosDosAjustes(ajustesDaLinha(row), nome, "Reserva de matéria-prima %"),
+  };
 }
 
 /** Cor do selo da origem do custo: o que falta ou exige decisão avisa; o resto informa. */
@@ -816,7 +824,27 @@ function operandosDoFisico(
  * construção (backend também bloqueia).
  */
 /** ⓘ de um conceito da tela — o texto vive no registro de ajuda. */
-function Dica({ id }: { id: "formulacao.base" | "formulacao.modoCalculo" | "formulacao.fornecimento" | "formulacao.pureza" | "formulacao.overage" | "formulacao.equivalenteEstoque" }) {
+type DicaDaBancada =
+  | "formulacao.base"
+  | "formulacao.modoCalculo"
+  | "formulacao.fornecimento"
+  | "formulacao.pureza"
+  | "formulacao.overage"
+  | "formulacao.equivalenteEstoque"
+  | "formulacao.perdaPrevista"
+  | "formulacao.rendimentoEsperado"
+  | "formulacao.forma"
+  | "formulacao.apresentacaoComercial"
+  | "formulacao.capsulasPorDose"
+  | "formulacao.capsulasPorEmbalagem"
+  | "formulacao.dose"
+  | "formulacao.conteudo"
+  | "formulacao.dosesPorEmbalagem"
+  | "formulacao.loteMinimo"
+  | "formulacao.caixaEmbarque"
+  | "formulacao.faixaEtaria";
+
+function Dica({ id }: { id: DicaDaBancada }) {
   const dica = helpHints[id];
   return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
 }
@@ -841,6 +869,12 @@ export function FormulationVersionPage() {
   const [doseUomCode, setDoseUomCode] = useState("");
   const [packageContentAmount, setPackageContentAmount] = useState("");
   const [packageContentUomCode, setPackageContentUomCode] = useState("");
+  /*
+   * PERDA PREVISTA DE PRODUÇÃO — premissa GLOBAL desta versão, não da linha.
+   * A reserva de matéria-prima continua por componente, na coluna: uma é do
+   * insumo, a outra é do processo.
+   */
+  const [expectedLossPercent, setExpectedLossPercent] = useState("");
   const [notes, setNotes] = useState("");
   const [components, setComponents] = useState<ComponentRow[]>([]);
 
@@ -918,6 +952,9 @@ export function FormulationVersionPage() {
     setDoseUomCode(dto.doseUomCode ?? "");
     setPackageContentAmount(toPtBrEditText(dto.packageContentAmount ?? null, OPCOES_QUANTIDADE));
     setPackageContentUomCode(dto.packageContentUomCode ?? "");
+    setExpectedLossPercent(
+      toPtBrEditText(dto.expectedLossPercent ?? null, OPCOES_PERCENTUAL_TECNICO),
+    );
     setNotes(dto.notes ?? "");
     /*
      * O rascunho entra na tela já sob o contrato da bancada: pureza preenchida
@@ -1428,6 +1465,16 @@ export function FormulationVersionPage() {
           ? exigirDecimalOpcional(packageContentAmount, "Conteúdo da embalagem", OPCOES_QUANTIDADE)
           : null,
       packageContentUomCode: dosageForm === "POWDER" ? packageContentUomCode || null : null,
+      /*
+       * PERDA PREVISTA: vai para a VERSÃO em qualquer forma — é premissa do
+       * processo produtivo, não da apresentação. Vazio é `null`, e `null`
+       * significa não informada, nunca 0%.
+       */
+      expectedLossPercent: exigirDecimalOpcional(
+        expectedLossPercent,
+        "Perda prevista de produção",
+        OPCOES_PERCENTUAL_TECNICO,
+      ),
       notes: notes.trim(),
       components: components
         .filter((row) => row.itemId)
@@ -1775,6 +1822,17 @@ export function FormulationVersionPage() {
     : dosageForm === ""
       ? FORMAS_DA_BANCADA
       : [...FORMAS_DA_BANCADA, dosageForm as DosageForm];
+  /*
+   * As apresentações COERENTES com a forma escolhida — pelo mesmo princípio da
+   * lista de formas: a apresentação já gravada continua oferecida mesmo fora da
+   * lista, para que uma versão histórica não perca a premissa no primeiro
+   * salvamento. Forma em branco oferece tudo.
+   */
+  const apresentacoesOferecidas = apresentacoesDaForma(
+    dosageForm === "" ? null : dosageForm,
+    presentationType === "" ? null : presentationType,
+    PRESENTATION_TYPES,
+  );
   const capsulasNaEmbalagem = capsulasPorEmbalagem(capsulasPorDose, dosesPorEmbalagem);
 
   /*
@@ -1804,31 +1862,71 @@ export function FormulationVersionPage() {
    * aqui é o que vale nas duas e não é editável na Formulação — e só quando o
    * domínio TEM o dado. Linha ausente é melhor que linha com traço inventado.
    */
-  const premissasDeReferencia: { rotulo: string; valor: string }[] = [];
+  const premissasDeReferencia: { rotulo: string; valor: string; dica?: DicaDaBancada }[] = [];
   if (perfil?.targetAgeGroup) {
     premissasDeReferencia.push({
       rotulo: "Faixa etária",
       valor: TARGET_AGE_GROUP_LABELS[perfil.targetAgeGroup],
+      dica: "formulacao.faixaEtaria",
     });
   }
   if (reservaDeReferencia !== null) {
     premissasDeReferencia.push({
-      rotulo: "Reserva de produção",
+      rotulo: "Reserva de matéria-prima",
       valor: `${formatPercentPtBr(reservaDeReferencia, OPCOES_PERCENTUAL_TECNICO)} em todas as matérias-primas`,
+      dica: "formulacao.overage",
     });
   }
   if (perfil?.minimumBatchQuantity) {
     premissasDeReferencia.push({
       rotulo: "Lote mínimo",
       valor: `${formatQuantity(perfil.minimumBatchQuantity)} ${version?.outputUnitCode ?? ""}`.trim(),
+      dica: "formulacao.loteMinimo",
     });
   }
   if (perfil?.unitsPerShippingBox) {
     premissasDeReferencia.push({
       rotulo: "Caixa de embarque",
       valor: `${formatIntegerPtBr(perfil.unitsPerShippingBox)} por caixa`,
+      dica: "formulacao.caixaEmbarque",
     });
   }
+
+  /*
+   * RENDIMENTO ESPERADO — 100% menos a perda prevista, calculado enquanto se
+   * digita e pela MESMA função que a API usa. Nunca editável: dois campos para
+   * a mesma premissa divergem no primeiro que alguém esquecer de atualizar.
+   */
+  const perdaDigitada = decimalLegivel(expectedLossPercent, OPCOES_PERCENTUAL_TECNICO);
+  const rendimento = rendimentoEsperado(perdaDigitada);
+  const rendimentoExibido =
+    rendimento === null || typeof rendimento === "string" ? null : rendimento.toString();
+
+  /*
+   * A BASE decide material nesta versão?
+   *
+   * Só quando alguma linha é declarada por base fixa — é ela que divide por
+   * `basisQuantity`. Quem decide isso é a FÓRMULA, não o modo da versão: o
+   * dado real tem versão em modo "Base fixa" com todas as linhas por dose, e
+   * ali a base não multiplica nada. Ela continua sendo a quantidade sobre a
+   * qual o custo estimado é apresentado, e é assim que aparece.
+   *
+   * O valor continua indo ao servidor exatamente como antes — o contrato não
+   * mudou, só o peso visual de um campo que não era decisão de ninguém.
+   */
+  const baseMultiplicaMaterial =
+    components.length === 0 ||
+    components.some((row) => row.basis === "FIXED_BASIS") ||
+    /*
+       Base diferente de 1 é número que alguém escolheu — continua à vista e
+       editável mesmo sem linha por base fixa. Campo que some levando o número
+       junto esconde a premissa em vez de simplificar a tela.
+
+       A pergunta é feita sobre o valor GRAVADO, nunca sobre o texto que está
+       sendo digitado: apagar o campo para redigitar o faria desaparecer no
+       meio da digitação, levando junto o foco e o que já tinha sido escrito.
+    */
+    decimalDaApiComparavel(version?.basisQuantity ?? null) !== "1";
 
   /** Totais técnicos da dose, somados em mg pelo mesmo motor das linhas. */
   const resumoDaDose = resumirDoses(
@@ -1859,6 +1957,13 @@ export function FormulationVersionPage() {
     const equivalenteExibido = previa?.teorico ?? row.theoreticalPerUnit;
     const dose = valoresDaDose(row);
     const nomeDoItem = row.itemCode || "componente";
+    /** Base canônica da seção — o que `handleAddComponent` já escolhe sozinho. */
+    const baseDaSecao: FormulationComponentBasis = daComposicao
+      ? receitaPorDose
+        ? "PER_DOSE"
+        : "FIXED_BASIS"
+      : "PER_FINISHED_UNIT";
+    const baseEditavelNaLinha = baseMultiplicaMaterial || row.basis !== baseDaSecao;
     const erroDe = (campo: CampoDoComponente) => fieldErrors[chaveDeErro(row.key, campo)];
     const marcaDeErro = (campo: CampoDoComponente) =>
       erroDe(campo)
@@ -1942,7 +2047,7 @@ export function FormulationVersionPage() {
         )}
 
         {daComposicao && (
-          <td className="col-pureza is-numeric" data-label="Pureza">
+          <td className="col-pureza is-numeric" data-label="Pureza (%)">
             {isDraft ? (
               <>
                 <PercentField
@@ -2051,25 +2156,44 @@ export function FormulationVersionPage() {
           </td>
         )}
 
-        <td className="col-regras" data-label="Base · Fornecimento">
+        {/*
+          BASE e FORNECIMENTO dividem a célula, mas não têm o mesmo peso.
+
+          A base de cada linha já é decidida pela seção e pelo modo: matéria-prima
+          numa fórmula por dose nasce por dose, embalagem nasce por unidade
+          acabada, e a seção vem do TIPO do Item, que a linha não escolhe. Um
+          seletor repetindo essa escolha em cada linha ocupava a largura de uma
+          coluna inteira para oferecer uma decisão que ninguém toma. Ele volta a
+          ser seletor quando a base multiplica material de verdade (alguma linha
+          por base fixa) ou quando ESTA linha já tem base fora do padrão da seção
+          — linha herdada de cópia antiga continua corrigível. Fora disso a base
+          fica como texto de apoio: a capacidade do domínio continua inteira, o
+          que saiu foi o peso visual.
+        */}
+        <td
+          className="col-regras"
+          data-label={baseEditavelNaLinha ? "Base · Fornecimento" : "Fornecimento"}
+        >
           {isDraft ? (
             <div className="col-regras__campos">
-              <select
-                aria-label="Base de cálculo do componente"
-                value={row.basis}
-                onChange={(event) =>
-                  handleComponentBasisChange(
-                    row.key,
-                    event.target.value as FormulationComponentBasis,
-                  )
-                }
-              >
-                {FORMULATION_COMPONENT_BASES.map((basis) => (
-                  <option key={basis} value={basis}>
-                    {FORMULATION_COMPONENT_BASIS_LABELS[basis]}
-                  </option>
-                ))}
-              </select>
+              {baseEditavelNaLinha && (
+                <select
+                  aria-label="Base de cálculo do componente"
+                  value={row.basis}
+                  onChange={(event) =>
+                    handleComponentBasisChange(
+                      row.key,
+                      event.target.value as FormulationComponentBasis,
+                    )
+                  }
+                >
+                  {FORMULATION_COMPONENT_BASES.map((basis) => (
+                    <option key={basis} value={basis}>
+                      {FORMULATION_COMPONENT_BASIS_LABELS[basis]}
+                    </option>
+                  ))}
+                </select>
+              )}
               <select
                 aria-label="Responsabilidade de fornecimento"
                 value={row.supplyResponsibility}
@@ -2086,12 +2210,17 @@ export function FormulationVersionPage() {
                   </option>
                 ))}
               </select>
+              {!baseEditavelNaLinha && (
+                <span className="cell-sub">
+                  {FORMULATION_COMPONENT_BASIS_LABELS[row.basis]}
+                </span>
+              )}
             </div>
           ) : (
             <>
-              {FORMULATION_COMPONENT_BASIS_LABELS[row.basis]}
+              {SUPPLY_RESPONSIBILITY_LABELS[row.supplyResponsibility]}
               <span className="cell-sub">
-                {SUPPLY_RESPONSIBILITY_LABELS[row.supplyResponsibility]}
+                {FORMULATION_COMPONENT_BASIS_LABELS[row.basis]}
               </span>
             </>
           )}
@@ -2104,13 +2233,13 @@ export function FormulationVersionPage() {
           continua igual depois de digitar aqui.
         */}
         {daComposicao && (
-          <td className="col-reserva is-numeric" data-label="Reserva de produção">
+          <td className="col-reserva is-numeric" data-label="Reserva de matéria-prima (%)">
             {isDraft ? (
               <>
                 <PercentField
                   id={idDoCampo(row.key, "overagePercent")}
                   scale={CASAS_PERCENTUAL_TECNICO}
-                  aria-label={`Reserva de produção de ${nomeDoItem}`}
+                  aria-label={`Reserva de matéria-prima de ${nomeDoItem}`}
                   placeholder="—"
                   value={row.overagePercent}
                   onChangeValue={(valor) =>
@@ -2183,19 +2312,25 @@ export function FormulationVersionPage() {
         title={daComposicao ? "Composição — matérias-primas" : "Embalagem"}
         subtitle={
           daComposicao
-            ? "Busque por código ou nome: a lista abre com os primeiros itens e digitar procura no catálogo inteiro. A quantidade é o alvo ATIVO por dose; a pureza informada corrige a quantidade física, e o resultado aparece ao lado enquanto se digita. A reserva de produção fica registrada para o lote e não altera a dose."
-            : "Itens do tipo Material de embalagem, pela classificação do cadastro — nunca pelo nome. A quantidade é por embalagem acabada: 120 cápsulas, 1 pote, 1 tampa."
+            ? "Busque por código ou nome — digitar procura no catálogo inteiro. A quantidade é o alvo ATIVO por dose."
+            : "Itens do tipo Material de embalagem, pela classificação do cadastro. A quantidade é por embalagem acabada: 120 cápsulas, 1 pote, 1 tampa."
         }
       >
         <div className="table-container">
-          <table className="table table--sticky-actions table--formulacao">
+          <table
+            className={
+              daComposicao
+                ? "table table--sticky-actions table--formulacao table--formulacao-composicao"
+                : "table table--sticky-actions table--formulacao table--formulacao-embalagem"
+            }
+          >
             <thead>
               <tr>
                 <th className="col-item">{daComposicao ? "Ingrediente" : "Item"}</th>
                 {daComposicao && <th className="col-fonte">Fonte / Função</th>}
                 {daComposicao && (
                   <th className="col-pureza is-numeric">
-                    Pureza <Dica id="formulacao.pureza" />
+                    Pureza (%) <Dica id="formulacao.pureza" />
                   </th>
                 )}
                 <th className="col-quantidade is-numeric">
@@ -2206,11 +2341,12 @@ export function FormulationVersionPage() {
                   <th className="col-capsula is-numeric">Por cápsula</th>
                 )}
                 <th className="col-regras">
-                  Base · Fornecimento <Dica id="formulacao.fornecimento" />
+                  {baseMultiplicaMaterial ? "Base · Fornecimento" : "Fornecimento"}{" "}
+                  <Dica id="formulacao.fornecimento" />
                 </th>
                 {daComposicao && (
                   <th className="col-reserva is-numeric">
-                    Reserva de produção <Dica id="formulacao.overage" />
+                    Reserva de matéria-prima (%) <Dica id="formulacao.overage" />
                   </th>
                 )}
                 <th className="col-fisico is-numeric">
@@ -2395,7 +2531,9 @@ export function FormulationVersionPage() {
             vocabulário que não descreve nem produto nem embalagem.
           */}
           <div className="field field--narrow">
-            <label htmlFor="version-dosageForm">Forma do produto</label>
+            <label htmlFor="version-dosageForm">
+              Forma do produto <Dica id="formulacao.forma" />
+            </label>
             {isDraft ? (
               <select
                 id="version-dosageForm"
@@ -2414,15 +2552,12 @@ export function FormulationVersionPage() {
                 {dosageForm ? DOSAGE_FORM_LABELS[dosageForm] : "—"}
               </p>
             )}
-            <p className="field__hint">
-              O Produto Acabado da Veridi é pó ou cápsula, e a bancada calcula por dose nas
-              duas: ela mostra a quantidade física de cada ingrediente por dose e, na cápsula,
-              por cápsula.
-            </p>
           </div>
 
           <div className="field field--narrow">
-            <label htmlFor="version-presentationType">Apresentação</label>
+            <label htmlFor="version-presentationType">
+              Apresentação comercial <Dica id="formulacao.apresentacaoComercial" />
+            </label>
             {isDraft ? (
               <select
                 id="version-presentationType"
@@ -2432,7 +2567,7 @@ export function FormulationVersionPage() {
                 }
               >
                 <option value="">—</option>
-                {PRESENTATION_TYPES.map((tipo) => (
+                {apresentacoesOferecidas.map((tipo) => (
                   <option key={tipo} value={tipo}>
                     {PRESENTATION_TYPE_LABELS[tipo]}
                   </option>
@@ -2443,16 +2578,14 @@ export function FormulationVersionPage() {
                 {presentationType ? PRESENTATION_TYPE_LABELS[presentationType] : "—"}
               </p>
             )}
-            <p className="field__hint">
-              A embalagem comercial do produto — não confundir com os itens de embalagem da
-              fórmula, que ficam na seção Embalagem.
-            </p>
           </div>
 
           {dosageForm === "CAPSULE" && (
             <>
               <div className="field field--narrow">
-                <label htmlFor="version-capsulesPerDose">Cápsulas por dose</label>
+                <label htmlFor="version-capsulesPerDose">
+                  Cápsulas por dose <Dica id="formulacao.capsulasPorDose" />
+                </label>
                 {isDraft ? (
                   <IntegerField
                     id="version-capsulesPerDose"
@@ -2478,7 +2611,9 @@ export function FormulationVersionPage() {
               </div>
 
               <div className="field field--narrow">
-                <label htmlFor="version-capsulesPerPackage">Cápsulas por embalagem</label>
+                <label htmlFor="version-capsulesPerPackage">
+                  Cápsulas por embalagem <Dica id="formulacao.capsulasPorEmbalagem" />
+                </label>
                 {isDraft ? (
                   <IntegerField
                     id="version-capsulesPerPackage"
@@ -2508,7 +2643,9 @@ export function FormulationVersionPage() {
           {dosageForm === "POWDER" && (
             <>
               <div className="field field--narrow">
-                <label htmlFor="version-doseAmount">Dose</label>
+                <label htmlFor="version-doseAmount">
+                  Dose <Dica id="formulacao.dose" />
+                </label>
                 {isDraft ? (
                   <div className="quantidade-unidade">
                     <DecimalField
@@ -2556,7 +2693,9 @@ export function FormulationVersionPage() {
               </div>
 
               <div className="field field--narrow">
-                <label htmlFor="version-packageContentAmount">Conteúdo da embalagem</label>
+                <label htmlFor="version-packageContentAmount">
+                  Conteúdo da embalagem <Dica id="formulacao.conteudo" />
+                </label>
                 {isDraft ? (
                   <div className="quantidade-unidade">
                     <DecimalField
@@ -2603,25 +2742,23 @@ export function FormulationVersionPage() {
           )}
 
           {derivaDoses && (
-            <div className="field field--narrow">
-              <span className="field__label-static">Doses por embalagem</span>
-              <p className="field-readonly-value" data-testid="doses-derivadas">
+            <div className="field field--narrow field--calculado">
+              <span className="field__label-static">
+                Doses por embalagem <Dica id="formulacao.dosesPorEmbalagem" />
+              </span>
+              <p className="field-readonly-value field-readonly-value--calculado" data-testid="doses-derivadas">
                 {dosesPorEmbalagem === null ? "—" : formatIntegerPtBr(dosesPorEmbalagem)}
-              </p>
-              <p className="field__hint">
-                {dosageForm === "CAPSULE"
-                  ? "Cápsulas por embalagem ÷ cápsulas por dose — por isso o número não é digitado."
-                  : "Conteúdo da embalagem ÷ dose — por isso o número não é digitado."}
               </p>
             </div>
           )}
 
           <div className="field field--narrow">
             <label htmlFor="version-basis">
-              Base da formulação ({version.outputUnitCode}) <span className="req">*</span>{" "}
+              Base da formulação ({version.outputUnitCode})
+              {baseMultiplicaMaterial && <span className="req"> *</span>}{" "}
               <Dica id="formulacao.base" />
             </label>
-            {isDraft ? (
+            {isDraft && baseMultiplicaMaterial ? (
               <DecimalField
                 id="version-basis"
                 scale={CASAS_QUANTIDADE}
@@ -2636,8 +2773,15 @@ export function FormulationVersionPage() {
                   : {})}
               />
             ) : (
-              <p className="field-readonly-value">
-                {formatQuantity(version.basisQuantity)} {version.outputUnitCode}
+              /*
+                Sem linha por base fixa a base não multiplica material nenhum:
+                aparece como REFERÊNCIA, não como decisão. O valor continua
+                gravado e continua viajando no payload — o que saiu foi o campo,
+                não o contrato.
+              */
+              <p className="field-readonly-value field-readonly-value--calculado">
+                {formatQuantity(decimalLegivel(basisQuantity, OPCOES_QUANTIDADE) ?? version.basisQuantity)}{" "}
+                {version.outputUnitCode}
               </p>
             )}
             {fieldErrors["basisQuantity"] && (
@@ -2670,10 +2814,6 @@ export function FormulationVersionPage() {
                 {FORMULATION_CALCULATION_MODE_LABELS[version.calculationMode]}
               </p>
             )}
-            <p className="field__hint">
-              Base fixa: as quantidades produzem a base declarada. Por dose: a fórmula é declarada
-              por dose do produto acabado.
-            </p>
           </div>
 
           {/*
@@ -2687,7 +2827,8 @@ export function FormulationVersionPage() {
           {mostrarDoses && (
             <div className="field field--narrow">
               <label htmlFor="version-doses">
-                Doses por embalagem {dosesObrigatorias && <span className="req">*</span>}
+                Doses por embalagem {dosesObrigatorias && <span className="req">*</span>}{" "}
+                <Dica id="formulacao.dosesPorEmbalagem" />
               </label>
               {isDraft ? (
                 <IntegerField
@@ -2705,9 +2846,6 @@ export function FormulationVersionPage() {
               ) : (
                 <p className="field-readonly-value">{formatIntegerPtBr(version.dosesPerPackage)}</p>
               )}
-              <p className="field__hint">
-                Usado para calcular a quantidade total de componentes definidos por dose.
-              </p>
               {dosesObrigatorias && !dosesInformadas && (
                 <p className="field__error" id="version-doses-required-error">
                   Há componentes calculados por dose. Sem este número a formulação não pode ser
@@ -2724,6 +2862,64 @@ export function FormulationVersionPage() {
           </div>
 
           {/*
+            PREMISSAS DE PRODUÇÃO — a perda prevista e o rendimento que sai dela.
+            Bloco próprio, e não mais um campo no meio da apresentação: a
+            apresentação descreve o que se vende, esta linha descreve o processo.
+            Compacta de propósito — é uma premissa e o seu resultado, não um
+            assunto que mereça cartão inteiro.
+          */}
+          <div className="premissas-producao">
+            <span className="premissas-producao__titulo">Premissas de produção</span>
+            <div className="premissas-producao__campos">
+              <div className="field field--narrow">
+                <label htmlFor="version-expectedLoss">
+                  Perda prevista de produção (%) <Dica id="formulacao.perdaPrevista" />
+                </label>
+                {isDraft ? (
+                  <PercentField
+                    id="version-expectedLoss"
+                    scale={CASAS_PERCENTUAL_TECNICO}
+                    placeholder="—"
+                    value={expectedLossPercent}
+                    onChangeValue={setExpectedLossPercent}
+                    {...(fieldErrors["expectedLossPercent"]
+                      ? {
+                          "aria-invalid": true as const,
+                          "aria-describedby": "version-expectedLossPercent-error",
+                        }
+                      : {})}
+                  />
+                ) : (
+                  <p className="field-readonly-value">
+                    {version.expectedLossPercent
+                      ? formatPercentPtBr(version.expectedLossPercent, OPCOES_PERCENTUAL_TECNICO)
+                      : "—"}
+                  </p>
+                )}
+                {fieldErrors["expectedLossPercent"] && (
+                  <p className="field__error" id="version-expectedLossPercent-error">
+                    {fieldErrors["expectedLossPercent"]}
+                  </p>
+                )}
+              </div>
+
+              <div className="field field--narrow field--calculado">
+                <span className="field__label-static">
+                  Rendimento esperado <Dica id="formulacao.rendimentoEsperado" />
+                </span>
+                <p
+                  className="field-readonly-value field-readonly-value--calculado"
+                  data-testid="rendimento-esperado"
+                >
+                  {rendimentoExibido === null
+                    ? "—"
+                    : formatPercentPtBr(rendimentoExibido, OPCOES_PERCENTUAL_TECNICO)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/*
             PREMISSAS QUE A FORMULAÇÃO NÃO EDITA, mas que quem confere precisa ver
             junto: público, reserva de referência, lote mínimo e caixa de embarque.
             Vieram do cadastro do Produto e das próprias linhas — nenhum cadastro
@@ -2734,7 +2930,15 @@ export function FormulationVersionPage() {
             <dl className="definition-list definition-list--faixa">
               {premissasDeReferencia.map((premissa) => (
                 <Fragment key={premissa.rotulo}>
-                  <dt>{premissa.rotulo}</dt>
+                  <dt>
+                    {premissa.rotulo}
+                    {premissa.dica && (
+                      <>
+                        {" "}
+                        <Dica id={premissa.dica} />
+                      </>
+                    )}
+                  </dt>
                   <dd>{premissa.valor}</dd>
                 </Fragment>
               ))}
@@ -2899,6 +3103,12 @@ export function FormulationVersionPage() {
                         <span className="field__hint">
                           {formatQuantity(component.formulaQuantity)} {component.formulaUnitCode}
                         </span>
+                        {/* Um custo que subiu sem a lista de QUEM subiu é um
+                            número sem auditoria: a linha diz quando a perda
+                            prevista entrou na quantidade dela. */}
+                        {component.expectedLossApplied && (
+                          <span className="cell-sub">com perda prevista</span>
+                        )}
                       </td>
                       <td className="is-numeric">{component.customerSupplied ? "—" : formatBRL(component.unitCost)}</td>
                       <td>
@@ -2923,13 +3133,43 @@ export function FormulationVersionPage() {
             </div>
 
             <dl className="definition-list">
+              {/*
+                A PREMISSA ao lado do número que ela mudou. Conferir um custo
+                maior sem ver a perda que o aumentou não é conferência — e a
+                quantidade bruta é a única linha da tela em que a perda vira
+                quantidade.
+              */}
+              {costEstimate.expectedLossPercent && (
+                <>
+                  <dt>
+                    Perda prevista de produção <Dica id="formulacao.perdaPrevista" />
+                  </dt>
+                  <dd>
+                    {formatPercentPtBr(costEstimate.expectedLossPercent, OPCOES_PERCENTUAL_TECNICO)}{" "}
+                    · rendimento{" "}
+                    {costEstimate.expectedYieldPercent
+                      ? formatPercentPtBr(costEstimate.expectedYieldPercent, OPCOES_PERCENTUAL_TECNICO)
+                      : "—"}
+                    {costEstimate.grossPlannedQuantity && (
+                      <span className="cell-sub">
+                        quantidade bruta planejada{" "}
+                        {formatQuantity(costEstimate.grossPlannedQuantity)}{" "}
+                        {costEstimate.outputUnitCode} para{" "}
+                        {formatQuantity(costEstimate.basisQuantity)}{" "}
+                        {costEstimate.outputUnitCode} vendáveis — a quantidade comercial do
+                        Orçamento e do Pedido não muda.
+                      </span>
+                    )}
+                  </dd>
+                </>
+              )}
               <dt>Custo estimado da base ({formatQuantity(costEstimate.basisQuantity)} {costEstimate.outputUnitCode})</dt>
               <dd>
                 {costEstimate.estimatedMaterialCost
                   ? formatBRL(costEstimate.estimatedMaterialCost)
                   : "Indisponível"}
               </dd>
-              <dt>Custo estimado por unidade</dt>
+              <dt>Custo estimado por unidade vendável</dt>
               <dd>
                 {costEstimate.estimatedMaterialUnitCost
                   ? formatBRL(costEstimate.estimatedMaterialUnitCost)

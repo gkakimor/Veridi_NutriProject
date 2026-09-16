@@ -431,6 +431,111 @@ export function dosesPorEmbalagemDaApresentacao(
   return null;
 }
 
+/*
+ * PERDA PREVISTA DE PRODUÇÃO — premissa GLOBAL da versão (FORMULATION-WORKBENCH-01).
+ *
+ * É a perda normal esperada do processo produtivo, e não tem nada a ver com a
+ * pureza do insumo nem com a reserva de matéria-prima da linha:
+ *
+ * - PUREZA corrige a massa de UM ingrediente para entregar o mesmo teor ativo;
+ * - RESERVA DE MATÉRIA-PRIMA é um adicional POR LINHA, registrado para o lote;
+ * - PERDA PREVISTA é da VERSÃO inteira e responde outra pergunta: quanto
+ *   precisa ENTRAR na produção para SAIR a quantidade líquida desejada.
+ *
+ * Por isso ela não muda a composição de uma dose nem de uma cápsula — só a
+ * quantidade planejada do lote. E nunca muda quantidade COMERCIAL: Orçamento,
+ * Pedido e faturamento continuam na quantidade contratada com o cliente.
+ */
+
+/** Por que a perda prevista não fecha um número. */
+export type PerdaPrevistaBlock = "PERDA_INVALIDA";
+
+/** Perda de 100% ou mais não tem quantidade bruta: nada sai da produção. */
+const PERDA_MAXIMA_EXCLUSIVA = new Decimal(100);
+
+/**
+ * A perda declarada, quando ela é utilizável.
+ *
+ * `null` = NÃO INFORMADA, que é diferente de zero: versão gravada antes desta
+ * premissa não declarou nada, e assumir 0% silencioso seria inventar premissa
+ * em nome de quem não a declarou. Fora da faixa `[0, 100)` devolve o motivo.
+ */
+export function lerPerdaPrevista(
+  perdaPercent: DecimalValue | null | undefined,
+): DecimalInstance | null | PerdaPrevistaBlock {
+  if (perdaPercent === null || perdaPercent === undefined || perdaPercent === "") return null;
+  let perda: DecimalInstance;
+  try {
+    perda = new Decimal(perdaPercent);
+  } catch {
+    return "PERDA_INVALIDA";
+  }
+  if (!perda.isFinite() || perda.lessThan(0) || perda.greaterThanOrEqualTo(PERDA_MAXIMA_EXCLUSIVA)) {
+    return "PERDA_INVALIDA";
+  }
+  return perda;
+}
+
+/**
+ * Rendimento esperado (%) = 100 − perda prevista.
+ *
+ * É DERIVADO, nunca digitado: dois campos para a mesma premissa divergem no
+ * primeiro que alguém esquecer de atualizar. `null` quando não há perda
+ * declarada — rendimento de 100% presumido seria a mesma invenção.
+ */
+export function rendimentoEsperado(
+  perdaPercent: DecimalValue | null | undefined,
+): DecimalInstance | null | PerdaPrevistaBlock {
+  const perda = lerPerdaPrevista(perdaPercent);
+  if (perda === null || typeof perda === "string") return perda;
+  return CEM.minus(perda);
+}
+
+/**
+ * Quantidade BRUTA planejada: quanto entra na produção para sair a líquida.
+ *
+ *     bruta = líquida ÷ (1 − perda/100)
+ *
+ * 5.000 un com 1% de perda = 5.000 ÷ 0,99 = 5.050,505050… Não é
+ * `líquida × (1 + perda)`, que dá 5.050 e continua entregando menos que 5.000
+ * depois da perda — a diferença cresce com o percentual e o erro é sempre para
+ * menos, que é o lado que falta material.
+ *
+ * Sem perda declarada a bruta É a líquida: nada some, nada é presumido. O
+ * arredondamento é de quem PLANEJA, com a unidade e o contexto reais; aqui o
+ * número sai inteiro em decimal, sem float em nenhuma etapa.
+ */
+export function quantidadeBrutaPlanejada(
+  quantidadeLiquida: DecimalValue,
+  perdaPercent: DecimalValue | null | undefined,
+): DecimalInstance | PerdaPrevistaBlock {
+  const perda = lerPerdaPrevista(perdaPercent);
+  if (typeof perda === "string") return perda;
+  const liquida = new Decimal(quantidadeLiquida);
+  if (perda === null || perda.isZero()) return liquida;
+  return liquida.dividedBy(CEM.minus(perda).dividedBy(CEM));
+}
+
+/**
+ * Esta base acompanha a quantidade PRODUZIDA ou a quantidade VENDÁVEL?
+ *
+ * É a distinção que decide quem a perda prevista afeta, e ela já existia no
+ * domínio — nenhuma classificação nova foi inventada para esta premissa:
+ *
+ * - `PER_DOSE` e `FIXED_BASIS` declaram quanto de material forma o que é
+ *   produzido. Produzir mais para compensar a perda consome mais deles;
+ * - `PER_FINISHED_UNIT` declara o que acompanha CADA unidade acabada — um
+ *   pote, uma tampa, um rótulo. Continua atrelado à quantidade vendável.
+ *
+ * Um componente declarado `PER_FINISHED_UNIT` NÃO é escalado pela perda, ainda
+ * que fisicamente pudesse ser (cápsula vazia é o caso real): quem declara a
+ * base é a receita, e mudar isso por dentro seria o motor decidir sozinho uma
+ * regra de custo que ninguém escreveu.
+ */
+export function baseSegueQuantidadeProduzida(basis: FormulationComponentBasisLike): boolean {
+  return basis === "PER_DOSE" || basis === "FIXED_BASIS";
+}
+
 /** Cápsulas por embalagem de uma versão: cápsulas por dose × doses por embalagem. */
 export function capsulasPorEmbalagem(
   capsulasPorDose: number | null,

@@ -2568,6 +2568,19 @@ model FormulationVersion {
   packageContentUomCode String?
   packageContentUom     UnitOfMeasure? @relation("FormulationVersionPackageContentUom", fields: [packageContentUomCode], references: [code], onDelete: Restrict)
 
+  /// PERDA PREVISTA DE PRODUCAO (%) — premissa GLOBAL da versao, snapshot.
+  ///
+  /// Perda normal esperada do processo produtivo. NAO altera a composicao de
+  /// uma dose/capsula: o que ela muda e quanto precisa ENTRAR na producao para
+  /// sair a quantidade liquida desejada (quantidade bruta = liquida / (1 -
+  /// perda)). Nunca altera quantidade comercial — Orcamento, Pedido e
+  /// faturamento continuam na quantidade contratada.
+  ///
+  /// `null` = NAO INFORMADA, e nao zero: as versoes gravadas antes desta
+  /// coluna nao declararam premissa nenhuma, e inventar 0% silencioso seria
+  /// reescrever historico. Quem calcula trata ausencia como "sem correcao".
+  expectedLossPercent Decimal? @db.Decimal(9, 6)
+
   /// Snapshot do output no momento da criacao/copia da versao — nunca
   /// depende da associacao ATUAL do Product (que pode mudar depois),
   /// preservando o significado historico da versao.

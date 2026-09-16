@@ -32,6 +32,19 @@ vi.mock("../../app/AuthProvider", () => ({ useAuth: () => ({ user: { role: "ADMI
 import { getFormulationVersion } from "../../lib/formulations-api";
 import { FormulationVersionPage } from "./FormulationVersionPage";
 
+/**
+ * A busca por rótulo precisa achar o CAMPO, não o ícone de ajuda.
+ *
+ * As premissas da bancada passaram a explicar-se num ⓘ dentro do próprio
+ * `<label>` (FORMULATION-WORKBENCH-01), e o gatilho da dica é um `<button>`
+ * chamado "Ajuda sobre Cápsulas por dose". Para `getByLabelText` os dois
+ * respondem pelo mesmo nome, e a busca passou a achar dois elementos. O
+ * seletor prende a resposta ao controle de formulário — o ⓘ continua
+ * acessível, e continua fora desta pergunta.
+ */
+const CAMPO_DO_FORMULARIO = { selector: "input, select, textarea" } as const;
+
+
 function componente(basis: FormulationVersionDTO["components"][number]["basis"]) {
   return {
     id: "cmp-1",
@@ -115,14 +128,15 @@ async function abrir(dto: FormulationVersionDTO) {
 describe("Doses por embalagem", () => {
   it("aparece em modo Base fixa quando há componente por dose", async () => {
     await abrir(versao());
-    expect(screen.getByLabelText(/Doses por embalagem/)).toBeTruthy();
+    expect(screen.getByLabelText(/Doses por embalagem/, CAMPO_DO_FORMULARIO)).toBeTruthy();
   });
 
-  it("explica para que serve, sem falar de implementação", async () => {
+  it("explica para que serve no ⓘ, sem frase permanente sob o campo", async () => {
     await abrir(versao());
-    expect(
-      screen.getByText(/quantidade total de componentes definidos por dose/i),
-    ).toBeTruthy();
+    // A explicação saiu do texto fixo embaixo do campo e virou dica: o que
+    // ocupa a tela o tempo todo é o campo, não a prosa sobre ele.
+    fireEvent.click(screen.getByRole("button", { name: "Ajuda sobre Doses por embalagem" }));
+    expect(screen.getByText(/multiplica toda linha declarada por dose/i)).toBeTruthy();
   });
 
   it("avisa que a formulação não ativa enquanto o número faltar", async () => {
@@ -132,7 +146,7 @@ describe("Doses por embalagem", () => {
 
   it("some o aviso quando a premissa é informada", async () => {
     await abrir(versao());
-    fireEvent.change(screen.getByLabelText(/Doses por embalagem/), { target: { value: "60" } });
+    fireEvent.change(screen.getByLabelText(/Doses por embalagem/, CAMPO_DO_FORMULARIO), { target: { value: "60" } });
     await waitFor(() =>
       expect(screen.queryByText(/não pode ser\s+ativada/i)).toBeNull(),
     );
@@ -140,14 +154,14 @@ describe("Doses por embalagem", () => {
 
   it("não aparece quando nenhum componente depende de dose", async () => {
     await abrir(versao({ components: [componente("FIXED_BASIS")] }));
-    expect(screen.queryByLabelText(/Doses por embalagem/)).toBeNull();
+    expect(screen.queryByLabelText(/Doses por embalagem/, CAMPO_DO_FORMULARIO)).toBeNull();
   });
 
   it("continua visível quando já existe valor gravado, mesmo sem componente por dose", async () => {
     // Campo que some levando o número junto esconde a premissa em vez de
     // simplificar a tela.
     await abrir(versao({ components: [componente("FIXED_BASIS")], dosesPerPackage: 60 }));
-    expect(screen.getByLabelText(/Doses por embalagem/)).toBeTruthy();
+    expect(screen.getByLabelText(/Doses por embalagem/, CAMPO_DO_FORMULARIO)).toBeTruthy();
   });
 
   it("quantidade sem premissa aparece como '—', nunca como zero", async () => {

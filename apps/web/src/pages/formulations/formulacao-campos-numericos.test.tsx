@@ -41,6 +41,19 @@ vi.mock("../../app/AuthProvider", () => ({ useAuth: () => ({ user: { role: "ADMI
 import { getFormulationVersion, updateFormulationVersion } from "../../lib/formulations-api";
 import { FormulationVersionPage } from "./FormulationVersionPage";
 
+/**
+ * A busca por rótulo precisa achar o CAMPO, não o ícone de ajuda.
+ *
+ * As premissas da bancada passaram a explicar-se num ⓘ dentro do próprio
+ * `<label>` (FORMULATION-WORKBENCH-01), e o gatilho da dica é um `<button>`
+ * chamado "Ajuda sobre Cápsulas por dose". Para `getByLabelText` os dois
+ * respondem pelo mesmo nome, e a busca passou a achar dois elementos. O
+ * seletor prende a resposta ao controle de formulário — o ⓘ continua
+ * acessível, e continua fora desta pergunta.
+ */
+const CAMPO_DO_FORMULARIO = { selector: "input, select, textarea" } as const;
+
+
 function componente(overrides: Partial<FormulationComponentDTO> = {}): FormulationComponentDTO {
   return {
     id: "cmp-1",
@@ -119,7 +132,7 @@ async function abrir(dto = versao()) {
 }
 
 const base = () => document.getElementById("version-basis") as HTMLInputElement;
-const doses = () => screen.getByLabelText(/Doses por embalagem/) as HTMLInputElement;
+const doses = () => screen.getByLabelText(/Doses por embalagem/, CAMPO_DO_FORMULARIO) as HTMLInputElement;
 const quantidade = () =>
   screen.getByRole("textbox", { name: "Quantidade de MP-000003" }) as HTMLInputElement;
 const pendente = () => screen.queryByText("Alterações não salvas");

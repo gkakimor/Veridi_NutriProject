@@ -1133,6 +1133,63 @@
 }
 
 /*
+ * PREMISSAS DE PRODUÇÃO — perda prevista e o rendimento que sai dela
+ * (FORMULATION-WORKBENCH-01).
+ *
+ * Uma faixa, não um cartão: são duas grandezas, e dar seção inteira a elas
+ * empurraria a composição — que é o assunto da tela — para baixo da dobra. A
+ * barra à esquerda separa do bloco da apresentação sem desenhar caixa.
+ */
+.premissas-producao {
+  margin-top: var(--sp-4);
+  padding-left: var(--sp-3);
+  border-left: 3px solid var(--line-strong);
+}
+
+.premissas-producao__titulo {
+  display: block;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+}
+
+.premissas-producao__campos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  align-items: start;
+  margin-top: var(--sp-2);
+}
+
+.premissas-producao__campos .field--narrow {
+  max-width: 220px;
+  margin-top: 0;
+}
+
+/*
+ * CALCULADO NÃO PARECE CAMPO (FORMULATION-WORKBENCH-01).
+ *
+ * Rendimento esperado, doses por embalagem e a base que virou referência são
+ * RESULTADO. Ao lado de um input com borda, um valor sem borda ainda é lido
+ * como "campo que esqueceram de habilitar" — o que faltava era o valor dizer
+ * que é conta: número tabular, rótulo em peso normal e um traço sob o valor,
+ * que é a marca de leitura, não de edição.
+ */
+.field--calculado label,
+.field--calculado .field__label-static {
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+}
+
+.field-readonly-value--calculado {
+  font-variant-numeric: tabular-nums;
+  padding-bottom: var(--sp-1);
+  border-bottom: 1px dashed var(--line-strong);
+}
+
+/*
  * As premissas que a tela só mostra, numa faixa: rótulo em cima, valor embaixo,
  * uma ao lado da outra. Na `definition-list` normal elas viravam quatro linhas
  * de duas colunas e gastavam altura sem usar a largura.
@@ -1722,7 +1779,9 @@
  */
 td .entity-select {
   display: block;
-  min-width: 15rem;
+  /* 12rem ainda mostra "MP-000012 · Exemplo…" e o "✕"; 15rem sozinhas
+     empurravam a coluna do resultado para fora da tela na bancada. */
+  min-width: 12rem;
 }
 
 /* Dentro de `.field` o input herdava largura da regra de formulário; numa
@@ -3452,9 +3511,16 @@ button.help-flow__box:focus-visible {
  * desktop continua tabela — editar formulação grande é o uso principal; em
  * tela estreita vira cartão (fim desta seção).
  */
+/*
+ * Densidade da bancada: a folga horizontal de cada célula saiu pela metade
+ * (FORMULATION-WORKBENCH-01). Com nove colunas na cápsula, 8px de cada lado
+ * viravam 160px só de respiro — e era a coluna do resultado que saía da tela
+ * por causa deles. A folga vertical continua igual: quem lê a linha lê de
+ * cima para baixo.
+ */
 .table--formulacao th,
 .table--formulacao td {
-  padding: var(--sp-2);
+  padding: var(--sp-2) var(--sp-1);
   vertical-align: top;
 }
 
@@ -3472,8 +3538,8 @@ button.help-flow__box:focus-visible {
  */
 /* Item leva a sobra da largura; quantidade e métricas ficam compactas. */
 .table--formulacao .col-item {
-  min-width: 200px;
-  width: 26%;
+  min-width: 180px;
+  width: 20%;
 }
 
 .table--formulacao .col-base {
@@ -3485,7 +3551,7 @@ button.help-flow__box:focus-visible {
 }
 
 .table--formulacao .col-quantidade {
-  min-width: 150px;
+  min-width: 128px;
 }
 
 
@@ -3493,7 +3559,8 @@ button.help-flow__box:focus-visible {
    alinhado à direita, com a unidade colada ao valor. */
 .table--formulacao .col-equivalente,
 .table--formulacao .col-fisico {
-  min-width: 96px;
+  min-width: 104px;
+  width: 104px;
   text-align: right;
 }
 
@@ -3506,7 +3573,7 @@ button.help-flow__box:focus-visible {
  * ação fixa, e cada célula segue legível.
  */
 .table--formulacao .col-fonte {
-  min-width: 148px;
+  min-width: 116px;
 }
 
 /* Pureza e reserva de produção: dois percentuais editáveis na própria linha.
@@ -3514,22 +3581,28 @@ button.help-flow__box:focus-visible {
    coluna não pode espremer o campo até esconder o número. */
 .table--formulacao .col-pureza,
 .table--formulacao .col-reserva {
-  min-width: 100px;
+  min-width: 88px;
+  width: 88px;
   text-align: right;
 }
 
 .table--formulacao .col-reserva {
-  min-width: 112px;
+  min-width: 96px;
+  width: 96px;
 }
 
 .table--formulacao .col-dose,
 .table--formulacao .col-capsula {
-  min-width: 108px;
+  min-width: 96px;
+  width: 96px;
   text-align: right;
 }
 
+/* Com a base fora da linha sobra UM seletor: a coluna deixou de precisar da
+   largura de dois campos empilhados. */
 .table--formulacao .col-regras {
-  min-width: 152px;
+  min-width: 100px;
+  width: 100px;
 }
 
 .table--formulacao .col-regras__campos {
@@ -3553,18 +3626,91 @@ button.help-flow__box:focus-visible {
 }
 
 .table--formulacao .quantidade-unidade input {
-  flex: 1 1 88px;
+  flex: 1 1 72px;
+  min-width: 0;
   text-align: right;
 }
 
 .table--formulacao .quantidade-unidade select {
-  flex: 0 0 64px;
+  flex: 0 0 58px;
 }
 
 /* O número e a unidade não se separam em duas linhas. */
 .table--formulacao .estoque-valor__numero {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * EDITÁVEL TEM BORDA; CALCULADO NÃO (FORMULATION-WORKBENCH-01).
+ *
+ * A grade parecia formulário antigo porque todo valor da linha vinha dentro de
+ * uma caixa — inclusive os que ninguém pode digitar. Física por dose, por
+ * cápsula e por embalagem são RESULTADO do motor: ganham o peso do número e
+ * perdem a moldura, e a diferença entre "eu decido isto" e "isto é
+ * consequência" passa a ser visível sem ler o cabeçalho.
+ */
+.table--formulacao .col-dose .estoque-valor__numero,
+.table--formulacao .col-capsula .estoque-valor__numero,
+.table--formulacao .col-fisico .estoque-valor__numero {
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+}
+
+/* Informativo é texto secundário, nunca um segundo resultado. */
+.table--formulacao .col-fonte {
+  color: var(--ink-2);
+}
+
+/*
+ * EMBALAGEM — a distribuição da grade (FORMULATION-WORKBENCH-01).
+ *
+ * A grade da embalagem nasceu com as larguras da composição, que tem nove
+ * colunas: com quatro, a quantidade herdava um campo do tamanho do nome do
+ * item e o Item — que é o que se procura na linha — ficava espremido. Aqui o
+ * Item leva metade da largura, quantidade e unidade ficam compactas na mesma
+ * célula e o fornecimento ocupa o necessário para o seletor.
+ */
+.table--formulacao-embalagem .col-item {
+  width: 50%;
+}
+
+.table--formulacao-embalagem .col-quantidade {
+  width: 20%;
+  min-width: 132px;
+}
+
+.table--formulacao-embalagem .col-regras {
+  width: 18%;
+  min-width: 132px;
+}
+
+.table--formulacao-embalagem .col-fisico {
+  width: auto;
+}
+
+/* Quantidade de embalagem é 1, 2, 120 — número curto. O campo acompanha. */
+.table--formulacao-embalagem .quantidade-unidade input {
+  flex: 0 1 72px;
+}
+
+.table--formulacao-embalagem .quantidade-unidade select {
+  flex: 0 0 60px;
+}
+
+/*
+ * O texto de apoio da linha PODE quebrar (FORMULATION-WORKBENCH-01).
+ *
+ * "equivalente 0,000048 kg" e "L-metilfolato de cálcio" são a segunda linha da
+ * célula, e com palavra longa indivisível eles ditavam a largura da coluna:
+ * o apoio empurrava para fora da tela o número que a coluna existe para
+ * mostrar. O número em si continua `nowrap` — é ele que não pode partir.
+ */
+.table--formulacao .col-fisico .cell-sub,
+.table--formulacao .col-fonte,
+.table--formulacao .col-fonte .cell-sub {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* Mensagem de erro sob o campo, dentro da coluna — prosa, não célula. */

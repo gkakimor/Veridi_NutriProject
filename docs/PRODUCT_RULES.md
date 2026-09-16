@@ -3752,6 +3752,77 @@ código ou nome, no catálogo inteiro.
 **Custo continua fora da Formulação.** A bancada responde o que entra e quanto
 entra; quanto custa é Estrutura de Custos, por quanto vender é Precificação.
 
+### Perda prevista de produção (FORMULATION-WORKBENCH-01)
+
+**Três percentuais distintos, que ninguém pode confundir:**
+
+| Percentual | Escopo | O que corrige |
+| --- | --- | --- |
+| Pureza (%) | linha | o teor real do insumo: a massa física de UM ingrediente |
+| Reserva de matéria-prima (%) | linha | adicional previsto para o lote daquele material |
+| Perda prevista de produção (%) | **versão** | quanto precisa ENTRAR na produção para sair a quantidade líquida |
+
+A perda prevista é premissa **GLOBAL da versão** e snapshot como as demais:
+`FormulationVersion.expectedLossPercent`, `DECIMAL(9,6)` nulo. `null` significa
+**não informada**, nunca 0% — versão gravada antes desta premissa não declarou
+nada, e assumir zero silencioso seria inventar premissa em nome de quem não a
+declarou. A faixa aceita é `[0, 100)`: 0 é declaração legítima, e 100% não tem
+quantidade bruta porque nada sai da produção.
+
+**Rendimento esperado é DERIVADO**, nunca digitado:
+
+```
+rendimento (%) = 100 − perda prevista (%)
+```
+
+**Quantidade bruta planejada — o helper canônico** (`quantidadeBrutaPlanejada`,
+`packages/shared`), usado pela tela e pela API:
+
+```
+bruta = líquida ÷ (1 − perda/100)
+```
+
+Nunca `líquida × (1 + perda)`: 5.000 un a 1% dá 5.050,5050…, e a conta errada
+dá 5.050, que depois da perda entrega menos de 5.000. O erro é sempre para
+menos, que é o lado em que falta material. Nenhum float participa; o
+arredondamento é de quem planeja, com a unidade e o contexto reais.
+
+**A perda NÃO altera a composição.** A quantidade física por dose e por cápsula
+é a mesma com ou sem perda declarada: o Ácido Fólico continua em 0,571428… mg
+por cápsula com 1% de perda preenchido. A perda muda o tamanho do lote, não a
+receita.
+
+**A perda NUNCA altera quantidade comercial.** Orçamento, Pedido, quantidade
+contratada, quantidade faturável e quantidade apresentada ao cliente continuam
+sendo a quantidade acordada. O cliente compra 5.000 un, o Pedido diz 5.000 un e
+o faturamento segue a entrega real; internamente a fábrica pode planejar 5.051.
+Substituir a quantidade comercial pela bruta planejada é proibido, e a guarda
+que sustenta isso mede ALCANCE: `expectedLossPercent` só pode ser LIDO em
+`formulations.service.ts`, `formulations.schemas.ts`, `costs.service.ts` e
+`requirement-calc.ts` — nenhum módulo comercial lê a premissa.
+
+**Onde a perda entra no custo.** A Veridi calcula CMV antes de produzir, então a
+perda normal do processo é custo real da unidade vendável. Na estimativa de
+custo da Formulação o motor de necessidade é chamado com `aplicarPerdaPrevista`,
+e a escala é decidida **pela base que a própria receita declara** — nunca por
+`total × (1 + perda)`:
+
+- `PER_DOSE` e `FIXED_BASIS` acompanham a quantidade PRODUZIDA e usam a bruta;
+- `PER_FINISHED_UNIT` acompanha a unidade VENDÁVEL e continua na líquida — a
+  perda não vende pote, tampa, rótulo nem caixa.
+
+O divisor do custo unitário continua sendo a quantidade líquida da base: o
+material perdido no caminho é custo da unidade boa. A Ordem de Produção e o
+picking **não** aplicam a premissa nesta rodada — a opção é do chamador, e
+`computeFormulationRequirements` não a liga sozinho.
+
+**Cápsula vazia declarada como embalagem não é escalada.** Nos dois produtos de
+homologação a cápsula vazia é item `PACKAGING` com base `PER_FINISHED_UNIT`, e
+por isso continua atrelada à unidade vendável. Fisicamente ela poderia
+acompanhar a produção; quem declara a base é a receita, e mudar isso por dentro
+seria o motor decidir sozinho uma regra de custo que ninguém escreveu. **Decisão
+pendente do PO.**
+
 ## §53 — Fonte de custo do material: seleção automática, referência manual e substituição por cálculo
 
 ### A ordem canônica, num lugar só
