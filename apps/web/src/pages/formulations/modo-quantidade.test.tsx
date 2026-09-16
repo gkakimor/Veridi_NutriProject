@@ -172,18 +172,15 @@ describe("Prévia da quantidade física", () => {
     expect(vi.mocked(updateFormulationVersion)).not.toHaveBeenCalled();
   });
 
-  it("desligar o ajuste e aplicar muda o número na tela, sem salvar", async () => {
-    const user = userEvent.setup();
+  it("apagar a pureza na coluna muda o número na tela, sem salvar", async () => {
     await abrir();
     expect(celula("fisico")).toBe("0,22449 kg");
 
-    await user.click(screen.getByText(/^Calculada/));
-    await user.click(screen.getByRole("radio", { name: "Quantidade física informada" }));
-    // O painel edita um rascunho: a linha só muda ao aplicar.
-    expect(celula("fisico")).toBe("0,22449 kg");
-    await user.click(screen.getByRole("button", { name: "Aplicar ajustes" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Pureza de MP-000003" }), {
+      target: { value: "" },
+    });
 
-    // Sem a correção, o físico é o digitado: 220 g = 0,22 kg.
+    // Sem pureza não há correção, e o físico é o digitado: 220 g = 0,22 kg.
     await waitFor(() => expect(celula("fisico")).toBe("0,22 kg"));
     expect(vi.mocked(updateFormulationVersion)).not.toHaveBeenCalled();
   });
@@ -227,13 +224,18 @@ describe("O modo do componente chega ao servidor", () => {
     );
   });
 
-  it("trocar o modo na tela é o que o servidor recebe", async () => {
+  it("a coluna Pureza é o que decide o modo que o servidor recebe", async () => {
     const user = userEvent.setup();
     await abrir();
 
-    await user.click(screen.getByText(/^Calculada/));
-    await user.click(screen.getByRole("radio", { name: "Quantidade física informada" }));
-    await user.click(screen.getByRole("button", { name: "Aplicar ajustes" }));
+    /*
+     * Sem pureza não há o que corrigir, e o modo do componente acompanha: a
+     * pessoa não escolhe `PHYSICAL_DIRECT` num seletor escondido, ela apaga o
+     * número que não conhece. A quantidade informada passa a ser a física.
+     */
+    fireEvent.change(screen.getByRole("textbox", { name: "Pureza de MP-000003" }), {
+      target: { value: "" },
+    });
     await user.click(screen.getByRole("button", { name: /Salvar rascunho/i }));
 
     await waitFor(() => expect(vi.mocked(updateFormulationVersion)).toHaveBeenCalled());
@@ -244,9 +246,7 @@ describe("O modo do componente chega ao servidor", () => {
           expect.objectContaining({
             quantityMode: "PHYSICAL_DIRECT",
             applyPurityAdjustment: false,
-            // A pureza continua REGISTRADA — o que mudou foi a autorização de
-            // aplicá-la, não o dado documental.
-            purityPercentApplied: "98",
+            purityPercentApplied: null,
           }),
         ],
       }),
@@ -254,86 +254,54 @@ describe("O modo do componente chega ao servidor", () => {
   });
 });
 
-describe("O painel de ajustes não mente sobre o que está ligado", () => {
-  it("modo teórico sem ajuste marcado diz que nada está sendo corrigido", async () => {
-    const user = userEvent.setup();
-    // Componente com pureza REGISTRADA e modo físico direto — o caso legado.
-    await abrir(
-      versao({
-        components: [
-          componente({ quantityMode: "PHYSICAL_DIRECT", applyPurityAdjustment: false }),
-        ],
-      }),
-    );
-
-    await user.click(screen.getByRole("button", { name: /Física informada/ }));
-    await user.click(
-      screen.getByRole("radio", { name: "Calcular quantidade física" }),
-    );
-
+describe("A coluna Pureza não mente sobre o que está ligado", () => {
+  it("rascunho legado com pureza registrada passa a corrigir, e a tela diz", async () => {
     /*
-     * Trocar o modo não liga ajuste nenhum, de propósito: marcar é a
-     * autorização. Mas a tela dizia "O sistema calcula a quantidade física"
-     * nesse exato momento, o que faz quem lê rápido achar que a correção está
-     * ativa — sub-correção em silêncio, o erro espelhado do que motivou esta
-     * capability.
+     * O caso legado: pureza gravada com o modo físico direto. Sob o contrato
+     * antigo isso era "registrada, não aplicada"; sob o da bancada a coluna
+     * preenchida corrige. A conversão é o que a tela mostra — e ela avisa que
+     * o número desta linha mudou, porque mudou material.
      */
-    expect(
-      screen.getByText(/enquanto nada estiver marcado, a quantidade física continua igual/i),
-    ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Aplicar ajustes" }));
-    expect(screen.getByRole("button", { name: /nenhum ajuste marcado/ })).toBeInTheDocument();
-    // E o número não mudou: 220 g continuam 0,22 kg.
-    expect(celula("fisico")).toBe("0,22 kg");
-  });
-
-  it("marcar a pureza troca a frase e o número junto", async () => {
-    const user = userEvent.setup();
     await abrir(
       versao({
-        components: [
-          componente({ quantityMode: "PHYSICAL_DIRECT", applyPurityAdjustment: false }),
-        ],
+        components: [componente({ quantityMode: "PHYSICAL_DIRECT", applyPurityAdjustment: false })],
       }),
     );
-
-    await user.click(screen.getByRole("button", { name: /Física informada/ }));
-    await user.click(
-      screen.getByRole("radio", { name: "Calcular quantidade física" }),
-    );
-    await user.click(screen.getByRole("checkbox", { name: "Corrigir pela pureza" }));
-    // A frase do painel acompanha o rascunho na hora…
-    expect(screen.queryByText(/enquanto nada estiver marcado/i)).not.toBeInTheDocument();
-    // …e o número da linha acompanha ao aplicar.
-    await user.click(screen.getByRole("button", { name: "Aplicar ajustes" }));
 
     await waitFor(() => expect(celula("fisico")).toBe("0,22449 kg"));
     expect(
-      screen.queryByText(/enquanto nada estiver marcado/i),
-    ).not.toBeInTheDocument();
+      screen.getByText(/a pureza de MP-000003 estava gravada sem corrigir/i),
+    ).toBeInTheDocument();
+    // E nenhum vocabulário de autorização sobrou na linha do rascunho.
+    expect(screen.queryByText("registrada, não aplicada")).toBeNull();
   });
 
-  it("o painel abre numa linha de largura inteira, fora da rolagem lateral", async () => {
-    const user = userEvent.setup();
+  it("a pureza trocada acompanha o número na hora, sem confirmar nada", async () => {
     await abrir();
 
-    await user.click(screen.getByRole("button", { name: /^▸|Calculada/ }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Pureza de MP-000003" }), {
+      target: { value: "50" },
+    });
+
+    await waitFor(() => expect(celula("fisico")).toBe("0,44 kg"));
+    expect(document.querySelector("tr.ajuste-quantidade__linha")).toBeNull();
+  });
+
+  it("a conta do físico por embalagem fica na própria célula do número", async () => {
+    await abrir();
 
     /*
-     * Estrutura, não estilo: jsdom não faz layout, então medir pixels aqui não
-     * provaria nada. O que impede o defeito é o painel morar numa LINHA que
-     * atravessa a tabela — dentro da célula ele herdava a rolagem horizontal e
-     * o aviso de dupla correção ficava 20% visível numa tela de 1500px.
+     * A explicação vivia dentro do painel de ajustes. Longe do resultado ela
+     * obriga a confiar no número em vez de conferi-lo: agora mora na célula
+     * que o mostra.
      */
-    const linha = document.querySelector("tr.ajuste-quantidade__linha");
-    expect(linha).not.toBeNull();
-    const celulaDoPainel = linha!.querySelector("td");
-    // Atravessa TODAS as colunas da tabela DELA — composição e embalagem têm
-    // contagens diferentes desde a bancada (FORMULATION-WORKBENCH-01).
-    expect(Number(celulaDoPainel!.getAttribute("colspan"))).toBe(
-      linha!.closest("table")!.querySelectorAll("thead th").length,
-    );
-    expect(celulaDoPainel!.querySelector(".ajuste-quantidade__corpo")).not.toBeNull();
+    const porEmbalagem = document
+      .querySelector("tbody tr .estoque-valor--fisico")!
+      .closest("td")!;
+    const explicacao = porEmbalagem.querySelector("button");
+    expect(explicacao).not.toBeNull();
+    expect(explicacao!.getAttribute("aria-label")).toContain("Quantidade física");
+    expect(porEmbalagem.textContent).toContain("0,22449 kg");
   });
 });
 

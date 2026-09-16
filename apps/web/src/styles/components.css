@@ -1105,6 +1105,53 @@
   margin-top: var(--sp-4);
 }
 
+/*
+ * PREMISSAS LADO A LADO (FORMULATION-WORKBENCH-01, homologação).
+ *
+ * Campo estreito atrás de campo estreito é leitura de coluna: numa tela de
+ * 1900px o resumo da apresentação ocupava 220px e empurrava base e modo de
+ * cálculo para fora da primeira dobra, com o texto de apoio de cada um entre
+ * eles. A grade quebra sozinha pelo espaço disponível — `auto-fit` dá quatro
+ * colunas em 1900, duas em 900 e uma no celular, sem media query por tamanho.
+ *
+ * O `margin-top` do campo estreito sai aqui: quem separa as linhas é o `gap`,
+ * e a margem deixava a primeira linha da grade mais baixa que a segunda.
+ */
+.form-premissas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--sp-4);
+  align-items: start;
+  margin-top: var(--sp-4);
+}
+
+/* O campo cresce até a coluna, mas não até o absurdo: um seletor de 700px na
+   última linha da grade é tão ruim de ler quanto a coluna única de 220. */
+.form-premissas .field--narrow {
+  max-width: 340px;
+  margin-top: 0;
+}
+
+/*
+ * As premissas que a tela só mostra, numa faixa: rótulo em cima, valor embaixo,
+ * uma ao lado da outra. Na `definition-list` normal elas viravam quatro linhas
+ * de duas colunas e gastavam altura sem usar a largura.
+ */
+.definition-list--faixa {
+  grid-template-columns: repeat(auto-fit, minmax(150px, max-content));
+  gap: var(--sp-1) var(--sp-6);
+  grid-auto-flow: column;
+  grid-template-rows: auto auto;
+  justify-content: start;
+  margin-top: var(--sp-4);
+}
+
+.definition-list--faixa dt {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .field label {
   font-size: 12.5px;
   font-weight: var(--fw-semibold);
@@ -3382,14 +3429,6 @@ button.help-flow__box:focus-visible {
   color: var(--warn-fg);
 }
 
-.ajuste-quantidade__resultado {
-  display: grid;
-  gap: var(--sp-1);
-  margin: 0;
-  padding-top: var(--sp-2);
-  border-top: 1px solid var(--line);
-}
-
 /* Aplicar / Cancelar: o fim explícito da edição de um ajuste. */
 .ajuste-quantidade__acoes {
   display: flex;
@@ -3449,9 +3488,6 @@ button.help-flow__box:focus-visible {
   min-width: 150px;
 }
 
-.table--formulacao .col-ajustes {
-  min-width: 144px;
-}
 
 /* Equivalente e físico: cada número na SUA coluna, sob o seu cabeçalho,
    alinhado à direita, com a unidade colada ao valor. */
@@ -3473,9 +3509,17 @@ button.help-flow__box:focus-visible {
   min-width: 148px;
 }
 
-.table--formulacao .col-pureza {
+/* Pureza e reserva de produção: dois percentuais editáveis na própria linha.
+   A reserva pede um pouco mais que a pureza porque o rótulo é mais longo e a
+   coluna não pode espremer o campo até esconder o número. */
+.table--formulacao .col-pureza,
+.table--formulacao .col-reserva {
   min-width: 100px;
   text-align: right;
+}
+
+.table--formulacao .col-reserva {
+  min-width: 112px;
 }
 
 .table--formulacao .col-dose,
@@ -3515,17 +3559,6 @@ button.help-flow__box:focus-visible {
 
 .table--formulacao .quantidade-unidade select {
   flex: 0 0 64px;
-}
-
-/* O resumo dos ajustes pode quebrar linha: "Calculada · pureza · overage"
-   não cabe em 176px numa linha só, e esconder é pior que quebrar. */
-.table--formulacao .col-ajustes .ajuste-quantidade__botao {
-  white-space: normal;
-}
-
-.ajuste-quantidade__nota--erro {
-  color: var(--err-fg);
-  opacity: 1;
 }
 
 /* O número e a unidade não se separam em duas linhas. */

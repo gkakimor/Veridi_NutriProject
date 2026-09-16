@@ -4,13 +4,14 @@ import type { HelpTopicV2 } from "../../help-content";
  * Formulação — a versão, e o que cada número significa.
  *
  * Era o maior painel do sistema (1.288 palavras) para a tela com as regras
- * mais difíceis, e explicava a mais difícil de todas — "informar registra,
- * marcar aplica" — em aforismo, sem um número.
+ * mais difíceis, e explicava a mais difícil de todas em aforismo, sem um
+ * número.
  *
- * A decisão PO-3 manteve a regra: preencher "Pureza %" registra o dado,
- * marcar "Corrigir pela pureza" é o que autoriza a conta. O que muda aqui é
- * que a regra passa a vir com exemplo numérico, e o aviso de dupla correção
- * deixa de ser aforismo para virar ressalva com consequência.
+ * A regra mudou com a homologação da bancada (FORMULATION-WORKBENCH-01):
+ * pureza e reserva de produção são COLUNAS da linha, a pureza informada
+ * sempre corrige e a reserva nunca entra na dose. O que ficou foi a forma:
+ * cada regra vem com o número, e o aviso de dupla correção é ressalva com
+ * consequência, não aforismo.
  */
 export const formulacaoVersao = {
   version: 2,
@@ -34,7 +35,7 @@ export const formulacaoVersao = {
   prerequisites: [
     { text: "Produto cadastrado — o item de produto acabado nasce junto com ele.", href: "/cadastros/produtos" },
     { text: "Cada matéria-prima e embalagem cadastrada como item, na unidade em que é comprada e pesada.", href: "/cadastros/itens" },
-    { text: "Componente declarado por dose exige saber as doses por embalagem: sem esse número a versão não ativa e o custo não existe." },
+    { text: "Componente por dose exige as doses por embalagem: sem esse número a versão não ativa e o custo não existe." },
     { text: "Componente fornecido pelo cliente exige produto com cliente vinculado." },
   ],
   steps: [
@@ -43,16 +44,16 @@ export const formulacaoVersao = {
       system: "O sistema abre um rascunho, já copiado da ativa quando existe.",
     },
     {
-      you: 'Em "Produto e base", defina quanto de produto a receita produz e o modo: base fixa ou por dose. Decida isto antes de digitar quantidades.',
-      system: "O sistema passa a interpretar todos os números abaixo em relação a essa base.",
+      you: 'Em "Produto e apresentação", defina a forma (pó ou cápsula), a base e o modo. Decida isto antes de digitar quantidades.',
+      system: "O sistema deriva as doses por embalagem e passa a ler todos os números abaixo em relação a essa base.",
     },
     {
-      you: 'Use "Adicionar componente": item, quantidade, unidade, base da linha e quem fornece.',
-      system: 'O sistema converte para a unidade de estoque do item e mostra "Equivalente estoque" e "Físico / unidade", cada um na sua coluna.',
+      you: 'Use "Adicionar matéria-prima" ou "Adicionar embalagem": item, quantidade, unidade, base da linha e quem fornece.',
+      system: "O sistema traz a pureza do cadastro do item e mostra a física por dose e por embalagem.",
     },
     {
-      you: 'Abra os ajustes da linha e diga o que a quantidade significa: física informada, ou calculada com os ajustes que você marcar. Clique em "Aplicar ajustes" para confirmar.',
-      system: "Ao aplicar, o sistema recalcula o físico da linha e resume os ajustes nela; a conta fica no ⓘ do painel.",
+      you: 'Informe a pureza na coluna da linha, e a reserva de produção se houver.',
+      system: "O sistema corrige a física pela pureza enquanto você digita; a conta fica no ⓘ ao lado do número.",
     },
     {
       you: 'Clique em "Salvar rascunho" quantas vezes precisar.',
@@ -60,13 +61,13 @@ export const formulacaoVersao = {
     },
     {
       you: 'Clique em "Ativar".',
-      system: "O sistema grava o que está na tela, fecha a versão, desativa a anterior e passa a usar esta em toda ordem, cálculo e preço novos.",
+      system: "O sistema grava a tela, fecha a versão, desativa a anterior e passa a usar esta em toda ordem, cálculo e preço novos.",
     },
   ],
   automations: [
-    "O sistema converte unidades (1 kg é 1.000 g) e calcula o físico por unidade acabada — é o físico que a ordem reserva e consome.",
+    "O sistema converte unidades (1 kg é 1.000 g), aplica a pureza e calcula o físico por dose, por cápsula e por unidade acabada — é ele que a ordem reserva e consome.",
     "O sistema multiplica componente por dose pelas doses por embalagem; embalagem nunca é multiplicada por dose.",
-    "O sistema estima o custo com as fontes de hoje e avisa quando há edição pendente. Essa estimativa não é gravada: o custo que vale é o cálculo salvo na Estrutura de custos.",
+    "O sistema estima o custo com as fontes de hoje e avisa quando há edição pendente. A estimativa não é gravada: vale o cálculo salvo na Estrutura de custos.",
     "O sistema congela a versão dentro de cada Ordem de Produção: ativar outra depois não muda ordem já emitida.",
   ],
   process: {
@@ -78,12 +79,10 @@ export const formulacaoVersao = {
   terms: [
     { term: "Modo de cálculo", text: "Base fixa: as quantidades produzem a base inteira. Por dose: a quantidade de cada componente é para UMA dose." },
     { term: "Doses por embalagem", text: "Quantas doses cabem numa embalagem. É o multiplicador do modo por dose; em branco, não há quantidade física nem custo." },
-    { term: "Quantidade informada", text: "O que você digitou, na unidade que escolheu. Sozinha ela não diz se já está corrigida." },
-    { term: "Ajustes da quantidade", text: 'Equiv. é a quantidade por unidade acabada na unidade de estoque, ANTES dos ajustes. Físico/un. é depois — é o que a fábrica pesa.' },
-    {
-      term: "Pureza e overage (excesso planejado)",
-      text: 'Pureza é o teor real do insumo; em branco significa desconhecida, nunca 100%. Overage é quantidade a mais, de propósito, para compensar perda. Preencher "Pureza %" ou "Overage %" registra o dado; marcar "Corrigir pela pureza" ou "Aplicar overage" é o que manda o sistema usá-lo. A linha avisa quando há risco de dupla correção.',
-    },
+    { term: "Alvo por dose", text: "A quantidade ATIVA que uma dose deve entregar. É o que a fórmula promete; o que a fábrica pesa sai dela pela pureza." },
+    { term: "Pureza", text: "Teor real do insumo. Corrige a física: com 70%, 0,4 mg de alvo viram 0,571429 mg pesados. Em branco é desconhecida, nunca 100% — é assim que se evita a dupla correção, quando o alvo já vem corrigido." },
+    { term: "Reserva de produção", text: "Percentual a mais previsto para o lote. Fica registrado na linha e NÃO altera a dose: a física por dose e por cápsula continua a mesma." },
+    { term: "Por embalagem", text: "Equivalente é por unidade acabada, ANTES da pureza; ao lado, o físico é depois — é o que a ordem reserva." },
     { term: "Fornecimento", text: "Veridi compra e custeia. Cliente envia o material: ele entra na receita e na necessidade, nunca no custo da Veridi." },
     { term: "Custo estimado de materiais", text: "Prévia de apoio, calculada com os preços de hoje. Não é gravada e não substitui o cálculo salvo." },
   ],
@@ -94,13 +93,13 @@ export const formulacaoVersao = {
   ],
   cautions: [
     "Não tem volta: versão ativada não se edita. Mudar a receita é criar outra versão.",
-    "Informar pureza ou overage não corrige nada sozinho — a correção só acontece com o ajuste marcado.",
-    "Risco de dupla correção: se a quantidade digitada já veio corrigida da origem, não marque o ajuste. O sistema dividiria pela pureza duas vezes e a ordem reservaria material a mais.",
+    "A pureza SEMPRE corrige. Se o alvo já vier corrigido, deixe-a em branco — senão o sistema divide duas vezes e a ordem reserva material a mais.",
+    "A reserva de produção não entra na dose: é previsão de lote.",
     'O botão "Ativar" grava antes o que está na tela: o que você vê é o que vira ativa.',
     "Observações e notas técnicas não entram em cálculo.",
   ],
   example:
-    "Um ativo declarado com 100 mg teóricos e Pureza % 80: com \"Corrigir pela pureza\" marcado, o físico é 100 ÷ 0,80 = 125 mg. Com a pureza preenchida e o ajuste desmarcado, o físico continua 100 mg — o dado fica registrado e não entra na conta.",
+    "Alvo de 100 mg por dose e Pureza 80%: o físico por dose é 100 ÷ 0,80 = 125 mg. Uma reserva de 10% na mesma linha fica registrada para o lote, e o físico por dose continua 125 mg.",
   learnMore: [
     { concept: "versoes" },
     { concept: "material-do-cliente" },

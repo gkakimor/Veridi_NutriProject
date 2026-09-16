@@ -182,10 +182,10 @@ describe("Validação inline por componente", () => {
     expect(rolagem).toHaveBeenCalledTimes(1);
   });
 
-  it("pureza ilegível é marcada na COLUNA da linha, sem esconder o erro atrás do painel", async () => {
+  it("pureza ilegível é marcada na COLUNA da linha, onde o valor está", async () => {
     const user = userEvent.setup();
-    // Pureza ilegível já gravada. Desde FORMULATION-WORKBENCH-01 ela é coluna
-    // da linha de matéria-prima: o erro aparece onde o valor está.
+    // Pureza ilegível já gravada. Ela é coluna da linha de matéria-prima, e
+    // não há mais painel nenhum onde o erro pudesse ficar escondido.
     await abrir(versao({ components: [componente({ purityPercentApplied: "abc" })] }));
     expect(document.querySelector("tr.ajuste-quantidade__linha")).toBeNull();
 
@@ -195,9 +195,19 @@ describe("Validação inline por componente", () => {
     await waitFor(() => expect(pureza).toHaveAttribute("aria-invalid", "true"));
     expect(mensagemDo(pureza)).toMatch(/^MP-000003 — Pureza %: use só números/);
     await waitFor(() => expect(document.activeElement).toBe(pureza));
-    // O painel não precisa abrir — e o resumo da linha continua avisando.
     expect(document.querySelector("tr.ajuste-quantidade__linha")).toBeNull();
-    expect(screen.getByRole("button", { name: /corrigir/ })).toBeInTheDocument();
+    expect(vi.mocked(updateFormulationVersion)).not.toHaveBeenCalled();
+  });
+
+  it("reserva de produção ilegível é marcada na própria coluna", async () => {
+    const user = userEvent.setup();
+    await abrir(versao({ components: [componente({ overagePercent: "abc" })] }));
+
+    await salvar(user);
+
+    const reserva = screen.getByRole("textbox", { name: "Reserva de produção de MP-000003" });
+    await waitFor(() => expect(reserva).toHaveAttribute("aria-invalid", "true"));
+    expect(mensagemDo(reserva)).toMatch(/^MP-000003 — Reserva de produção %: use só números/);
     expect(vi.mocked(updateFormulationVersion)).not.toHaveBeenCalled();
   });
 

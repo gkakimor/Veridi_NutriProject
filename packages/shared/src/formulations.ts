@@ -2,7 +2,19 @@
 
 import type { ItemFamily, ItemType, PackagingSubtype } from "./items.js";
 import type { SupplyResponsibility } from "./ownership.js";
-import type { DosageForm, PresentationType } from "./products.js";
+import type { DosageForm, PresentationType, TargetAgeGroup } from "./products.js";
+
+/**
+ * As formas que a bancada da Formulação oferece.
+ *
+ * A Veridi produz Produto Acabado em PÓ ou em CÁPSULA, e são essas as duas
+ * formas cujas premissas a bancada sabe calcular por dose. O enum
+ * `DosageForm` continua inteiro — comprimido, líquido e "outro" seguem
+ * cadastráveis no Produto e continuam legíveis numa versão histórica que já
+ * os tenha. O que esta lista restringe é a ESCOLHA da tela: oferecer forma
+ * que a bancada não calcula é convidar a premissa que não fecha.
+ */
+export const FORMAS_DA_BANCADA: readonly DosageForm[] = ["CAPSULE", "POWDER"];
 
 export type FormulationVersionStatus = "DRAFT" | "ACTIVE" | "INACTIVE";
 
@@ -259,6 +271,18 @@ export interface FormulationProductProfileDTO {
   doseAmount: string | null;
   doseUomCode: string | null;
   dosesPerPackage: number | null;
+  /**
+   * Premissas de embarque e público que o resumo da bancada mostra.
+   *
+   * São do CADASTRO do Produto e continuam sendo: a Formulação as exibe para
+   * conferência e nunca as edita — nenhum cadastro novo foi criado para
+   * preencher o topo da tela. `null` quando o Produto não as informa, e aí o
+   * resumo omite a linha em vez de inventar um valor.
+   */
+  targetAgeGroup: TargetAgeGroup | null;
+  /** Na unidade do Produto Acabado — a mesma de `outputUnitCode`. */
+  minimumBatchQuantity: string | null;
+  unitsPerShippingBox: number | null;
 }
 
 export interface FormulationSummaryDTO {

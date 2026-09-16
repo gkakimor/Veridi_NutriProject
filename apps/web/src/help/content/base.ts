@@ -370,12 +370,12 @@ export const baseHints = {
   "formulacao.pureza": {
     module: "producao",
     label: "Pureza",
-    text: "Teor real do insumo. Com 80% de pureza é preciso pesar mais para entregar a mesma quantidade ativa. Registrar a pureza NÃO aplica a correção sozinha: marque “Calcular quantidade física” e a caixa da pureza para o sistema corrigir. Sem isso ela fica registrada para auditoria e a quantidade informada é usada como está — importante quando a quantidade já vem corrigida de origem, porque corrigir de novo dobraria o ajuste. Vazio significa desconhecida, e nunca é lida como 100%.",
+    text: "Teor real do insumo, em porcentagem. Com 70% de pureza é preciso pesar mais para entregar a mesma quantidade ativa: a quantidade física é o alvo dividido pela pureza. Ela vem do cadastro do Item quando ele a informa e pode ser trocada aqui; o valor usado fica congelado na versão, e mudar o Item depois não reescreve formulação nenhuma. Vazio significa desconhecida, nunca 100% — e aí a quantidade informada é usada como está, que é o certo quando ela já vem corrigida de origem.",
   },
   "formulacao.overage": {
     module: "producao",
-    label: "Overage",
-    text: "Excesso declarado de propósito, para compensar perda de processo ou de validade. Nunca entra no que é declarado ao cliente. Como a pureza, só é aplicado quando explicitamente marcado — preencher registra, marcar autoriza.",
+    label: "Reserva de produção",
+    text: "Percentual adicional previsto para produção/lote. Não altera a dose formulada: a quantidade física por dose e por cápsula continua a mesma depois de preenchê-lo. Nunca entra no que é declarado ao cliente.",
   },
   "formulacao.equivalenteEstoque": {
     module: "producao",

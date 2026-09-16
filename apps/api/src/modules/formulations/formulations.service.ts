@@ -226,6 +226,14 @@ function toVersionDTO(
       doseAmount: version.product.doseAmount ? version.product.doseAmount.toString() : null,
       doseUomCode: version.product.doseUomCode,
       dosesPerPackage: version.product.dosesPerPackage,
+      // Público, lote mínimo e caixa de embarque: cadastro do Produto, lido
+      // para o resumo da bancada conferir sem sair da tela. Nenhum deles é
+      // premissa de cálculo desta versão.
+      targetAgeGroup: version.product.targetAgeGroup,
+      minimumBatchQuantity: version.product.minimumBatchQuantity
+        ? version.product.minimumBatchQuantity.toString()
+        : null,
+      unitsPerShippingBox: version.product.unitsPerShippingBox,
     },
     outputItemId: version.outputItemId,
     outputItemCode: version.outputItemCode,

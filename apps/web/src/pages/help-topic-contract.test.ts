@@ -236,9 +236,10 @@ const ESSENCIAIS: Record<string, string[]> = {
   "formulacao.comoFunciona": [
     "Modo de cálculo",
     "Doses por embalagem",
-    "Quantidade informada",
-    "Ajustes da quantidade",
-    "Pureza e overage",
+    "Alvo por dose",
+    "Pureza",
+    "Reserva de produção",
+    "Por embalagem",
     "dupla correção",
     "Fornecimento",
     "Custo estimado",
