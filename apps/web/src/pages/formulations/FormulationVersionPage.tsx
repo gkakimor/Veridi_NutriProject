@@ -44,6 +44,7 @@ import {
   capsulasPorEmbalagem,
   dosesPorEmbalagemDaApresentacao,
   formaDerivaDoses,
+  quantidadeBrutaPlanejada,
   rendimentoEsperado,
   resumirDoses,
 } from "@veridi/shared";
@@ -138,6 +139,15 @@ interface ItemOption {
  * ao servidor (`buscarItens`), que conhece o catálogo inteiro.
  */
 const PRIMEIRA_PAGINA = 50;
+
+/**
+ * Lote de referência da simulação da perda, em unidade do produto acabado.
+ *
+ * Número redondo de propósito: ele não descreve nenhum pedido, serve para ler a
+ * perda como quantidade em vez de percentual. Quem planeja de verdade usa a
+ * quantidade do Pedido; aqui é régua.
+ */
+const LOTE_DA_SIMULACAO = "1000";
 
 /** Uma conversão só de item do catálogo para opção da tela. */
 function itemOption(item: ItemDTO): ItemOption {
@@ -840,6 +850,7 @@ type DicaDaBancada =
   | "formulacao.equivalenteEstoque"
   | "formulacao.perdaPrevista"
   | "formulacao.rendimentoEsperado"
+  | "formulacao.simulacaoDeLote"
   | "formulacao.forma"
   | "formulacao.apresentacaoComercial"
   | "formulacao.capsulasPorDose"
@@ -1927,6 +1938,27 @@ export function FormulationVersionPage() {
     rendimento === null || typeof rendimento === "string" ? null : rendimento.toString();
 
   /*
+   * SIMULAÇÃO DE LOTE — quanto entra para sair 1.000.
+   *
+   * Rendimento é percentual, e percentual não responde a pergunta que quem
+   * planeja faz: "para entregar mil, produzo quanto?". Com 4% de perda a
+   * resposta é 1.042, não 1.040 — a conta é 1.000 ÷ 0,96, pelo mesmo helper
+   * canônico do custo, e não 1.000 × 1,04.
+   *
+   * O arredondamento é PARA CIMA, e só em unidade contável: 1.041 unidades
+   * produzidas entregam 999,36 vendáveis, ou seja, não entregam o lote. Em
+   * unidade contínua (um acabado a granel, em kg) o número sai como é.
+   */
+  const unidadeDaSaida = units.find((unit) => unit.code === version?.outputUnitCode);
+  const brutaDaSimulacao = quantidadeBrutaPlanejada(LOTE_DA_SIMULACAO, perdaDigitada);
+  const simulacaoExibida =
+    perdaDigitada === null || typeof brutaDaSimulacao === "string"
+      ? null
+      : unidadeDaSaida?.dimension === "COUNT"
+        ? brutaDaSimulacao.ceil().toFixed()
+        : brutaDaSimulacao.toFixed();
+
+  /*
    * A BASE decide material nesta versão?
    *
    * Só quando alguma linha é declarada por base fixa — é ela que divide por
@@ -2995,6 +3027,21 @@ export function FormulationVersionPage() {
                   {rendimentoExibido === null
                     ? "—"
                     : formatPercentPtBr(rendimentoExibido, OPCOES_PERCENTUAL_TECNICO)}
+                </p>
+              </div>
+
+              <div className="field field--calculado premissas-producao__simulacao">
+                <span className="field__label-static">
+                  Produzir para entregar {formatIntegerPtBr(Number(LOTE_DA_SIMULACAO))}{" "}
+                  {version.outputUnitCode} <Dica id="formulacao.simulacaoDeLote" />
+                </span>
+                <p
+                  className="field-readonly-value field-readonly-value--calculado"
+                  data-testid="simulacao-de-lote"
+                >
+                  {simulacaoExibida === null
+                    ? "—"
+                    : `${formatQuantity(simulacaoExibida)} ${version.outputUnitCode}`}
                 </p>
               </div>
             </div>

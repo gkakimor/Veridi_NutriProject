@@ -236,6 +236,29 @@ describe("Premissas de produção — perda e rendimento", () => {
     expect(vi.mocked(updateFormulationVersion)).not.toHaveBeenCalled();
   });
 
+  it("a simulação diz quanto produzir para entregar 1.000, arredondando para cima", async () => {
+    await abrir(versao());
+    const simulacao = () => screen.getByTestId("simulacao-de-lote");
+
+    // Sem premissa declarada não há simulação — e não é 1.000.
+    expect(simulacao().textContent).toBe("—");
+
+    // 4% de perda: 1.000 ÷ 0,96 = 1.041,666…, e 1.041 produzidas entregariam
+    // 999,36 vendáveis. Arredonda PARA CIMA porque o lote é contável.
+    fireEvent.change(perda(), { target: { value: "4" } });
+    await waitFor(() => expect(simulacao().textContent).toBe("1.042 un"));
+
+    // 1% : 1.000 ÷ 0,99 = 1.010,101…
+    fireEvent.change(perda(), { target: { value: "1" } });
+    await waitFor(() => expect(simulacao().textContent).toBe("1.011 un"));
+  });
+
+  it("nunca é líquida × (1 + perda) — a conta errada dá 1.040 com 4%", async () => {
+    await abrir(versao({ expectedLossPercent: "4" }));
+    expect(screen.getByTestId("simulacao-de-lote").textContent).not.toBe("1.040 un");
+    expect(screen.getByTestId("simulacao-de-lote").textContent).toBe("1.042 un");
+  });
+
   it("o rendimento é resultado, não campo: não existe input com esse nome", async () => {
     await abrir(versao({ expectedLossPercent: "1" }));
     expect(rendimento().textContent).toBe("99%");

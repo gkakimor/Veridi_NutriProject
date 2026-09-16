@@ -86,7 +86,9 @@ estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0
   mostra o CÓDIGO LEGADO do Item (`Item.externalCode`) junto da unidade de estoque, quando existe
   ("Estoque em kg · Código legado: 1042"), e a referência de pureza do cadastro virou "Cadastro: 88,7%" — as duas
   linhas de apoio cabem numa linha só. A coluna do Alvo ficou em 156px para a unidade voltar ao lado da caixa, que
-  mantém os 88px das demais. **Falta a avaliação
+  mantém os 88px das demais. O bloco de premissas ganhou a SIMULAÇÃO: sobre um lote de referência de 1.000 unidades,
+  quanto precisa entrar na produção para sair 1.000 vendáveis — com 4% de perda, 1.042 un, arredondado para cima em
+  unidade contável. **Falta a avaliação
   visual do PO** — é dela que depende o fechamento;
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 

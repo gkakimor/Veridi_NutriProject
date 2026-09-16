@@ -382,6 +382,11 @@ export const baseHints = {
     label: "Perda prevista de produção (%)",
     text: "Percentual estimado de perda normal durante o processo produtivo. É utilizado no planejamento e no custo estimado interno, sem alterar a quantidade comercial vendida ao cliente.",
   },
+  "formulacao.simulacaoDeLote": {
+    module: "producao",
+    label: "Produzir para entregar",
+    text: "Simulação sobre um lote de referência de 1.000 unidades: com a perda prevista, é esta a quantidade que precisa ENTRAR na produção para sair 1.000 vendáveis — 1.000 ÷ (1 − perda/100). Em unidade contável o número é arredondado para CIMA, porque produzir a menos não entrega o lote. É referência de planejamento e de custo interno; a quantidade vendida ao cliente continua sendo a contratada.",
+  },
   "formulacao.rendimentoEsperado": {
     module: "producao",
     label: "Rendimento esperado",
