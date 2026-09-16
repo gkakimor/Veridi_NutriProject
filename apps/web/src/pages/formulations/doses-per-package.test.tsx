@@ -75,6 +75,7 @@ function componente(basis: FormulationVersionDTO["components"][number]["basis"])
     itemFamily: null,
     itemPackagingSubtype: null,
     itemDefaultPurityPercent: null,
+    itemExternalCode: null,
     theoreticalPerDose: null,
     physicalPerDose: null,
     physicalPerCapsule: null,

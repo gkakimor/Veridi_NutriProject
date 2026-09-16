@@ -3588,16 +3588,19 @@ button.help-flow__box:focus-visible {
 .table--formulacao-embalagem { min-width: 1000px; }
 
 /*
- * COMPOSIÇÃO — pó (367 + 96 = 463 no ingrediente).
+ * COMPOSIÇÃO — pó.
  *
- * Os 96px da coluna "Por cápsula", que o pó não tem, vão para o INGREDIENTE —
- * é o nome do que se procura na linha, e é lá que a sobra rende.
- * 463 · 211 · 152 · 211 · 110 · 100 · 96 · 104 · 45 = 1492px.
+ * Pureza e Alvo por dose usam a MESMA largura da Reserva (96px): os três são
+ * campo curto de número, e dar a um deles o dobro do outro desenhava hierarquia
+ * onde não há. Os 171px liberados foram para o INGREDIENTE, que é o nome que se
+ * procura na linha — e os 96px da coluna "Por cápsula", que o pó não tem, vão
+ * para lá também.
+ * 634 · 211 · 96 · 96 · 110 · 100 · 96 · 104 · 45 = 1492px.
  */
-.table--formulacao-composicao .col-item { width: 31.0261%; }
+.table--formulacao-composicao .col-item { width: 42.4873%; }
 .table--formulacao-composicao .col-fonte { width: 14.1421%; }
-.table--formulacao-composicao .col-pureza { width: 10.1877%; text-align: right; }
-.table--formulacao-composicao .col-quantidade { width: 14.1421%; }
+.table--formulacao-composicao .col-pureza { width: 6.4343%; text-align: right; }
+.table--formulacao-composicao .col-quantidade { width: 6.4343%; }
 .table--formulacao-composicao .col-dose { width: 7.3727%; text-align: right; }
 .table--formulacao-composicao .col-regras { width: 6.7024%; }
 .table--formulacao-composicao .col-reserva { width: 6.4343%; text-align: right; }
@@ -3612,10 +3615,10 @@ button.help-flow__box:focus-visible {
 
 /*
  * COMPOSIÇÃO — cápsula: a coluna "Por cápsula" existe e o ingrediente devolve
- * exatamente os 96px dela. 367 · 211 · 152 · 211 · 110 · 96 · 100 · 96 · 104 ·
- * 45 = 1492px. Nenhuma outra coluna muda entre as duas formas.
+ * exatamente os 96px dela. 538 · 211 · 96 · 96 · 110 · 96 · 100 · 96 · 104 · 45
+ * = 1492px. Nenhuma outra coluna muda entre as duas formas.
  */
-.table--formulacao-composicao.table--com-capsula .col-item { width: 24.5918%; }
+.table--formulacao-composicao.table--com-capsula .col-item { width: 36.053%; }
 
 .table--formulacao-composicao.table--com-capsula .col-capsula {
   width: 6.4343%;
@@ -3765,6 +3768,35 @@ button.help-flow__box:focus-visible {
 
 .table--formulacao .quantidade-unidade select {
   flex: 0 0 58px;
+}
+
+/*
+ * ALVO POR DOSE: a unidade desce uma linha.
+ *
+ * A coluna passou à largura da Reserva (96px), e lado a lado o seletor levava
+ * 58 desses 96 — sobravam 26px para o número, e `0,0026` não cabe em 26px. O
+ * número é o que se digita ali, então ele fica com a coluna inteira e a unidade
+ * vai para a segunda linha da célula, alinhada à direita, onde a coluna da
+ * Pureza já põe a referência do cadastro. Continua seletor: mg, g e kg são três
+ * escolhas reais numa matéria-prima em massa.
+ */
+.table--formulacao-composicao .quantidade-unidade {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.table--formulacao-composicao .quantidade-unidade input {
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+.table--formulacao-composicao .quantidade-unidade select {
+  flex: 0 0 auto;
+  width: 56px;
+  height: 24px;
+  padding: 0 2px;
+  font-size: var(--fs-xs);
 }
 
 /*

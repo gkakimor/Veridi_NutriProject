@@ -46,6 +46,7 @@ function toItemDTO(item: ItemWithUnit, operationallyUsed: boolean): ItemDTO {
     defaultPurityPercent: item.defaultPurityPercent ? item.defaultPurityPercent.toString() : null,
     packagingSubtype: item.packagingSubtype,
     externalBarcode: item.externalBarcode,
+    externalCode: item.externalCode,
     active: item.active,
     operationallyUsed,
     createdAt: item.createdAt.toISOString(),

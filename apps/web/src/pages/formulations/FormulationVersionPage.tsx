@@ -127,6 +127,7 @@ interface ItemOption {
   family: ItemFamily | null;
   packagingSubtype: PackagingSubtype | null;
   defaultPurityPercent: string | null;
+  externalCode: string | null;
 }
 
 /**
@@ -153,6 +154,7 @@ function itemOption(item: ItemDTO): ItemOption {
     family: item.family,
     packagingSubtype: item.packagingSubtype,
     defaultPurityPercent: item.defaultPurityPercent,
+    externalCode: item.externalCode,
   };
 }
 
@@ -209,6 +211,8 @@ interface ComponentRow {
   itemPackagingSubtype: PackagingSubtype | null;
   /** Pureza do cadastro HOJE; a aplicada nesta versão é `purityPercentApplied`. */
   itemDefaultPurityPercent: string | null;
+  /** Código do sistema legado do Item. `null` = item sem legado, e a linha cala. */
+  itemExternalCode: string | null;
 }
 
 function statusBadgeClass(status: FormulationVersionDTO["status"]): string {
@@ -411,6 +415,7 @@ function rowFromDTO(component: FormulationVersionDTO["components"][number]): Com
     itemFamily: component.itemFamily ?? null,
     itemPackagingSubtype: component.itemPackagingSubtype ?? null,
     itemDefaultPurityPercent: component.itemDefaultPurityPercent ?? null,
+    itemExternalCode: component.itemExternalCode ?? null,
   };
 }
 
@@ -660,6 +665,7 @@ function comItemEscolhido(
       itemFamily: null,
       itemPackagingSubtype: null,
       itemDefaultPurityPercent: null,
+      itemExternalCode: null,
     };
   }
   const dimensaoAtual = units.find((unit) => unit.code === row.unitCode)?.dimension ?? null;
@@ -683,6 +689,7 @@ function comItemEscolhido(
     itemFamily: item.family,
     itemPackagingSubtype: item.packagingSubtype,
     itemDefaultPurityPercent: item.defaultPurityPercent,
+    itemExternalCode: item.externalCode,
     purityPercentApplied: daComposicao
       ? toPtBrEditText(item.defaultPurityPercent, OPCOES_PERCENTUAL_TECNICO)
       : "",
@@ -1284,6 +1291,7 @@ export function FormulationVersionPage() {
           family: row.itemFamily,
           packagingSubtype: row.itemPackagingSubtype,
           defaultPurityPercent: row.itemDefaultPurityPercent,
+          externalCode: row.itemExternalCode,
         },
       ];
     }
@@ -1363,6 +1371,7 @@ export function FormulationVersionPage() {
         itemFamily: null,
         itemPackagingSubtype: null,
         itemDefaultPurityPercent: null,
+        itemExternalCode: null,
       },
     ]);
   }
@@ -2043,8 +2052,16 @@ export function FormulationVersionPage() {
           ) : (
             <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
           )}
+          {/*
+            O CÓDIGO LEGADO ao lado da unidade de estoque, e só quando existe.
+            Quem confere a receita contra a planilha antiga procura por ele, e
+            sair para o cadastro do Item a cada linha era o que essa conferência
+            custava. Item sem legado não ganha rótulo vazio nem travessão: a
+            linha simplesmente não o menciona.
+          */}
           <span className="cell-sub">
             {row.stockUnitCode ? `Estoque em ${row.stockUnitCode}` : "Estoque: —"}
+            {row.itemExternalCode ? ` · legado ${row.itemExternalCode}` : ""}
             {row.itemPackagingSubtype
               ? ` · ${PACKAGING_SUBTYPE_LABELS[row.itemPackagingSubtype]}`
               : ""}
@@ -2394,7 +2411,9 @@ export function FormulationVersionPage() {
                   </th>
                 )}
                 <th className="col-quantidade is-numeric">
-                  {daComposicao ? "Alvo por dose · unidade" : "Quantidade"}
+                  {/* A unidade tem controle próprio na segunda linha da célula;
+                      repeti-la no cabeçalho gastava três linhas de altura. */}
+                  {daComposicao ? "Alvo por dose" : "Quantidade"}
                 </th>
                 {daComposicao && <th className="col-dose is-numeric">Física por dose</th>}
                 {daComposicao && mostrarPorCapsula && (

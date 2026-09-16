@@ -64,6 +64,7 @@ function componente(): FormulationComponentDTO {
     itemFamily: null,
     itemPackagingSubtype: null,
     itemDefaultPurityPercent: null,
+    itemExternalCode: null,
     theoreticalPerDose: null,
     physicalPerDose: null,
     physicalPerCapsule: null,

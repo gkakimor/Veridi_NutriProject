@@ -80,7 +80,10 @@ estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0
   apenas quando o cadastro oferece mais de uma unidade compatível. Os campos da grade ganharam o desenho do campo do
   Ingrediente (altura, borda e canto), os dois percentuais alinham o valor à direita, e Pureza, Reserva e Perda
   prevista ganharam setas de passo dentro do campo — o passo é a ÚLTIMA CASA escrita (`1`→`2`, `1,1`→`1,2`), em
-  aritmética inteira, parando onde a validação pararia. **Falta a avaliação
+  aritmética inteira, parando onde a validação pararia. Larguras revistas pelo PO: Pureza e Alvo por dose usam a mesma
+  da Reserva (96px em 1.492) e os 171px liberados foram para o Ingrediente (538 na cápsula, 634 no pó); a unidade do
+  Alvo desceu para a segunda linha da célula, porque lado a lado sobravam 26px para o número. A linha do Ingrediente
+  mostra o CÓDIGO LEGADO do Item (`Item.externalCode`) junto da unidade de estoque, quando existe. **Falta a avaliação
   visual do PO** — é dela que depende o fechamento;
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 

@@ -181,6 +181,7 @@ function toComponentDTO(
     itemDefaultPurityPercent: item.defaultPurityPercent
       ? item.defaultPurityPercent.toString()
       : null,
+    itemExternalCode: item.externalCode,
     theoreticalPerDose: dose ? dose.teorica.toFixed() : null,
     physicalPerDose: dose ? dose.fisica.toFixed() : null,
     physicalPerCapsule: dose && dose.porCapsula ? dose.porCapsula.toFixed() : null,
