@@ -28,6 +28,7 @@ zero BLOCKER. O MVP foi entregue; o que está aqui é evolução do produto.
 | 7 | P1 | Decisões de **PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01** → PRODUCTION-PERMISSION-HARDENING-01 | Discovery `EM_ANALISE` · P1 e P6 bloqueiam | PO fecha P1 e P6 (e confirma P2–P5, P7, P8); implementar | — |
 | 8 | P1 | Decisões de **WAVE-05-GOLDEN-PATH-DISCOVERY-01** → E2E-BASELINE-REDESIGN-WAVE-05 (golden path) | Discovery `EM_ANALISE` · Q3 bloqueia | PO fecha Q3 e as demais; passos 1–2 do plano não dependem de decisão | WAVE 4 entregue |
 | 9 | P1 | ~~**CUSTOMER-STATUS-LIFECYCLE-01**~~ — situação cadastral do Cliente (Ativo · Bloqueado · Inativo), histórico auditável e guardas de venda | **FECHADO em 2026-09-15** · feedback direto da Veridi · migration aditiva (`blocked` + `customer_status_history`) | — (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §95, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md)) | — |
+| 9b | P1 | ~~**CUSTOMER-STATUS-HARDENING-01**~~ — quem muda a situação cadastral e o aviso no documento em andamento (pré-homologação) | **FECHADO em 2026-09-16** · absorve CUSTOMER-STATUS-PERMISSIONS-01 (só ADMIN e COMMERCIAL alteram, 403 na API para os demais, que seguem consultando) e CUSTOMER-STATUS-DRAFT-WARNING-01 (aviso no Orçamento, Projeto e Pedido em andamento, pela situação atual que a leitura traz) · guardas de venda intactas · **sem migration** | — (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §95, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
 | 10 | P2 | **Estabilização final ampla do produto** | Sem ID e sem escopo | Abrir ID e escopo quando 4–8 fecharem | WAVE 4, permissões e WAVE 5 |
 | 11 | — | **DEMO-DATASET-01** — ambiente DEMO com massa fictícia determinística | **AGUARDANDO DEFINIÇÃO DO PO** | Massa fictícia determinística + reset protegido para um futuro ambiente Railway DEMO, e o fluxo `main` → `release/demo` → aprovação → o MESMO SHA em `release/prod`. Nada criado: sem ambiente, sem `release/demo` | PO |
 
@@ -43,7 +44,6 @@ watchlist (E). A estabilização final (10) é o lugar natural para varrê-los.
 | #8E, #8F, #8G · PLAN-DATE-01 · UX-HELP-03 | Melhorias aguardando autorização | B, E |
 | #7, #11 | Gate com a Veridi | C |
 | SUPPLIER-OFFER-OVERLAP-01 · COM-CONTRACT-01 · SUPPLIER-MODE-01 · ASSET-01 | Discovery sem pergunta decidida | G |
-| CUSTOMER-STATUS-PERMISSIONS-01 · CUSTOMER-STATUS-DRAFT-WARNING-01 | Follow-ups de CUSTOMER-STATUS-LIFECYCLE-01 (§95), sem posição: quem pode bloquear, desbloquear, inativar e reativar (hoje qualquer sessão autenticada, o mesmo da inativação de antes) e o aviso na tela do rascunho cujo cliente foi bloqueado depois da abertura (hoje a recusa aparece no enviar/confirmar) | — |
 
 ---
 
