@@ -1,5 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FocusEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type {
+  FocusEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+} from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { NavigationPreferencesDTO, UserRole } from "@veridi/shared";
@@ -11,7 +16,7 @@ import {
   searchNavigation,
   visibleNavGroups,
 } from "./navigation";
-import type { NavItem } from "./navigation";
+import type { NavGroup, NavItem } from "./navigation";
 import type { NavigationPreferencesUpdate } from "./use-navigation-preferences";
 
 /**
@@ -26,6 +31,27 @@ interface Peek {
   /** `data-rail` do ícone que abriu a espiada: recebe o foco de volta no Esc. */
   trigger: string;
 }
+
+/**
+ * Catálogo de uma seção ao lado do trilho (NAV-SIDEBAR-HOVER-01): o mouse
+ * parado no ícone, ou o foco do teclado nele, mostra as telas da seção sem
+ * clique. Só desta visita — nunca preferência.
+ */
+interface Flyout {
+  groupId: string;
+  /** Posição na janela: o catálogo é `fixed`, por cima do conteúdo. */
+  top: number;
+  left: number;
+  /** Aberto pelo foco do teclado: o mouse saindo não fecha o que o teclado usa. */
+  byFocus: boolean;
+}
+
+/** Passar o mouse pelo trilho a caminho da tela não abre catálogo. */
+const FLYOUT_OPEN_DELAY_MS = 150;
+/** Levar o mouse do ícone até o catálogo não o fecha. */
+const FLYOUT_CLOSE_DELAY_MS = 200;
+/** Folga mínima entre o catálogo e as bordas da janela. */
+const FLYOUT_MARGIN_PX = 8;
 
 const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.userAgent);
 const SHORTCUT_LABEL = IS_MAC ? "⌘K" : "Ctrl K";
@@ -49,7 +75,9 @@ export interface SidebarProps {
  *
  * Desktop expandido: busca de telas, Painel, Favoritos e os grupos
  * recolhíveis. Desktop compacto: trilho com um ícone por grupo; clicar abre
- * o menu por cima do conteúdo. Celular: o mesmo menu expandido, em drawer.
+ * o menu por cima do conteúdo, e o mouse parado no ícone — ou o foco do
+ * teclado nele — abre ao lado o catálogo das telas da seção
+ * (NAV-SIDEBAR-HOVER-01). Celular: o mesmo menu expandido, em drawer.
  *
  * Preferência (compacto, grupos abertos, favoritos) vem por id estável e é
  * gravada pelo `useNavigationPreferences`. O que é só desta visita — o grupo
@@ -76,6 +104,18 @@ export function Sidebar({
   const [railFocus, setRailFocus] = useState<string | null>(null);
   const [autoOpenDismissedAt, setAutoOpenDismissedAt] = useState<string | null>(null);
   const [tooltip, setTooltip] = useState<{ text: string; top: number; left: number } | null>(null);
+  const [flyout, setFlyout] = useState<Flyout | null>(null);
+  const flyoutRef = useRef<HTMLDivElement>(null);
+  const flyoutTimer = useRef<number | null>(null);
+  /** Seção que o timer vai abrir: mexer o mouse dentro do mesmo ícone não reinicia a pausa. */
+  const flyoutPending = useRef<string | null>(null);
+  /*
+   * Foco que chegou por clique ou toque não abre catálogo — o clique no ícone
+   * já abre o menu por cima. Nem o foco que o Esc devolve ao ícone: reabriria
+   * o que a pessoa acabou de fechar.
+   */
+  const pointerInput = useRef(false);
+  const restoringFocus = useRef(false);
 
   const compact = prefs.compact && !isMobile;
   const rail = compact && peek === null;
@@ -115,15 +155,80 @@ export function Sidebar({
     );
   }
 
-  // Trocar de tela encerra a busca e a espiada.
+  const cancelFlyoutTimer = useCallback(() => {
+    if (flyoutTimer.current !== null) window.clearTimeout(flyoutTimer.current);
+    flyoutTimer.current = null;
+    flyoutPending.current = null;
+  }, []);
+
+  const closeFlyout = useCallback(() => {
+    cancelFlyoutTimer();
+    setFlyout(null);
+  }, [cancelFlyoutTimer]);
+
+  useEffect(() => cancelFlyoutTimer, [cancelFlyoutTimer]);
+
+  // Trocar de tela encerra a busca, a espiada e o catálogo.
   useEffect(() => {
     setPeek(null);
     setQuery("");
-  }, [pathname, search]);
+    closeFlyout();
+  }, [pathname, search, closeFlyout]);
+
+  // Catálogo é do trilho: espiada, menu expandido e celular não têm.
+  useEffect(() => {
+    if (rail) return;
+    setTooltip(null);
+    closeFlyout();
+  }, [rail, closeFlyout]);
 
   useEffect(() => {
-    if (!rail) setTooltip(null);
-  }, [rail]);
+    const onPointerDown = () => {
+      pointerInput.current = true;
+    };
+    const onKeyDown = () => {
+      pointerInput.current = false;
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, []);
+
+  /*
+   * Esc fecha o catálogo e só ele: o Esc não chega ao modal de trás. Com o foco
+   * numa tela do catálogo, o foco volta ao ícone da seção.
+   */
+  const flyoutGroupId = flyout?.groupId ?? null;
+  useEffect(() => {
+    if (flyoutGroupId === null) return;
+    const groupId = flyoutGroupId;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      const focusInside = flyoutRef.current?.contains(document.activeElement) ?? false;
+      closeFlyout();
+      if (focusInside) focusRail(groupId);
+    }
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("resize", closeFlyout);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("resize", closeFlyout);
+    };
+  }, [flyoutGroupId, closeFlyout]);
+
+  // O catálogo cabe na janela: perto do rodapé, sobe o quanto precisar.
+  useLayoutEffect(() => {
+    const panel = flyoutRef.current;
+    if (!flyout || !panel) return;
+    const minTop = (rootRef.current?.getBoundingClientRect().top ?? 0) + FLYOUT_MARGIN_PX;
+    const maxTop = window.innerHeight - FLYOUT_MARGIN_PX - panel.offsetHeight;
+    const top = Math.max(minTop, Math.min(flyout.top, maxTop));
+    if (top !== flyout.top) setFlyout({ ...flyout, top });
+  }, [flyout]);
 
   // O campo de busca pode estar nascendo neste mesmo render (espiada, drawer).
   useEffect(() => {
@@ -146,9 +251,16 @@ export function Sidebar({
     target?.focus();
   }, [peekFocus, peekGroupId]);
 
+  /** Devolve o foco a um ícone do trilho sem abrir o catálogo dele. */
+  function focusRail(railId: string) {
+    restoringFocus.current = true;
+    rootRef.current?.querySelector<HTMLElement>(`[data-rail="${railId}"]`)?.focus();
+    restoringFocus.current = false;
+  }
+
   useEffect(() => {
     if (!rail || railFocus === null) return;
-    rootRef.current?.querySelector<HTMLElement>(`[data-rail="${railFocus}"]`)?.focus();
+    focusRail(railFocus);
     setRailFocus(null);
   }, [rail, railFocus]);
 
@@ -160,7 +272,8 @@ export function Sidebar({
    */
   useEffect(() => {
     const nav = navRef.current;
-    const ativo = nav?.querySelector<HTMLElement>(".sidebar__link.is-active, .sidebar__rail-btn.is-active");
+    // No trilho, o ativo é o ícone — nunca a tela acesa no catálogo, que é `fixed`.
+    const ativo = nav?.querySelector<HTMLElement>(rail ? ".sidebar__rail-btn.is-active" : ".sidebar__link.is-active");
     if (!nav || !ativo || ativo.closest("[hidden]")) return;
     const caixaNav = nav.getBoundingClientRect();
     const caixaItem = ativo.getBoundingClientRect();
@@ -314,6 +427,141 @@ export function Sidebar({
     onBlur: hideTooltip,
   };
 
+  // Com um catálogo aberto, o nome da seção já está nele: a dica só atrapalharia.
+  const groupTooltipHandlers = {
+    ...tooltipHandlers,
+    onMouseEnter: (event: ReactMouseEvent<HTMLElement>) => {
+      if (!flyout) showTooltip(event);
+    },
+    onFocus: (event: FocusEvent<HTMLElement>) => {
+      if (!flyout) showTooltip(event);
+    },
+  };
+
+  function scheduleFlyout(action: () => void, delay: number, pendingGroupId: string | null = null) {
+    cancelFlyoutTimer();
+    flyoutPending.current = pendingGroupId;
+    flyoutTimer.current = window.setTimeout(() => {
+      flyoutTimer.current = null;
+      flyoutPending.current = null;
+      action();
+    }, delay);
+  }
+
+  /** O catálogo encosta no trilho, com o nome da seção na altura do ícone. */
+  function openFlyout(groupId: string, anchor: HTMLElement, byFocus: boolean) {
+    cancelFlyoutTimer();
+    setTooltip(null);
+    const box = anchor.getBoundingClientRect();
+    const left = rootRef.current?.getBoundingClientRect().right ?? box.right;
+    setFlyout({ groupId, top: box.top, left, byFocus });
+  }
+
+  function closeFlyoutOf(groupId: string) {
+    setFlyout((current) => (current?.groupId === groupId ? null : current));
+  }
+
+  /*
+   * O teclado está usando o catálogo aberto (numa tela dele, ou no ícone que o
+   * abriu pelo foco): o mouse passando por perto não o fecha nem o troca.
+   */
+  function keyboardHoldsFlyout(): boolean {
+    if (!flyout) return false;
+    const focused = document.activeElement;
+    if (flyoutRef.current?.contains(focused)) return true;
+    return flyout.byFocus && focused instanceof HTMLElement && focused.dataset.rail === flyout.groupId;
+  }
+
+  function railAnchor(group: HTMLElement): HTMLElement | null {
+    return group.querySelector<HTMLElement>("[data-rail]");
+  }
+
+  // Só mouse: no toque não existe hover, e tocar no ícone segue abrindo o menu por cima.
+  function onRailGroupPointerMove(event: ReactPointerEvent<HTMLElement>, groupId: string) {
+    if (event.pointerType !== "mouse") return;
+    if (flyout?.groupId === groupId) {
+      cancelFlyoutTimer();
+      return;
+    }
+    if (flyoutPending.current === groupId || keyboardHoldsFlyout()) return;
+    const anchor = railAnchor(event.currentTarget);
+    if (!anchor) return;
+    scheduleFlyout(() => openFlyout(groupId, anchor, false), FLYOUT_OPEN_DELAY_MS, groupId);
+  }
+
+  function onRailGroupPointerLeave(event: ReactPointerEvent<HTMLElement>, groupId: string) {
+    if (event.pointerType !== "mouse") return;
+    if (flyout?.groupId === groupId && keyboardHoldsFlyout()) return;
+    scheduleFlyout(() => closeFlyoutOf(groupId), FLYOUT_CLOSE_DELAY_MS);
+  }
+
+  function onRailGroupFocus(event: FocusEvent<HTMLElement>, groupId: string) {
+    // Foco andando dentro da seção (ícone ↔ telas do catálogo): continua aberto.
+    if (flyout?.groupId === groupId) {
+      cancelFlyoutTimer();
+      return;
+    }
+    if (restoringFocus.current || pointerInput.current) return;
+    const anchor = railAnchor(event.currentTarget);
+    if (anchor) openFlyout(groupId, anchor, true);
+  }
+
+  function onRailGroupBlur(event: FocusEvent<HTMLElement>, groupId: string) {
+    const group = event.currentTarget;
+    if (event.relatedTarget instanceof Node && group.contains(event.relatedTarget)) return;
+    if (flyout?.groupId !== groupId) return;
+    // A janela perdendo o foco deixa o `activeElement` aqui dentro: ao voltar, o catálogo continua.
+    scheduleFlyout(() => {
+      if (!group.contains(document.activeElement)) closeFlyoutOf(groupId);
+    }, 0);
+  }
+
+  function onRailScroll() {
+    hideTooltip();
+    if (!flyout) return;
+    const anchor = rootRef.current?.querySelector<HTMLElement>(`[data-rail="${flyout.groupId}"]`);
+    if (!anchor) return;
+    // O catálogo acompanha o ícone quando o trilho rola (o foco do teclado rola o trilho).
+    const top = anchor.getBoundingClientRect().top;
+    if (top !== flyout.top) setFlyout({ ...flyout, top });
+  }
+
+  function renderFlyout(group: NavGroup, panel: Flyout) {
+    const titleId = `sidebar-flyout-${group.id}`;
+    return (
+      <div
+        ref={flyoutRef}
+        className="sidebar-flyout"
+        role="group"
+        aria-labelledby={titleId}
+        style={{ top: panel.top, left: panel.left }}
+      >
+        <p className="sidebar-flyout__title" id={titleId}>
+          {group.title}
+        </p>
+        <ul className="sidebar-flyout__items">
+          {group.items.map((item) => {
+            const isActive = isNavItemActive(item, pathname, search);
+            return (
+              <li key={item.id}>
+                <Link
+                  to={item.path}
+                  className={cx("sidebar__link", isActive && "is-active")}
+                  aria-current={isActive ? "page" : undefined}
+                  // Escolheu a tela: o catálogo sai, mesmo que a guarda de alterações segure a navegação.
+                  onClick={closeFlyout}
+                >
+                  <span className="sidebar__label">{item.label}</span>
+                  {!item.implemented && <span className="sidebar__tag">em breve</span>}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  }
+
   function renderItem(item: NavItem) {
     const isActive = isNavItemActive(item, pathname, search);
     const isFavorite = favoriteIds.has(item.id);
@@ -356,7 +604,7 @@ export function Sidebar({
             <NavIcon name="search" />
           </button>
         </div>
-        <div className="sidebar__nav" ref={navRef} onScroll={hideTooltip}>
+        <div className="sidebar__nav" ref={navRef} onScroll={onRailScroll}>
           <Link
             to="/"
             className={cx("sidebar__rail-btn", dashboardActive && "is-active")}
@@ -381,19 +629,35 @@ export function Sidebar({
             const isActive = group.id === activeGroupId;
             // A tela atual entra no nome: no trilho é o que identifica o item ativo.
             const label = isActive && active ? `${group.title} — ${active.item.label}` : group.title;
+            const panel = flyout?.groupId === group.id ? flyout : null;
+            /*
+             * O catálogo mora logo depois do ícone, dentro da `<nav>`: o Tab
+             * passa do ícone para as telas da seção, e com um modal de
+             * workspace aberto ele segue saída de navegação como o resto da
+             * sidebar. `position: fixed` tira o catálogo do `overflow` da coluna.
+             */
             return (
-              <button
+              <div
                 key={group.id}
-                type="button"
-                className={cx("sidebar__rail-btn", isActive && "is-active")}
-                data-rail={group.id}
-                aria-label={label}
-                aria-current={isActive ? "true" : undefined}
-                onClick={() => openPeek({ focus: "group", groupId: group.id, trigger: group.id })}
-                {...tooltipHandlers}
+                className="sidebar__rail-group"
+                onPointerMove={(event) => onRailGroupPointerMove(event, group.id)}
+                onPointerLeave={(event) => onRailGroupPointerLeave(event, group.id)}
+                onFocus={(event) => onRailGroupFocus(event, group.id)}
+                onBlur={(event) => onRailGroupBlur(event, group.id)}
               >
-                <NavIcon name={group.icon} />
-              </button>
+                <button
+                  type="button"
+                  className={cx("sidebar__rail-btn", isActive && "is-active", panel && "is-open")}
+                  data-rail={group.id}
+                  aria-label={label}
+                  aria-current={isActive ? "true" : undefined}
+                  onClick={() => openPeek({ focus: "group", groupId: group.id, trigger: group.id })}
+                  {...groupTooltipHandlers}
+                >
+                  <NavIcon name={group.icon} />
+                </button>
+                {panel && renderFlyout(group, panel)}
+              </div>
             );
           })}
         </div>
