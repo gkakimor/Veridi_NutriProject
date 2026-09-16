@@ -45,6 +45,7 @@ function toItemDTO(item: ItemWithUnit, operationallyUsed: boolean): ItemDTO {
     // `null` — pureza desconhecida jamais é apresentada como 100%.
     defaultPurityPercent: item.defaultPurityPercent ? item.defaultPurityPercent.toString() : null,
     packagingSubtype: item.packagingSubtype,
+    consumedInProduction: item.consumedInProduction,
     externalBarcode: item.externalBarcode,
     externalCode: item.externalCode,
     active: item.active,
@@ -206,6 +207,11 @@ export async function createItem(
       ...(input.packagingSubtype !== undefined
         ? { packagingSubtype: input.packagingSubtype }
         : {}),
+      // Ausente é `false` pelo default da coluna: não declarar não é declarar
+      // que o material entra no processo.
+      ...(input.consumedInProduction !== undefined
+        ? { consumedInProduction: input.consumedInProduction }
+        : {}),
       externalBarcode: input.externalBarcode ? input.externalBarcode : null,
     },
     include: { unit: true },
@@ -275,6 +281,12 @@ export async function updateItem(
         : {}),
       ...(input.packagingSubtype !== undefined
         ? { packagingSubtype: input.packagingSubtype }
+        : {}),
+      // Corrigir a classificação NUNCA é bloqueada por uso operacional: ela
+      // não reescreve documento nenhum — a estimativa de custo é recalculada a
+      // cada leitura, e a Ordem de Produção não aplica a perda prevista.
+      ...(input.consumedInProduction !== undefined
+        ? { consumedInProduction: input.consumedInProduction }
         : {}),
       ...(input.externalBarcode !== undefined
         ? { externalBarcode: input.externalBarcode ? input.externalBarcode : null }

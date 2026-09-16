@@ -154,6 +154,19 @@ export interface ItemDTO {
   defaultPurityPercent: string | null;
   /** Preenchido apenas quando `type = PACKAGING`. */
   packagingSubtype: PackagingSubtype | null;
+  /**
+   * Este material é consumido NO PROCESSO, proporcional à quantidade BRUTA
+   * produzida — e não por unidade vendável.
+   *
+   * É a marca que separa a CÁPSULA VAZIA, que entra na encapsuladora junto com
+   * cada unidade bruta, do pote, da tampa e do rótulo, que acompanham a unidade
+   * VENDIDA. Os dois são `PACKAGING`, e nenhum subtipo os distinguia.
+   *
+   * Quem lê é só o motor de necessidade, e só quando a perda prevista da versão
+   * é aplicada (estimativa de custo). Matéria-prima já acompanha a produção pela
+   * BASE declarada na receita: nela a marca é redundante, nunca contraditória.
+   */
+  consumedInProduction: boolean;
   externalBarcode: string | null;
   /**
    * Código do sistema legado (planilhas). Reconciliação da importação, nunca
@@ -188,6 +201,8 @@ export interface CreateItemInput {
   controlsExpiry?: boolean;
   requiresQualityRelease?: boolean;
   requiresCoa?: boolean;
+  /** Ver `ItemDTO.consumedInProduction`. Ausente = `false`. */
+  consumedInProduction?: boolean;
   externalBarcode?: string;
   /**
    * Custo de referência inicial — opcional. Sem ele o item continua
@@ -204,5 +219,7 @@ export interface UpdateItemInput {
   controlsExpiry?: boolean;
   requiresQualityRelease?: boolean;
   requiresCoa?: boolean;
+  /** Ver `ItemDTO.consumedInProduction`. Ausente deixa como está. */
+  consumedInProduction?: boolean;
   externalBarcode?: string;
 }

@@ -40,6 +40,16 @@ const industrialItemFields = {
   family: itemFamilySchema,
   defaultPurityPercent: optionalPurityPercent,
   packagingSubtype: packagingSubtypeSchema,
+  /*
+   * Consumido no processo, proporcional à quantidade BRUTA produzida
+   * (FORMULATION-LOSS-SCOPE-01). Aceito em QUALQUER tipo de item, de
+   * propósito: o caso que motivou a marca é a cápsula vazia (`PACKAGING`),
+   * mas "outros consumíveis ligados às unidades que entram no processo" não
+   * são necessariamente embalagem, e recusar por tipo criaria uma barreira
+   * que o domínio não pediu. Em matéria-prima a marca é redundante — a base
+   * da receita já a faz acompanhar a produção.
+   */
+  consumedInProduction: z.boolean().optional(),
 };
 
 /**

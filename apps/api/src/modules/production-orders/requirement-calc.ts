@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { PrismaClient, ItemType, SupplyResponsibility } from "@prisma/client";
 import { computeComponentRequirement } from "../../lib/formulation-math.js";
-import { baseSegueQuantidadeProduzida, quantidadeBrutaPlanejada } from "@veridi/shared";
+import { componenteSegueQuantidadeProduzida, quantidadeBrutaPlanejada } from "@veridi/shared";
 
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -25,10 +25,10 @@ export interface ComputedRequirementRow {
   /**
    * A perda prevista da versão entrou na quantidade desta linha?
    *
-   * Só quem pediu `aplicarPerdaPrevista` vê `true` aqui, e só nas bases que
-   * acompanham a quantidade produzida. Existe para a tela poder DIZER quais
-   * linhas carregam a premissa e quais não — um custo que subiu sem a lista
-   * de quem subiu é um número sem auditoria.
+   * Só quem pediu `aplicarPerdaPrevista` vê `true` aqui, e só nas linhas
+   * consumidas proporcionalmente ao que entra no processo. Existe para a tela
+   * poder DIZER quais linhas carregam a premissa e quais não — um custo que
+   * subiu sem a lista de quem subiu é um número sem auditoria.
    */
   expectedLossApplied: boolean;
 }
@@ -43,9 +43,12 @@ export interface ComputedRequirementRow {
  */
 export interface RequirementCalcOptions {
   /**
-   * Escalar para a quantidade BRUTA planejada as linhas cuja base acompanha a
-   * quantidade produzida (`PER_DOSE`, `FIXED_BASIS`). As linhas
-   * `PER_FINISHED_UNIT` continuam na quantidade vendável — um pote por pote
+   * Escalar para a quantidade BRUTA planejada as linhas consumidas
+   * proporcionalmente ao que ENTRA no processo — as que a base declara
+   * (`PER_DOSE`, `FIXED_BASIS`) e as de Item marcado como consumido na
+   * produção, que é o caso da cápsula vazia.
+   *
+   * Embalagem comercial continua na quantidade vendável: um pote por pote
    * vendido, e a perda não vende pote.
    */
   aplicarPerdaPrevista?: boolean;
@@ -99,7 +102,10 @@ export async function computeFormulationRequirements(
     const item = component.item;
     // Quem acompanha o que é PRODUZIDO usa a bruta; quem acompanha a unidade
     // VENDÁVEL continua na líquida.
-    const segueProducao = baseSegueQuantidadeProduzida(component.basis);
+    const segueProducao = componenteSegueQuantidadeProduzida({
+      basis: component.basis,
+      consumedInProduction: item.consumedInProduction,
+    });
     const quantidadeDaLinha = segueProducao ? quantidadeBruta : plannedQuantity;
     const requirement = computeComponentRequirement(
       {

@@ -96,6 +96,7 @@ interface FormState {
   family: string;
   defaultPurityPercent: string;
   packagingSubtype: string;
+  consumedInProduction: boolean;
   externalBarcode: string;
   /** Só na criação. Vazio = sem referência; o item continua válido. */
   initialCostReference: string;
@@ -117,6 +118,7 @@ function initialState(item: ItemDTO | null, initialType: ItemType | null): FormS
       family: item.family ?? "",
       defaultPurityPercent: toPtBrEditText(item.defaultPurityPercent, OPCOES_PERCENTUAL_TECNICO),
       packagingSubtype: item.packagingSubtype ?? "",
+      consumedInProduction: item.consumedInProduction,
       externalBarcode: item.externalBarcode ?? "",
       initialCostReference: "",
       initialCostReferenceNote: "",
@@ -143,6 +145,9 @@ function initialState(item: ItemDTO | null, initialType: ItemType | null): FormS
     family: "",
     defaultPurityPercent: "",
     packagingSubtype: "",
+    // Nunca inferido do tipo: declarar que o material entra no processo é
+    // escolha de quem cadastra, e o default preserva a embalagem comercial.
+    consumedInProduction: false,
     externalBarcode: "",
     initialCostReference: "",
     initialCostReferenceNote: "",
@@ -299,6 +304,11 @@ export function useItemForm({
         : {}),
       ...(mode === "edit" || form.packagingSubtype
         ? { packagingSubtype: form.type === "PACKAGING" ? form.packagingSubtype : "" }
+        : {}),
+      // A marca só é oferecida na embalagem, onde a ambiguidade existe; trocar
+      // o tipo depois de marcá-la não pode deixar a marca para trás.
+      ...(mode === "edit" || form.consumedInProduction
+        ? { consumedInProduction: form.type === "PACKAGING" && form.consumedInProduction }
         : {}),
       // No edit sempre envia a chave (mesmo vazia) para permitir limpar um
       // barcode existente; no create so envia quando preenchido.
@@ -602,6 +612,26 @@ export function ItemFormFields({
               </div>
             )}
           </div>
+
+          {/*
+            Só na embalagem: é onde a ambiguidade existe. A cápsula vazia e o
+            pote são os dois `PACKAGING`, e nenhum subtipo os separava. Em
+            matéria-prima a marca seria ruído — a base declarada na receita já
+            faz o ingrediente acompanhar a produção.
+          */}
+          {form.type === "PACKAGING" && (
+            <div className="toggle-row">
+              <ToggleCard
+                id="item-consumed-in-production"
+                checked={form.consumedInProduction}
+                onChange={(checked) =>
+                  setForm((prev) => ({ ...prev, consumedInProduction: checked }))
+                }
+                label="Consumido na produção"
+                description="Entra no processo junto com cada unidade produzida, como a cápsula vazia: a perda prevista aumenta a necessidade dele. Pote, tampa, rótulo e caixa acompanham a quantidade vendida e ficam desmarcados."
+              />
+            </div>
+          )}
         </FormSection>
       )}
 

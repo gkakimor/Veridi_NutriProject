@@ -519,21 +519,61 @@ export function quantidadeBrutaPlanejada(
 /**
  * Esta base acompanha a quantidade PRODUZIDA ou a quantidade VENDÁVEL?
  *
- * É a distinção que decide quem a perda prevista afeta, e ela já existia no
- * domínio — nenhuma classificação nova foi inventada para esta premissa:
- *
  * - `PER_DOSE` e `FIXED_BASIS` declaram quanto de material forma o que é
  *   produzido. Produzir mais para compensar a perda consome mais deles;
  * - `PER_FINISHED_UNIT` declara o que acompanha CADA unidade acabada — um
  *   pote, uma tampa, um rótulo. Continua atrelado à quantidade vendável.
  *
- * Um componente declarado `PER_FINISHED_UNIT` NÃO é escalado pela perda, ainda
- * que fisicamente pudesse ser (cápsula vazia é o caso real): quem declara a
- * base é a receita, e mudar isso por dentro seria o motor decidir sozinho uma
- * regra de custo que ninguém escreveu.
+ * É METADE da regra de incidência da perda prevista, não a regra inteira: a
+ * base descreve a ARITMÉTICA da linha, e existe material consumido no processo
+ * cuja quantidade é declarada por unidade acabada. Quem decide a incidência é
+ * `componenteSegueQuantidadeProduzida`.
  */
 export function baseSegueQuantidadeProduzida(basis: FormulationComponentBasisLike): boolean {
   return basis === "PER_DOSE" || basis === "FIXED_BASIS";
+}
+
+/** O que a regra de incidência precisa saber de um componente. */
+export interface ComponenteParaIncidenciaDaPerda {
+  /** Base declarada na linha da receita. */
+  basis: FormulationComponentBasisLike;
+  /**
+   * O Item está marcado no cadastro como consumido NO PROCESSO?
+   * `undefined`/`null` lê-se como `false` — ausência de marca nunca vira marca.
+   */
+  consumedInProduction?: boolean | null;
+}
+
+/**
+ * Este COMPONENTE é consumido proporcionalmente à quantidade BRUTA produzida?
+ *
+ * É a regra canônica de incidência da PERDA PREVISTA DE PRODUÇÃO
+ * (FORMULATION-LOSS-SCOPE-01), e ela tem duas entradas, porque o domínio tem
+ * duas perguntas diferentes:
+ *
+ * 1. a BASE da linha (`basis`) responde "quanto deste material forma o que é
+ *    produzido" — aritmética da receita;
+ * 2. a MARCA do Item (`consumedInProduction`) responde "este material entra no
+ *    processo junto com cada unidade bruta" — classificação do cadastro.
+ *
+ * Basta uma delas. Matéria-prima e ingrediente entram pela base; a CÁPSULA
+ * VAZIA entra pela marca, porque a quantidade dela é naturalmente declarada por
+ * unidade acabada (120 cápsulas por pote) e mesmo assim a cápsula perdida no
+ * envase leva o invólucro junto.
+ *
+ * Quem NÃO entra: embalagem comercial — pote, tampa, rótulo, cartucho, caixa de
+ * embarque e dosador. Ela acompanha a quantidade LÍQUIDA vendável, e produzir
+ * 5.051 unidades brutas para entregar 5.000 não vende 5.051 potes.
+ *
+ * A decisão vem sempre do domínio: base declarada na receita ou marca do
+ * cadastro. Nome, código e subtipo de embalagem não participam — uma regra de
+ * custo escondida num `nome.includes("CAPS")` é invisível para quem confere o
+ * custo e falha em silêncio no primeiro item renomeado.
+ */
+export function componenteSegueQuantidadeProduzida(
+  componente: ComponenteParaIncidenciaDaPerda,
+): boolean {
+  return baseSegueQuantidadeProduzida(componente.basis) || componente.consumedInProduction === true;
 }
 
 /** Cápsulas por embalagem de uma versão: cápsulas por dose × doses por embalagem. */

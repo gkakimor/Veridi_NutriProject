@@ -376,6 +376,310 @@ describe("Perda prevista — custo estimado interno", () => {
 });
 
 /**
+ * ESCOPO DA INCIDÊNCIA — quem a perda alcança (FORMULATION-LOSS-SCOPE-01).
+ *
+ * A decisão do PO: a perda prevista é perda do PROCESSO para alcançar a
+ * quantidade líquida vendável. Recebe o fator quem é consumido
+ * proporcionalmente à quantidade BRUTA que entra no processo — matérias-primas,
+ * ingredientes e a CÁPSULA VAZIA. Não recebe a embalagem comercial, que
+ * acompanha a unidade vendida: pote, tampa, rótulo, cartucho e caixa.
+ *
+ * A separação vem do DOMÍNIO: base declarada na receita ou marca
+ * `consumedInProduction` do cadastro do Item. Nenhum caso desta suíte depende do
+ * nome ou do código do item — os códigos são gerados e os nomes carregam apenas
+ * o carimbo da fixture.
+ */
+describe("Escopo da perda prevista — a cápsula vazia e a embalagem comercial", () => {
+  /**
+   * Um produto Cápsula completo: dois materiais que formam o conteúdo, a
+   * cápsula vazia que recebe esse conteúdo, e a embalagem que leva o produto
+   * pronto ao cliente.
+   */
+  async function produtoCapsulaCompleto(app: App) {
+    const materia = await criarItem(app, { type: "RAW_MATERIAL", unitCode: "kg" });
+    const ingrediente = await criarItem(app, { type: "RAW_MATERIAL", unitCode: "mg" });
+    const capsula = await criarItem(app, {
+      type: "PACKAGING",
+      unitCode: "un",
+      // A marca do cadastro é o que separa a cápsula do pote: os dois são
+      // PACKAGING e nenhum subtipo os distinguia.
+      consumedInProduction: true,
+    });
+    const pote = await criarItem(app, { type: "PACKAGING", unitCode: "un", packagingSubtype: "POT" });
+    const tampa = await criarItem(app, { type: "PACKAGING", unitCode: "un", packagingSubtype: "CAP" });
+    const rotulo = await criarItem(app, { type: "PACKAGING", unitCode: "un", packagingSubtype: "LABEL" });
+    const caixa = await criarItem(app, { type: "PACKAGING", unitCode: "un", packagingSubtype: "BOX" });
+
+    await referenciaManual(app, materia.id, "10");
+    await referenciaManual(app, ingrediente.id, "0.01");
+    await referenciaManual(app, capsula.id, "0.05");
+    await referenciaManual(app, pote.id, "2");
+    await referenciaManual(app, tampa.id, "1");
+    await referenciaManual(app, rotulo.id, "0.5");
+    await referenciaManual(app, caixa.id, "3");
+
+    const produto = await criarProduto(app, { dosageForm: "CAPSULE", presentationType: "POT" });
+    const versao = await primeiraVersao(app, produto.id);
+
+    const componentes = [
+      { itemId: materia.id, quantity: "1", unitCode: "kg", basis: "FIXED_BASIS" },
+      { itemId: ingrediente.id, quantity: "0.4", unitCode: "mg", basis: "PER_DOSE" },
+      // 120 cápsulas por pote — a quantidade é naturalmente declarada por
+      // unidade acabada, e é exatamente por isso que a base não bastava.
+      { itemId: capsula.id, quantity: "120", unitCode: "un", basis: "PER_FINISHED_UNIT" },
+      { itemId: pote.id, quantity: "1", unitCode: "un", basis: "PER_FINISHED_UNIT" },
+      { itemId: tampa.id, quantity: "1", unitCode: "un", basis: "PER_FINISHED_UNIT" },
+      { itemId: rotulo.id, quantity: "1", unitCode: "un", basis: "PER_FINISHED_UNIT" },
+      { itemId: caixa.id, quantity: "1", unitCode: "un", basis: "PER_FINISHED_UNIT" },
+    ];
+
+    // 5.000 unidades vendáveis — a quantidade que o cliente compra.
+    await gravarOk(app, versao.id, {
+      basisQuantity: "5000",
+      dosageForm: "CAPSULE",
+      capsulesPerDose: 1,
+      capsulesPerPackage: 120,
+      components: componentes,
+    });
+
+    return { versao, componentes, materia, ingrediente, capsula, pote, tampa, rotulo, caixa };
+  }
+
+  const COMERCIAIS = ["pote", "tampa", "rotulo", "caixa"] as const;
+
+  it("com 1% de perda escala matéria-prima, ingrediente e cápsula vazia — e nada da embalagem comercial", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const cenario = await produtoCapsulaCompleto(app);
+    const sem = await estimativa(app, cenario.versao.id);
+
+    await gravarOk(app, cenario.versao.id, {
+      expectedLossPercent: "1",
+      components: cenario.componentes,
+    });
+    const com = await estimativa(app, cenario.versao.id);
+
+    // 5.000 / 0,99 = 5.050,505050… — a bruta que o planejamento interno usa.
+    expect(new Decimal(com.grossPlannedQuantity).toFixed(6)).toBe("5050.505051");
+
+    // Matéria-prima na base fixa: 1 kg por 5.000 → 1,010101… kg.
+    const linhaMateria = linhaDo(com, cenario.materia.code);
+    expect(linhaMateria.expectedLossApplied, "matéria-prima deve carregar a perda").toBe(true);
+    expect(new Decimal(String(linhaMateria.requiredQuantity)).toFixed(6)).toBe("1.010101");
+
+    // Ingrediente por dose: 0,4 mg × 120 doses × bruta = 242.424,2424… mg.
+    const linhaIngrediente = linhaDo(com, cenario.ingrediente.code);
+    expect(linhaIngrediente.expectedLossApplied, "ingrediente deve carregar a perda").toBe(true);
+    expect(new Decimal(String(linhaIngrediente.requiredQuantity)).toFixed(6)).toBe("242424.242424");
+
+    /*
+     * CÁPSULA VAZIA — o caso desta capability. Declarada por unidade acabada
+     * (120 por pote) e ainda assim escalada, porque a cápsula perdida no envase
+     * leva o invólucro junto: 120 × 5.050,505050… = 606.060,606060…
+     *
+     * Antes desta rodada a linha vinha 600.000 un e o custo previsto ficava
+     * abaixo do real.
+     */
+    const linhaCapsula = linhaDo(com, cenario.capsula.code);
+    expect(linhaCapsula.expectedLossApplied, "cápsula vazia deve carregar a perda").toBe(true);
+    expect(new Decimal(String(linhaCapsula.requiredQuantity)).toFixed(6)).toBe("606060.606061");
+    expect(
+      new Decimal(String(linhaCapsula.requiredQuantity)).greaterThan(
+        String(linhaDo(sem, cenario.capsula.code).requiredQuantity),
+      ),
+      "a cápsula vazia continuou na quantidade vendável",
+    ).toBe(true);
+
+    /*
+     * EMBALAGEM COMERCIAL — 5.000 potes para 5.000 unidades vendáveis. Não
+     * basta conferir a quantidade: o CUSTO da linha também tem de ser idêntico
+     * ao do cenário sem perda.
+     */
+    for (const nome of COMERCIAIS) {
+      const item = cenario[nome];
+      const depois = linhaDo(com, item.code);
+      const antes = linhaDo(sem, item.code);
+      expect(depois.expectedLossApplied, `${nome} não pode carregar a perda`).toBe(false);
+      expect(
+        new Decimal(String(depois.requiredQuantity)).equals(5000),
+        `${nome} deixou de ser 5.000`,
+      ).toBe(true);
+      expect(depois.estimatedComponentCost, `${nome} mudou de custo`).toBe(
+        antes.estimatedComponentCost,
+      );
+    }
+
+    await app.close();
+  });
+
+  it("o custo sobe, e o divisor do custo unitário continua a quantidade LÍQUIDA vendável", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const cenario = await produtoCapsulaCompleto(app);
+    const sem = await estimativa(app, cenario.versao.id);
+    await gravarOk(app, cenario.versao.id, {
+      expectedLossPercent: "1",
+      components: cenario.componentes,
+    });
+    const com = await estimativa(app, cenario.versao.id);
+
+    expect(sem.quality).toBe("ESTIMATED");
+    expect(com.quality).toBe("ESTIMATED");
+    expect(
+      new Decimal(com.estimatedMaterialCost).greaterThan(sem.estimatedMaterialCost),
+      "o custo previsto tinha de subir com a cápsula vazia dentro da perda",
+    ).toBe(true);
+
+    /*
+     * QUANTIDADE COMERCIAL PRESERVADA: a base da estimativa continua 5.000, e é
+     * por 5.000 que o custo é dividido — o material perdido no caminho é custo
+     * da unidade BOA, não uma unidade a mais para vender.
+     */
+    expect(new Decimal(com.basisQuantity).equals(5000)).toBe(true);
+    const porUnidade = new Decimal(com.estimatedMaterialCost).dividedBy(5000);
+    expect(
+      new Decimal(com.estimatedMaterialUnitCost).minus(porUnidade).abs().lessThan("0.000001"),
+    ).toBe(true);
+
+    await app.close();
+  });
+
+  it("sem perda declarada, e com perda zero, nenhuma linha é escalada", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const cenario = await produtoCapsulaCompleto(app);
+
+    // Versão nova nasce sem a premissa — ausência nunca é 0% presumido, e
+    // nenhum dos dois escala nada.
+    const semPremissa = await estimativa(app, cenario.versao.id);
+    expect(semPremissa.expectedLossPercent).toBeNull();
+    expect(semPremissa.grossPlannedQuantity).toBeNull();
+
+    await gravarOk(app, cenario.versao.id, {
+      expectedLossPercent: "0",
+      components: cenario.componentes,
+    });
+    const zero = await estimativa(app, cenario.versao.id);
+    expect(new Decimal(zero.expectedLossPercent).equals(0)).toBe(true);
+    expect(new Decimal(zero.grossPlannedQuantity).equals(5000)).toBe(true);
+
+    for (const linha of [...semPremissa.components, ...zero.components]) {
+      expect(linha.expectedLossApplied, `${linha.itemCode} escalou sem perda declarada`).toBe(false);
+    }
+    // Cápsula marcada inclusive: a marca diz QUEM a perda alcança, nunca que
+    // existe perda.
+    expect(
+      new Decimal(String(linhaDo(zero, cenario.capsula.code).requiredQuantity)).equals(600000),
+    ).toBe(true);
+    expect(zero.estimatedMaterialCost).toBe(semPremissa.estimatedMaterialCost);
+
+    await app.close();
+  });
+
+  it("produto em PÓ, sem cápsula: a perda escala o pó e não escala o pote", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const po = await criarItem(app, { type: "RAW_MATERIAL", unitCode: "kg" });
+    const pote = await criarItem(app, {
+      type: "PACKAGING",
+      unitCode: "un",
+      packagingSubtype: "POT",
+    });
+    await referenciaManual(app, po.id, "40");
+    await referenciaManual(app, pote.id, "2");
+
+    const produto = await criarProduto(app, { dosageForm: "POWDER", presentationType: "POT" });
+    const versao = await primeiraVersao(app, produto.id);
+    await gravarOk(app, versao.id, {
+      basisQuantity: "1000",
+      dosageForm: "POWDER",
+      expectedLossPercent: "1",
+      components: [
+        { itemId: po.id, quantity: "1", unitCode: "kg", basis: "FIXED_BASIS" },
+        { itemId: pote.id, quantity: "1", unitCode: "un", basis: "PER_FINISHED_UNIT" },
+      ],
+    });
+
+    const dto = await estimativa(app, versao.id);
+    expect(linhaDo(dto, po.code).expectedLossApplied).toBe(true);
+    // Nenhum item marcado nesta receita: a capability não mudou o produto em
+    // pó, que nunca teve cápsula.
+    expect(linhaDo(dto, pote.code).expectedLossApplied).toBe(false);
+    expect(new Decimal(String(linhaDo(dto, pote.code).requiredQuantity)).equals(1000)).toBe(true);
+
+    await app.close();
+  });
+
+  it("formulação antiga, com a cápsula ainda sem marca, continua exatamente como era", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    // O estado de TODO item gravado antes desta capability: `PACKAGING` sem
+    // marca nenhuma. A migration nasceu com `false`, e `false` é o
+    // comportamento anterior.
+    const capsulaSemMarca = await criarItem(app, { type: "PACKAGING", unitCode: "un" });
+    const materia = await criarItem(app, { type: "RAW_MATERIAL", unitCode: "kg" });
+    await referenciaManual(app, capsulaSemMarca.id, "0.05");
+    await referenciaManual(app, materia.id, "10");
+
+    const produto = await criarProduto(app, { dosageForm: "CAPSULE", presentationType: "POT" });
+    const versao = await primeiraVersao(app, produto.id);
+    await gravarOk(app, versao.id, {
+      basisQuantity: "5000",
+      dosageForm: "CAPSULE",
+      capsulesPerDose: 1,
+      capsulesPerPackage: 120,
+      expectedLossPercent: "1",
+      components: [
+        { itemId: materia.id, quantity: "1", unitCode: "kg", basis: "FIXED_BASIS" },
+        { itemId: capsulaSemMarca.id, quantity: "120", unitCode: "un", basis: "PER_FINISHED_UNIT" },
+      ],
+    });
+
+    const dto = await estimativa(app, versao.id);
+    const linha = linhaDo(dto, capsulaSemMarca.code);
+    expect(linha.expectedLossApplied, "item sem marca não pode ser escalado").toBe(false);
+    expect(new Decimal(String(linha.requiredQuantity)).equals(600000)).toBe(true);
+    // A matéria-prima continua escalando pela base — a marca não é condição
+    // para quem já entrava pela receita.
+    expect(linhaDo(dto, materia.code).expectedLossApplied).toBe(true);
+
+    await app.close();
+  });
+
+  it("a marca vive no cadastro do Item, e a leitura devolve o que foi gravado", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    // Item novo nasce desmarcado: não declarar nunca é declarar.
+    const capsula = await criarItem(app, { type: "PACKAGING", unitCode: "un" });
+    const lido = await app.inject({ method: "GET", url: `/items/${capsula.id}` });
+    expect(lido.json().consumedInProduction).toBe(false);
+
+    const marcado = await app.inject({
+      method: "PATCH",
+      url: `/items/${capsula.id}`,
+      payload: { consumedInProduction: true },
+    });
+    expect(marcado.statusCode, marcado.body).toBeLessThan(400);
+    expect(marcado.json().consumedInProduction).toBe(true);
+
+    const desmarcado = await app.inject({
+      method: "PATCH",
+      url: `/items/${capsula.id}`,
+      payload: { consumedInProduction: false },
+    });
+    expect(desmarcado.json().consumedInProduction).toBe(false);
+
+    await app.close();
+  });
+});
+
+/**
  * REGRA CRÍTICA — a perda prevista NUNCA altera quantidade comercial.
  *
  * Esta guarda não mede comportamento: ela mede ALCANCE. Um teste de Orçamento

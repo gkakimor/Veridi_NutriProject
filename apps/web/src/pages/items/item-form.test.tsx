@@ -54,6 +54,7 @@ function item(overrides: Partial<ItemDTO> = {}): ItemDTO {
     family: null,
     defaultPurityPercent: null,
     packagingSubtype: null,
+    consumedInProduction: false,
     externalBarcode: null,
     active: true,
     operationallyUsed: false,
@@ -298,6 +299,59 @@ describe("Item — tipo pré-escolhido pela URL", () => {
 
     expect(seletor("item-type").value).toBe("");
     expect(opcoesDeTipo()).toEqual(["RAW_MATERIAL", "PACKAGING"]);
+  });
+});
+
+describe("Item — consumo na produção", () => {
+  /**
+   * "Consumido na produção" (FORMULATION-LOSS-SCOPE-01) é a marca que separa a
+   * cápsula vazia do pote no cálculo da perda prevista. Ela só faz sentido na
+   * embalagem, e o que sai da tela tem de ser o booleano — não a presença do
+   * campo.
+   */
+  it("a marca de consumo na produção só aparece na embalagem, e vai no payload", async () => {
+    renderPagina();
+    await waitFor(() => expect(seletor("item-unit").options.length).toBeGreaterThan(1));
+
+    await preencherObrigatorios("RAW_MATERIAL");
+    // Matéria-prima já acompanha a produção pela base da receita: oferecer a
+    // marca aqui seria pedir uma decisão que o motor ignora.
+    expect(document.getElementById("item-consumed-in-production")).toBeNull();
+
+    fireEvent.change(seletor("item-type"), { target: { value: "PACKAGING" } });
+    const marca = document.getElementById("item-consumed-in-production") as HTMLInputElement;
+    expect(marca).not.toBeNull();
+    // Nasce desmarcada: embalagem comercial é o caso comum, e não declarar
+    // nunca pode virar declarar.
+    expect(marca.checked).toBe(false);
+
+    fireEvent.change(seletor("item-unit"), { target: { value: "un" } });
+    fireEvent.click(marca);
+    fireEvent.click(screen.getByRole("button", { name: "Criar item" }));
+
+    await waitFor(() => expect(createItem).toHaveBeenCalled());
+    expect(vi.mocked(createItem).mock.calls[0]![0]).toMatchObject({
+      type: "PACKAGING",
+      consumedInProduction: true,
+    });
+  });
+
+  it("marcar e depois voltar para matéria-prima não deixa a marca para trás", async () => {
+    renderPagina();
+    await waitFor(() => expect(seletor("item-unit").options.length).toBeGreaterThan(1));
+
+    await preencherObrigatorios("PACKAGING");
+    fireEvent.click(document.getElementById("item-consumed-in-production")!);
+    // A marca some da tela junto com o tipo; o que o servidor recebe tem de
+    // acompanhar o que a pessoa vê.
+    fireEvent.change(seletor("item-type"), { target: { value: "RAW_MATERIAL" } });
+    fireEvent.click(screen.getByRole("button", { name: "Criar item" }));
+
+    await waitFor(() => expect(createItem).toHaveBeenCalled());
+    expect(vi.mocked(createItem).mock.calls[0]![0]).toMatchObject({
+      type: "RAW_MATERIAL",
+      consumedInProduction: false,
+    });
   });
 });
 
