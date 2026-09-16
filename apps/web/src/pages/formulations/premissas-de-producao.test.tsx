@@ -304,7 +304,9 @@ describe("Premissas de produção — perda e rendimento", () => {
     fireEvent.click(screen.getByRole("button", { name: /Salvar rascunho/i }));
 
     await waitFor(() => expect(vi.mocked(updateFormulationVersion)).toHaveBeenCalled());
-    const [, payload] = vi.mocked(updateFormulationVersion).mock.calls[0]!;
+    // A última chamada, não a primeira: os mocks não são limpos entre os casos
+    // deste arquivo, e `calls[0]` traz o salvamento de um teste anterior.
+    const [, payload] = vi.mocked(updateFormulationVersion).mock.calls.at(-1)!;
     expect(payload.expectedLossPercent).toBe("1");
     // A reserva de matéria-prima NÃO virou premissa global: continua na linha.
     expect(payload.components?.[0]?.overagePercent).toBe("10");
@@ -430,6 +432,64 @@ describe("Refinamento da grade", () => {
     expect(
       within(composicao).getByRole("combobox", { name: "Base de cálculo do componente" }),
     ).toBeTruthy();
+  });
+});
+
+describe("Ordem dos itens da formulação", () => {
+  const codigos = (bloco: HTMLElement) =>
+    within(bloco)
+      .getAllByRole("textbox", { name: /^Quantidade de / })
+      .map((campo) => (campo.getAttribute("aria-label") ?? "").replace("Quantidade de ", ""));
+
+  it("descer troca a linha com a seguinte da MESMA seção", async () => {
+    await abrir(
+      versao({
+        components: [
+          acidoFolico(),
+          acidoFolico({ id: "cmp-2", itemId: "item-2", itemCode: "MP-000499", position: 1 }),
+          pote(),
+        ],
+      } as Partial<FormulationVersionDTO>),
+    );
+    const composicao = secao(/Composição/);
+    expect(codigos(composicao)).toEqual(["MP-000030", "MP-000499"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Descer MP-000030" }));
+    await waitFor(() => expect(codigos(composicao)).toEqual(["MP-000499", "MP-000030"]));
+
+    fireEvent.click(screen.getByRole("button", { name: "Subir MP-000030" }));
+    await waitFor(() => expect(codigos(composicao)).toEqual(["MP-000030", "MP-000499"]));
+  });
+
+  it("a linha das pontas não sobe nem desce para fora da seção", async () => {
+    await abrir(versao());
+    // Uma matéria-prima só e uma embalagem só: nenhuma das duas se move, e nada
+    // pode empurrar a matéria-prima para dentro da embalagem.
+    expect(screen.getByRole("button", { name: "Subir MP-000030" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Descer MP-000030" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Subir ME-000455" })).toBeDisabled();
+  });
+
+  it("a ordem vai ao servidor como a tela mostra", async () => {
+    vi.mocked(updateFormulationVersion).mockResolvedValue(versao());
+    await abrir(
+      versao({
+        components: [
+          acidoFolico(),
+          acidoFolico({ id: "cmp-2", itemId: "item-2", itemCode: "MP-000499", position: 1 }),
+          pote(),
+        ],
+      } as Partial<FormulationVersionDTO>),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Descer MP-000030" }));
+    fireEvent.click(screen.getByRole("button", { name: /Salvar rascunho/i }));
+
+    await waitFor(() => expect(vi.mocked(updateFormulationVersion)).toHaveBeenCalled());
+    // A última chamada, não a primeira: os mocks não são limpos entre os casos
+    // deste arquivo, e `calls[0]` traz o salvamento de um teste anterior.
+    const [, payload] = vi.mocked(updateFormulationVersion).mock.calls.at(-1)!;
+    expect(payload.components?.map((c) => c.itemId)).toEqual(["item-2", "item-mp", "item-emb"]);
   });
 });
 

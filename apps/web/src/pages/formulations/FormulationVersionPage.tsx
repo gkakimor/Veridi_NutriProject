@@ -1391,6 +1391,38 @@ export function FormulationVersionPage() {
     setComponents((prev) => prev.filter((row) => row.key !== key));
   }
 
+  /**
+   * Move a linha uma posição dentro da PRÓPRIA seção.
+   *
+   * A ordem da receita é dela: quem monta a fórmula lista o ativo principal
+   * primeiro e os excipientes depois, e essa leitura vale na tela, na Ordem de
+   * Produção e na folha de pesagem. A ordem já viajava no payload — o servidor
+   * grava `position` pelo índice do array —, e o que faltava era poder mudá-la
+   * sem apagar a linha e refazer.
+   *
+   * O vizinho é procurado SALTANDO as linhas da outra seção: composição e
+   * embalagem dividem um array só, e trocar com a linha imediatamente anterior
+   * moveria uma matéria-prima para dentro da embalagem.
+   */
+  function handleMoveComponent(key: string, direcao: -1 | 1) {
+    setComponents((prev) => {
+      const indice = prev.findIndex((row) => row.key === key);
+      const atual = prev[indice];
+      if (!atual) return prev;
+      const secao = secaoDaLinha(atual);
+      let vizinho = indice + direcao;
+      while (vizinho >= 0 && vizinho < prev.length && secaoDaLinha(prev[vizinho]!) !== secao) {
+        vizinho += direcao;
+      }
+      const trocada = prev[vizinho];
+      if (!trocada) return prev;
+      const proximo = [...prev];
+      proximo[indice] = trocada;
+      proximo[vizinho] = atual;
+      return proximo;
+    });
+  }
+
   function handleComponentBasisChange(key: string, basis: FormulationComponentBasis) {
     setComponents((prev) => prev.map((row) => (row.key === key ? { ...row, basis } : row)));
   }
@@ -2025,6 +2057,9 @@ export function FormulationVersionPage() {
       apenas com Item escolhido — linha em branco ainda não tem cadastro que
       responda, e ali o seletor continua sendo a pergunta certa.
     */
+    /* Onde a linha está DENTRO da seção — é o que decide se ela ainda sobe ou desce. */
+    const irmas = daComposicao ? linhasDaComposicao : linhasDaEmbalagem;
+    const posicaoNaSecao = irmas.findIndex((irma) => irma.key === row.key);
     const unidadesDaLinha = unitOptionsForRow(row);
     const unidadeUnica = row.itemId !== "" && unidadesDaLinha.length === 1 && row.unitCode !== "";
     const erroDe = (campo: CampoDoComponente) => fieldErrors[chaveDeErro(row.key, campo)];
@@ -2374,14 +2409,42 @@ export function FormulationVersionPage() {
 
         {isDraft && (
           <td className="col-acoes">
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm"
-              aria-label="Remover componente"
-              onClick={() => handleRemoveComponent(row.key)}
-            >
-              ✕
-            </button>
+            <div className="col-acoes__grupo">
+              {/* Subir e descer, e o remover em vermelho — apagar uma linha da
+                  receita não se parece com reordená-la. */}
+              <span className="col-acoes__ordem">
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--icone"
+                  aria-label={`Subir ${nomeDoItem}`}
+                  disabled={posicaoNaSecao <= 0}
+                  onClick={() => handleMoveComponent(row.key, -1)}
+                >
+                  <svg viewBox="0 0 10 6" aria-hidden="true" focusable="false">
+                    <path d="M5 0 10 6H0z" fill="currentColor" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--icone"
+                  aria-label={`Descer ${nomeDoItem}`}
+                  disabled={posicaoNaSecao === irmas.length - 1}
+                  onClick={() => handleMoveComponent(row.key, 1)}
+                >
+                  <svg viewBox="0 0 10 6" aria-hidden="true" focusable="false">
+                    <path d="M5 6 0 0h10z" fill="currentColor" />
+                  </svg>
+                </button>
+              </span>
+              <button
+                type="button"
+                className="btn btn--ghost-danger btn--sm"
+                aria-label={`Remover ${nomeDoItem}`}
+                onClick={() => handleRemoveComponent(row.key)}
+              >
+                ✕
+              </button>
+            </div>
           </td>
         )}
       </tr>
