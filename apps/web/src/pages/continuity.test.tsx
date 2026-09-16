@@ -158,8 +158,8 @@ describe("Ordem de produção sabe para quem produz", () => {
     expect(pedido.getAttribute("href")).toContain("/comercial/pedidos/ped-1");
     const cliente = screen.getByRole("link", { name: /NutriViva/ });
     expect(cliente.getAttribute("href")).toContain("cli-1");
-    // A unidade acompanha o número — "1000" sozinho não diz se são caixas.
-    expect(screen.getByText(/1000 un/)).toBeTruthy();
+    // A unidade acompanha o número — "1.000" sozinho não diz se são caixas.
+    expect(screen.getByText(/1\.000 un/)).toBeTruthy();
   });
 
   it("não mostra vínculo de pedido quando a ordem é de estoque próprio", async () => {

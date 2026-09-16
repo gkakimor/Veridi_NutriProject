@@ -190,7 +190,7 @@ const pagina = (total: number) => ({ page: 1, pageSize: 20, total });
 function cliente(codigo: string) {
   return {
     id: codigo, code: codigo, legalName: "Nutrifarm", tradeName: null, cnpj: null, city: null, state: null,
-    phone: null, commercial: null, active: true,
+    phone: null, commercial: null, active: true, blocked: false, status: "ACTIVE", block: null,
   };
 }
 
@@ -208,7 +208,9 @@ const LISTAS: Lista[] = [
       seletor("situação comercial", "Filtrar por situação comercial", "PROSPECT", (f) =>
         expect(f).toMatchObject({ commercialStatus: "PROSPECT" }),
       ),
-      seletor("cadastro", "Filtrar por cadastro", "inactive", (f) => expect(f).toMatchObject({ active: false })),
+      seletor("situação cadastral", "Filtrar por situação cadastral", "INACTIVE", (f) =>
+        expect(f).toMatchObject({ status: ["INACTIVE"] }),
+      ),
     ],
   },
   {
