@@ -175,7 +175,10 @@ Default:
 - dark-green top topbar (52px);
 - left sidebar: 312px expanded, or a 56px compact icon rail (one icon per
   section, with tooltip), toggled by the discreet "Recolher menu / Expandir
-  menu" control in the sidebar footer and saved per user;
+  menu" control in the sidebar footer and saved per user. On the rail,
+  resting the mouse on a section icon — or giving it keyboard focus — opens
+  that section's screens in a flyout beside the rail; a click still opens the
+  full menu over the content;
 - main workspace;
 - no permanent global command toolbar;
 - no permanent bottom status bar.
@@ -937,6 +940,15 @@ Favoritos ficam acima das seções sem tirar a tela da seção original. Compact
 seções abertas e favoritos são do usuário (`/me/preferences`) e gravam sem
 botão. Entrada que o perfil não pode abrir some do menu, da busca e dos
 favoritos — espelho do gate de leitura da API, nunca regra nova.
+
+**No menu recolhido, a seção se mostra sem clique** (NAV-SIDEBAR-HOVER-01).
+Mouse parado no ícone da seção por 150 ms, ou o foco do teclado nele, abre ao
+lado do trilho o catálogo da seção: por cima do conteúdo, sem empurrar a tela
+nem alargar a página, dentro da janela. Sair fecha em 200 ms, e o caminho do
+ícone até o catálogo não fecha. Só mouse abre por hover — toque não tem hover,
+e tocar no ícone segue abrindo o menu por cima, como o clique. O catálogo vem
+logo depois do ícone na ordem de Tab; Esc fecha uma camada só e devolve o foco
+ao ícone. Menu expandido e celular não têm catálogo, e nada dele é preferência.
 
 ## Trilha, alvo e voz
 

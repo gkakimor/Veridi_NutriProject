@@ -5122,6 +5122,32 @@ modelo" à vista, sem rolagem horizontal e console limpo. Sem `pnpm test` global
 Modelo está na `main` e fora de PROD. Continua aberto, fora desta capability: FORMULATION-PRESENTATION-BY-FORM-01
 (aguardando a Veridi).
 
+## Catálogo da seção no menu recolhido (NAV-SIDEBAR-HOVER-01, 2026-09-16)
+
+Feedback da Veridi: no menu recolhido, só o clique mostrava as telas de uma seção. Na `main`, fora de PROD
+(`release/prod` segue `5b7c1a3`).
+
+**Web.** No trilho do desktop, o mouse parado num ícone de seção por 150 ms — ou o foco do teclado nele — abre ao lado
+o catálogo com o nome da seção e as telas que o perfil enxerga, com a tela atual acesa (`app/Sidebar.tsx`,
+`.sidebar-flyout` em `app/shell.css`). Fica por cima do conteúdo (`position: fixed`, acima do modal de workspace), sem
+empurrar a tela nem alargar a página, e sobe para caber em janela baixa. Sair fecha em 200 ms; ir do ícone ao catálogo
+não fecha, nem cruzando outro ícone. A intenção vem do `pointermove` de mouse: toque e caneta não abrem, e o trilho
+redesenhado sob o mouse parado também não. O catálogo mora logo depois do ícone, dentro da `<nav>`: o Tab percorre as
+telas e segue para a próxima seção, e com modal aberto ele continua saída de navegação. Esc fecha só o catálogo e
+devolve o foco ao ícone; foco de clique, de toque ou devolvido pelo Esc não abre.
+
+**Preservado.** Clique e Enter no ícone abrem o menu inteiro por cima, como antes; menu expandido e drawer do celular
+sem catálogo; rotas, rótulos, ids, permissões e preferência intactos — nada do catálogo é gravado. Favoritos, Painel e
+busca no trilho seguem só pelo clique: catálogo é de seção.
+
+**Validação.** Web: `app/sidebar-hover-flyout.test.tsx` (16 testes: pausas medidas no antes e no depois com relógio
+falso, folga e diagonal, troca de seção, clique e toque, Esc em camada, tela atual com filtro, ADMIN × VIEWER, teclado,
+expandido, celular e guarda de CSS) com os cinco arquivos de navegação e shell — 72 testes. Mutação provada: 18
+derrubadas (pausas, só mouse, foco de clique/toque/Esc, teclado segurando o catálogo, Esc vazando, perfil, tela atual,
+foco que sai, espiada, dica, celular, saída do mouse). Smoke no Chromium real (Vite do worktree, API simulada, nada
+gravado): 47 verificações em 1440, 1366×600, 390 com toque, 1024 com toque e expandido, console só com os 503
+declarados das telas sem API. Typecheck web. Sem migration.
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a
