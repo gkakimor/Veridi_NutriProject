@@ -246,7 +246,7 @@ export function FormulationDetailPage() {
               disabled={saving || !product.finishedProductItem}
               onClick={() => setUsandoTemplate(true)}
             >
-              Usar template da biblioteca
+              Usar modelo da biblioteca
             </button>
           </div>
         </FormSection>
@@ -352,7 +352,7 @@ export function FormulationDetailPage() {
                 const criada = await applyTemplateToProduct(productId!, templateVersionId);
                 navigate(`/producao/formulacoes/${productId}/versoes/${criada.id}`);
               } catch (err) {
-                setError(err instanceof Error ? err.message : "Falha ao aplicar o template");
+                setError(err instanceof Error ? err.message : "Falha ao aplicar o modelo");
               } finally {
                 setSaving(false);
               }

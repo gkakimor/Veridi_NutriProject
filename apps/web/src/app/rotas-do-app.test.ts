@@ -102,6 +102,9 @@ const ROTAS_ANTES_DA_MIGRACAO = [
   "/producao/formulacoes",
   "/producao/formulacoes/:productId",
   "/producao/formulacoes/:productId/versoes/:versionId",
+  // Ficha técnica em PDF real (FORMULATION-TECHNICAL-SHEET-PDF-01, 7503626):
+  // rota nova, registrada aqui depois — ela entrou sem passar por esta lista.
+  "/producao/formulacoes/:productId/versoes/:versionId/ficha-tecnica",
   "/producao/ordens",
   "/producao/ordens/:id",
   "/producao/ordens/:id/imprimir",

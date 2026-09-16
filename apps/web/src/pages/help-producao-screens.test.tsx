@@ -352,6 +352,7 @@ describe("Modelos de Formulação", () => {
         outputUnitCode: "un",
         notes: null,
         usageCount: 2,
+        componentIssues: [],
         sourceVersionId: null,
         sourceVersionNumber: null,
         createdAt: "2026-08-20T00:00:00.000Z",
@@ -407,7 +408,7 @@ describe("Modelos de Formulação", () => {
     await verificaFluxoNumerado("producao.templates", "Fluxo A · Criar uma matriz do zero");
     expect(
       screen.getByRole("list", {
-        name: "Fluxo: Fluxo B · Salvar uma formulação existente como template",
+        name: "Fluxo: Fluxo B · Salvar uma formulação existente como modelo",
       }),
     ).toBeInTheDocument();
   });

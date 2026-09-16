@@ -62,7 +62,7 @@ export function FormulationTemplatesPage() {
   const consulta = useListQuery(
     listFormulationTemplates,
     { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
-    { fallbackError: "Falha ao carregar os templates" },
+    { fallbackError: "Falha ao carregar os modelos" },
   );
   const templates: FormulationTemplateSummaryDTO[] = consulta.data?.templates ?? [];
   const total = consulta.data?.total ?? 0;
@@ -76,7 +76,7 @@ export function FormulationTemplatesPage() {
       const template = await createFormulationTemplate({ name: newName.trim() });
       navigate(`/producao/templates-formulacao/${template.id}`);
     } catch (err) {
-      setErroAoCriar(err instanceof Error ? err.message : "Falha ao criar o template");
+      setErroAoCriar(err instanceof Error ? err.message : "Falha ao criar o modelo");
     }
   }
 
@@ -86,14 +86,14 @@ export function FormulationTemplatesPage() {
         <div>
           <h1 className="page__title">Modelos de Formulação</h1>
           <p className="page__subtitle">
-            Matrizes técnicas reutilizáveis entre clientes. Usar um template cria uma cópia
-            independente na formulação do produto — alterar o template depois não muda nenhuma
+            Matrizes técnicas reutilizáveis entre clientes. Usar um modelo cria uma cópia
+            independente na formulação do produto — alterar o modelo depois não muda nenhuma
             formulação já criada.
           </p>
         </div>
         {canEdit && (
           <button type="button" className="btn btn--accent" onClick={() => setCreating(true)}>
-            Novo template
+            Novo modelo
           </button>
         )}
       </div>
@@ -102,7 +102,7 @@ export function FormulationTemplatesPage() {
 
       {creating && (
         <div className="inline-form">
-          <label htmlFor="template-name">Nome do template</label>
+          <label htmlFor="template-name">Nome do modelo</label>
           <input
             id="template-name"
             type="text"
@@ -138,7 +138,7 @@ export function FormulationTemplatesPage() {
       <div className="toolbar">
         <div className="toolbar__search">
           <label className="sr-only" htmlFor="templates-search">
-            Buscar templates
+            Buscar modelos
           </label>
           <input
             id="templates-search"
@@ -226,8 +226,8 @@ export function FormulationTemplatesPage() {
 
             <ListStatusRow colSpan={8} query={consulta} rowCount={templates.length}>
               {search
-                ? "Nenhum template encontrado para esta busca."
-                : "A biblioteca ainda está vazia. Crie um template ou salve uma formulação existente como template."}
+                ? "Nenhum modelo encontrado para esta busca."
+                : "A biblioteca ainda está vazia. Crie um modelo ou salve uma formulação existente como modelo."}
             </ListStatusRow>
           </tbody>
         </table>

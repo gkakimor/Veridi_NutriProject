@@ -4852,8 +4852,7 @@ Typecheck dos três pacotes. Sem migration; sem `pnpm test` global, E2E, stress,
 
 ## O Modelo guarda a premissa técnica (FORMULATION-TEMPLATE-WORKBENCH-01, Fatia 1, 2026-09-16)
 
-**`FATIA_1_READY = YES`. A capability NÃO está fechada** — faltam a fatia 2 (bancada visual compartilhada) e a
-fatia 3 (aplicar/salvar, pré-check, diff e acabamento).
+**`FATIA_1_READY = YES`.** A capability fechou com a fatia 3 ([abaixo](#as-bordas-do-modelo-e-a-capability-fechada-formulation-template-workbench-01-fatia-3-2026-09-16)).
 
 O Modelo de Formulação já copiava quantidade, pureza, reserva e intenção de ajuste, mas não a premissa que dá
 sentido a tudo isso. Aplicar o Modelo entregava a receita certa com a leitura em branco: "500 mg por dose" sem
@@ -4905,8 +4904,8 @@ autorizada — o Modelo guarda a premissa e nunca calcula com ela, e nenhum mód
 
 ## A bancada é a mesma nas duas telas (FORMULATION-TEMPLATE-WORKBENCH-01, Fatia 2, 2026-09-16)
 
-**`FATIA_2_READY = YES`. A capability NÃO está fechada** — falta a fatia 3 (aplicar/salvar, pré-check de itens
-problemáticos, diff das premissas, acabamento do `UseTemplateDialog` e Ficha Técnica do Modelo).
+**`FATIA_2_READY = YES`.** A capability fechou com a fatia 3, logo abaixo; a Ficha Técnica do Modelo ficou para
+FORMULATION-TEMPLATE-TECHNICAL-SHEET-PDF-01.
 
 A fatia 1 alinhou o DADO; esta alinhou a TELA. A receita — item, quantidade, unidade, base, fornecimento,
 pureza e reserva — passou a ser editada pelos MESMOS componentes na Formulação de produto e no Modelo de
@@ -4979,7 +4978,70 @@ arquivos, 383 testes, verdes; typecheck do web verde. Sem `pnpm test` global, E2
 migration). A conferência visual rodou contra a API local com a carga real, no Chromium, nas duas larguras.
 
 
+## As bordas do Modelo, e a capability fechada (FORMULATION-TEMPLATE-WORKBENCH-01, Fatia 3, 2026-09-16)
+
+**`FORMULATION_TEMPLATE_WORKBENCH_CLOSED = YES`.** Com as fatias 1 e 2, a capability está pronta para a homologação
+com a Veridi. **Regra durável: §97.** Sem migration.
+
+**O cadastro do Item muda, e o Modelo sabe.** Ativar uma versão do Modelo relê cada componente e recusa — 400
+`invalid_component`, cada item nomeado com o motivo — se ele ficou inativo, virou produto acabado, perdeu a unidade
+compatível ou tem quantidade inválida; antes só a unidade era relida. A versão do Modelo ganhou `componentIssues`, o
+MESMO contrato da Formulação e a MESMA regra, que saiu do serviço da Formulação para
+`apps/api/src/lib/formulation-component-issues.ts`: no rascunho é o que barra a ativação, na ativa é o aviso de quem
+vai aplicar, e a arquivada cala. A página do Modelo mostra o painel no topo, e relê o Modelo depois de uma ativação
+recusada.
+
+**Aplicar com pendência gera rascunho (D-6).** O diálogo "Usar modelo da biblioteca" mostra os itens problemáticos
+antes da composição e antes do botão, marca a linha e troca o botão por "Usar mesmo assim". A Formulação nasce em
+rascunho com a receita inteira, as pendências aparecem nela, e a ativação continua fechada até a correção. A revisão do
+diálogo passou a mostrar as premissas que viajam, a seção de cada linha, pureza e reserva. A única recusa estrutural
+na aplicação continua a da base em unidade que o Produto não alcança (TEMPLATE-APPLY-BASE-UOM-01).
+
+**Salvar como Modelo é uma escrita só.** O Modelo nascia vazio e a receita entrava numa segunda gravação: um item
+inativado depois da homologação derrubava a segunda e deixava na biblioteca um Modelo sem receita. Agora as premissas
+passam pela regra única da gravação do Modelo (`premissasDaGravacao`, também usada pela edição do rascunho) antes do
+código FT, a receita é copiada fiel num único `create`, e o item mudado atravessa como pendência. Provado em teste:
+Formulação homologada → Modelo → Formulação de outro Produto volta com premissas, base e cada linha na mesma ordem —
+pureza, reserva, fornecimento, base, modo e embalagem —, sem nada comercial, e a V2 do Modelo não move nenhuma das duas.
+
+**O diff explica a leitura.** Versão × versão e Formulação × Modelo (pelo mesmo leitor, `receitaComparavel`)
+comparam também forma, apresentação, cápsulas por dose, dose e conteúdo (quantidade e unidade juntas), doses por
+embalagem e perda prevista; a ordem conta entre os componentes comuns, na posição da tela. Rótulos da bancada ("Pureza
+(%)", "Reserva (%)", "Premissa alterada"); tipo desconhecido vira "Alteração", nunca o nome interno.
+
+**Seletor e item histórico.** As duas bancadas só oferecem, para linha nova, item ATIVO do tipo da seção
+(`itemElegivelParaSecao`) — produto acabado não aparece nem na composição. O item que a linha já referencia continua à
+vista, e a linha mostra a marca "Inativo".
+
+**Nomenclatura (absorve NAV-TEMPLATE-WORDING-01).** Nenhuma tela mostra "template": Modelos de Formulação e Modelos de
+Estrutura de Custo dizem "Novo modelo", "Usar modelo", "Nome do modelo", "Salvar como modelo", "Criar modelo", nas
+mensagens da API e na ajuda. Classes, tabelas, rotas (`/producao/templates-formulacao`) e os apelidos da busca de
+telas continuam `template`.
+
+**Rascunho × ativa e barra fixa.** Com rascunho aberto, a bancada é do rascunho; a seção da ativa diz onde está a
+receita dela (histórico e "Comparar versões") — nenhuma segunda tabela. A barra fixa da fatia 2 ficou como estava; só
+o rótulo "Salvar como modelo" mudou. O painel antigo "O que a quantidade informada significa" continua fora.
+
+**Achados da rodada, fechados nela.** Dois testes da `main` já falhavam antes desta fatia: o guarda de rotas não tinha
+a rota da ficha técnica (entrou em 7503626 sem passar pela lista) e o teste de hierarquia da barra do Modelo
+(`modelos-acoes-e-feedback.test.tsx`) ainda procurava a barra de antes da fatia 2. Os dois foram alinhados.
+
+**Validação.** API: faixas de Modelos, Formulações e Modelos de Custo — 18 arquivos, 275 testes (14 novos, com 7
+mutações pegas); web: Modelos, Formulações, Modelos de Custo, bancada, criação no contexto, ajuda, custos, rotas e
+listas — 53 arquivos, 849 testes (14 novos, com 7 mutações pegas); `shared` — 23 arquivos, 383 testes. Typecheck dos
+três pacotes. Conferência visual no Chromium contra a API do worktree sobre o `veridi_dev`, em 1440 × 900 e 390 × 844,
+com dados de pendência sintéticos e toda escrita bloqueada: painel, marca "Inativo", diff, diálogo e "Salvar como
+modelo" à vista, sem rolagem horizontal e console limpo. Sem `pnpm test` global, E2E, stress, security ou restore.
+
+**Próximo passo imediato: FORMULATION-TEMPLATE-TECHNICAL-SHEET-PDF-01** — a Ficha Técnica do Modelo, sobre o read
+model neutro da ficha do Produto. Continua aberto, fora desta capability: FORMULATION-PRESENTATION-BY-FORM-01
+(aguardando a Veridi).
+
 ## Próxima prioridade
+
+**FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a
+homologação com a Veridi; a atividade imediata seguinte é FORMULATION-TEMPLATE-TECHNICAL-SHEET-PDF-01, a Ficha Técnica
+do Modelo.
 
 **A ordem vive na fila viva do [`BACKLOG.md`](BACKLOG.md)**, reconciliada em 2026-09-15: WAVE 4; Inventário Físico em
 fatias (a próxima é a Fatia 2, telas); decisões de permissões da Produção; WAVE 5; estabilização final. Os parágrafos

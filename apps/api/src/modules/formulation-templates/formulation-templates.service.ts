@@ -8,6 +8,10 @@ import type {
   User,
 } from "@prisma/client";
 import type {
+  DosageForm,
+  FormulationCalculationMode,
+  FormulationComponentBasis,
+  FormulationComponentIssueDTO,
   FormulationTemplateComponentDTO,
   FormulationTemplateDTO,
   FormulationTemplateDiffDTO,
@@ -15,18 +19,37 @@ import type {
   FormulationTemplateListResponse,
   FormulationTemplateSummaryDTO,
   FormulationTemplateVersionDTO,
+  ItemType,
+  PresentationType,
 } from "@veridi/shared";
 import {
+  DOSAGE_FORM_LABELS,
   FORMULATION_TEMPLATE_CODE_PREFIX,
+  PRESENTATION_TYPE_LABELS,
+  SECAO_DA_FORMULA_LABELS,
   capsulasPorEmbalagem,
   formaDerivaDoses,
+  secaoDoItem,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+/*
+ * A MESMA regra da Formulacao para o que o cadastro do Item invalidou
+ * (FORMULATION-TEMPLATE-WORKBENCH-01, fatia 3).
+ */
+import {
+  MOTIVO_CURTO_DO_PROBLEMA,
+  problemasDosComponentes,
+} from "../../lib/formulation-component-issues.js";
 /*
  * A MESMA autoridade da Formulacao para as premissas tecnicas
  * (FORMULATION-TEMPLATE-WORKBENCH-01): o Modelo nao implementa conta propria.
  */
 import { resolverApresentacao, tocouNaApresentacao } from "../../lib/formulation-premises.js";
+import type {
+  PremissasAtuais,
+  PremissasGravadas,
+  PremissasInformadas,
+} from "../../lib/formulation-premises.js";
 import {
   basisRequiresDosesPerPackage,
   hasUsableDosesPerPackage,
@@ -49,6 +72,7 @@ import {
   FormulationTemplateNotFoundError,
   FormulationTemplateVersionNotFoundError,
   TemplateArchivedError,
+  TemplateComponentsNeedReviewError,
   TemplateDosesRequiredError,
   TemplateDraftAlreadyExistsError,
   TemplateVersionNotDraftError,
@@ -138,8 +162,26 @@ function toComponentDTO(component: ComponentWithItem): FormulationTemplateCompon
   };
 }
 
+/**
+ * O que o cadastro do Item invalidou nos componentes desta versão.
+ *
+ * RASCUNHO: é o que barra a ativação do Modelo — dito antes do clique.
+ * ATIVA: é o aviso de quem vai aplicá-la; a Formulação nasce em rascunho com a
+ * receita como está e só ativa depois da correção (decisão D-6).
+ * ARQUIVADA: não se aplica nem se edita, e apontar problema nela sugeriria um
+ * gesto que não existe.
+ */
+function problemasDaVersao(
+  version: VersionWithRelations,
+  units: readonly UnitOfMeasure[],
+): FormulationComponentIssueDTO[] {
+  if (version.status === "ARCHIVED") return [];
+  return problemasDosComponentes(version.components, units);
+}
+
 export function toTemplateVersionDTO(
   version: VersionWithRelations,
+  units: readonly UnitOfMeasure[],
 ): FormulationTemplateVersionDTO {
   return {
     id: version.id,
@@ -181,11 +223,15 @@ export function toTemplateVersionDTO(
     sourceVersionId: version.sourceVersionId,
     sourceVersionNumber: version.sourceVersionNumber,
     usageCount: version._count?.derivedFormulationVersions ?? 0,
+    componentIssues: problemasDaVersao(version, units),
   };
 }
 
-function toTemplateDTO(template: TemplateWithVersions): FormulationTemplateDTO {
-  const versions = template.versions.map(toTemplateVersionDTO);
+function toTemplateDTO(
+  template: TemplateWithVersions,
+  units: readonly UnitOfMeasure[],
+): FormulationTemplateDTO {
+  const versions = template.versions.map((version) => toTemplateVersionDTO(version, units));
   return {
     id: template.id,
     code: template.code,
@@ -240,14 +286,21 @@ export async function requireTemplateVersion(id: string): Promise<VersionWithRel
   return version;
 }
 
+/** O catálogo de unidades — a compatibilidade da linha depende dele. */
+function lerUnidades(): Promise<UnitOfMeasure[]> {
+  return getPrisma().unitOfMeasure.findMany();
+}
+
 export async function getFormulationTemplate(id: string): Promise<FormulationTemplateDTO> {
-  return toTemplateDTO(await requireTemplate(id));
+  const [template, units] = await Promise.all([requireTemplate(id), lerUnidades()]);
+  return toTemplateDTO(template, units);
 }
 
 export async function getFormulationTemplateVersion(
   id: string,
 ): Promise<FormulationTemplateVersionDTO> {
-  return toTemplateVersionDTO(await requireTemplateVersion(id));
+  const [version, units] = await Promise.all([requireTemplateVersion(id), lerUnidades()]);
+  return toTemplateVersionDTO(version, units);
 }
 
 /**
@@ -360,6 +413,14 @@ async function exigirUnidadeDoCatalogo(code: string): Promise<void> {
   if (!unidade) throw new UomNotFoundError(code);
 }
 
+/**
+ * O próximo código FT. `nextval` não volta atrás com a transação: quem chama
+ * faz toda recusa possível ANTES, para que Modelo recusado não gaste número.
+ */
+export function proximoCodigoDeModelo(): Promise<string> {
+  return nextSequenceCode(getPrisma(), CODE_SEQUENCE, FORMULATION_TEMPLATE_CODE_PREFIX);
+}
+
 export async function createFormulationTemplate(
   input: CreateFormulationTemplateInput,
   actor: User,
@@ -367,7 +428,7 @@ export async function createFormulationTemplate(
   const prisma = getPrisma();
   // Antes do código: recusa não consome número da sequência.
   await exigirUnidadeDoCatalogo(input.outputUnitCode ?? "un");
-  const code = await nextSequenceCode(prisma, CODE_SEQUENCE, FORMULATION_TEMPLATE_CODE_PREFIX);
+  const code = await proximoCodigoDeModelo();
   const modo = input.calculationMode ?? "FIXED_BASIS";
   if (modo === "PER_DOSE" && !input.dosesPerPackage) throw new TemplateDosesRequiredError();
 
@@ -432,31 +493,30 @@ export async function setFormulationTemplateArchived(
   return getFormulationTemplate(id);
 }
 
-export async function updateFormulationTemplateVersion(
-  id: string,
-  input: UpdateFormulationTemplateVersionInput,
-): Promise<FormulationTemplateVersionDTO> {
-  const current = await requireTemplateVersion(id);
-  // Versão ativa é histórica: para mudar, cria-se uma nova.
-  if (current.status !== "DRAFT") throw new TemplateVersionNotDraftError(current.status);
-  if (input.outputUnitCode !== undefined) await exigirUnidadeDoCatalogo(input.outputUnitCode);
-
+/**
+ * O que uma gravação deixa nas premissas técnicas do Modelo — a regra ÚNICA,
+ * usada pela edição do rascunho e pela cópia de uma Formulação ("Salvar como
+ * modelo"). Duas versões dela divergiriam no primeiro caso de borda corrigido
+ * de um lado só.
+ *
+ * Recusa ANTES de qualquer escrita: divisão que não fecha e dose que falta não
+ * gravam metade da apresentação — nem consomem código de Modelo novo.
+ */
+export function premissasDaGravacao(
+  current: PremissasAtuais & { calculationMode: FormulationCalculationMode },
+  input: PremissasInformadas & { calculationMode?: FormulationCalculationMode | undefined },
+  componentesFinais: readonly { basis?: FormulationComponentBasis | undefined }[],
+  units: readonly UnitOfMeasure[],
+): Partial<PremissasGravadas> {
   const modo = input.calculationMode ?? current.calculationMode;
 
   /*
    * PREMISSAS TECNICAS — resolvidas pela MESMA funcao da Formulacao.
    *
-   * Recusa ANTES da transacao: divisao que nao fecha nao grava metade da
-   * apresentacao. Nas formas capsula e po as doses por embalagem sao RESULTADO
-   * das premissas, e o numero que o cliente mandar nao substitui a divisao.
+   * Nas formas capsula e po as doses por embalagem sao RESULTADO das
+   * premissas, e o numero que o cliente mandar nao substitui a divisao.
    */
-  const mexeuNaApresentacao = tocouNaApresentacao(input);
-  // Uma leitura do catalogo serve as duas conferencias desta gravacao.
-  const units =
-    mexeuNaApresentacao || input.components
-      ? await getPrisma().unitOfMeasure.findMany()
-      : ([] as UnitOfMeasure[]);
-  const apresentacao = mexeuNaApresentacao
+  const apresentacao = tocouNaApresentacao(input)
     ? resolverApresentacao(current, input, units)
     : null;
   const forma = apresentacao ? apresentacao.dosageForm : current.dosageForm;
@@ -474,11 +534,51 @@ export async function updateFormulationTemplateVersion(
    * arranjo que zerou o material da auditoria VAL-LEG-01. Enquanto houver
    * um componente por dose, as doses ficam — e continuam obrigatórias.
    */
-  const componentesFinais = input.components ?? current.components;
   const dependeDeDoses = componentesFinais.some(
     (component) => component.basis !== undefined && basisRequiresDosesPerPackage(component.basis),
   );
   if (dependeDeDoses && !hasUsableDosesPerPackage(doses)) throw new TemplateDosesRequiredError();
+
+  return {
+    // Mexeu na apresentacao? As doses saem dela. Senao, o campo antigo
+    // continua valendo exatamente como valia.
+    ...(apresentacao
+      ? apresentacao
+      : input.dosesPerPackage !== undefined
+        ? { dosesPerPackage: input.dosesPerPackage }
+        : {}),
+    // Modo FIXED_BASIS não carrega doses POR SI — mas um componente por
+    // dose carrega. Limpar aqui apagaria a premissa que a fórmula usa.
+    //
+    // A forma que DERIVA doses tambem carrega: na capsula e no po as doses
+    // sao resultado das premissas, e apaga-las aqui desfaria, no mesmo
+    // update, a divisao que acabou de ser aceita.
+    ...(modo === "FIXED_BASIS" && !dependeDeDoses && !formaDerivaDoses(forma)
+      ? { dosesPerPackage: null }
+      : {}),
+  };
+}
+
+export async function updateFormulationTemplateVersion(
+  id: string,
+  input: UpdateFormulationTemplateVersionInput,
+): Promise<FormulationTemplateVersionDTO> {
+  const current = await requireTemplateVersion(id);
+  // Versão ativa é histórica: para mudar, cria-se uma nova.
+  if (current.status !== "DRAFT") throw new TemplateVersionNotDraftError(current.status);
+  if (input.outputUnitCode !== undefined) await exigirUnidadeDoCatalogo(input.outputUnitCode);
+
+  // Uma leitura do catalogo serve as duas conferencias desta gravacao.
+  const units =
+    tocouNaApresentacao(input) || input.components
+      ? await getPrisma().unitOfMeasure.findMany()
+      : ([] as UnitOfMeasure[]);
+  const premissas = premissasDaGravacao(
+    current,
+    input,
+    input.components ?? current.components,
+    units,
+  );
 
   if (input.components) {
     const anteriores = new Set(current.components.map((component) => component.itemId));
@@ -494,26 +594,11 @@ export async function updateFormulationTemplateVersion(
           : {}),
         ...(input.outputUnitCode !== undefined ? { outputUnitCode: input.outputUnitCode } : {}),
         ...(input.calculationMode !== undefined ? { calculationMode: input.calculationMode } : {}),
-        // Mexeu na apresentacao? As doses saem dela. Senao, o campo antigo
-        // continua valendo exatamente como valia.
-        ...(apresentacao
-          ? apresentacao
-          : input.dosesPerPackage !== undefined
-            ? { dosesPerPackage: input.dosesPerPackage }
-            : {}),
+        ...premissas,
         ...(input.expectedLossPercent !== undefined
           ? { expectedLossPercent: input.expectedLossPercent }
           : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
-        // Modo FIXED_BASIS não carrega doses POR SI — mas um componente por
-        // dose carrega. Limpar aqui apagaria a premissa que a fórmula usa.
-        //
-        // A forma que DERIVA doses tambem carrega: na capsula e no po as doses
-        // sao resultado das premissas, e apaga-las aqui desfaria, no mesmo
-        // update, a divisao que acabou de ser aceita.
-        ...(modo === "FIXED_BASIS" && !dependeDeDoses && !formaDerivaDoses(forma)
-          ? { dosesPerPackage: null }
-          : {}),
       },
     });
 
@@ -575,15 +660,24 @@ export async function activateFormulationTemplateVersion(
     throw new TemplateDosesRequiredError();
   }
   /*
-   * A mesma porta da Formulação real (FORM-UOM-01): componente com unidade fora
-   * do catálogo, ou de outra dimensão que a do Item — dado legado, gravado por
-   * fora da API —, não entra na biblioteca como versão pronta para uso.
+   * A mesma porta da Formulação real (FORM-UOM-01 e FORMULATION-TEMPLATE-
+   * WORKBENCH-01, fatia 3): o cadastro do Item é RELIDO agora, e não na hora em
+   * que a linha foi gravada. Item que ficou inativo, que virou produto acabado,
+   * que perdeu a unidade compatível — dado legado, gravado por fora da API — ou
+   * com quantidade inválida não entra na biblioteca como versão pronta para uso:
+   * seria copiado para toda formulação nova, e a recusa só apareceria lá.
+   *
+   * A recusa nomeia CADA item e o motivo. Nada é reescrito: a versão continua
+   * rascunho, e as versões ativa e arquivadas continuam como estavam.
    */
   const units = await getPrisma().unitOfMeasure.findMany();
-  const semUnidadeValida = current.components.find(
-    (component) => !isUomCompatible(component.unitCode, component.item.unitCode, units),
-  );
-  if (semUnidadeValida) throw new IncompatibleComponentUnitError(semUnidadeValida.item.code);
+  const problemas = problemasDosComponentes(current.components, units);
+  if (problemas.length > 0) {
+    const motivos = problemas
+      .map((problema) => `${problema.itemCode} (${MOTIVO_CURTO_DO_PROBLEMA[problema.code]})`)
+      .join(", ");
+    throw new TemplateComponentsNeedReviewError(problemas, motivos);
+  }
 
   await getPrisma().$transaction(async (tx) => {
     // Uma ativa por template — o índice único parcial no banco garante o
@@ -720,9 +814,14 @@ const INTERPRETACAO_LABEL: Record<string, string> = {
 
 const simOuNao = (valor: boolean) => (valor ? "Sim" : "Não");
 
+/** Premissa ausente é NÃO INFORMADA — nunca zero, nunca uma forma presumida. */
+const NAO_INFORMADA = "Não informada";
+
 interface ComparavelComponente {
   itemCode: string;
   itemName: string;
+  /** Decide a seção — composição ou embalagem — em que a posição é contada. */
+  itemType: ItemType;
   quantity: string;
   unitCode: string;
   basis: string;
@@ -732,6 +831,7 @@ interface ComparavelComponente {
   quantityMode: string;
   applyPurityAdjustment: boolean;
   applyOverageAdjustment: boolean;
+  position: number;
 }
 
 export interface ComparavelVersao {
@@ -740,7 +840,52 @@ export interface ComparavelVersao {
   calculationMode: string;
   dosesPerPackage: number | null;
   outputUnitCode: string;
+  /** Premissas técnicas — as mesmas colunas na Formulação e no Modelo. */
+  dosageForm: DosageForm | null;
+  presentationType: PresentationType | null;
+  capsulesPerDose: number | null;
+  doseAmount: string | null;
+  doseUomCode: string | null;
+  packageContentAmount: string | null;
+  packageContentUomCode: string | null;
+  expectedLossPercent: string | null;
   components: ComparavelComponente[];
+}
+
+/** Quantidade e unidade juntas: "5 g". O número sem a unidade não diz nada. */
+function grandeza(quantidade: string | null, unidade: string | null): string {
+  if (quantidade === null) return NAO_INFORMADA;
+  return unidade ? `${quantidade} ${unidade}` : quantidade;
+}
+
+/**
+ * A POSIÇÃO de cada componente dentro da própria seção, e o lugar dele entre
+ * os componentes que as DUAS versões têm.
+ *
+ * Composição e embalagem dividem uma lista só (`position` é o índice nela), mas
+ * a tela ordena dentro de cada seção. Uma linha acrescentada no topo empurra
+ * todas as outras uma casa para baixo sem que nenhuma tenha sido movida: a
+ * mudança de lugar se mede entre os componentes COMUNS, e a entrada mostra a
+ * posição que a pessoa vê na tela.
+ */
+function posicoesNaSecao(
+  components: readonly ComparavelComponente[],
+  comuns: ReadonlySet<string>,
+): Map<string, { naTela: number; entreComuns: number }> {
+  const porSecao = new Map<string, ComparavelComponente[]>();
+  for (const componente of [...components].sort((a, b) => a.position - b.position)) {
+    const secao = secaoDoItem(componente.itemType);
+    porSecao.set(secao, [...(porSecao.get(secao) ?? []), componente]);
+  }
+  const posicoes = new Map<string, { naTela: number; entreComuns: number }>();
+  for (const linhas of porSecao.values()) {
+    let entreComuns = 0;
+    linhas.forEach((componente, indice) => {
+      if (comuns.has(componente.itemCode)) entreComuns += 1;
+      posicoes.set(componente.itemCode, { naTela: indice + 1, entreComuns });
+    });
+  }
+  return posicoes;
 }
 
 /**
@@ -749,6 +894,11 @@ export interface ComparavelVersao {
  * Específico e pequeno de propósito: as coisas que mudam numa fórmula são
  * conhecidas e contáveis. Um framework genérico de comparação custaria mais
  * do que resolver o problema, e produziria diferenças que ninguém precisa ler.
+ *
+ * É o ÚNICO algoritmo: versão × versão do Modelo e Formulação × Modelo passam
+ * por aqui, com as premissas técnicas junto (FORMULATION-TEMPLATE-WORKBENCH-01,
+ * fatia 3). Os rótulos são os da bancada — nenhum nome de campo ou de enum
+ * chega à tela.
  */
 export function compararComposicoes(
   de: ComparavelVersao,
@@ -774,11 +924,55 @@ export function compararComposicoes(
     MODO_LABEL[para.calculationMode] ?? para.calculationMode,
   );
   anotar(
+    "DOSAGE_FORM",
+    "Forma do produto",
+    null,
+    de.dosageForm ? DOSAGE_FORM_LABELS[de.dosageForm] : NAO_INFORMADA,
+    para.dosageForm ? DOSAGE_FORM_LABELS[para.dosageForm] : NAO_INFORMADA,
+  );
+  anotar(
+    "PRESENTATION",
+    "Apresentação comercial",
+    null,
+    de.presentationType ? PRESENTATION_TYPE_LABELS[de.presentationType] : NAO_INFORMADA,
+    para.presentationType ? PRESENTATION_TYPE_LABELS[para.presentationType] : NAO_INFORMADA,
+  );
+  anotar(
+    "CAPSULES_PER_DOSE",
+    "Cápsulas por dose",
+    null,
+    de.capsulesPerDose === null ? NAO_INFORMADA : String(de.capsulesPerDose),
+    para.capsulesPerDose === null ? NAO_INFORMADA : String(para.capsulesPerDose),
+  );
+  anotar(
+    "DOSE",
+    "Dose",
+    null,
+    grandeza(de.doseAmount, de.doseUomCode),
+    grandeza(para.doseAmount, para.doseUomCode),
+  );
+  anotar(
+    "PACKAGE_CONTENT",
+    "Conteúdo da embalagem",
+    null,
+    grandeza(de.packageContentAmount, de.packageContentUomCode),
+    grandeza(para.packageContentAmount, para.packageContentUomCode),
+  );
+  // Nas formas cápsula e pó as doses são RESULTADO das premissas acima: a
+  // entrada aparece junto de quem a mudou.
+  anotar(
     "DOSES",
     "Doses por embalagem",
     null,
     de.dosesPerPackage === null ? "—" : String(de.dosesPerPackage),
     para.dosesPerPackage === null ? "—" : String(para.dosesPerPackage),
+  );
+  anotar(
+    "EXPECTED_LOSS",
+    "Perda prevista de produção (%)",
+    null,
+    de.expectedLossPercent ?? NAO_INFORMADA,
+    para.expectedLossPercent ?? NAO_INFORMADA,
   );
   anotar("OUTPUT_UOM", "Unidade da base", null, de.outputUnitCode, para.outputUnitCode);
 
@@ -808,6 +1002,13 @@ export function compararComposicoes(
       });
     }
   }
+
+  const comuns = new Set(
+    para.components.filter((c) => porItemDe.has(c.itemCode)).map((c) => c.itemCode),
+  );
+  const posicoesDe = posicoesNaSecao(de.components, comuns);
+  const posicoesPara = posicoesNaSecao(para.components, comuns);
+
   for (const componente of para.components) {
     const anterior = porItemDe.get(componente.itemCode);
     if (!anterior) continue;
@@ -830,19 +1031,40 @@ export function compararComposicoes(
         INTERPRETACAO_LABEL[anterior.quantityMode] ?? anterior.quantityMode,
         INTERPRETACAO_LABEL[componente.quantityMode] ?? componente.quantityMode,
       ],
-      ["Pureza", anterior.purityPercentApplied, componente.purityPercentApplied],
+      ["Pureza (%)", anterior.purityPercentApplied, componente.purityPercentApplied],
       [
         "Aplicar pureza",
         simOuNao(anterior.applyPurityAdjustment),
         simOuNao(componente.applyPurityAdjustment),
       ],
-      ["Overage", anterior.overagePercent, componente.overagePercent],
+      // `overagePercent` é interno: na bancada a coluna se chama Reserva.
+      ["Reserva (%)", anterior.overagePercent, componente.overagePercent],
       [
-        "Aplicar overage",
+        "Aplicar reserva na conta",
         simOuNao(anterior.applyOverageAdjustment),
         simOuNao(componente.applyOverageAdjustment),
       ],
     ];
+    /*
+     * Mudou de LUGAR só quem mudou de ordem entre os componentes comuns; a
+     * entrada mostra a posição na tela. Linha acrescentada ou removida já tem
+     * a própria entrada, e não faz as vizinhas parecerem movidas.
+     */
+    const lugarDe = posicoesDe.get(componente.itemCode);
+    const lugarPara = posicoesPara.get(componente.itemCode);
+    if (
+      lugarDe &&
+      lugarPara &&
+      lugarDe.entreComuns !== lugarPara.entreComuns &&
+      lugarDe.naTela !== lugarPara.naTela
+    ) {
+      const secao = SECAO_DA_FORMULA_LABELS[secaoDoItem(componente.itemType)].toLowerCase();
+      campos.push([
+        `Posição na ${secao}`,
+        `${lugarDe.naTela}ª linha`,
+        `${lugarPara.naTela}ª linha`,
+      ]);
+    }
     for (const [campo, antes, depois] of campos) {
       if (antes !== depois) {
         entries.push({
@@ -859,30 +1081,80 @@ export function compararComposicoes(
   return { fromLabel: de.label, toLabel: para.label, entries };
 }
 
-/** Uma versão de template no formato comparável. */
-export function versaoComparavel(version: VersionWithRelations): ComparavelVersao {
+/**
+ * O que a Formulação e o Modelo gravam — as MESMAS colunas, lidas de um jeito
+ * só. É por aqui que as duas comparações montam o lado de cada uma: um segundo
+ * leitor esqueceria a próxima premissa que entrar.
+ */
+type ReceitaGravada = {
+  basisQuantity: Prisma.Decimal;
+  calculationMode: string;
+  dosesPerPackage: number | null;
+  outputUnitCode: string;
+  dosageForm: DosageForm | null;
+  presentationType: PresentationType | null;
+  capsulesPerDose: number | null;
+  doseAmount: Prisma.Decimal | null;
+  doseUomCode: string | null;
+  packageContentAmount: Prisma.Decimal | null;
+  packageContentUomCode: string | null;
+  expectedLossPercent: Prisma.Decimal | null;
+  components: readonly {
+    item: Pick<Item, "code" | "name" | "type">;
+    quantity: Prisma.Decimal;
+    unitCode: string;
+    basis: string;
+    supplyResponsibility: string;
+    purityPercentApplied: Prisma.Decimal | null;
+    overagePercent: Prisma.Decimal | null;
+    quantityMode: string;
+    applyPurityAdjustment: boolean;
+    applyOverageAdjustment: boolean;
+    position: number;
+  }[];
+};
+
+const textoOuNulo = (valor: Prisma.Decimal | null) => (valor ? valor.toString() : null);
+
+export function receitaComparavel(label: string, receita: ReceitaGravada): ComparavelVersao {
   return {
-    label: `${version.formulationTemplate.code} · V${version.versionNumber}`,
-    basisQuantity: version.basisQuantity.toString(),
-    calculationMode: version.calculationMode,
-    dosesPerPackage: version.dosesPerPackage,
-    outputUnitCode: version.outputUnitCode,
-    components: version.components.map((component) => ({
+    label,
+    basisQuantity: receita.basisQuantity.toString(),
+    calculationMode: receita.calculationMode,
+    dosesPerPackage: receita.dosesPerPackage,
+    outputUnitCode: receita.outputUnitCode,
+    dosageForm: receita.dosageForm,
+    presentationType: receita.presentationType,
+    capsulesPerDose: receita.capsulesPerDose,
+    doseAmount: textoOuNulo(receita.doseAmount),
+    doseUomCode: receita.doseUomCode,
+    packageContentAmount: textoOuNulo(receita.packageContentAmount),
+    packageContentUomCode: receita.packageContentUomCode,
+    expectedLossPercent: textoOuNulo(receita.expectedLossPercent),
+    components: receita.components.map((component) => ({
       itemCode: component.item.code,
       itemName: component.item.name,
+      itemType: component.item.type,
       quantity: component.quantity.toString(),
       unitCode: component.unitCode,
       basis: component.basis,
       supplyResponsibility: component.supplyResponsibility,
-      purityPercentApplied: component.purityPercentApplied
-        ? component.purityPercentApplied.toString()
-        : null,
-      overagePercent: component.overagePercent ? component.overagePercent.toString() : null,
+      purityPercentApplied: textoOuNulo(component.purityPercentApplied),
+      overagePercent: textoOuNulo(component.overagePercent),
       quantityMode: component.quantityMode,
       applyPurityAdjustment: component.applyPurityAdjustment,
       applyOverageAdjustment: component.applyOverageAdjustment,
+      position: component.position,
     })),
   };
+}
+
+/** Uma versão do Modelo no formato comparável. */
+export function versaoComparavel(version: VersionWithRelations): ComparavelVersao {
+  return receitaComparavel(
+    `${version.formulationTemplate.code} · V${version.versionNumber}`,
+    version,
+  );
 }
 
 export async function compareTemplateVersions(

@@ -1,13 +1,21 @@
+import type { FormulationComponentIssueDTO } from "@veridi/shared";
+
+/*
+ * As frases daqui chegam à tela: dizem MODELO, que é o nome da capacidade em
+ * português. As classes continuam `Template*` — nome interno, não texto
+ * (FORMULATION-TEMPLATE-WORKBENCH-01, fatia 3).
+ */
+
 export class FormulationTemplateNotFoundError extends Error {
   constructor(id: string) {
-    super(`Template de formulação não encontrado: ${id}`);
+    super(`Modelo de formulação não encontrado: ${id}`);
     this.name = "FormulationTemplateNotFoundError";
   }
 }
 
 export class FormulationTemplateVersionNotFoundError extends Error {
   constructor(id: string) {
-    super(`Versão de template não encontrada: ${id}`);
+    super(`Versão do modelo não encontrada: ${id}`);
     this.name = "FormulationTemplateVersionNotFoundError";
   }
 }
@@ -16,7 +24,7 @@ export class FormulationTemplateVersionNotFoundError extends Error {
 export class TemplateVersionNotDraftError extends Error {
   constructor(status: string) {
     super(
-      `Só um rascunho pode ser editado — esta versão está em "${status}". Crie uma nova versão para alterar o template.`,
+      `Só um rascunho pode ser editado — esta versão está em "${status}". Crie uma nova versão para alterar o modelo.`,
     );
     this.name = "TemplateVersionNotDraftError";
   }
@@ -31,7 +39,7 @@ export class TemplateVersionNotDraftError extends Error {
 export class TemplateDraftAlreadyExistsError extends Error {
   constructor(versionNumber: number) {
     super(
-      `Este template já tem a versão V${versionNumber} em rascunho. Termine ou descarte essa versão antes de criar outra.`,
+      `Este modelo já tem a versão V${versionNumber} em rascunho. Termine ou descarte essa versão antes de criar outra.`,
     );
     this.name = "TemplateDraftAlreadyExistsError";
   }
@@ -40,8 +48,28 @@ export class TemplateDraftAlreadyExistsError extends Error {
 /** Template sem componentes não descreve fórmula nenhuma. */
 export class TemplateVersionWithoutComponentsError extends Error {
   constructor() {
-    super("Adicione ao menos um componente antes de ativar esta versão do template.");
+    super("Adicione ao menos um componente antes de ativar esta versão do modelo.");
     this.name = "TemplateVersionWithoutComponentsError";
+  }
+}
+
+/**
+ * A versão do Modelo não ativa com componente que o cadastro invalidou —
+ * FORMULATION-TEMPLATE-WORKBENCH-01, fatia 3.
+ *
+ * Ativar é o que libera a matriz para ser aplicada em produto. Um item
+ * inativado, que virou produto acabado ou que perdeu a unidade compatível
+ * passaria a ser copiado para toda formulação nova — e a recusa só apareceria
+ * lá, na ativação de cada uma. A frase nomeia CADA item e o motivo; a lista
+ * estruturada vai junto para a tela.
+ */
+export class TemplateComponentsNeedReviewError extends Error {
+  constructor(
+    readonly issues: FormulationComponentIssueDTO[],
+    motivos: string,
+  ) {
+    super(`Não é possível ativar esta versão do modelo: componentes precisam de revisão — ${motivos}.`);
+    this.name = "TemplateComponentsNeedReviewError";
   }
 }
 
@@ -54,7 +82,7 @@ export class TemplateVersionWithoutComponentsError extends Error {
 export class TemplateVersionNotActiveError extends Error {
   constructor(status: string) {
     super(
-      `Só uma versão ativa do template pode ser usada — esta está em "${status}".`,
+      `Só uma versão ativa do modelo pode ser usada — esta está em "${status}".`,
     );
     this.name = "TemplateVersionNotActiveError";
   }
@@ -63,7 +91,7 @@ export class TemplateVersionNotActiveError extends Error {
 /** Template arquivado sai da biblioteca de escolha. */
 export class TemplateArchivedError extends Error {
   constructor(code: string) {
-    super(`O template ${code} está arquivado e não pode ser usado em novas formulações.`);
+    super(`O modelo ${code} está arquivado e não pode ser usado em novas formulações.`);
     this.name = "TemplateArchivedError";
   }
 }
@@ -77,7 +105,7 @@ export class TemplateArchivedError extends Error {
 export class FormulationNotEmptyForTemplateError extends Error {
   constructor(versionNumber: number) {
     super(
-      `A versão V${versionNumber} já tem componentes. Crie uma nova versão para aplicar o template sem apagar o que existe.`,
+      `A versão V${versionNumber} já tem componentes. Crie uma nova versão para aplicar o modelo sem apagar o que existe.`,
     );
     this.name = "FormulationNotEmptyForTemplateError";
   }

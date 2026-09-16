@@ -1,7 +1,7 @@
 import type { FormulationTemplateDiffDTO, TemplateDiffDTO } from "@veridi/shared";
 
 /**
- * O que muda entre duas versões de uma matriz.
+ * O que muda entre duas versões de um modelo.
  *
  * Serve às três bibliotecas — formulação, estrutura de custos e política —
  * porque a pergunta é a mesma em todas: o que essa versão nova faz diferente?
@@ -18,6 +18,13 @@ const ROTULO: Record<string, string> = {
   MODE: "Modo",
   DOSES: "Doses",
   OUTPUT_UOM: "Unidade",
+  // premissas técnicas da receita — a coluna "Onde" diz qual
+  DOSAGE_FORM: "Premissa alterada",
+  PRESENTATION: "Premissa alterada",
+  CAPSULES_PER_DOSE: "Premissa alterada",
+  DOSE: "Premissa alterada",
+  PACKAGE_CONTENT: "Premissa alterada",
+  EXPECTED_LOSS: "Premissa alterada",
   COMPONENT_ADDED: "Componente adicionado",
   COMPONENT_REMOVED: "Componente removido",
   COMPONENT_CHANGED: "Componente alterado",
@@ -70,7 +77,8 @@ export function TemplateDiffTable({
         <tbody>
           {diff.entries.map((entry, index) => (
             <tr key={`${entry.kind}-${entry.label}-${entry.field ?? ""}-${index}`}>
-              <td>{ROTULO[entry.kind] ?? entry.kind}</td>
+              {/* Tipo desconhecido não vira nome interno na tela. */}
+              <td>{ROTULO[entry.kind] ?? "Alteração"}</td>
               <td>
                 {entry.label}
                 {entry.field && <span className="field__hint">{entry.field}</span>}

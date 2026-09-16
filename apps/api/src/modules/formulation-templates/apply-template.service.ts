@@ -13,6 +13,7 @@ import { convertUomDecimal, isUomCompatible } from "../items/uom.js";
 import {
   getFormulationVersionById,
   listFormulationVersionsByProduct,
+  modoEFlags,
 } from "../formulations/formulations.service.js";
 import {
   FormulationVersionNotFoundError,
@@ -26,10 +27,11 @@ import {
 } from "./formulation-templates.errors.js";
 import {
   compararComposicoes,
-  createFormulationTemplate,
   getFormulationTemplate,
+  premissasDaGravacao,
+  proximoCodigoDeModelo,
+  receitaComparavel,
   requireTemplateVersion,
-  updateFormulationTemplateVersion,
   versaoComparavel,
 } from "./formulation-templates.service.js";
 import type { CreateTemplateFromFormulationInput } from "./formulation-templates.schemas.js";
@@ -322,36 +324,17 @@ export async function compareFormulationWithTemplate(
   /*
    * Compara a FORMULAÇÃO ATUAL contra a versão nova do template — e não a
    * versão antiga do template contra a nova. Quem lê quer saber o que muda no
-   * produto dela, incluindo os ajustes que ela mesma fez depois da cópia.
+   * produto dela, incluindo os ajustes que ela mesma fez depois da cópia. O
+   * lado da Formulação é lido pelo MESMO leitor do Modelo, premissas incluídas.
    */
-  const formulacaoComparavel = {
-    label: `Formulação V${version.versionNumber}`,
-    basisQuantity: version.basisQuantity.toString(),
-    calculationMode: version.calculationMode,
-    dosesPerPackage: version.dosesPerPackage,
-    outputUnitCode: version.outputUnitCode,
-    components: version.components.map((component) => ({
-      itemCode: component.item.code,
-      itemName: component.item.name,
-      quantity: component.quantity.toString(),
-      unitCode: component.unitCode,
-      basis: component.basis,
-      supplyResponsibility: component.supplyResponsibility,
-      purityPercentApplied: component.purityPercentApplied
-        ? component.purityPercentApplied.toString()
-        : null,
-      overagePercent: component.overagePercent ? component.overagePercent.toString() : null,
-      quantityMode: component.quantityMode,
-      applyPurityAdjustment: component.applyPurityAdjustment,
-      applyOverageAdjustment: component.applyOverageAdjustment,
-    })),
-  };
-
-  return compararComposicoes(formulacaoComparavel, versaoComparavel(alvo));
+  return compararComposicoes(
+    receitaComparavel(`Formulação V${version.versionNumber}`, version),
+    versaoComparavel(alvo),
+  );
 }
 
 /**
- * Salvar uma formulação de produto como template da biblioteca.
+ * Salvar uma formulação de produto como Modelo da biblioteca.
  *
  * É CÓPIA: a formulação original não se move, não se converte e não muda de
  * dono. Nada comercial vem junto — cliente, projeto, orçamento, custo, preço
@@ -360,6 +343,18 @@ export async function compareFormulationWithTemplate(
  *
  * Nasce em RASCUNHO de propósito: quem vai reutilizar precisa revisar antes,
  * e ativar sozinho transformaria uma decisão em efeito colateral.
+ *
+ * NUMA ESCRITA SÓ (FORMULATION-TEMPLATE-WORKBENCH-01, fatia 3). Antes, o Modelo
+ * nascia vazio e a receita entrava numa segunda gravação: se ela recusasse —
+ * um item que o cadastro inativou depois da homologação bastava —, ficava na
+ * biblioteca um Modelo sem receita que ninguém pediu. Agora toda recusa
+ * possível acontece ANTES do código FT, e o Modelo nasce inteiro ou não nasce.
+ *
+ * A receita é copiada FIEL, como na cópia de versão da Formulação e como na
+ * aplicação do Modelo (decisão D-6): item inativado, que virou produto acabado
+ * ou com unidade que deixou de ser compatível atravessa, e aparece em
+ * `componentIssues` do rascunho do Modelo — que é onde se corrige. A ativação
+ * do Modelo continua fechada para eles.
  */
 export async function createTemplateFromFormulation(
   formulationVersionId: string,
@@ -373,36 +368,35 @@ export async function createTemplateFromFormulation(
   });
   if (!version) throw new FormulationVersionNotFoundError(formulationVersionId);
 
-  const template = await createFormulationTemplate(
+  /*
+   * PREMISSAS TECNICAS — vao junto (FORMULATION-TEMPLATE-WORKBENCH-01).
+   *
+   * A matriz que nascesse sem forma perdia a leitura da receita: "500 mg por
+   * dose" sem saber se a dose sao duas capsulas ou cinco gramas nao se
+   * reproduz em produto nenhum. Passam pela MESMA regra da gravacao do Modelo,
+   * que deriva as doses por embalagem das premissas — e recusa divisao que nao
+   * fecha, em vez de gravar a matriz pela metade.
+   *
+   * `capsulesPerPackage` e ENTRADA: sai do produto de capsulas por dose e
+   * doses por embalagem da Formulacao, os mesmos numeros que a originaram. O
+   * ponto de partida e o Modelo novo, sem premissa nenhuma, com as doses da
+   * Formulacao quando ela as tinha.
+   */
+  const units = await prisma.unitOfMeasure.findMany();
+  const dosesDaFormulacao = version.dosesPerPackage ? version.dosesPerPackage : null;
+  const premissas = premissasDaGravacao(
     {
-      name: input.name,
-      ...(input.description !== undefined ? { description: input.description } : {}),
-      basisQuantity: version.basisQuantity.toString(),
-      outputUnitCode: version.outputUnitCode,
       calculationMode: version.calculationMode,
-      ...(version.dosesPerPackage ? { dosesPerPackage: version.dosesPerPackage } : {}),
+      dosageForm: null,
+      presentationType: null,
+      capsulesPerDose: null,
+      doseAmount: null,
+      doseUomCode: null,
+      packageContentAmount: null,
+      packageContentUomCode: null,
+      dosesPerPackage: dosesDaFormulacao,
     },
-    actor,
-  );
-
-  const rascunho = template.draftVersion;
-  if (rascunho) {
-    /*
-     * PREMISSAS TECNICAS — vao junto (FORMULATION-TEMPLATE-WORKBENCH-01).
-     *
-     * A matriz que nascesse sem forma perdia a leitura da receita: "500 mg por
-     * dose" sem saber se a dose sao duas capsulas ou cinco gramas nao se
-     * reproduz em produto nenhum. Passam pela MESMA gravacao do Modelo, que
-     * deriva as doses por embalagem das premissas — e recusa divisao que nao
-     * fecha, em vez de gravar a matriz pela metade.
-     *
-     * `capsulesPerPackage` e ENTRADA: sai do produto de capsulas por dose e
-     * doses por embalagem da Formulacao, os mesmos numeros que a originaram.
-     *
-     * Nada comercial vem junto: Produto, Cliente, Projeto, Orcamento, custo,
-     * preco, Pedido e faturamento ficam onde estao.
-     */
-    const premissas = {
+    {
       dosageForm: version.dosageForm,
       presentationType: version.presentationType,
       capsulesPerDose: version.capsulesPerDose,
@@ -413,34 +407,59 @@ export async function createTemplateFromFormulation(
         ? version.packageContentAmount.toString()
         : null,
       packageContentUomCode: version.packageContentUomCode,
-      expectedLossPercent: version.expectedLossPercent
-        ? version.expectedLossPercent.toString()
-        : null,
-    };
-    await updateFormulationTemplateVersion(rascunho.id, {
-      ...premissas,
-      notes: version.notes,
-      components: version.components.map((component) => ({
-        itemId: component.itemId,
-        quantity: component.quantity.toString(),
-        unitCode: component.unitCode,
-        basis: component.basis,
-        supplyResponsibility: component.supplyResponsibility,
-        purityPercentApplied: component.purityPercentApplied
-          ? component.purityPercentApplied.toString()
-          : null,
-        overagePercent: component.overagePercent ? component.overagePercent.toString() : null,
-        // Sem o modo, "salvar como Modelo" transformava componente calculado
-        // em físico direto — e aplicar o Modelo de volta mudava a receita.
-        quantityMode: component.quantityMode,
-        applyPurityAdjustment: component.applyPurityAdjustment,
-        applyOverageAdjustment: component.applyOverageAdjustment,
-        notes: component.notes,
-      })),
-    });
-  }
+    },
+    version.components,
+    units,
+  );
 
-  return getFormulationTemplate(template.id);
+  // Só agora o código: recusa acima não consome número da sequência.
+  const code = await proximoCodigoDeModelo();
+  const criado = await prisma.formulationTemplate.create({
+    data: {
+      code,
+      name: input.name,
+      ...(input.description !== undefined ? { description: input.description } : {}),
+      createdBy: actor.name,
+      versions: {
+        create: {
+          versionNumber: 1,
+          status: "DRAFT",
+          basisQuantity: version.basisQuantity,
+          calculationMode: version.calculationMode,
+          dosesPerPackage: dosesDaFormulacao,
+          ...premissas,
+          // A perda prevista é DEFAULT da matriz, como na aplicação.
+          expectedLossPercent: version.expectedLossPercent,
+          outputUnitCode: version.outputUnitCode,
+          notes: version.notes,
+          createdBy: actor.name,
+          /*
+           * Nada comercial vem junto: Produto, Cliente, Projeto, Orcamento,
+           * custo, preco, Pedido e faturamento ficam onde estao.
+           */
+          components: {
+            create: version.components.map((component, index) => ({
+              itemId: component.itemId,
+              quantity: component.quantity,
+              unitCode: component.unitCode,
+              basis: component.basis,
+              supplyResponsibility: component.supplyResponsibility,
+              purityPercentApplied: component.purityPercentApplied,
+              overagePercent: component.overagePercent,
+              // Sem o modo, "salvar como Modelo" transformava componente
+              // calculado em físico direto — e aplicar o Modelo de volta mudava
+              // a receita. A MESMA normalização da gravação (§52).
+              ...modoEFlags(component),
+              notes: component.notes,
+              position: index,
+            })),
+          },
+        },
+      },
+    },
+  });
+
+  return getFormulationTemplate(criado.id);
 }
 
 /** Formulações do produto — reexportado para a rota de aplicação. */

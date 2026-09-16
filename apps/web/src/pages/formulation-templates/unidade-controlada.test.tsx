@@ -128,6 +128,7 @@ function comRascunho(componentes: FormulationTemplateComponentDTO[] = []): Formu
     sourceVersionId: null,
     sourceVersionNumber: null,
     usageCount: 0,
+    componentIssues: [],
   } as FormulationTemplateVersionDTO;
   return {
     id: "ft-1",

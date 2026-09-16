@@ -81,9 +81,11 @@ import { StickyActionBar } from "../formulation-workbench/StickyActionBar";
 import { TabelaDaReceita } from "../formulation-workbench/TabelaDaReceita";
 import {
   itemDaBancada,
+  itemElegivelParaSecao,
   opcaoDoItem,
   useCatalogoDeItens,
 } from "../formulation-workbench/catalogo-de-itens";
+import { PendenciasDoModelo } from "./PendenciasDoModelo";
 import type { ItemDaBancada } from "../formulation-workbench/catalogo-de-itens";
 import {
   CAMPOS_DO_COMPONENTE,
@@ -460,7 +462,7 @@ export function FormulationTemplateDetailPage() {
         }
       })
       .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Falha ao carregar o template"),
+        setError(err instanceof Error ? err.message : "Falha ao carregar o modelo"),
       );
   }, [templateId]);
 
@@ -557,6 +559,12 @@ export function FormulationTemplateDetailPage() {
         setErrosDeCampo(porCampo);
       }
       setError(apiErrorMessage(err, "Falha ao executar a ação"));
+      /*
+       * Ativação recusada por componente: o cadastro do Item pode ter mudado
+       * depois da última leitura. Reler traz as pendências de agora para o
+       * painel — e a leitura só substitui o que ninguém editou desde então.
+       */
+      if (acao === "ativar") load();
     } finally {
       setAcaoEmCurso(null);
     }
@@ -778,14 +786,22 @@ export function FormulationTemplateDetailPage() {
     return unidadesDaDimensao(units, dimensao);
   }
 
-  /** O que o seletor da linha oferece: a seção manda, e o já escolhido fica. */
+  /**
+   * O que o seletor da linha oferece: a seção manda, e o já escolhido fica.
+   *
+   * Nova escolha só entre itens ATIVOS do tipo da seção — a API recusaria os
+   * outros. O item que a linha já referencia continua na lista mesmo inativo,
+   * com a marca, para a matriz antiga poder ser lida e corrigida.
+   */
   function opcoesDaLinha(linha: LinhaDaReceita): ItemDaBancada[] {
     const secao = secaoDaLinha(linha);
     const usadosPorOutras = new Set(
       linhas.filter((outra) => outra.key !== linha.key).map((outra) => outra.itemId),
     );
     const base = catalogo.itens.filter(
-      (item) => !usadosPorOutras.has(item.id) && secaoDoItem(item.type) === secao,
+      (item) =>
+        !usadosPorOutras.has(item.id) &&
+        (item.id === linha.itemId || itemElegivelParaSecao(item, secao)),
     );
     if (linha.itemId && !base.some((item) => item.id === linha.itemId)) {
       return [
@@ -811,11 +827,14 @@ export function FormulationTemplateDetailPage() {
   }
 
   async function buscarItens(linha: LinhaDaReceita, termo: string): Promise<EntityOption[]> {
-    const encontrados = await catalogo.buscar(secaoDaLinha(linha), termo);
+    const secao = secaoDaLinha(linha);
+    const encontrados = await catalogo.buscar(secao, termo);
     const usadosPorOutras = new Set(
       linhas.filter((outra) => outra.key !== linha.key).map((outra) => outra.itemId),
     );
-    return encontrados.filter((item) => !usadosPorOutras.has(item.id)).map(opcaoDoItem);
+    return encontrados
+      .filter((item) => !usadosPorOutras.has(item.id) && itemElegivelParaSecao(item, secao))
+      .map(opcaoDoItem);
   }
 
   /**
@@ -1151,9 +1170,17 @@ export function FormulationTemplateDetailPage() {
 
         {error && <p className="form-alert" role="alert">{error}</p>}
 
+        {/* O que o cadastro do Item invalidou: no rascunho é o que barra a
+            ativação; sem rascunho, é o aviso de quem vai aplicar a ativa. */}
+        {rascunho ? (
+          <PendenciasDoModelo issues={rascunho.componentIssues} versao="rascunho" />
+        ) : (
+          ativa && <PendenciasDoModelo issues={ativa.componentIssues} versao="ativa" />
+        )}
+
         <FormSection
           title="Identificação"
-          subtitle="O nome é escolhido por quem cria — um template é reutilizável e não carrega o nome de nenhum cliente."
+          subtitle="O nome é escolhido por quem cria — um modelo é reutilizável e não carrega o nome de nenhum cliente."
         >
           <div className="field-grid-2">
             <div className="field">
@@ -1235,7 +1262,17 @@ export function FormulationTemplateDetailPage() {
                 {ativa.usageCount === 1
                   ? "1 formulação de produto nasceu desta versão."
                   : `${ativa.usageCount} formulações de produto nasceram desta versão.`}{" "}
-                Nenhuma delas muda quando este template muda.
+                Nenhuma delas muda quando este modelo muda.
+              </p>
+            )}
+            {/* Com rascunho aberto, a bancada é do rascunho: duas receitas
+                inteiras na mesma página confundem mais do que ajudam. A ativa
+                não some — continua aqui, no histórico e na comparação. */}
+            {rascunho && (
+              <p className="field__hint">
+                A receita abaixo é a do rascunho {rascunho.versionLabel}. A da{" "}
+                {ativa.versionLabel} continua valendo para quem aplicar o modelo até o rascunho
+                ser ativado — compare as duas em “Comparar versões”, no histórico.
               </p>
             )}
           </FormSection>

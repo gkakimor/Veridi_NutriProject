@@ -89,7 +89,7 @@ export function FormulationTemplateOrigin({
       });
       navigate(`/producao/templates-formulacao/${template.id}`);
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Falha ao salvar como template");
+      setErro(err instanceof Error ? err.message : "Falha ao salvar como modelo");
     } finally {
       setOcupado(false);
     }
@@ -118,7 +118,7 @@ export function FormulationTemplateOrigin({
       {novidade && (
         <div className="template-origin__update">
           <p>
-            Existe uma versão mais recente do template de origem —{" "}
+            Existe uma versão mais recente do modelo de origem —{" "}
             <strong>V{novidade.latestVersionNumber}</strong>. Esta formulação continua na
             V{novidade.originVersionNumber} e não muda sozinha.
           </p>
@@ -171,7 +171,7 @@ export function FormulationTemplateOrigin({
         <div className="template-origin__save">
           {(
             <div className="inline-form">
-              <label htmlFor="novo-template-nome">Nome do template</label>
+              <label htmlFor="novo-template-nome">Nome do modelo</label>
               <input
                 id="novo-template-nome"
                 type="text"
@@ -190,7 +190,7 @@ export function FormulationTemplateOrigin({
                 disabled={ocupado || !nomeTemplate.trim()}
                 onClick={() => void salvarComoTemplate()}
               >
-                Criar template
+                Criar modelo
               </button>
               <button
                 type="button"
@@ -202,7 +202,7 @@ export function FormulationTemplateOrigin({
             </div>
           )}
           <p className="field__hint">
-            É uma cópia: esta formulação continua exatamente como está, e o template nasce em
+            É uma cópia: esta formulação continua exatamente como está, e o modelo nasce em
             rascunho para você revisar antes de disponibilizá-lo.
           </p>
         </div>

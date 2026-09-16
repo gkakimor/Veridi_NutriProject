@@ -68,7 +68,7 @@ export function PricingPoliciesPage() {
         <div>
           <h1 className="page__title">Políticas de Precificação</h1>
           <p className="page__subtitle">
-            Templates comerciais reutilizáveis: faixas de quantidade, margem alvo e comissão. Uma
+            Modelos comerciais reutilizáveis: faixas de quantidade, margem alvo e comissão. Uma
             política não guarda preço — o preço de cada faixa é calculado sobre o custo do produto
             no momento em que a política é aplicada.
           </p>

@@ -64,8 +64,8 @@ export function UseCostTemplateDialog({ onCancel, onApply, saving }: Props) {
       open
       onClose={onCancel}
       crumb="Cadastros e Configurações / Modelos de Estrutura de Custo"
-      crumbActive="Usar template"
-      title="Usar template de estrutura"
+      crumbActive="Usar modelo"
+      title="Usar modelo de estrutura"
       footer={
         <>
           {selecionado && (
@@ -83,7 +83,7 @@ export function UseCostTemplateDialog({ onCancel, onApply, saving }: Props) {
               disabled={saving}
               onClick={() => onApply(versao.id)}
             >
-              Usar este template
+              Usar este modelo
             </button>
           )}
         </>
@@ -95,7 +95,7 @@ export function UseCostTemplateDialog({ onCancel, onApply, saving }: Props) {
         {!selecionado ? (
           <>
             <div className="field">
-              <label htmlFor="tec-busca">Buscar template</label>
+              <label htmlFor="tec-busca">Buscar modelo</label>
               <input
                 id="tec-busca"
                 type="search"
@@ -151,8 +151,8 @@ export function UseCostTemplateDialog({ onCancel, onApply, saving }: Props) {
                   {!carregando && disponiveis.length === 0 && (
                     <TableEmptyRow colSpan={6}>
                       {termo
-                        ? "Nenhum template ativo encontrado para esta busca."
-                        : "A biblioteca ainda não tem nenhum template ativo."}
+                        ? "Nenhum modelo ativo encontrado para esta busca."
+                        : "A biblioteca ainda não tem nenhum modelo ativo."}
                     </TableEmptyRow>
                   )}
                 </tbody>
@@ -162,13 +162,13 @@ export function UseCostTemplateDialog({ onCancel, onApply, saving }: Props) {
         ) : versao ? (
           <>
             <dl className="definition-list">
-              <dt>Template</dt>
+              <dt>Modelo</dt>
               <dd>
                 <code>{selecionado.code}</code> · {versao.versionLabel}
               </dd>
               <dt>Nome</dt>
               <dd>{selecionado.name}</dd>
-              <dt>Base de produção do template</dt>
+              <dt>Base de produção do modelo</dt>
               <dd>
                 {formatQuantity(versao.referenceOutputQuantity)} {versao.referenceOutputUomCode}
               </dd>
@@ -238,7 +238,7 @@ export function UseCostTemplateDialog({ onCancel, onApply, saving }: Props) {
             )}
 
             <p className="field__hint">
-              O template define o uso dos recursos. As tarifas — valor da hora, da energia — vêm do
+              O modelo define o uso dos recursos. As tarifas — valor da hora, da energia — vêm do
               cadastro na data de cada cálculo, e não são copiadas para cá.
             </p>
             {/* A tela de custos oferece um campo de base de produção que este
@@ -247,12 +247,12 @@ export function UseCostTemplateDialog({ onCancel, onApply, saving }: Props) {
                 por quê. A regra continua a mesma — o template manda —, o que
                 muda é dizê-la antes. */}
             <p className="field__hint">
-              A estrutura será criada com a base do template ({formatQuantity(versao.referenceOutputQuantity)}{" "}
+              A estrutura será criada com a base do modelo ({formatQuantity(versao.referenceOutputQuantity)}{" "}
               {versao.referenceOutputUomCode}). Você pode ajustá-la no rascunho antes de ativar.
             </p>
           </>
         ) : (
-          <p className="field__hint">Este template não tem versão ativa.</p>
+          <p className="field__hint">Este modelo não tem versão ativa.</p>
         )}
       </div>
     </FullWorkspaceModal>

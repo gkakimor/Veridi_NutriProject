@@ -1,14 +1,21 @@
-import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
+import { formatIntegerPtBr, formatPercentPtBr } from "../../lib/numeric-ptbr";
+import { OPCOES_PERCENTUAL_TECNICO } from "../../lib/numeric-scales";
 import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useMemo, useState } from "react";
 import type {
+  FormulationComponentIssueDTO,
+  FormulationTemplateComponentDTO,
   FormulationTemplateDTO,
   FormulationTemplateSummaryDTO,
   FormulationTemplateVersionDTO,
 } from "@veridi/shared";
 import {
+  DOSAGE_FORM_LABELS,
   FORMULATION_CALCULATION_MODE_LABELS,
+  PRESENTATION_TYPE_LABELS,
+  SECAO_DA_FORMULA_LABELS,
   SUPPLY_RESPONSIBILITY_LABELS,
+  secaoDoItem,
 } from "@veridi/shared";
 import {
   getFormulationTemplate,
@@ -18,7 +25,7 @@ import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /**
- * Escolher um template da biblioteca, direto da tela do produto.
+ * Escolher um modelo da biblioteca, direto da tela do produto.
  *
  * Quem já usou uma fórmula parecida para outro cliente precisa reaproveitá-la
  * onde está trabalhando — obrigar a passar pela Biblioteca primeiro faria a
@@ -27,12 +34,89 @@ import { TableEmptyRow } from "../../components/TableEmptyRow";
  * A revisão antes de aplicar não é cerimônia: aplicar copia a matriz inteira
  * para dentro do produto, e é mais barato conferir a composição agora do que
  * descobrir a troca depois de calcular custo em cima dela.
+ *
+ * PRÉ-CHECAGEM (FORMULATION-TEMPLATE-WORKBENCH-01, fatia 3, decisão D-6): o que
+ * o cadastro do Item invalidou na versão ativa aparece AQUI, com cada item
+ * nomeado, antes do clique. Aplicar continua possível — o rascunho da
+ * Formulação é o lugar de corrigir uma matriz antiga —, e a ativação dela
+ * continua fechada até a correção.
  */
 
 interface Props {
   onCancel: () => void;
   onApply: (templateVersionId: string) => void;
   saving: boolean;
+}
+
+/** O motivo de cada pendência, curto, para a marca da linha. */
+const MARCA_DO_PROBLEMA: Record<FormulationComponentIssueDTO["code"], string> = {
+  ITEM_INACTIVE: "Inativo",
+  ITEM_IS_FINISHED_PRODUCT: "Produto acabado",
+  UOM_INCOMPATIBLE: "Unidade incompatível",
+  INVALID_QUANTITY: "Quantidade inválida",
+};
+
+const ID_DO_AVISO = "usar-modelo-pendencias";
+
+/** Composição antes da embalagem — a mesma ordem da bancada. */
+function emOrdemDaBancada(
+  componentes: readonly FormulationTemplateComponentDTO[],
+): FormulationTemplateComponentDTO[] {
+  const daComposicao = componentes.filter((c) => secaoDoItem(c.itemType) === "COMPOSICAO");
+  const daEmbalagem = componentes.filter((c) => secaoDoItem(c.itemType) === "EMBALAGEM");
+  return [...daComposicao, ...daEmbalagem];
+}
+
+function percentual(valor: string | null): string {
+  return valor === null ? "—" : formatPercentPtBr(valor, OPCOES_PERCENTUAL_TECNICO);
+}
+
+/** As premissas que viajam com a receita — só as que a matriz declarou. */
+function PremissasDaVersao({ versao }: { versao: FormulationTemplateVersionDTO }) {
+  return (
+    <>
+      <dt>Forma do produto</dt>
+      <dd>{versao.dosageForm ? DOSAGE_FORM_LABELS[versao.dosageForm] : "Não informada"}</dd>
+      {versao.presentationType && (
+        <>
+          <dt>Apresentação comercial</dt>
+          <dd>{PRESENTATION_TYPE_LABELS[versao.presentationType]}</dd>
+        </>
+      )}
+      {versao.capsulesPerDose !== null && (
+        <>
+          <dt>Cápsulas por dose</dt>
+          <dd>{formatIntegerPtBr(versao.capsulesPerDose)}</dd>
+        </>
+      )}
+      {versao.doseAmount !== null && (
+        <>
+          <dt>Dose</dt>
+          <dd>
+            {formatQuantity(versao.doseAmount)} {versao.doseUomCode ?? ""}
+          </dd>
+        </>
+      )}
+      {versao.packageContentAmount !== null && (
+        <>
+          <dt>Conteúdo da embalagem</dt>
+          <dd>
+            {formatQuantity(versao.packageContentAmount)} {versao.packageContentUomCode ?? ""}
+          </dd>
+        </>
+      )}
+      {versao.dosesPerPackage !== null && (
+        <>
+          <dt>Doses por embalagem</dt>
+          <dd>{formatIntegerPtBr(versao.dosesPerPackage)}</dd>
+        </>
+      )}
+      <dt>Perda prevista de produção</dt>
+      <dd>
+        {versao.expectedLossPercent === null ? "Não informada" : percentual(versao.expectedLossPercent)}
+      </dd>
+    </>
+  );
 }
 
 export function UseTemplateDialog({ onCancel, onApply, saving }: Props) {
@@ -59,7 +143,7 @@ export function UseTemplateDialog({ onCancel, onApply, saving }: Props) {
   }, [termo]);
 
   /*
-   * Só matriz com versão ATIVA aparece para uso. Um template que só tem
+   * Só matriz com versão ATIVA aparece para uso. Um modelo que só tem
    * rascunho ainda não foi revisado por ninguém — oferecê-lo aqui deixaria a
    * pessoa copiar trabalho em andamento sem saber.
    */
@@ -69,14 +153,22 @@ export function UseTemplateDialog({ onCancel, onApply, saving }: Props) {
   );
 
   const versaoAtiva: FormulationTemplateVersionDTO | null = selecionado?.activeVersion ?? null;
+  const pendencias = versaoAtiva?.componentIssues ?? [];
+  const pendenciasPorItem = new Map<string, FormulationComponentIssueDTO[]>();
+  for (const pendencia of pendencias) {
+    pendenciasPorItem.set(pendencia.itemId, [
+      ...(pendenciasPorItem.get(pendencia.itemId) ?? []),
+      pendencia,
+    ]);
+  }
 
   return (
     <FullWorkspaceModal
       open
       onClose={onCancel}
       crumb="Cadastros e Configurações / Modelos de Formulação"
-      crumbActive="Usar template"
-      title="Usar template da biblioteca"
+      crumbActive="Usar modelo"
+      title="Usar modelo da biblioteca"
       footer={
         <>
           {selecionado && (
@@ -92,9 +184,12 @@ export function UseTemplateDialog({ onCancel, onApply, saving }: Props) {
               type="button"
               className="btn btn--accent"
               disabled={saving}
+              /* Com pendência o gesto continua o mesmo, e diz o que faz: o
+                 aviso fica ligado ao botão para quem navega por leitor. */
+              {...(pendencias.length > 0 ? { "aria-describedby": ID_DO_AVISO } : {})}
               onClick={() => onApply(versaoAtiva.id)}
             >
-              Usar este template
+              {pendencias.length > 0 ? "Usar mesmo assim" : "Usar este modelo"}
             </button>
           )}
         </>
@@ -106,7 +201,7 @@ export function UseTemplateDialog({ onCancel, onApply, saving }: Props) {
           {!selecionado ? (
             <>
               <div className="field">
-                <label htmlFor="template-busca">Buscar template</label>
+                <label htmlFor="template-busca">Buscar modelo</label>
                 <input
                   id="template-busca"
                   type="search"
@@ -162,8 +257,8 @@ export function UseTemplateDialog({ onCancel, onApply, saving }: Props) {
                     {!carregando && disponiveis.length === 0 && (
                       <TableEmptyRow colSpan={5}>
                         {termo
-                          ? "Nenhum template ativo encontrado para esta busca."
-                          : "A biblioteca ainda não tem nenhum template ativo."}
+                          ? "Nenhum modelo ativo encontrado para esta busca."
+                          : "A biblioteca ainda não tem nenhum modelo ativo."}
                       </TableEmptyRow>
                     )}
                   </tbody>
@@ -172,8 +267,31 @@ export function UseTemplateDialog({ onCancel, onApply, saving }: Props) {
             </>
           ) : versaoAtiva ? (
             <>
+              {/* ANTES da composição e antes do botão: quem vai copiar a matriz
+                  precisa saber o que dela o cadastro já não aceita. */}
+              {pendencias.length > 0 && (
+                <div className="pendency-panel" id={ID_DO_AVISO} role="alert">
+                  <h4 className="pendency-panel__title">
+                    {pendencias.length === 1
+                      ? "1 item deste modelo precisa de revisão"
+                      : `${pendencias.length} itens deste modelo precisam de revisão`}
+                  </h4>
+                  <p className="pendency-panel__sub">
+                    A formulação nasce em rascunho com a receita como está no modelo. Ela só poderá
+                    ser ativada depois que estes itens forem corrigidos no rascunho.
+                  </p>
+                  <ul className="pendency-panel__list">
+                    {pendencias.map((pendencia) => (
+                      <li key={`${pendencia.code}-${pendencia.itemId}`}>
+                        {pendencia.description} ({pendencia.itemName})
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <dl className="definition-list">
-                <dt>Template</dt>
+                <dt>Modelo</dt>
                 <dd>
                   <code>{selecionado.code}</code> · {versaoAtiva.versionLabel}
                 </dd>
@@ -185,18 +303,13 @@ export function UseTemplateDialog({ onCancel, onApply, saving }: Props) {
                     <dd>{selecionado.description}</dd>
                   </>
                 )}
+                <PremissasDaVersao versao={versaoAtiva} />
                 <dt>Base</dt>
                 <dd>
                   {formatQuantity(versaoAtiva.basisQuantity)} {versaoAtiva.outputUnitCode}
                 </dd>
                 <dt>Modo de cálculo</dt>
                 <dd>{FORMULATION_CALCULATION_MODE_LABELS[versaoAtiva.calculationMode]}</dd>
-                {versaoAtiva.dosesPerPackage !== null && (
-                  <>
-                    <dt>Doses por embalagem</dt>
-                    <dd>{formatIntegerPtBr(versaoAtiva.dosesPerPackage)}</dd>
-                  </>
-                )}
                 <dt>Componentes</dt>
                 <dd>{versaoAtiva.components.length}</dd>
               </dl>
@@ -206,33 +319,59 @@ export function UseTemplateDialog({ onCancel, onApply, saving }: Props) {
                   <thead>
                     <tr>
                       <th>Item</th>
+                      <th>Seção</th>
                       <th className="is-numeric">Quantidade</th>
-                      <th>Unidade</th>
+                      <th className="is-numeric">Pureza (%)</th>
+                      <th className="is-numeric">Reserva (%)</th>
                       <th>Fornecimento padrão</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {versaoAtiva.components.map((component) => (
-                      <tr key={component.id}>
-                        <td>
-                          {component.itemCode} — {component.itemName}
-                        </td>
-                        <td className="is-numeric">{formatQuantity(component.quantity)}</td>
-                        <td>{component.unitCode}</td>
-                        <td>{SUPPLY_RESPONSIBILITY_LABELS[component.supplyResponsibility]}</td>
-                      </tr>
-                    ))}
+                    {emOrdemDaBancada(versaoAtiva.components).map((component) => {
+                      const secao = secaoDoItem(component.itemType);
+                      const daLinha = pendenciasPorItem.get(component.itemId) ?? [];
+                      return (
+                        <tr key={component.id}>
+                          <td>
+                            <span>
+                              {component.itemCode} — {component.itemName}
+                            </span>
+                            {daLinha.map((pendencia) => (
+                              <span key={pendencia.code}>
+                                {" "}
+                                <span className="badge badge--warn">
+                                  {MARCA_DO_PROBLEMA[pendencia.code]}
+                                </span>
+                              </span>
+                            ))}
+                          </td>
+                          <td>{SECAO_DA_FORMULA_LABELS[secao]}</td>
+                          <td className="is-numeric">
+                            {formatQuantity(component.quantity)} {component.unitCode}
+                          </td>
+                          {/* Embalagem não tem pureza nem reserva. */}
+                          <td className="is-numeric">
+                            {secao === "COMPOSICAO" ? percentual(component.purityPercentApplied) : "—"}
+                          </td>
+                          <td className="is-numeric">
+                            {secao === "COMPOSICAO" ? percentual(component.overagePercent) : "—"}
+                          </td>
+                          <td>{SUPPLY_RESPONSIBILITY_LABELS[component.supplyResponsibility]}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
               <p className="field__hint">
-                O fornecimento padrão é uma sugestão do template: depois de aplicado, você pode
-                mudar item a item neste produto sem alterar a biblioteca.
+                O fornecimento padrão é uma sugestão do modelo: depois de aplicado, você pode mudar
+                item a item neste produto sem alterar a biblioteca. Pureza, reserva e premissas
+                chegam como estão no modelo e seguem editáveis enquanto a formulação for rascunho.
               </p>
             </>
           ) : (
-            <p className="field__hint">Este template não tem versão ativa.</p>
+            <p className="field__hint">Este modelo não tem versão ativa.</p>
           )}
       </div>
     </FullWorkspaceModal>

@@ -6303,3 +6303,57 @@ cápsulas ou cinco gramas.
   da perda prevista (§52, "Perda prevista de produção") continua valendo tal
   como está, e o Modelo entrou na lista de quem PODE lê-la justamente porque
   não calcula com ela.
+
+## §97 — Modelo de Formulação: o cadastro do Item muda, a matriz avisa e não ativa
+
+FORMULATION-TEMPLATE-WORKBENCH-01, fatia 3, 2026-09-16. Fecha a capability.
+
+O Modelo guarda Item real, e o cadastro do Item muda depois da gravação: o item
+é inativado, vira produto acabado, troca de unidade. Três gestos respondem a
+isso, cada um do seu jeito.
+
+- **Ativar o Modelo relê o cadastro.** A ativação confere cada componente AGORA
+  e recusa, nomeando cada item e o motivo, se algum ficou inativo, virou produto
+  acabado, perdeu a unidade compatível ou tem quantidade inválida. Nada é
+  reescrito: o rascunho continua rascunho, e as versões ativa e arquivadas
+  continuam como estavam. Antes só a unidade era relida.
+- **Pendência é o mesmo contrato da Formulação.** `componentIssues` da versão do
+  Modelo usa `FormulationComponentIssueDTO` e a MESMA regra
+  (`lib/formulation-component-issues.ts`). Só entra o que depende do Item —
+  nada de Produto nem de Cliente, que o Modelo não tem. No rascunho, é o que
+  barra a ativação; na versão ativa, é o aviso de quem vai aplicá-la; a
+  arquivada não aponta nada.
+- **Aplicar com pendência gera rascunho (decisão D-6).** O diálogo mostra, antes
+  da composição e antes do botão, cada item que o cadastro invalidou, e o botão
+  passa a dizer "Usar mesmo assim". A Formulação nasce em RASCUNHO com a receita
+  como está no Modelo, as pendências aparecem nela, e a ATIVAÇÃO dela continua
+  fechada até a correção — o aviso nunca vira autorização. O único caso que
+  continua recusado na aplicação é o que o contrato não representa sem mudar a
+  receita: a base do Modelo numa unidade que a do Produto não alcança
+  (TEMPLATE-APPLY-BASE-UOM-01).
+- **Salvar como Modelo é uma escrita só, e a cópia é fiel.** Toda recusa possível
+  — premissa que não fecha, dose que falta — acontece antes do código FT; o
+  Modelo nasce inteiro ou não nasce. Item que o cadastro mudou depois da
+  homologação atravessa como pendência do rascunho do Modelo, simétrico à
+  aplicação. Salvar e aplicar levam as mesmas coisas: forma, apresentação,
+  premissas de pó e cápsula, perda prevista, componentes, pureza, reserva,
+  fornecimento, base, posição e embalagem — e nada comercial.
+- **Nova escolha só entre elegíveis.** O seletor das duas bancadas oferece para
+  linha nova apenas item ATIVO do tipo da seção (composição: matéria-prima;
+  embalagem: embalagem) — produto acabado não é oferecido nem na composição. O
+  item que a linha já referencia continua à vista, com a marca "Inativo", para a
+  matriz antiga poder ser lida e corrigida.
+- **O diff explica a leitura, não só os números.** A comparação de versões — e a
+  da Formulação com a versão nova do Modelo, pelo mesmo leitor — inclui forma,
+  apresentação comercial, cápsulas por dose, dose e conteúdo (quantidade e
+  unidade na mesma entrada), doses por embalagem e perda prevista, além de cada
+  componente. A ordem conta: mudou de lugar quem mudou de ordem entre os
+  componentes que as duas versões têm, na posição que a tela mostra — linha
+  acrescentada no topo não faz as de baixo parecerem movidas. Rótulos são os da
+  bancada; nome de campo e de enum não chegam à tela.
+- **A tela diz Modelo.** Nenhuma superfície brasileira mostra "template";
+  classes, tabelas, rotas e arquivos continuam `Template` — é nome interno, não
+  texto. Vale para Modelos de Formulação e Modelos de Estrutura de Custo.
+- **Rascunho × ativa.** Com rascunho aberto, a bancada mostra o rascunho; a
+  versão ativa continua à vista em seção própria, no histórico e na comparação,
+  sem uma segunda receita inteira na mesma página.

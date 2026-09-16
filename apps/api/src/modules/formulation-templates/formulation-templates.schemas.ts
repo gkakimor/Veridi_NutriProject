@@ -63,7 +63,7 @@ const componentSchema = z.object({
 });
 
 export const createFormulationTemplateSchema = z.object({
-  name: z.string().trim().min(1, "Informe o nome do template").max(200),
+  name: z.string().trim().min(1, "Informe o nome do modelo").max(200),
   description: optionalNullableText(1000),
   basisQuantity: decimalString.optional(),
   outputUnitCode: z.string().trim().min(1).max(20).optional(),
@@ -149,7 +149,7 @@ export const applyFormulationTemplateSchema = z.object({
 });
 
 export const createTemplateFromFormulationSchema = z.object({
-  name: z.string().trim().min(1, "Informe o nome do template").max(200),
+  name: z.string().trim().min(1, "Informe o nome do modelo").max(200),
   description: optionalNullableText(1000),
 });
 

@@ -218,7 +218,7 @@ describe("Biblioteca de estruturas de custo", () => {
 
   it("promete cópia independente e tarifa resolvida na data, não congelada", async () => {
     renderizar(<CostTemplatesPage />);
-    const texto = (await screen.findByText(/Aplicar um template cria uma estrutura independente/))
+    const texto = (await screen.findByText(/Aplicar um modelo cria uma estrutura independente/))
       .textContent;
     expect(texto).toMatch(/independente/);
     expect(texto).toMatch(/tarifas continuam sendo resolvidas na data do cálculo/);
@@ -250,14 +250,14 @@ describe("Detalhe do template de estrutura", () => {
   it("diz que a versão ativa é histórica e que a tarifa vem da data do cálculo", async () => {
     renderizar(<CostTemplateDetailPage />);
     expect(
-      await screen.findByText(/As tarifas dos recursos não fazem parte do template/),
+      await screen.findByText(/As tarifas dos recursos não fazem parte do modelo/),
     ).toBeInTheDocument();
   });
 
   it("avisa que as estruturas já criadas não mudam quando o template muda", async () => {
     renderizar(<CostTemplateDetailPage />);
     expect(
-      await screen.findByText(/Nenhuma delas muda quando este template muda/),
+      await screen.findByText(/Nenhuma delas muda quando este modelo muda/),
     ).toBeInTheDocument();
   });
 
@@ -298,7 +298,7 @@ describe("Usar template numa estrutura de custos", () => {
     const onApply = vi.fn();
     renderizar(<UseCostTemplateDialog saving={false} onCancel={vi.fn()} onApply={onApply} />);
     fireEvent.click(await screen.findByRole("button", { name: "Revisar" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Usar este template" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Usar este modelo" }));
     expect(onApply).toHaveBeenCalledWith("tecv-2");
   });
 });
@@ -347,7 +347,7 @@ describe("Origem da estrutura de custos", () => {
         onChanged={vi.fn()}
       />,
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Salvar como template" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Salvar como modelo" }));
     expect(
       screen.getByText(/recursos, uso, energia e premissas —, nunca as\s+tarifas/),
     ).toBeInTheDocument();
@@ -363,6 +363,6 @@ describe("Origem da estrutura de custos", () => {
       />,
     );
     await screen.findByText(/TEC-000004 · V1/);
-    expect(screen.queryByRole("button", { name: "Salvar como template" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Salvar como modelo" })).toBeNull();
   });
 });

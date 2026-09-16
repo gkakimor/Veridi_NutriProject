@@ -19,7 +19,7 @@ import type { FormulationComponentDTO, FormulationVersionDTO } from "@veridi/sha
  *   - a barra é o ÚLTIMO elemento do fluxo, então no fim da rolagem ela ocupa
  *     o lugar dela e não cobre a última linha do documento.
  *
- * "Salvar como template" mudou de LUGAR, não de contrato: o botão abre o mesmo
+ * "Salvar como modelo" mudou de LUGAR, não de contrato: o botão abre o mesmo
  * formulário de nome, na proveniência, com a mesma validação e o mesmo destino.
  */
 
@@ -147,7 +147,7 @@ describe("Formulação — barra fixa de ações", () => {
 
     // Esquerda: sair e promover a receita a Modelo. Direita: gravar e ativar.
     expect(within(inicio).getByRole("link", { name: "← Voltar" })).toBeInTheDocument();
-    expect(within(inicio).getByRole("button", { name: "Salvar como template" })).toBeInTheDocument();
+    expect(within(inicio).getByRole("button", { name: "Salvar como modelo" })).toBeInTheDocument();
     expect(within(fim).getByRole("button", { name: "Salvar rascunho" })).toBeInTheDocument();
     expect(within(fim).getByRole("button", { name: "Ativar versão" })).toBeInTheDocument();
   });
@@ -155,7 +155,7 @@ describe("Formulação — barra fixa de ações", () => {
   it("uma superfície só: nada duplicado no topo nem no fim do documento", async () => {
     await abrir();
 
-    for (const nome of ["Salvar rascunho", "Ativar versão", "Salvar como template"]) {
+    for (const nome of ["Salvar rascunho", "Ativar versão", "Salvar como modelo"]) {
       expect(screen.getAllByRole("button", { name: nome })).toHaveLength(1);
     }
     expect(screen.getAllByRole("link", { name: "← Voltar" })).toHaveLength(1);
@@ -220,7 +220,7 @@ describe("Formulação — barra fixa de ações", () => {
     papel = "COMMERCIAL";
     await abrir();
 
-    expect(screen.queryByRole("button", { name: "Salvar como template" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Salvar como modelo" })).toBeNull();
     expect(screen.getByRole("link", { name: "← Voltar" })).toBeInTheDocument();
   });
 
@@ -228,16 +228,16 @@ describe("Formulação — barra fixa de ações", () => {
     vi.mocked(createTemplateFromFormulation).mockResolvedValue({ id: "ft-novo" } as never);
     await abrir();
 
-    fireEvent.click(botao("Salvar como template"));
+    fireEvent.click(botao("Salvar como modelo"));
 
     // O MESMO formulário de nome, com a mesma frase de que é cópia.
     expect(
       screen.getByText(/É uma cópia: esta formulação continua exatamente como está/),
     ).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Nome do template"), {
+    fireEvent.change(screen.getByLabelText("Nome do modelo"), {
       target: { value: "DEMO — Cafeína Base" },
     });
-    fireEvent.click(botao("Criar template"));
+    fireEvent.click(botao("Criar modelo"));
 
     await waitFor(() =>
       expect(createTemplateFromFormulation).toHaveBeenCalledWith("fv-1", {
@@ -245,6 +245,6 @@ describe("Formulação — barra fixa de ações", () => {
       }),
     );
     // Enquanto o formulário está aberto, o gatilho sai: uma ação, um lugar.
-    expect(screen.queryByRole("button", { name: "Salvar como template" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Salvar como modelo" })).toBeNull();
   });
 });
