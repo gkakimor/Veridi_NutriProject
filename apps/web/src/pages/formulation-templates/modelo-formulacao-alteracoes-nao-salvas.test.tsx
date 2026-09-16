@@ -184,11 +184,9 @@ async function abrir() {
 const nome = () => screen.getByLabelText("Nome");
 /* O ⓘ do rótulo também responde por ele: o campo é o input. */
 const base = () => screen.getByLabelText(/Base da formulação/, { selector: "input" });
-/** A quantidade da linha não tem rótulo próprio: é o decimal da tabela. */
-const quantidadeDaLinha = () =>
-  document.querySelectorAll<HTMLInputElement>(
-    'table input[inputmode="decimal"]',
-  )[0] as HTMLInputElement;
+/** Os campos da linha na bancada: cada um tem o seu rótulo acessível. */
+const quantidadeDaLinha = () => screen.getByRole('textbox', { name: 'Quantidade de MP-000001' });
+const purezaDaLinha = () => screen.getByRole('textbox', { name: 'Pureza de MP-000001' });
 const menuPedidos = () => screen.getByRole("link", { name: "Pedidos" });
 const pergunta = () => screen.queryByText("Sair sem salvar?");
 
@@ -248,33 +246,26 @@ describe("Modelo de Formulação — guarda de alterações não salvas", () => 
     expect(await screen.findByRole("heading", { name: "Pedidos" })).toBeInTheDocument();
   });
 
-  it("o painel de ajustes em edição continua sendo pendência — agora também na saída", async () => {
+  /*
+   * O painel "O que a quantidade informada significa" saiu do Modelo na fatia
+   * 2 da bancada compartilhada: pureza e reserva são COLUNAS, como já eram na
+   * Formulação. A pendência que o painel criava — configuração aberta e não
+   * aplicada — deixou de existir com ele; o que sobra, e é o que importa, é
+   * que editar a coluna É alteração, e desfazer a edição limpa.
+   */
+  it("editar a pureza na coluna é pendência, e desfazer limpa", async () => {
     const user = userEvent.setup();
     await abrir();
 
-    await user.click(await screen.findByRole("button", { name: /Física informada/ }));
-    await user.click(screen.getByRole("radio", { name: "Calcular quantidade física" }));
+    fireEvent.change(purezaDaLinha(), { target: { value: "70" } });
     await user.click(menuPedidos());
 
     expect(await screen.findByText("Sair sem salvar?")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Pedidos" })).toBeNull();
 
-    // E a recusa de salvar com ajuste por aplicar não mudou.
+    // A versão gravada não tem pureza: apagar o campo devolve a tela ao limpo.
     await user.click(screen.getByRole("button", { name: "Continuar editando" }));
-    await user.click(screen.getByRole("button", { name: "Salvar rascunho" }));
-    expect(
-      screen.getByText("Aplique ou cancele os ajustes de MP-000001 antes de salvar."),
-    ).toBeInTheDocument();
-    expect(updateFormulationTemplateVersion).not.toHaveBeenCalled();
-  });
-
-  it("Cancelar no painel devolve a tela ao estado limpo", async () => {
-    const user = userEvent.setup();
-    await abrir();
-
-    await user.click(await screen.findByRole("button", { name: /Física informada/ }));
-    await user.click(screen.getByRole("radio", { name: "Calcular quantidade física" }));
-    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+    fireEvent.change(purezaDaLinha(), { target: { value: "" } });
     await user.click(menuPedidos());
 
     expect(await screen.findByRole("heading", { name: "Pedidos" })).toBeInTheDocument();
@@ -325,7 +316,7 @@ describe("Modelo de Formulação — guarda de alterações não salvas", () => 
     const user = userEvent.setup();
     await abrir();
 
-    await user.click(screen.getByRole("button", { name: "+ Adicionar componente" }));
+    await user.click(screen.getByRole("button", { name: "+ Adicionar matéria-prima" }));
     await user.click(menuPedidos());
 
     expect(await screen.findByRole("heading", { name: "Pedidos" })).toBeInTheDocument();

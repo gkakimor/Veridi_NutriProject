@@ -27,13 +27,27 @@ interface Props {
   version: FormulationVersionDTO;
   canEdit: boolean;
   onChanged: () => void;
+  /**
+   * "Salvar como template" aberto — o BOTÃO mora na barra fixa do rodapé
+   * (FORMULATION-TEMPLATE-WORKBENCH-01, fatia 2), e o formulário de nome
+   * continua aqui, onde a proveniência é explicada. O estado é da página
+   * porque as duas metades da mesma ação passaram a morar em lugares
+   * diferentes; o que a ação faz não mudou.
+   */
+  salvandoComoTemplate: boolean;
+  onSalvandoComoTemplateChange: (aberto: boolean) => void;
 }
 
-export function FormulationTemplateOrigin({ version, canEdit, onChanged }: Props) {
+export function FormulationTemplateOrigin({
+  version,
+  canEdit,
+  onChanged,
+  salvandoComoTemplate: salvandoTemplate,
+  onSalvandoComoTemplateChange: setSalvandoTemplate,
+}: Props) {
   const navigate = useNavigate();
   const [novidade, setNovidade] = useState<FormulationTemplateUpdateAvailableDTO | null>(null);
   const [diff, setDiff] = useState<FormulationTemplateDiffDTO | null>(null);
-  const [salvandoTemplate, setSalvandoTemplate] = useState(false);
   const [nomeTemplate, setNomeTemplate] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
@@ -151,9 +165,11 @@ export function FormulationTemplateOrigin({ version, canEdit, onChanged }: Props
         </div>
       )}
 
-      {canEdit && (
+      {/* O gatilho saiu daqui e foi para a barra fixa: uma superfície só para
+          as ações da página. O que fica é o formulário do nome. */}
+      {canEdit && salvandoTemplate && (
         <div className="template-origin__save">
-          {salvandoTemplate ? (
+          {(
             <div className="inline-form">
               <label htmlFor="novo-template-nome">Nome do template</label>
               <input
@@ -184,21 +200,11 @@ export function FormulationTemplateOrigin({ version, canEdit, onChanged }: Props
                 Cancelar
               </button>
             </div>
-          ) : (
-            <button
-              type="button"
-              className="btn btn--primary btn--sm"
-              onClick={() => setSalvandoTemplate(true)}
-            >
-              Salvar como template
-            </button>
           )}
-          {salvandoTemplate && (
-            <p className="field__hint">
-              É uma cópia: esta formulação continua exatamente como está, e o template nasce em
-              rascunho para você revisar antes de disponibilizá-lo.
-            </p>
-          )}
+          <p className="field__hint">
+            É uma cópia: esta formulação continua exatamente como está, e o template nasce em
+            rascunho para você revisar antes de disponibilizá-lo.
+          </p>
         </div>
       )}
     </div>

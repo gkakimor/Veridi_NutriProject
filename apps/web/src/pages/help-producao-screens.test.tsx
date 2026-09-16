@@ -433,10 +433,12 @@ describe("Modelos de Formulação", () => {
   it("“Usada por” e “Fornecimento padrão” têm o seu ⓘ no detalhe", async () => {
     await abrirDetalhe();
 
+    /* A bancada compartilhada desenha as DUAS seções — composição e embalagem
+       —, e cada uma traz o ⓘ do fornecimento no cabeçalho da coluna. */
     for (const id of ["producao.template.usadaPor", "producao.template.fornecimentoPadrao"] as const) {
       expect(
-        screen.getByRole("button", { name: `Ajuda sobre ${helpHints[id].label}` }),
-      ).toBeInTheDocument();
+        screen.getAllByRole("button", { name: `Ajuda sobre ${helpHints[id].label}` }).length,
+      ).toBeGreaterThan(0);
     }
   });
 });

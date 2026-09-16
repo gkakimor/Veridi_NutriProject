@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -411,11 +412,42 @@ describe("Escolher template a partir do produto", () => {
   });
 });
 
+/**
+ * A proveniência com o estado de "Salvar como template" que a PÁGINA controla.
+ *
+ * O botão mora na barra fixa da Formulação desde a fatia 2 da bancada
+ * compartilhada; o formulário do nome continua na proveniência. Este harness
+ * reproduz só o gatilho, para que o arquivo continue provando o CONTRATO da
+ * ação — é cópia, o nome é obrigatório, o destino é o Modelo novo — em vez do
+ * lugar do clique, que a tela da Formulação prova no teste dela.
+ */
+function OrigemComAcoes(props: {
+  version: FormulationVersionDTO;
+  canEdit: boolean;
+  onChanged: () => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  return (
+    <>
+      {props.canEdit && !aberto && (
+        <button type="button" onClick={() => setAberto(true)}>
+          Salvar como template
+        </button>
+      )}
+      <FormulationTemplateOrigin
+        {...props}
+        salvandoComoTemplate={aberto}
+        onSalvandoComoTemplateChange={setAberto}
+      />
+    </>
+  );
+}
+
 describe("Origem da formulação", () => {
   it("mostra de onde a formulação veio", async () => {
     render(
       <MemoryRouter>
-        <FormulationTemplateOrigin version={formulacao()} canEdit onChanged={vi.fn()} />
+        <OrigemComAcoes version={formulacao()} canEdit onChanged={vi.fn()} />
       </MemoryRouter>,
     );
 
@@ -427,7 +459,7 @@ describe("Origem da formulação", () => {
   it("formulação sem template não inventa origem", async () => {
     render(
       <MemoryRouter>
-        <FormulationTemplateOrigin
+        <OrigemComAcoes
           version={formulacao({
             originTemplateVersionId: null,
             originTemplateCode: null,
@@ -459,7 +491,7 @@ describe("Origem da formulação", () => {
 
     render(
       <MemoryRouter>
-        <FormulationTemplateOrigin version={formulacao()} canEdit onChanged={vi.fn()} />
+        <OrigemComAcoes version={formulacao()} canEdit onChanged={vi.fn()} />
       </MemoryRouter>,
     );
 
@@ -493,7 +525,7 @@ describe("Origem da formulação", () => {
 
     render(
       <MemoryRouter>
-        <FormulationTemplateOrigin version={formulacao()} canEdit onChanged={vi.fn()} />
+        <OrigemComAcoes version={formulacao()} canEdit onChanged={vi.fn()} />
       </MemoryRouter>,
     );
     await waitFor(() =>
@@ -526,7 +558,7 @@ describe("Origem da formulação", () => {
 
     render(
       <MemoryRouter>
-        <FormulationTemplateOrigin version={formulacao()} canEdit onChanged={vi.fn()} />
+        <OrigemComAcoes version={formulacao()} canEdit onChanged={vi.fn()} />
       </MemoryRouter>,
     );
     await waitFor(() =>
@@ -546,7 +578,7 @@ describe("Origem da formulação", () => {
 
     render(
       <MemoryRouter>
-        <FormulationTemplateOrigin version={formulacao()} canEdit onChanged={vi.fn()} />
+        <OrigemComAcoes version={formulacao()} canEdit onChanged={vi.fn()} />
       </MemoryRouter>,
     );
     await waitFor(() =>
@@ -574,7 +606,7 @@ describe("Origem da formulação", () => {
   it("quem não edita fórmula não vê ações de escrita", async () => {
     render(
       <MemoryRouter>
-        <FormulationTemplateOrigin version={formulacao()} canEdit={false} onChanged={vi.fn()} />
+        <OrigemComAcoes version={formulacao()} canEdit={false} onChanged={vi.fn()} />
       </MemoryRouter>,
     );
 

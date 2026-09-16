@@ -138,7 +138,9 @@ describe("Formulação — Salvar rascunho responde", () => {
     editarBase("2500");
     const pendencia = screen.getByText("Alterações não salvas");
     expect(pendencia).toHaveAttribute("role", "status");
-    expect(pendencia.closest(".doc-actions__primary")).toContainElement(botao("Salvar rascunho"));
+    /* A barra é FIXA no rodapé desde FORMULATION-TEMPLATE-WORKBENCH-01 (fatia
+       2): a pendência continua ao lado do botão que a resolve. */
+    expect(pendencia.closest(".sticky-action-bar__fim")).toContainElement(botao("Salvar rascunho"));
 
     fireEvent.click(botao("Salvar rascunho"));
 

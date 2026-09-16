@@ -1,30 +1,27 @@
-import { formatQuantity } from "../../lib/quantity";
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type {
-  DosageForm,
-  FormulationComponentQuantityMode,
-  FormulationTemplateComponentInput,
+  FormulationComponentBasis,
+  FormulationTemplateComponentDTO,
   FormulationTemplateDTO,
   FormulationTemplateDiffDTO,
   FormulationTemplateVersionDTO,
-  ItemDTO,
-  PresentationType,
+  SecaoDaFormula,
+  SupplyResponsibility,
   UnitOfMeasureDTO,
   UpdateFormulationTemplateVersionInput,
 } from "@veridi/shared";
 import {
-  DOSAGE_FORM_LABELS,
   FORMAS_DA_BANCADA,
   FORMULATION_CALCULATION_MODE_LABELS,
   FORMULATION_TEMPLATE_VERSION_STATUS_LABELS,
   PRESENTATION_TYPES,
-  PRESENTATION_TYPE_LABELS,
-  SUPPLY_RESPONSIBILITY_LABELS,
   apresentacoesDaForma,
+  capsulasPorEmbalagem,
   dosesPorEmbalagemDaApresentacao,
-  baseSugeridaDaSecao,
   formaDerivaDoses,
+  rendimentoEsperado,
+  resumirDoses,
   secaoDoItem,
 } from "@veridi/shared";
 import {
@@ -36,13 +33,13 @@ import {
   updateFormulationTemplate,
   updateFormulationTemplateVersion,
 } from "../../lib/formulation-templates-api";
-import { getItem, listItems } from "../../lib/items-api";
+import { getItem } from "../../lib/items-api";
 import { listUnits } from "../../lib/units-api";
 import { unidadesDaDimensao } from "../../lib/uom-options";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { FormSection } from "../../components/FormSection";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
-import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
+import { CalcHint } from "../../components/help/CalcHint";
 import { TemplateDiff } from "./TemplateDiff";
 import { formatDateTime } from "../../lib/dates";
 import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
@@ -50,32 +47,65 @@ import { decimalLegivel, exigirDecimal, exigirDecimalOpcional } from "../../lib/
 import { lerInteiroOpcional } from "../../lib/integer-input";
 import { toPtBrEditText, formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import {
-  CASAS_PERCENTUAL_TECNICO,
   CASAS_QUANTIDADE,
   OPCOES_PERCENTUAL_TECNICO,
   OPCOES_QUANTIDADE,
 } from "../../lib/numeric-scales";
-import { DecimalField, IntegerField, PercentField } from "../../components/NumericField";
+import { DecimalField } from "../../components/NumericField";
 import {
   assinaturaDoDocumento,
   decimalComparavel,
   textoComparavel,
 } from "../../lib/dirty-fields";
+import { formatQuantity } from "../../lib/quantity";
 import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import { useAuth } from "../../app/AuthProvider";
-import { ContextHelp, InfoHint } from "../../components/help";
+import { ContextHelp } from "../../components/help";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
-import { helpHints, helpTopics } from "../../help/help-content";
-import type { HelpHintId } from "../../help/help-content";
+import { helpTopics } from "../../help/help-content";
+/*
+  A BANCADA É A MESMA DA FORMULAÇÃO (FORMULATION-TEMPLATE-WORKBENCH-01, fatia 2).
+
+  Esta tela deixou de ter tabela própria. A grade da receita, as premissas da
+  forma, as premissas de produção, o resumo técnico, a prévia do cálculo e o
+  catálogo de itens vêm de `formulation-workbench` — os MESMOS componentes que a
+  Formulação de produto usa. O que continua daqui é o DOCUMENTO: nome, descrição,
+  arquivamento, ciclo de vida das versões, histórico e comparação.
+*/
+import { Dica } from "../formulation-workbench/dicas";
+import { PremissasDaForma } from "../formulation-workbench/PremissasDaForma";
+import type { PremissasDaFormaValores } from "../formulation-workbench/PremissasDaForma";
+import { PremissasDeProducao } from "../formulation-workbench/PremissasDeProducao";
+import { ResumoDaReceita } from "../formulation-workbench/ResumoDaReceita";
+import { StickyActionBar } from "../formulation-workbench/StickyActionBar";
+import { TabelaDaReceita } from "../formulation-workbench/TabelaDaReceita";
 import {
-  PainelDeAjustes,
-  errosDosAjustes,
-  normalizarAjustes,
-  resumoDosAjustes,
-  useAjustesEmEdicao,
-} from "../formulations/AjustesDaQuantidade";
-import type { AjustesDaQuantidade } from "../formulations/AjustesDaQuantidade";
-import { TableEmptyRow } from "../../components/TableEmptyRow";
+  itemDaBancada,
+  opcaoDoItem,
+  useCatalogoDeItens,
+} from "../formulation-workbench/catalogo-de-itens";
+import type { ItemDaBancada } from "../formulation-workbench/catalogo-de-itens";
+import {
+  CAMPOS_DO_COMPONENTE,
+  ROTULO_DA_RESERVA,
+  absorverChaves,
+  chaveDeErro,
+  comAjustesDaBancada,
+  comItemEscolhido,
+  errosDaLinha,
+  idDoCampo,
+  linhaNova,
+  proximaChaveDaLinha,
+  secaoDaLinha,
+  unidadeLegadaDaLinha,
+} from "../formulation-workbench/linha-da-receita";
+import type { LinhaDaReceita } from "../formulation-workbench/linha-da-receita";
+import {
+  operandosDoFisico,
+  previaDaDose,
+  previaDoComponente,
+  unidadesDoMotor,
+} from "../formulation-workbench/previa-do-calculo";
 
 /**
  * Detalhe de um template da biblioteca.
@@ -85,72 +115,67 @@ import { TableEmptyRow } from "../../components/TableEmptyRow";
  * formulações de produto apontam para ela.
  */
 
-/** ⓘ de um conceito da matriz, lido do registro central. */
-function Dica({ id }: { id: HelpHintId }) {
-  const dica = helpHints[id];
-  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
-}
-
-interface LinhaEditavel extends FormulationTemplateComponentInput {
-  chave: string;
-}
-
 /**
- * Os componentes da versão, na forma que a tela edita.
+ * O componente da versão do Modelo como a bancada o edita.
  *
- * A linha carrega TUDO o que o componente é — salvar recria os componentes, e
- * o que não viesse aqui voltava ao padrão do banco: base por dose virava base
- * da fórmula, e pureza, overage e notas sumiam.
- *
- * Números no texto do campo, em português (`toPtBrEditText`): é o que os
- * campos editam e o que a pendência compara.
+ * Os nomes já são os mesmos desde a fatia 1 — `stockUnitCode`,
+ * `itemDefaultPurityPercent`, `itemExternalCode` —, então a conversão é direta.
+ * O Modelo não tem servidor que calcule físico por embalagem: as grandezas
+ * derivadas ficam `null` e quem responde por elas é a prévia, pelo MESMO motor
+ * que a API da Formulação usa.
  */
-function linhasDaVersao(version: FormulationTemplateVersionDTO): LinhaEditavel[] {
-  return version.components.map((component, index) => ({
-    chave: `${component.id}-${index}`,
+function linhaDoModelo(component: FormulationTemplateComponentDTO): LinhaDaReceita {
+  return {
+    key: proximaChaveDaLinha(),
     itemId: component.itemId,
+    itemCode: component.itemCode,
+    itemName: component.itemName,
+    itemActive: component.itemActive,
+    stockUnitCode: component.stockUnitCode,
+    // Números no texto do campo, em português: é o que os campos editam.
     quantity: toPtBrEditText(component.quantity, OPCOES_QUANTIDADE),
     unitCode: component.unitCode,
     basis: component.basis,
     supplyResponsibility: component.supplyResponsibility,
-    ...percentuaisEmTexto(component),
+    purityPercentApplied: toPtBrEditText(component.purityPercentApplied, OPCOES_PERCENTUAL_TECNICO),
+    overagePercent: toPtBrEditText(component.overagePercent, OPCOES_PERCENTUAL_TECNICO),
     quantityMode: component.quantityMode,
     applyPurityAdjustment: component.applyPurityAdjustment,
     applyOverageAdjustment: component.applyOverageAdjustment,
-    notes: component.notes,
-  }));
+    notes: component.notes ?? "",
+    theoreticalPerUnit: null,
+    physicalPerUnit: null,
+    theoreticalPerDose: null,
+    physicalPerDose: null,
+    physicalPerCapsule: null,
+    itemType: component.itemType,
+    secao: secaoDoItem(component.itemType),
+    itemSourceName: component.itemSourceName ?? null,
+    itemDeclaredNutrient: component.itemDeclaredNutrient ?? null,
+    itemFamily: component.itemFamily ?? null,
+    itemPackagingSubtype: component.itemPackagingSubtype ?? null,
+    itemDefaultPurityPercent: component.itemDefaultPurityPercent ?? null,
+    itemExternalCode: component.itemExternalCode ?? null,
+  };
 }
 
-/** Pureza e overage da API no texto do campo; ausente continua ausente. */
-function percentuaisEmTexto(componente: {
-  purityPercentApplied: string | null;
-  overagePercent: string | null;
-}): { purityPercentApplied: string | null; overagePercent: string | null } {
-  return {
-    purityPercentApplied:
-      componente.purityPercentApplied === null
-        ? null
-        : toPtBrEditText(componente.purityPercentApplied, OPCOES_PERCENTUAL_TECNICO),
-    overagePercent:
-      componente.overagePercent === null
-        ? null
-        : toPtBrEditText(componente.overagePercent, OPCOES_PERCENTUAL_TECNICO),
-  };
+function linhasDaVersao(version: FormulationTemplateVersionDTO): LinhaDaReceita[] {
+  return version.components.map(linhaDoModelo);
 }
 
 /**
  * A assinatura do rascunho — base, unidade e componentes numa string.
  *
- * Quantidade física, modo de cálculo, pureza, overage, unidade e notas entram
+ * Quantidade, base, fornecimento, modo, pureza, reserva, unidade e notas entram
  * todos: são digitação que "Salvar rascunho" grava e que sair perde. O que a
- * tela apenas calcula — a quantidade equivalente que o painel de ajustes
- * mostra, o resumo da linha, a comparação entre versões — fica fora.
+ * tela apenas calcula — a prévia da linha, o resumo da receita, a comparação
+ * entre versões — fica fora.
  *
  * A chave da linha não entra: é identidade de renderização e muda a cada
- * recarga. Linha em branco também — "+ Adicionar componente" sem preencher
+ * recarga. Linha em branco também — "+ Adicionar matéria-prima" sem preencher
  * nada não é trabalho a perder, e é o que o próprio salvamento já descarta.
  */
-function assinaturaDosComponentes(linhas: LinhaEditavel[]): string {
+function assinaturaDosComponentes(linhas: LinhaDaReceita[]): string {
   return assinaturaDoDocumento(
     linhas
       .filter((linha) => !linhaEmBranco(linha))
@@ -158,20 +183,20 @@ function assinaturaDosComponentes(linhas: LinhaEditavel[]): string {
         item: linha.itemId,
         quantidade: decimalComparavel(linha.quantity),
         unidade: linha.unitCode,
-        base: linha.basis ?? null,
-        fornecimento: linha.supplyResponsibility ?? null,
-        modo: linha.quantityMode ?? null,
+        base: linha.basis,
+        fornecimento: linha.supplyResponsibility,
+        modo: linha.quantityMode,
         pureza: decimalComparavel(linha.purityPercentApplied),
         overage: decimalComparavel(linha.overagePercent),
-        aplicaPureza: linha.applyPurityAdjustment ?? false,
-        aplicaOverage: linha.applyOverageAdjustment ?? false,
+        aplicaPureza: linha.applyPurityAdjustment,
+        aplicaOverage: linha.applyOverageAdjustment,
         notas: textoComparavel(linha.notes),
       })),
   );
 }
 
-/** "+ Adicionar componente" sem nada preenchido: não é trabalho, e não vai ao servidor. */
-function linhaEmBranco(linha: LinhaEditavel): boolean {
+/** Linha acrescentada e não preenchida: não é trabalho, e não vai ao servidor. */
+function linhaEmBranco(linha: LinhaDaReceita): boolean {
   return linha.itemId === "" && linha.quantity.trim() === "";
 }
 
@@ -182,7 +207,7 @@ function linhaEmBranco(linha: LinhaEditavel): boolean {
  * na tela, a pendência continuava acesa e nada dizia por que ela não foi
  * gravada. Linha começada não some em silêncio — prende o salvar e diz o quê.
  */
-function faltaNaLinha(linha: LinhaEditavel): "item" | "quantidade" | null {
+function faltaNaLinha(linha: LinhaDaReceita): "item" | "quantidade" | null {
   if (linhaEmBranco(linha)) return null;
   if (linha.itemId === "") return "item";
   if (linha.quantity.trim() === "") return "quantidade";
@@ -201,15 +226,7 @@ const MENSAGEM_DA_FALTA = {
  * renomear de um lado só criaria tradução a cada tela. Números em texto
  * português: é o que os campos editam e o que a pendência compara.
  */
-interface PremissasEmEdicao {
-  dosageForm: DosageForm | "";
-  presentationType: PresentationType | "";
-  capsulesPerDose: string;
-  capsulesPerPackage: string;
-  doseAmount: string;
-  doseUomCode: string;
-  packageContentAmount: string;
-  packageContentUomCode: string;
+interface PremissasEmEdicao extends PremissasDaFormaValores {
   expectedLossPercent: string;
 }
 
@@ -301,7 +318,7 @@ function assinaturaDoRascunho(
   base: string,
   unidade: string,
   premissas: PremissasEmEdicao,
-  linhas: LinhaEditavel[],
+  linhas: LinhaDaReceita[],
 ): string {
   return assinaturaDoDocumento({
     base: decimalComparavel(base),
@@ -309,49 +326,6 @@ function assinaturaDoRascunho(
     premissas: assinaturaDasPremissas(premissas),
     componentes: assinaturaDosComponentes(linhas),
   });
-}
-
-/**
- * A configuração de ajustes de uma linha ou componente do Modelo, no formato
- * do painel — o mesmo da Formulação real. Pureza e overage ausentes ficam
- * vazios: nunca 0% nem 100%. Modelo antigo, sem modo gravado, é física
- * informada sem ajuste, que é o que ele sempre significou.
- */
-function ajustesDoModelo(componente: {
-  quantityMode?: FormulationComponentQuantityMode | undefined;
-  purityPercentApplied?: string | null | undefined;
-  overagePercent?: string | null | undefined;
-  applyPurityAdjustment?: boolean | undefined;
-  applyOverageAdjustment?: boolean | undefined;
-}): AjustesDaQuantidade {
-  return {
-    quantityMode: componente.quantityMode ?? "PHYSICAL_DIRECT",
-    purityPercentApplied: componente.purityPercentApplied ?? "",
-    overagePercent: componente.overagePercent ?? "",
-    applyPurityAdjustment: componente.applyPurityAdjustment ?? false,
-    applyOverageAdjustment: componente.applyOverageAdjustment ?? false,
-  };
-}
-
-/**
- * Primeira página do catálogo — o que a lista mostra antes de digitar.
- *
- * Era 200 sobre 2.729 itens: 2.529 existiam e não apareciam na busca, sem
- * aviso. Quem busca agora pergunta ao servidor (`buscarItens`), que conhece
- * o catálogo inteiro.
- */
-const PRIMEIRA_PAGINA = 50;
-
-/** Um formato só de rótulo: o da lista inicial e o da busca não podem divergir. */
-function opcaoDoItem(item: ItemDTO): EntityOption {
-  return { id: item.id, code: item.code, name: item.name };
-}
-
-/** Mescla sem duplicar e sem trocar a referência à toa. */
-function mesclarItens(atual: ItemDTO[], novos: ItemDTO[]): ItemDTO[] {
-  const conhecidos = new Set(atual.map((item) => item.id));
-  const ineditos = novos.filter((item) => !conhecidos.has(item.id));
-  return ineditos.length === 0 ? atual : [...atual, ...ineditos];
 }
 
 /**
@@ -367,7 +341,7 @@ type RascunhoTemplate = {
   unidade: string;
   /** Premissas técnicas digitadas — sair para cadastrar um Item não as perde. */
   premissas: PremissasEmEdicao;
-  linhas: LinhaEditavel[];
+  linhas: LinhaDaReceita[];
 };
 
 /**
@@ -390,7 +364,6 @@ export function FormulationTemplateDetailPage() {
   const canEdit = user?.role === "ADMIN" || user?.role === "PRODUCTION";
 
   const [template, setTemplate] = useState<FormulationTemplateDTO | null>(null);
-  const [items, setItems] = useState<ItemDTO[]>([]);
   const [error, setError] = useState<string | null>(null);
   /*
    * A ação em curso pelo nome, não um booleano — o mesmo desenho da Política
@@ -401,7 +374,7 @@ export function FormulationTemplateDetailPage() {
   const saving = acaoEmCurso !== null;
   /** O que a última ação gravou, no bloco que a disparou — uma frase, nunca uma pilha. */
   const [feito, setFeito] = useState<{ bloco: string; texto: string } | null>(null);
-  const [linhas, setLinhas] = useState<LinhaEditavel[]>([]);
+  const [linhas, setLinhas] = useState<LinhaDaReceita[]>([]);
   /** Depois de um salvar recusado por linha incompleta, cada linha diz o que falta. */
   const [conferirLinhas, setConferirLinhas] = useState(false);
   const [base, setBase] = useState("1");
@@ -414,8 +387,8 @@ export function FormulationTemplateDetailPage() {
   const [diff, setDiff] = useState<FormulationTemplateDiffDTO | null>(null);
   const [nome, setNome] = useState("");
   const [descricao, setDescricao] = useState("");
-  /** Painel de ajustes por linha, com rascunho local — o mesmo da Formulação. */
-  const ajustes = useAjustesEmEdicao();
+  /** O catálogo da bancada — o MESMO da Formulação, filtrado pela seção. */
+  const catalogo = useCatalogoDeItens();
 
   /**
    * O rascunho restaurado ganha do servidor — uma vez.
@@ -492,11 +465,6 @@ export function FormulationTemplateDetailPage() {
   }, [templateId]);
 
   useEffect(() => load(), [load]);
-  useEffect(() => {
-    listItems({ pageSize: PRIMEIRA_PAGINA })
-      .then((result) => setItems(result.items))
-      .catch(() => setItems([]));
-  }, []);
   /*
    * O catálogo de unidades chega uma vez, para todas as linhas — cada uma só
    * filtra pela dimensão do seu Item. É a mesma leitura da Formulação real
@@ -507,50 +475,6 @@ export function FormulationTemplateDetailPage() {
       .then(setUnits)
       .catch(() => setUnits([]));
   }, []);
-
-  /**
-   * Busca no servidor. A carga inicial desta tela não filtra nada — template
-   * compõe com qualquer item de estoque, ativo ou não —, então a busca
-   * também não filtra: quem não aparecia na lista passa a ser encontrável,
-   * e ninguém que já era elegível deixa de ser.
-   */
-  async function buscarItens(termo: string): Promise<EntityOption[]> {
-    const resposta = await listItems({ search: termo, pageSize: PRIMEIRA_PAGINA });
-    // O achado entra no catálogo da tela: o rótulo do item escolhido sai
-    // daqui, e uma linha com id sem rótulo lê como campo vazio.
-    setItems((atual) => mesclarItens(atual, resposta.items));
-    return resposta.items.map(opcaoDoItem);
-  }
-
-  /**
-   * Rótulo do que a matriz JÁ referencia.
-   *
-   * A linha do rascunho guarda só o `itemId`; o nome vem do catálogo. Com o
-   * catálogo paginado, componente de item fora da página aparecia como campo
-   * em branco — parecia linha por preencher, e o caminho natural era
-   * escolher outro item ou cadastrar de novo. Buscar pelos ids resolve
-   * exatamente os que faltam, uma vez cada.
-   */
-  const rotulosPedidos = useRef(new Set<string>());
-  useEffect(() => {
-    const faltando = [
-      ...new Set(
-        linhas
-          .map((linha) => linha.itemId)
-          .filter(
-            (itemId) =>
-              itemId &&
-              !items.some((item) => item.id === itemId) &&
-              !rotulosPedidos.current.has(itemId),
-          ),
-      ),
-    ];
-    if (faltando.length === 0) return;
-    for (const itemId of faltando) rotulosPedidos.current.add(itemId);
-    listItems({ ids: faltando, pageSize: faltando.length })
-      .then((resultado) => setItems((atual) => mesclarItens(atual, resultado.items)))
-      .catch(() => undefined);
-  }, [linhas, items]);
 
   /**
    * Cadastro de item na TELA OFICIAL, sem perder a matriz.
@@ -572,7 +496,9 @@ export function FormulationTemplateDetailPage() {
       // Rascunho vem de `sessionStorage`: é dado desconhecido até prova em
       // contrário, e premissa ausente volta vazia em vez de quebrar a tela.
       setPremissas({ ...PREMISSAS_VAZIAS, ...(draft.premissas ?? {}) });
-      setLinhas(Array.isArray(draft.linhas) ? draft.linhas : []);
+      const restauradas = Array.isArray(draft.linhas) ? draft.linhas : [];
+      absorverChaves(restauradas);
+      setLinhas(restauradas);
     },
     onCreated: (result, record) => {
       const chave = lerChaveDaLinha(record.context);
@@ -580,140 +506,27 @@ export function FormulationTemplateDetailPage() {
       // Pelo id, imediatamente. O nome é provisório: fica no lugar até o
       // item real chegar logo abaixo.
       setLinhas((atual) =>
-        atual.map((l) => (l.chave === chave ? { ...l, itemId: result.entityId } : l)),
+        atual.map((l) =>
+          l.key === chave ? { ...l, itemId: result.entityId, itemName: result.label } : l,
+        ),
       );
       /*
-       * O catálogo desta tela vem paginado (200 itens) e o item recém-criado
-       * pode não estar nele. Buscá-lo pelo id resolve as duas coisas de uma
-       * vez: a linha ganha a unidade que o cadastro definiu, e o seletor
-       * passa a ter o que mostrar. Falha aqui não desfaz a seleção — o id
-       * já está na linha.
+       * A linha precisa da unidade de estoque, e o resultado da criação traz
+       * só id e rótulo. Buscar o item pelo id é o que completa a linha — e o
+       * que põe a opção no seletor antes de o catálogo recarregar. Falha aqui
+       * não desfaz a seleção: o id já está na linha.
        */
       void getItem(result.entityId)
         .then((item) => {
-          setItems((atual) => [item, ...atual.filter((row) => row.id !== item.id)]);
+          const opcao = itemDaBancada(item);
+          catalogo.adicionar(opcao);
           setLinhas((atual) =>
-            atual.map((l) =>
-              l.chave === chave ? { ...l, unitCode: unidadeParaOItem(l.unitCode, item) } : l,
-            ),
+            atual.map((l) => (l.key === chave ? comItemEscolhido(l, opcao, units) : l)),
           );
         })
         .catch(() => undefined);
     },
   });
-
-  /**
-   * A unidade da linha quando o Item muda. A escolhida continua se o Item novo
-   * é da mesma dimensão: trocar pela de estoque dele mudaria o que a quantidade
-   * digitada quer dizer, e quantidade não se converte sozinha. De outra
-   * dimensão, ela não pode ficar — entra a de estoque do Item novo.
-   */
-  function unidadeParaOItem(atual: string, item: ItemDTO | undefined): string {
-    if (!item) return atual;
-    const dimensao = dimensaoDoItem(item);
-    const serve = units.some((unit) => unit.code === atual && unit.dimension === dimensao);
-    return serve ? atual : item.unitCode;
-  }
-
-  /** A dimensão do Item é a da sua unidade de estoque, lida do catálogo — como a API compara. */
-  function dimensaoDoItem(item: ItemDTO): string | undefined {
-    return units.find((unit) => unit.code === item.unitCode)?.dimension;
-  }
-
-  /**
-   * A linha com o item escolhido — e com o que o cadastro do Item já sabe.
-   *
-   * A pureza padrão do Item entra como a APLICADA desta versão do Modelo:
-   * redigitar o que já está cadastrado é trabalho repetido e é divergência
-   * esperando acontecer. É SNAPSHOT — salvar congela o valor na versão, e
-   * alterar o cadastro do Item depois não reescreve Modelo nenhum, nem a
-   * Formulação que nascer dele.
-   *
-   * A pureza é do ITEM: trocar o item não mantém a do anterior, e item sem
-   * pureza cadastrada deixa o campo VAZIO — desconhecida nunca vira 100%.
-   * Embalagem não tem pureza: pote e tampa não têm teor a corrigir.
-   */
-  function trocarItem(index: number, itemId: string) {
-    const item = items.find((candidato) => candidato.id === itemId);
-    const daComposicao = item ? secaoDoItem(item.type) === "COMPOSICAO" : false;
-    /* Cápsula e pó calculam por dose, e o modo por dose também: é o que a linha nova assume. */
-    const receitaPorDose =
-      formaDerivaDoses(premissas.dosageForm === "" ? null : premissas.dosageForm) ||
-      template?.draftVersion?.calculationMode === "PER_DOSE";
-    setLinhas((atual) =>
-      atual.map((l, i) =>
-        i === index
-          ? // Sem Item não há dimensão: a unidade espera por ele.
-            {
-              ...l,
-              itemId,
-              unitCode: itemId ? unidadeParaOItem(l.unitCode, item) : "",
-              /*
-               * A base da linha NOVA sai da seção do Item: embalagem conta por
-               * unidade acabada, composição conta por dose quando a receita é
-               * por dose. Linha que já declarou base não é tocada — matriz
-               * histórica escrita sobre a base continua sobre a base.
-               */
-              ...(l.basis === undefined && item
-                ? { basis: baseSugeridaDaSecao(secaoDoItem(item.type), receitaPorDose) }
-                : {}),
-              purityPercentApplied:
-                itemId && daComposicao && item?.defaultPurityPercent
-                  ? toPtBrEditText(item.defaultPurityPercent, OPCOES_PERCENTUAL_TECNICO)
-                  : null,
-            }
-          : l,
-      ),
-    );
-  }
-
-  /**
-   * O que a linha oferece e o que ela diz. Só se julga com o Item e o catálogo
-   * na mão: antes disso, "não está na lista" é só "ainda não chegou". Unidade
-   * gravada fora da lista — legado — aparece como está, nunca trocada em
-   * silêncio, e prende o salvar até alguém escolher.
-   */
-  function unidadeDaLinha(linha: LinhaEditavel) {
-    const item = items.find((candidato) => candidato.id === linha.itemId);
-    const dimensao = item ? dimensaoDoItem(item) : undefined;
-    const opcoes = dimensao ? unidadesDaDimensao(units, dimensao) : [];
-    const oferecida = opcoes.some((unit) => unit.code === linha.unitCode);
-    const erro =
-      item && units.length > 0 && !oferecida
-        ? linha.unitCode
-          ? `Unidade inválida ou legada: ${linha.unitCode}. Escolha uma unidade da lista.`
-          : "Escolha a unidade do componente."
-        : null;
-    return { item, opcoes, oferecida, erro };
-  }
-
-  /**
-   * "Aplicar ajustes" no Modelo: o rascunho vira a linha, normalizado como na
-   * Formulação (§52), e o painel recolhe. Gravar continua sendo "Salvar
-   * rascunho" da versão.
-   */
-  function aplicarAjustesDoModelo(linha: LinhaEditavel) {
-    const rascunhoDeAjuste = ajustes.rascunhoDe(linha.chave);
-    if (!rascunhoDeAjuste) return;
-    const codigo = items.find((item) => item.id === linha.itemId)?.code ?? "Componente";
-    if (Object.keys(errosDosAjustes(rascunhoDeAjuste, codigo)).length > 0) return;
-    const aplicado = normalizarAjustes(rascunhoDeAjuste);
-    setLinhas((atual) =>
-      atual.map((l) =>
-        l.chave === linha.chave
-          ? {
-              ...l,
-              quantityMode: aplicado.quantityMode,
-              purityPercentApplied: aplicado.purityPercentApplied.trim() || null,
-              overagePercent: aplicado.overagePercent.trim() || null,
-              applyPurityAdjustment: aplicado.applyPurityAdjustment,
-              applyOverageAdjustment: aplicado.applyOverageAdjustment,
-            }
-          : l,
-      ),
-    );
-    ajustes.fechar(linha.chave);
-  }
 
   async function run(
     acao: string,
@@ -750,21 +563,16 @@ export function FormulationTemplateDetailPage() {
   }
 
   /*
-   * Três pendências convivem nesta tela, e a guarda soma as três.
+   * Duas pendências convivem nesta tela, e a guarda soma as duas.
    *
    * Identificação e rascunho gravam separado, cada um com o seu botão: salvar
    * o nome não absolve o componente meio digitado, e salvar o rascunho não
-   * absolve o nome trocado. A terceira é o painel de ajustes aberto e ainda
-   * não aplicado — a mesma pendência que já prende "Salvar rascunho", contada
-   * pela MESMA comparação, para que não divirjam no primeiro campo novo.
+   * absolve o nome trocado.
    *
-   * Nada do que a tela calcula entra: quantidade equivalente, resumo da linha
-   * e comparação entre versões são resultado do que já está ali.
+   * Nada do que a tela calcula entra: prévia da linha, resumo da receita e
+   * comparação entre versões são resultado do que já está ali.
    */
   const rascunhoDoServidor = template?.draftVersion ?? null;
-  const ajustePendente = linhas.some((linha) =>
-    ajustes.alterado(linha.chave, ajustesDoModelo(linha)),
-  );
   const identificacaoAlterada =
     template !== null &&
     canEdit &&
@@ -781,7 +589,7 @@ export function FormulationTemplateDetailPage() {
         linhasDaVersao(rascunhoDoServidor),
       );
   const { liberarGuarda } = useUnsavedChangesGuard({
-    isDirty: identificacaoAlterada || rascunhoAlterado || ajustePendente,
+    isDirty: identificacaoAlterada || rascunhoAlterado,
     substantivo: "modelo de formulação",
   });
 
@@ -809,17 +617,34 @@ export function FormulationTemplateDetailPage() {
     return null;
   }
 
-  if (!template) {
-    return (
-      <div className="doc-body">
-        {error ? <p className="form-alert" role="alert">{error}</p> : <p>Carregando…</p>}
-      </div>
-    );
-  }
-
-  const rascunho = template.draftVersion;
-  const ativa = template.activeVersion;
+  const rascunho = template?.draftVersion ?? null;
+  const ativa = template?.activeVersion ?? null;
   const editavel = canEdit && rascunho !== null;
+
+  /*
+   * A VERSÃO QUE A TELA MOSTRA: o rascunho quando existe, senão a ativa.
+   *
+   * A bancada é a mesma nos dois casos — só o rascunho é editável. Sem esta
+   * distinção, um Modelo sem rascunho abriria a grade vazia e sem premissa
+   * nenhuma, como se a matriz ativa não tivesse receita.
+   */
+  const versaoExibida = rascunho ?? ativa;
+  /*
+   * As linhas da versão ATIVA nascem uma vez por versão:  gera
+   * chave nova a cada chamada, e recalculá-las a cada render trocaria a
+   * identidade de todas as linhas — a tabela remontaria sozinha.
+   */
+  const linhasDaAtiva = useMemo(
+    () => (template?.activeVersion ? linhasDaVersao(template.activeVersion) : []),
+    [template?.activeVersion?.id],
+  );
+  const receitaExibida = rascunho ? linhas : linhasDaAtiva;
+  const premissasExibidas = rascunho
+    ? premissas
+    : ativa
+      ? premissasDaVersao(ativa)
+      : PREMISSAS_VAZIAS;
+  const baseExibida = rascunho ? base : (ativa?.basisQuantity ?? "1");
 
   /*
    * PREMISSAS TÉCNICAS DA MATRIZ — a mesma leitura da Formulação.
@@ -830,34 +655,33 @@ export function FormulationTemplateDetailPage() {
    * ENQUANTO for a dele, porque tirar a opção de um valor gravado faria o
    * seletor cair no traço e apagar a premissa no primeiro salvamento.
    */
-  const forma = premissas.dosageForm;
+  const forma = premissasExibidas.dosageForm;
   const formasOferecidas =
     forma === "" || FORMAS_DA_BANCADA.includes(forma)
       ? FORMAS_DA_BANCADA
       : [...FORMAS_DA_BANCADA, forma];
   const apresentacoesOferecidas = apresentacoesDaForma(
     forma === "" ? null : forma,
-    premissas.presentationType === "" ? null : premissas.presentationType,
+    premissasExibidas.presentationType === "" ? null : premissasExibidas.presentationType,
     PRESENTATION_TYPES,
   );
   /* Dose e conteúdo do pó são massa: o seletor só oferece unidade de massa. */
   const unidadesDeMassa = units.filter((unit) => unit.dimension === "MASS");
-  const leituraDasCapsulasPorDose = lerInteiroOpcional(premissas.capsulesPerDose);
-  const leituraDasCapsulasPorEmbalagem = lerInteiroOpcional(premissas.capsulesPerPackage);
+  const leituraDasCapsulasPorDose = lerInteiroOpcional(premissasExibidas.capsulesPerDose);
+  const leituraDasCapsulasPorEmbalagem = lerInteiroOpcional(premissasExibidas.capsulesPerPackage);
+  const capsulasPorDose =
+    forma === "CAPSULE" && leituraDasCapsulasPorDose.tipo === "valido"
+      ? leituraDasCapsulasPorDose.valor
+      : null;
   const premissasDaTela = {
     dosageForm: forma === "" ? null : forma,
-    capsulesPerDose:
-      forma === "CAPSULE" && leituraDasCapsulasPorDose.tipo === "valido"
-        ? leituraDasCapsulasPorDose.valor
-        : null,
+    capsulesPerDose: capsulasPorDose,
     capsulesPerPackage:
-      leituraDasCapsulasPorEmbalagem.tipo === "valido"
-        ? leituraDasCapsulasPorEmbalagem.valor
-        : null,
-    doseAmount: decimalLegivel(premissas.doseAmount, OPCOES_QUANTIDADE),
-    doseUomCode: premissas.doseUomCode || null,
-    packageContentAmount: decimalLegivel(premissas.packageContentAmount, OPCOES_QUANTIDADE),
-    packageContentUomCode: premissas.packageContentUomCode || null,
+      leituraDasCapsulasPorEmbalagem.tipo === "valido" ? leituraDasCapsulasPorEmbalagem.valor : null,
+    doseAmount: decimalLegivel(premissasExibidas.doseAmount, OPCOES_QUANTIDADE),
+    doseUomCode: premissasExibidas.doseUomCode || null,
+    packageContentAmount: decimalLegivel(premissasExibidas.packageContentAmount, OPCOES_QUANTIDADE),
+    packageContentUomCode: premissasExibidas.packageContentUomCode || null,
   };
   /*
    * Doses por embalagem é RESULTADO nas duas formas da bancada — a tela mostra
@@ -866,22 +690,61 @@ export function FormulationTemplateDetailPage() {
    */
   const derivaDoses = formaDerivaDoses(premissasDaTela.dosageForm);
   const dosesDerivadas = derivaDoses
-    ? dosesPorEmbalagemDaApresentacao(
-        premissasDaTela,
-        units.map((unit) => ({
-          code: unit.code,
-          dimension: unit.dimension,
-          toBaseFactor: unit.toBaseFactor,
-        })),
-      )
+    ? dosesPorEmbalagemDaApresentacao(premissasDaTela, unidadesDoMotor(units))
     : null;
+  /*
+   * O número de doses que a prévia usa: derivado na cápsula e no pó, e o que
+   * está GRAVADO nas formas que não derivam — inclusive o Modelo legado, que
+   * não tem forma nenhuma e continua com as doses que declarou.
+   */
+  const dosesPorEmbalagem =
+    typeof dosesDerivadas === "number" ? dosesDerivadas : (versaoExibida?.dosesPerPackage ?? null);
+  const capsulasNaEmbalagem = capsulasPorEmbalagem(capsulasPorDose, dosesPorEmbalagem);
+  const mostrarPorCapsula = forma === "CAPSULE";
+  /* Cápsula e pó calculam por dose: é o que a linha nova assume. */
+  const receitaPorDose = derivaDoses || versaoExibida?.calculationMode === "PER_DOSE";
 
-  /** Altera uma premissa e limpa a recusa que o servidor tinha pendurado nela. */
-  function mudarPremissa<K extends keyof PremissasEmEdicao>(
-    campo: K,
-    valor: PremissasEmEdicao[K],
-  ) {
-    setPremissas((atual) => ({ ...atual, [campo]: valor }));
+  /* As duas seções da bancada, pelo tipo real do Item. */
+  const linhasDaComposicao = receitaExibida.filter((linha) => secaoDaLinha(linha) === "COMPOSICAO");
+  const linhasDaEmbalagem = receitaExibida.filter((linha) => secaoDaLinha(linha) === "EMBALAGEM");
+
+  /*
+   * A BASE decide material nesta versão?
+   *
+   * Só quando alguma linha é declarada por base fixa — é ela que divide por
+   * `basisQuantity`. Quem decide isso é a FÓRMULA, não o modo da versão. Base
+   * diferente de 1 é número que alguém escolheu e continua à vista.
+   */
+  const baseMultiplicaMaterial =
+    receitaExibida.length === 0 ||
+    receitaExibida.some((linha) => linha.basis === "FIXED_BASIS") ||
+    decimalComparavel(versaoExibida?.basisQuantity ?? "1") !== decimalComparavel("1");
+
+  /** Totais técnicos da dose, somados em mg pelo mesmo motor das linhas. */
+  const resumoDaDose = resumirDoses(
+    linhasDaComposicao
+      .filter((linha) => linha.basis === "PER_DOSE")
+      .map((linha) => {
+        const valores = valoresDaDose(linha);
+        return valores
+          ? { teorica: valores.teorica, fisica: valores.fisica, unitCode: linha.unitCode }
+          : null;
+      })
+      .filter(
+        (linha): linha is { teorica: string; fisica: string; unitCode: string } => linha !== null,
+      ),
+    capsulasPorDose,
+    unidadesDoMotor(units),
+  );
+
+  /* RENDIMENTO ESPERADO — 100% menos a perda, pela MESMA função da API. */
+  const perdaDigitada = decimalLegivel(premissasExibidas.expectedLossPercent, OPCOES_PERCENTUAL_TECNICO);
+  const rendimento = rendimentoEsperado(perdaDigitada);
+  const rendimentoExibido =
+    rendimento === null || typeof rendimento === "string" ? null : rendimento.toString();
+
+  /** A recusa que o servidor pendurou no campo sai quando alguém o edita. */
+  function limparRecusaDoCampo(campo: string) {
     setErrosDeCampo((atual) => {
       if (!(campo in atual)) return atual;
       const { [campo]: _removido, ...resto } = atual;
@@ -889,13 +752,308 @@ export function FormulationTemplateDetailPage() {
     });
   }
 
-  /** O campo com recusa do servidor: `aria-invalid` e a mensagem, ligados. */
-  function acusarCampo(campo: string) {
-    return errosDeCampo[campo]
-      ? ({ "aria-invalid": true, "aria-describedby": `template-${campo}-error` } as const)
-      : {};
+  /** Altera uma premissa da matriz e limpa a recusa pendurada nela. */
+  function mudarPremissa<K extends keyof PremissasEmEdicao>(
+    campo: K,
+    valor: PremissasEmEdicao[K],
+  ) {
+    setPremissas((atual) => ({ ...atual, [campo]: valor }));
+    limparRecusaDoCampo(campo);
   }
 
+  /**
+   * As unidades compatíveis com o Item da linha.
+   *
+   * A dimensão vem do catálogo quando o Item está na página carregada e, senão,
+   * da UNIDADE DE ESTOQUE que a própria linha guarda — é a mesma leitura da
+   * Formulação (FORM-UOM-01).
+   */
+  function unidadesDaLinha(linha: LinhaDaReceita): UnitOfMeasureDTO[] {
+    const escolhido = catalogo.itens.find((item) => item.id === linha.itemId);
+    const dimensao =
+      escolhido?.unitDimension ??
+      units.find((unit) => unit.code === linha.stockUnitCode)?.dimension ??
+      null;
+    if (dimensao === null) return units;
+    return unidadesDaDimensao(units, dimensao);
+  }
+
+  /** O que o seletor da linha oferece: a seção manda, e o já escolhido fica. */
+  function opcoesDaLinha(linha: LinhaDaReceita): ItemDaBancada[] {
+    const secao = secaoDaLinha(linha);
+    const usadosPorOutras = new Set(
+      linhas.filter((outra) => outra.key !== linha.key).map((outra) => outra.itemId),
+    );
+    const base = catalogo.itens.filter(
+      (item) => !usadosPorOutras.has(item.id) && secaoDoItem(item.type) === secao,
+    );
+    if (linha.itemId && !base.some((item) => item.id === linha.itemId)) {
+      return [
+        ...base,
+        {
+          id: linha.itemId,
+          code: linha.itemCode,
+          name: linha.itemName,
+          type: linha.itemType ?? "RAW_MATERIAL",
+          unitCode: linha.stockUnitCode,
+          unitDimension: "",
+          active: linha.itemActive,
+          sourceName: linha.itemSourceName,
+          declaredNutrient: linha.itemDeclaredNutrient,
+          family: linha.itemFamily,
+          packagingSubtype: linha.itemPackagingSubtype,
+          defaultPurityPercent: linha.itemDefaultPurityPercent,
+          externalCode: linha.itemExternalCode,
+        },
+      ];
+    }
+    return base;
+  }
+
+  async function buscarItens(linha: LinhaDaReceita, termo: string): Promise<EntityOption[]> {
+    const encontrados = await catalogo.buscar(secaoDaLinha(linha), termo);
+    const usadosPorOutras = new Set(
+      linhas.filter((outra) => outra.key !== linha.key).map((outra) => outra.itemId),
+    );
+    return encontrados.filter((item) => !usadosPorOutras.has(item.id)).map(opcaoDoItem);
+  }
+
+  /**
+   * Os números por dose da linha — sempre pela PRÉVIA.
+   *
+   * O Modelo não tem servidor que calcule físico e equivalente: a matriz guarda
+   * a receita, não o resultado dela. A conta é a MESMA função que a API da
+   * Formulação chama, então o número que aparece aqui é o número que a
+   * formulação nascida deste Modelo vai ter.
+   */
+  function valoresDaDose(linha: LinhaDaReceita) {
+    return previaDaDose(linha, capsulasPorDose, units);
+  }
+
+  function valoresDaLinha(linha: LinhaDaReceita) {
+    const previa = previaDoComponente(linha, baseExibida, dosesPorEmbalagem, units);
+    return {
+      fisicoExibido: previa?.fisico ?? null,
+      equivalenteExibido: previa?.teorico ?? null,
+      dose: valoresDaDose(linha),
+    };
+  }
+
+  /** A conta do físico por embalagem, ao lado do número que ela produz. */
+  function explicacaoDoFisico(linha: LinhaDaReceita, fisico: string | null) {
+    if (fisico === null) return null;
+    return (
+      <CalcHint
+        label="Quantidade física"
+        operandos={operandosDoFisico(linha, baseExibida, dosesPorEmbalagem, units)}
+        resultado={`${formatQuantity(fisico)} ${linha.stockUnitCode}`}
+        nota="Calculado pelo mesmo motor da Formulação — a pureza corrige a quantidade física."
+      />
+    );
+  }
+
+  /** Base canônica da seção — o que a linha nova já escolhe sozinha. */
+  function baseDaSecao(secao: SecaoDaFormula): FormulationComponentBasis {
+    return secao === "COMPOSICAO"
+      ? receitaPorDose
+        ? "PER_DOSE"
+        : "FIXED_BASIS"
+      : "PER_FINISHED_UNIT";
+  }
+
+  function adicionarLinha(secao: SecaoDaFormula) {
+    setLinhas((atual) => [...atual, linhaNova(secao, receitaPorDose)]);
+  }
+
+  function removerLinha(key: string) {
+    setLinhas((atual) => atual.filter((linha) => linha.key !== key));
+  }
+
+  /**
+   * Move a linha uma posição dentro da PRÓPRIA seção.
+   *
+   * O vizinho é procurado SALTANDO as linhas da outra seção: composição e
+   * embalagem dividem um array só, e trocar com a linha imediatamente anterior
+   * moveria uma matéria-prima para dentro da embalagem. A ordem vai ao servidor
+   * como `position`, pelo índice do array.
+   */
+  function moverLinha(key: string, direcao: -1 | 1) {
+    setLinhas((atual) => {
+      const indice = atual.findIndex((linha) => linha.key === key);
+      const alvo = atual[indice];
+      if (!alvo) return atual;
+      const secao = secaoDaLinha(alvo);
+      let vizinho = indice + direcao;
+      while (vizinho >= 0 && vizinho < atual.length && secaoDaLinha(atual[vizinho]!) !== secao) {
+        vizinho += direcao;
+      }
+      const trocada = atual[vizinho];
+      if (!trocada) return atual;
+      const proximo = [...atual];
+      proximo[indice] = trocada;
+      proximo[vizinho] = alvo;
+      return proximo;
+    });
+  }
+
+  /**
+   * Campo da linha, já sob o contrato da bancada.
+   *
+   * Digitar na coluna Pureza é o gesto INTEIRO: não há painel para abrir, modo
+   * para trocar nem caixa para marcar. `comAjustesDaBancada` é idempotente e
+   * vale para qualquer campo, então nenhum caminho de edição escapa dele.
+   */
+  function mudarCampoDaLinha<K extends keyof LinhaDaReceita>(
+    key: string,
+    campo: K,
+    valor: LinhaDaReceita[K],
+  ) {
+    setLinhas((atual) =>
+      atual.map((linha) =>
+        linha.key === key ? comAjustesDaBancada({ ...linha, [campo]: valor }) : linha,
+      ),
+    );
+  }
+
+  function mudarBaseDaLinha(key: string, basis: FormulationComponentBasis) {
+    setLinhas((atual) =>
+      atual.map((linha) => (linha.key === key ? { ...linha, basis } : linha)),
+    );
+  }
+
+  function mudarFornecimentoDaLinha(key: string, supplyResponsibility: SupplyResponsibility) {
+    setLinhas((atual) =>
+      atual.map((linha) => (linha.key === key ? { ...linha, supplyResponsibility } : linha)),
+    );
+  }
+
+  /**
+   * A linha com o item escolhido — e com o que o cadastro do Item já sabe.
+   *
+   * A pureza padrão do Item entra como a APLICADA desta versão do Modelo: é
+   * SNAPSHOT, e alterar o cadastro do Item depois não reescreve Modelo nenhum,
+   * nem a Formulação que nascer dele. Embalagem não tem pureza: pote e tampa
+   * não têm teor a corrigir.
+   */
+  function mudarItemDaLinha(key: string, itemId: string) {
+    const item = catalogo.itens.find((candidato) => candidato.id === itemId);
+    setLinhas((atual) =>
+      atual.map((linha) => (linha.key === key ? comItemEscolhido(linha, item, units) : linha)),
+    );
+  }
+
+  /* Unidade gravada que a lista não oferece: legado, e prende o salvar. */
+  const temUnidadeInvalida = linhas.some(
+    (linha) => unidadeLegadaDaLinha(linha, unidadesDaLinha(linha)) !== null,
+  );
+
+  /** As recusas por campo da linha, no mesmo endereço que a bancada marca. */
+  const errosDasLinhas: Record<string, string> = {};
+  if (conferirLinhas) {
+    for (const linha of linhas) {
+      if (linhaEmBranco(linha)) continue;
+      /*
+       * Linha COMEÇADA e não terminada tem a sua própria frase: ela diz o que
+       * fazer com a linha ("informe ou remova"), não que o campo é obrigatório.
+       * Só depois de completa é que valem as regras de valor da bancada —
+       * pureza até 100, reserva não negativa, quantidade maior que zero.
+       */
+      if (faltaNaLinha(linha) === "quantidade") {
+        errosDasLinhas[chaveDeErro(linha.key, "quantity")] = MENSAGEM_DA_FALTA.quantidade;
+        continue;
+      }
+      if (!linha.itemId) continue;
+      const daLinha = errosDaLinha(linha);
+      for (const campo of CAMPOS_DO_COMPONENTE) {
+        const mensagem = daLinha[campo];
+        if (mensagem) errosDasLinhas[chaveDeErro(linha.key, campo)] = mensagem;
+      }
+    }
+  }
+
+  function salvarRascunho() {
+    if (!rascunho) return;
+    // Linha começada e não terminada prende o salvar, e o foco vai ao campo
+    // que falta — nada é descartado nem inventado.
+    const incompleta = linhas.find((linha) => faltaNaLinha(linha) !== null);
+    if (incompleta) {
+      const campoQueFalta =
+        faltaNaLinha(incompleta) === "item"
+          ? `componente-${incompleta.key}`
+          : idDoCampo(incompleta.key, "quantity");
+      setFeito(null);
+      setError(null);
+      setConferirLinhas(true);
+      requestAnimationFrame(() => document.getElementById(campoQueFalta)?.focus());
+      return;
+    }
+    /*
+     * Pureza e reserva seguem as MESMAS regras das duas bancadas: pureza
+     * 0 < x ≤ 100, reserva não negativa, vazio = não informado. A recusa
+     * nomeia o componente e o campo, e para antes de qualquer chamada.
+     */
+    const comErro = linhas
+      .filter((linha) => linha.itemId && !linhaEmBranco(linha))
+      .find((linha) => Object.keys(errosDaLinha(linha)).length > 0);
+    if (comErro) {
+      setFeito(null);
+      setError("Corrija os campos destacados.");
+      setConferirLinhas(true);
+      const primeiro = CAMPOS_DO_COMPONENTE.find((campo) => errosDaLinha(comErro)[campo]);
+      if (primeiro) {
+        const alvo = idDoCampo(comErro.key, primeiro);
+        requestAnimationFrame(() => document.getElementById(alvo)?.focus());
+      }
+      return;
+    }
+    setConferirLinhas(false);
+    void run(
+      "rascunho",
+      () =>
+        updateFormulationTemplateVersion(rascunho.id, {
+          basisQuantity: exigirDecimal(base, "Base da formulação", OPCOES_QUANTIDADE),
+          outputUnitCode: unidade,
+          /*
+           * PREMISSAS TECNICAS — vao inteiras, inclusive as vazias: `null`
+           * LIMPA a premissa, e omitir o campo deixaria o valor antigo gravado
+           * depois de a pessoa ter apagado o campo na tela.
+           *
+           * `capsulesPerPackage` e entrada: o servidor deriva as doses por
+           * embalagem dela e recusa a divisao que nao fecha, em vez de
+           * arredondar doses.
+           */
+          ...premissasParaAPI(premissas),
+          components: linhas
+            // Só a linha em branco fica de fora: a incompleta já parou acima.
+            .filter((linha) => !linhaEmBranco(linha))
+            .map((linha) => ({
+              itemId: linha.itemId,
+              quantity: exigirDecimal(linha.quantity, "Quantidade", OPCOES_QUANTIDADE),
+              unitCode: linha.unitCode,
+              basis: linha.basis,
+              supplyResponsibility: linha.supplyResponsibility,
+              // Vazio = não informado (null), nunca 0% nem 100%.
+              purityPercentApplied: exigirDecimalOpcional(
+                linha.purityPercentApplied,
+                "Pureza %",
+                OPCOES_PERCENTUAL_TECNICO,
+              ),
+              overagePercent: exigirDecimalOpcional(
+                linha.overagePercent,
+                ROTULO_DA_RESERVA,
+                OPCOES_PERCENTUAL_TECNICO,
+              ),
+              quantityMode: linha.quantityMode,
+              applyPurityAdjustment: linha.applyPurityAdjustment,
+              applyOverageAdjustment: linha.applyOverageAdjustment,
+              ...(linha.notes.trim() ? { notes: linha.notes.trim() } : {}),
+            })),
+        }),
+      { bloco: "rascunho", texto: "Rascunho salvo." },
+    );
+  }
+
+  /** O campo com recusa do servidor: `aria-invalid` e a mensagem, ligados. */
   function erroDoCampo(campo: string) {
     return errosDeCampo[campo] ? (
       <p className="field__error" id={`template-${campo}-error`}>
@@ -903,46 +1061,74 @@ export function FormulationTemplateDetailPage() {
       </p>
     ) : null;
   }
-  const temUnidadeInvalida = linhas.some((linha) => unidadeDaLinha(linha).erro !== null);
 
-  const composicaoDaVersao = (version: FormulationTemplateVersionDTO) => (
-    <div className="table-container">
-      <table className="table">
-        <thead>
-          <tr>
-            <th>Item</th>
-            <th className="is-numeric">Quantidade</th>
-            <th>Unidade</th>
-            <th>
-              Fornecimento padrão
-              <Dica id="producao.template.fornecimentoPadrao" />
-            </th>
-            <th>Ajustes da quantidade</th>
-          </tr>
-        </thead>
-        <tbody>
-          {version.components.map((component) => (
-            <tr key={component.id}>
-              <td>
-                {component.itemCode} — {component.itemName}
-              </td>
-              <td className="is-numeric">{formatQuantity(component.quantity)}</td>
-              <td>{component.unitCode}</td>
-              <td>{SUPPLY_RESPONSIBILITY_LABELS[component.supplyResponsibility]}</td>
-              <td>
-                {resumoDosAjustes(ajustesDoModelo({ ...component, ...percentuaisEmTexto(component) }))}
-              </td>
-            </tr>
-          ))}
-          {version.components.length === 0 && (
-            <TableEmptyRow colSpan={5}>
-              Sem componentes.
-            </TableEmptyRow>
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
+  if (!template) {
+    return (
+      <div className="doc-body">
+        {error ? <p className="form-alert" role="alert">{error}</p> : <p>Carregando…</p>}
+      </div>
+    );
+  }
+
+  /**
+   * A receita de uma versão, na bancada compartilhada.
+   *
+   * Rascunho edita; versão ativa é documento fechado e só se lê — e é a MESMA
+   * grade, com as mesmas colunas: Pureza, Reserva, Física por dose e, na
+   * cápsula, Por cápsula. A versão ativa não precisa de catálogo nem de
+   * gestos, então recebe listas vazias e ações que não fazem nada: sem campo
+   * para editar, nenhuma delas é alcançável.
+   */
+  function bancadaDaSecao(secao: SecaoDaFormula, comEdicao: boolean, daVersao: LinhaDaReceita[]) {
+    const linhasDaSecao = daVersao.filter((linha) => secaoDaLinha(linha) === secao);
+    return (
+      <TabelaDaReceita
+        secao={secao}
+        linhas={linhasDaSecao}
+        editavel={comEdicao}
+        mostrarPorCapsula={mostrarPorCapsula}
+        baseMultiplicaMaterial={baseMultiplicaMaterial}
+        baseDaSecao={baseDaSecao(secao)}
+        unidadesDaLinha={unidadesDaLinha}
+        opcoesDeItem={(linha) => opcoesDaLinha(linha).map(opcaoDoItem)}
+        onBuscarItem={buscarItens}
+        onCriarItem={
+          comEdicao
+            ? (linha) =>
+                liberarGuarda(() =>
+                  origem.goCreate({
+                    route: "/cadastros/itens/novo",
+                    fieldKey: "itemId",
+                    entityType: "item",
+                    // Qual linha pediu — o item volta para ela.
+                    context: { rowKey: linha.key },
+                  }),
+                )
+            : undefined
+        }
+        erroDoItem={(linha) =>
+          conferirLinhas && faltaNaLinha(linha) === "item"
+            ? MENSAGEM_DA_FALTA.item
+            : undefined
+        }
+        valoresDaLinha={valoresDaLinha}
+        explicacaoDoFisico={explicacaoDoFisico}
+        erros={errosDasLinhas}
+        onCampo={mudarCampoDaLinha}
+        onBase={mudarBaseDaLinha}
+        onFornecimento={mudarFornecimentoDaLinha}
+        onItem={mudarItemDaLinha}
+        onMover={moverLinha}
+        onRemover={removerLinha}
+        onAdicionar={adicionarLinha}
+        /* Os totais da dose fecham a COMPOSIÇÃO: a embalagem não soma massa. */
+        totaisDaDose={secao === "COMPOSICAO" ? resumoDaDose : undefined}
+        /* No Modelo o fornecimento é SUGESTÃO: a cópia leva o valor, e o produto
+           muda sem mexer na biblioteca. O ⓘ da matriz diz isso. */
+        dicaDoFornecimento="producao.template.fornecimentoPadrao"
+      />
+    );
+  }
 
   return (
     <div className="doc-page">
@@ -954,15 +1140,6 @@ export function FormulationTemplateDetailPage() {
             {template.archived && <span className="badge badge--neutral">Arquivado</span>}
           </h1>
           {template.description && <p className="page__subtitle">{template.description}</p>}
-        </div>
-        <div className="doc-actions">
-          <button
-            type="button"
-            className="btn btn--ghost"
-            onClick={() => navigate("/producao/templates-formulacao")}
-          >
-            ← Voltar
-          </button>
         </div>
       </div>
 
@@ -1041,12 +1218,18 @@ export function FormulationTemplateDetailPage() {
           )}
         </FormSection>
 
+        {/*
+          A VERSÃO ATIVA continua dizendo o que é, mesmo com rascunho aberto: é
+          ela que vale para quem aplicar o Modelo hoje, e quantas formulações
+          nasceram dela. A RECEITA dela aparece na bancada quando não há
+          rascunho — com rascunho, a bancada edita o rascunho, que é o que se
+          está montando; a versão ativa continua no histórico, intocada.
+        */}
         {ativa && (
           <FormSection
             title={`Versão ativa — ${ativa.versionLabel}`}
             subtitle={`Base ${formatQuantity(ativa.basisQuantity)} ${ativa.outputUnitCode} · ${FORMULATION_CALCULATION_MODE_LABELS[ativa.calculationMode]} · ${ativa.components.length} componentes. Versão ativa é histórica: para alterar, crie uma nova versão.`}
           >
-            {composicaoDaVersao(ativa)}
             {ativa.usageCount > 0 && (
               <p className="field__hint">
                 {ativa.usageCount === 1
@@ -1054,25 +1237,6 @@ export function FormulationTemplateDetailPage() {
                   : `${ativa.usageCount} formulações de produto nasceram desta versão.`}{" "}
                 Nenhuma delas muda quando este template muda.
               </p>
-            )}
-            {/* A ativação é confirmada AQUI: ao dar certo, o bloco do rascunho
-                deixa de existir e levaria a frase junto. */}
-            {canEdit && !rascunho && (
-              <div className="form-actions">
-                <div className="form-actions__group">
-                  <button
-                    type="button"
-                    className="btn btn--accent btn--sm"
-                    disabled={saving}
-                    onClick={() =>
-                      void run("nova-versao", () => createTemplateVersionFrom(ativa.id))
-                    }
-                  >
-                    {acaoEmCurso === "nova-versao" ? "Criando…" : "Criar nova versão"}
-                  </button>
-                  {estadoDoBloco("versao-ativa", false)}
-                </div>
-              </div>
             )}
           </FormSection>
         )}
@@ -1082,7 +1246,25 @@ export function FormulationTemplateDetailPage() {
             title={`Rascunho — ${rascunho.versionLabel}`}
             subtitle="Só o rascunho é editável. Ative quando a matriz estiver pronta para ser reutilizada."
           >
-            <div className="field-grid-2">
+            <PremissasDaForma
+              idPrefixo="template"
+              valores={premissas}
+              onChange={(campo, valor) => {
+                /* O mesmo gesto de `mudarPremissa`, escrito aqui porque o campo
+                   chega tipado pela bancada — que conhece as premissas da FORMA,
+                   não a perda prevista que só a matriz guarda. */
+                setPremissas((atual) => ({ ...atual, [campo]: valor }));
+                limparRecusaDoCampo(campo);
+              }}
+              editavel={editavel}
+              erros={errosDeCampo}
+              formasOferecidas={formasOferecidas}
+              apresentacoesOferecidas={apresentacoesOferecidas}
+              unidadesDeMassa={unidadesDeMassa}
+              derivaDoses={derivaDoses}
+              dosesDerivadas={typeof dosesDerivadas === "number" ? dosesDerivadas : null}
+              testIdDasDoses="modelo-doses-derivadas"
+            >
               <div className="field field--narrow">
                 <label htmlFor="template-base">
                   Base da formulação
@@ -1116,531 +1298,45 @@ export function FormulationTemplateDetailPage() {
                   ))}
                 </select>
               </div>
-            </div>
+            </PremissasDaForma>
 
-            {/*
-              PREMISSAS TECNICAS DA MATRIZ — a receita, nao o comercio.
-              Forma e apresentacao sao coisas diferentes: a forma e capsula ou
-              po, o que a bancada calcula por dose; a apresentacao e a embalagem
-              em que o produto sai. As duas viajam para a Formulacao como
-              DEFAULT quando o Modelo e aplicado, e la continuam editaveis.
-            */}
-            <div className="form-premissas">
-              <div className="field field--narrow">
-                <label htmlFor="template-dosageForm">
-                  Forma do produto <Dica id="formulacao.forma" />
-                </label>
-                <select
-                  id="template-dosageForm"
-                  disabled={!editavel}
-                  value={premissas.dosageForm}
-                  onChange={(event) =>
-                    mudarPremissa("dosageForm", event.target.value as DosageForm | "")
-                  }
-                  {...acusarCampo("dosageForm")}
-                >
-                  <option value="">—</option>
-                  {formasOferecidas.map((opcao) => (
-                    <option key={opcao} value={opcao}>
-                      {DOSAGE_FORM_LABELS[opcao]}
-                    </option>
-                  ))}
-                </select>
-                {erroDoCampo("dosageForm")}
-              </div>
-
-              <div className="field field--narrow">
-                <label htmlFor="template-presentationType">
-                  Apresentação comercial <Dica id="formulacao.apresentacaoComercial" />
-                </label>
-                <select
-                  id="template-presentationType"
-                  disabled={!editavel}
-                  value={premissas.presentationType}
-                  onChange={(event) =>
-                    mudarPremissa("presentationType", event.target.value as PresentationType | "")
-                  }
-                >
-                  <option value="">—</option>
-                  {apresentacoesOferecidas.map((tipo) => (
-                    <option key={tipo} value={tipo}>
-                      {PRESENTATION_TYPE_LABELS[tipo]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {forma === "CAPSULE" && (
-                <>
-                  <div className="field field--narrow">
-                    <label htmlFor="template-capsulesPerDose">
-                      Cápsulas por dose <Dica id="formulacao.capsulasPorDose" />
-                    </label>
-                    <IntegerField
-                      id="template-capsulesPerDose"
-                      disabled={!editavel}
-                      value={premissas.capsulesPerDose}
-                      onChangeValue={(valor) => mudarPremissa("capsulesPerDose", valor)}
-                      {...acusarCampo("capsulesPerDose")}
-                    />
-                    {erroDoCampo("capsulesPerDose")}
-                  </div>
-
-                  <div className="field field--narrow">
-                    <label htmlFor="template-capsulesPerPackage">
-                      Cápsulas por embalagem <Dica id="formulacao.capsulasPorEmbalagem" />
-                    </label>
-                    <IntegerField
-                      id="template-capsulesPerPackage"
-                      disabled={!editavel}
-                      value={premissas.capsulesPerPackage}
-                      onChangeValue={(valor) => mudarPremissa("capsulesPerPackage", valor)}
-                      {...acusarCampo("capsulesPerPackage")}
-                    />
-                    {erroDoCampo("capsulesPerPackage")}
-                  </div>
-                </>
-              )}
-
-              {forma === "POWDER" && (
-                <>
-                  <div className="field field--narrow">
-                    <label htmlFor="template-doseAmount">
-                      Dose <Dica id="formulacao.dose" />
-                    </label>
-                    <div className="quantidade-unidade">
-                      <DecimalField
-                        id="template-doseAmount"
-                        scale={CASAS_QUANTIDADE}
-                        placeholder="0"
-                        disabled={!editavel}
-                        value={premissas.doseAmount}
-                        onChangeValue={(valor) => mudarPremissa("doseAmount", valor)}
-                        {...acusarCampo("doseAmount")}
-                      />
-                      <select
-                        id="template-doseUomCode"
-                        aria-label="Unidade da dose"
-                        disabled={!editavel}
-                        value={premissas.doseUomCode}
-                        onChange={(event) => mudarPremissa("doseUomCode", event.target.value)}
-                        {...acusarCampo("doseUomCode")}
-                      >
-                        <option value="">—</option>
-                        {unidadesDeMassa.map((unit) => (
-                          <option key={unit.code} value={unit.code}>
-                            {unit.code}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {erroDoCampo("doseAmount")}
-                    {erroDoCampo("doseUomCode")}
-                  </div>
-
-                  <div className="field field--narrow">
-                    <label htmlFor="template-packageContentAmount">
-                      Conteúdo da embalagem <Dica id="formulacao.conteudo" />
-                    </label>
-                    <div className="quantidade-unidade">
-                      <DecimalField
-                        id="template-packageContentAmount"
-                        scale={CASAS_QUANTIDADE}
-                        placeholder="0"
-                        disabled={!editavel}
-                        value={premissas.packageContentAmount}
-                        onChangeValue={(valor) => mudarPremissa("packageContentAmount", valor)}
-                        {...acusarCampo("packageContentAmount")}
-                      />
-                      <select
-                        id="template-packageContentUomCode"
-                        aria-label="Unidade do conteúdo da embalagem"
-                        disabled={!editavel}
-                        value={premissas.packageContentUomCode}
-                        onChange={(event) =>
-                          mudarPremissa("packageContentUomCode", event.target.value)
-                        }
-                      >
-                        <option value="">—</option>
-                        {unidadesDeMassa.map((unit) => (
-                          <option key={unit.code} value={unit.code}>
-                            {unit.code}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {erroDoCampo("packageContentAmount")}
-                  </div>
-                </>
-              )}
-
-              {derivaDoses && (
-                <div className="field field--narrow field--calculado">
-                  <span className="field__label-static">
-                    Doses por embalagem <Dica id="formulacao.dosesPorEmbalagem" />
-                  </span>
-                  {/* Resultado, nunca segundo campo: dois numeros para a mesma
-                      premissa divergem no primeiro que alguem esquecer. */}
-                  <p
-                    className="field-readonly-value field-readonly-value--calculado"
-                    data-testid="modelo-doses-derivadas"
-                  >
-                    {typeof dosesDerivadas === "number" ? formatIntegerPtBr(dosesDerivadas) : "—"}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/*
-              PREMISSAS DE PRODUCAO — a perda prevista da matriz.
-              Bloco proprio: a apresentacao descreve o que se vende, esta linha
-              descreve o processo. Vazio e NAO INFORMADA, nunca 0%.
-            */}
-            <div className="premissas-producao">
-              <span className="premissas-producao__titulo">Premissas de produção</span>
-              <div className="premissas-producao__campos">
-                <div className="field field--narrow">
-                  <label htmlFor="template-expectedLoss">
-                    Perda prevista de produção (%) <Dica id="formulacao.perdaPrevista" />
-                  </label>
-                  <PercentField
-                    id="template-expectedLoss"
-                    scale={CASAS_PERCENTUAL_TECNICO}
-                    placeholder="—"
-                    /* 100% de perda nao tem quantidade bruta: a seta para em 99. */
-                    stepper={{ min: "0", max: "99", nome: "Perda prevista de produção" }}
-                    disabled={!editavel}
-                    value={premissas.expectedLossPercent}
-                    onChangeValue={(valor) => mudarPremissa("expectedLossPercent", valor)}
-                    {...acusarCampo("expectedLossPercent")}
-                  />
-                  {erroDoCampo("expectedLossPercent")}
-                </div>
-              </div>
-            </div>
-
-            <div className="table-container">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Item</th>
-                    <th className="is-numeric">Quantidade</th>
-                    <th>Unidade</th>
-                    <th>Fornecimento padrão</th>
-                    <th>Ajustes da quantidade</th>
-                    <th aria-hidden="true" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {linhas.map((linha, index) => {
-                    const daLinha = unidadeDaLinha(linha);
-                    const erroDaUnidade = `template-unidade-erro-${linha.chave}`;
-                    const configuracao = ajustesDoModelo(linha);
-                    const abertoAjuste = ajustes.aberto(linha.chave);
-                    const falta = conferirLinhas ? faltaNaLinha(linha) : null;
-                    const erroDaLinha = `template-linha-erro-${linha.chave}`;
-                    const acusarFalta = { "aria-invalid": true, "aria-describedby": erroDaLinha } as const;
-                    return (
-                      <Fragment key={linha.chave}>
-                      <tr>
-                        <td>
-                          <SearchableEntitySelect
-                            id={`template-item-${linha.chave}`}
-                            value={linha.itemId}
-                            onChange={(itemId) => trocarItem(index, itemId)}
-                            placeholder="Digite código ou nome do item…"
-                            /* Era o único campo do rascunho sem o `disabled` dos
-                               vizinhos: quem não edita trocava o item na tela e
-                               só descobria a recusa ao salvar. */
-                            disabled={!editavel}
-                            options={items.map(opcaoDoItem)}
-                            onSearch={buscarItens}
-                            canCreate={editavel}
-                            {...(falta === "item" ? acusarFalta : {})}
-                            createLabel="Novo item de estoque"
-                            /* Sair para cadastrar o item NÃO é descartar: o
-                               rascunho vai junto e volta aplicado na linha. */
-                            onCreateNew={() =>
-                              liberarGuarda(() =>
-                                origem.goCreate({
-                                  route: "/cadastros/itens/novo",
-                                  fieldKey: "itemId",
-                                  entityType: "item",
-                                  // Qual linha pediu — o item volta para ela.
-                                  context: { rowKey: linha.chave },
-                                }),
-                              )
-                            }
-                          />
-                          {falta === "item" && (
-                            <p className="field__error" id={erroDaLinha}>
-                              {MENSAGEM_DA_FALTA.item}
-                            </p>
-                          )}
-                        </td>
-                        <td className="is-numeric">
-                          <DecimalField
-                            id={`template-quantidade-${linha.chave}`}
-                            scale={CASAS_QUANTIDADE}
-                            disabled={!editavel}
-                            value={linha.quantity}
-                            onChangeValue={(quantity) =>
-                              setLinhas((atual) =>
-                                atual.map((l, i) => (i === index ? { ...l, quantity } : l)),
-                              )
-                            }
-                            {...(falta === "quantidade" ? acusarFalta : {})}
-                          />
-                          {falta === "quantidade" && (
-                            <p className="field__error" id={erroDaLinha}>
-                              {MENSAGEM_DA_FALTA.quantidade}
-                            </p>
-                          )}
-                        </td>
-                        <td>
-                          {/* Mesma lista da Formulação: o catálogo, na dimensão do
-                              Item. Sem Item, não há dimensão — e não há unidade. */}
-                          <select
-                            aria-label={daLinha.item ? `Unidade de ${daLinha.item.code}` : "Unidade"}
-                            disabled={!editavel || !daLinha.item}
-                            value={linha.unitCode}
-                            onChange={(event) =>
-                              setLinhas((atual) =>
-                                atual.map((l, i) =>
-                                  i === index ? { ...l, unitCode: event.target.value } : l,
-                                ),
-                              )
-                            }
-                            {...(daLinha.erro
-                              ? { "aria-invalid": true, "aria-describedby": erroDaUnidade }
-                              : {})}
-                          >
-                            <option value="">Selecione</option>
-                            {linha.unitCode && !daLinha.oferecida && (
-                              <option value={linha.unitCode} disabled={Boolean(daLinha.item)}>
-                                {linha.unitCode}
-                              </option>
-                            )}
-                            {daLinha.opcoes.map((unit) => (
-                              <option key={unit.code} value={unit.code}>
-                                {unit.code}
-                              </option>
-                            ))}
-                          </select>
-                          {daLinha.erro && (
-                            <p className="field__error" id={erroDaUnidade}>
-                              {daLinha.erro}
-                            </p>
-                          )}
-                        </td>
-                        <td>
-                          <select
-                            aria-label="Fornecimento padrão"
-                            disabled={!editavel}
-                            value={linha.supplyResponsibility ?? "VERIDI"}
-                            onChange={(event) =>
-                              setLinhas((atual) =>
-                                atual.map((l, i) =>
-                                  i === index
-                                    ? {
-                                        ...l,
-                                        supplyResponsibility: event.target.value as "VERIDI" | "CUSTOMER",
-                                      }
-                                    : l,
-                                ),
-                              )
-                            }
-                          >
-                            <option value="VERIDI">Veridi</option>
-                            <option value="CUSTOMER">Cliente</option>
-                          </select>
-                        </td>
-                        <td>
-                          {/* Mesmo resumo e mesmo painel da Formulação real: a
-                              intenção física do componente, não só os números. */}
-                          <button
-                            type="button"
-                            className="ajuste-quantidade__botao"
-                            aria-expanded={abertoAjuste}
-                            aria-controls={`modelo-ajustes-${linha.chave}`}
-                            onClick={() => ajustes.alternar(linha.chave, configuracao)}
-                          >
-                            <span aria-hidden="true">{abertoAjuste ? "▾" : "▸"}</span>{" "}
-                            {resumoDosAjustes(configuracao)}
-                          </button>
-                        </td>
-                        <td>
-                          {editavel && (
-                            <button
-                              type="button"
-                              className="btn btn--ghost btn--sm"
-                              aria-label="Remover componente"
-                              onClick={() => {
-                                ajustes.fechar(linha.chave);
-                                setLinhas((atual) => atual.filter((_, i) => i !== index));
-                              }}
-                            >
-                              ✕
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                      {abertoAjuste && (
-                        <tr className="ajuste-quantidade__linha">
-                          <td colSpan={6} id={`modelo-ajustes-${linha.chave}`}>
-                            {editavel ? (
-                              <PainelDeAjustes
-                                contexto="MODELO"
-                                idBase={`modelo-${linha.chave}`}
-                                idDoCampo={(campo) => `modelo-${linha.chave}-${campo}`}
-                                nomeDoItem={daLinha.item?.code ?? "Componente"}
-                                rascunho={ajustes.rascunhoDe(linha.chave) ?? configuracao}
-                                confirmado={configuracao}
-                                onChange={(proximo) => ajustes.mudar(linha.chave, proximo)}
-                                onAplicar={() => aplicarAjustesDoModelo(linha)}
-                                onCancelar={() => ajustes.fechar(linha.chave)}
-                                avisoDePendencia={ajustes.aviso(linha.chave)}
-                              />
-                            ) : (
-                              <p className="field__hint">{resumoDosAjustes(configuracao)}</p>
-                            )}
-                          </td>
-                        </tr>
-                      )}
-                      </Fragment>
-                    );
-                  })}
-                  {linhas.length === 0 && (
-                    <TableEmptyRow colSpan={6}>
-                      Nenhum componente ainda.
-                    </TableEmptyRow>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {editavel && (
-              <div className="form-actions form-actions--split">
-                <div className="form-actions__group">
-                  {/* Terciária: acrescentar componente não grava nada. */}
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--sm"
-                    onClick={() =>
-                      setLinhas((atual) => [
-                        ...atual,
-                        {
-                          chave: `nova-${atual.length}-${Date.now()}`,
-                          itemId: "",
-                          quantity: "",
-                          // A unidade vem do Item: antes dele, não há dimensão.
-                          unitCode: "",
-                          supplyResponsibility: "VERIDI",
-                        },
-                      ])
-                    }
-                  >
-                    + Adicionar componente
-                  </button>
-                </div>
-                <div className="form-actions__group">
-                  {estadoDoBloco("rascunho", rascunhoAlterado || ajustePendente)}
-                  <button
-                    type="button"
-                    className="btn btn--secondary btn--sm"
-                    /* Sem alteração pendente não há o que gravar. Ajuste aberto
-                       e não aplicado CONTA como pendência aqui: é o clique que
-                       diz qual linha espera decisão. */
-                    disabled={saving || temUnidadeInvalida || (!rascunhoAlterado && !ajustePendente)}
-                    onClick={() => {
-                      // Linha começada e não terminada prende o salvar, e o foco
-                      // vai ao campo que falta — nada é descartado nem inventado.
-                      const incompleta = linhas.find((linha) => faltaNaLinha(linha) !== null);
-                      if (incompleta) {
-                        const campoQueFalta =
-                          faltaNaLinha(incompleta) === "item"
-                            ? `template-item-${incompleta.chave}`
-                            : `template-quantidade-${incompleta.chave}`;
-                        setFeito(null);
-                        setError(null);
-                        setConferirLinhas(true);
-                        requestAnimationFrame(() => document.getElementById(campoQueFalta)?.focus());
-                        return;
-                      }
-                      setConferirLinhas(false);
-                      // Ajuste aberto e não aplicado não vai junto — e não se perde
-                      // em silêncio: a tela diz qual linha espera decisão.
-                      const pendente = linhas.find((linha) =>
-                        ajustes.alterado(linha.chave, ajustesDoModelo(linha)),
-                      );
-                      if (pendente) {
-                        const codigo =
-                          items.find((item) => item.id === pendente.itemId)?.code ?? "componente";
-                        setFeito(null);
-                        setError(`Aplique ou cancele os ajustes de ${codigo} antes de salvar.`);
-                        ajustes.avisar(pendente.chave);
-                        return;
-                      }
-                      void run(
-                        "rascunho",
-                        () =>
-                          updateFormulationTemplateVersion(rascunho.id, {
-                            basisQuantity: exigirDecimal(base, "Base da formulação", OPCOES_QUANTIDADE),
-                            outputUnitCode: unidade,
-                            /*
-                             * PREMISSAS TECNICAS — vao inteiras, inclusive as
-                             * vazias: `null` LIMPA a premissa, e omitir o campo
-                             * deixaria o valor antigo gravado depois de a
-                             * pessoa ter apagado o campo na tela.
-                             *
-                             * `capsulesPerPackage` e entrada: o servidor deriva
-                             * as doses por embalagem dela e recusa a divisao
-                             * que nao fecha, em vez de arredondar doses.
-                             */
-                            ...premissasParaAPI(premissas),
-                            components: linhas
-                              // Só a linha em branco fica de fora: a incompleta já parou acima.
-                              .filter((linha) => !linhaEmBranco(linha))
-                              .map(({ chave: _chave, ...resto }) => ({
-                                ...resto,
-                                quantity: exigirDecimal(resto.quantity, "Quantidade", OPCOES_QUANTIDADE),
-                                // Vazio = não informado (null), nunca 0% nem 100%.
-                                purityPercentApplied: exigirDecimalOpcional(
-                                  resto.purityPercentApplied ?? "",
-                                  "Pureza %",
-                                  OPCOES_PERCENTUAL_TECNICO,
-                                ),
-                                overagePercent: exigirDecimalOpcional(
-                                  resto.overagePercent ?? "",
-                                  "Overage %",
-                                  OPCOES_PERCENTUAL_TECNICO,
-                                ),
-                              })),
-                          }),
-                        { bloco: "rascunho", texto: "Rascunho salvo." },
-                      );
-                    }}
-                  >
-                    {acaoEmCurso === "rascunho" ? "Salvando…" : "Salvar rascunho"}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn--accent btn--sm"
-                    disabled={saving || rascunho.components.length === 0}
-                    onClick={() =>
-                      void run("ativar", () => activateFormulationTemplateVersion(rascunho.id), {
-                        bloco: "versao-ativa",
-                        texto: "Versão ativada.",
-                      })
-                    }
-                  >
-                    {acaoEmCurso === "ativar" ? "Ativando…" : "Ativar versão"}
-                  </button>
-                </div>
-              </div>
-            )}
+            <PremissasDeProducao
+              idPrefixo="template"
+              expectedLossPercent={premissas.expectedLossPercent}
+              onChange={(valor) => mudarPremissa("expectedLossPercent", valor)}
+              editavel={editavel}
+              erro={errosDeCampo["expectedLossPercent"]}
+              rendimentoExibido={rendimentoExibido}
+            />
+            {erroDoCampo("expectedLossPercent")}
           </FormSection>
         )}
+
+        {/*
+          COMPOSIÇÃO e EMBALAGEM separadas, pelo TIPO REAL do Item — a mesma
+          divisão da Formulação, e nunca pelo nome do cadastro: "cápsula" é
+          matéria-prima num produto e embalagem em outro.
+
+          Quando há rascunho, é ele que se edita; sem rascunho, a versão ativa
+          aparece na mesma grade, só para leitura.
+        */}
+        {bancadaDaSecao("COMPOSICAO", editavel, receitaExibida)}
+        {bancadaDaSecao("EMBALAGEM", editavel, receitaExibida)}
+
+        <ResumoDaReceita
+          dosageForm={premissasExibidas.dosageForm}
+          presentationType={premissasExibidas.presentationType}
+          capsulasPorDose={capsulasPorDose}
+          capsulasNaEmbalagem={capsulasNaEmbalagem}
+          doseAmount={premissasExibidas.doseAmount}
+          doseUomCode={premissasExibidas.doseUomCode}
+          packageContentAmount={premissasExibidas.packageContentAmount}
+          packageContentUomCode={premissasExibidas.packageContentUomCode}
+          dosesPorEmbalagem={dosesPorEmbalagem}
+          resumoDaDose={resumoDaDose}
+          linhasNaComposicao={linhasDaComposicao.length}
+          linhasNaEmbalagem={linhasDaEmbalagem.length}
+        />
 
         <FormSection
           title="Histórico de versões"
@@ -1727,6 +1423,65 @@ export function FormulationTemplateDetailPage() {
           )}
         </FormSection>
       </div>
+
+      {/*
+        A BARRA FIXA DAS AÇÕES — a mesma estrutura visual da Formulação, com as
+        ações do MODELO. "Salvar identificação" e "Arquivar" continuam no bloco
+        de identificação: são ações do cadastro, não da versão que se edita.
+      */}
+      <StickyActionBar
+        rotulo="Ações do modelo de formulação"
+        inicio={
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={() => navigate("/producao/templates-formulacao")}
+          >
+            ← Voltar
+          </button>
+        }
+        fim={
+          <>
+            {rascunho ? estadoDoBloco("rascunho", rascunhoAlterado) : estadoDoBloco("versao-ativa", false)}
+            {editavel && rascunho && (
+              <>
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  /* Sem alteração pendente não há o que gravar. */
+                  disabled={saving || temUnidadeInvalida || !rascunhoAlterado}
+                  onClick={salvarRascunho}
+                >
+                  {acaoEmCurso === "rascunho" ? "Salvando…" : "Salvar rascunho"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--accent"
+                  disabled={saving || rascunho.components.length === 0}
+                  onClick={() =>
+                    void run("ativar", () => activateFormulationTemplateVersion(rascunho.id), {
+                      bloco: "versao-ativa",
+                      texto: "Versão ativada.",
+                    })
+                  }
+                >
+                  {acaoEmCurso === "ativar" ? "Ativando…" : "Ativar versão"}
+                </button>
+              </>
+            )}
+            {canEdit && !rascunho && ativa && (
+              <button
+                type="button"
+                className="btn btn--accent"
+                disabled={saving}
+                onClick={() => void run("nova-versao", () => createTemplateVersionFrom(ativa.id))}
+              >
+                {acaoEmCurso === "nova-versao" ? "Criando…" : "Criar nova versão"}
+              </button>
+            )}
+          </>
+        }
+      />
     </div>
   );
 }
