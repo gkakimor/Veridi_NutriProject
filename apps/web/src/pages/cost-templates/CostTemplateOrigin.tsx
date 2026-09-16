@@ -77,7 +77,7 @@ export function CostTemplateOrigin({ version, productId, canEdit, onChanged }: P
       setSalvandoTemplate(false);
       setNomeTemplate("");
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Falha ao salvar como template");
+      setErro(err instanceof Error ? err.message : "Falha ao salvar como modelo");
     } finally {
       setOcupado(false);
     }
@@ -89,8 +89,8 @@ export function CostTemplateOrigin({ version, productId, canEdit, onChanged }: P
 
       {criado && (
         <p className="field__hint" role="status">
-          Template criado em rascunho.{" "}
-          <Link to={`/gestao/templates-estrutura/${criado}`}>Abrir o template</Link> para revisar e
+          Modelo criado em rascunho.{" "}
+          <Link to={`/gestao/templates-estrutura/${criado}`}>Abrir o modelo</Link> para revisar e
           ativar.
         </p>
       )}
@@ -114,7 +114,7 @@ export function CostTemplateOrigin({ version, productId, canEdit, onChanged }: P
       {novidade && (
         <div className="template-origin__update">
           <p>
-            Existe uma versão mais recente do template de origem —{" "}
+            Existe uma versão mais recente do modelo de origem —{" "}
             <strong>V{novidade.latestVersionNumber}</strong>. Esta estrutura continua na V
             {novidade.originVersionNumber} e não muda sozinha.
           </p>
@@ -164,7 +164,7 @@ export function CostTemplateOrigin({ version, productId, canEdit, onChanged }: P
         <div className="template-origin__save">
           {salvandoTemplate ? (
             <div className="inline-form">
-              <label htmlFor="novo-tec-nome">Nome do template</label>
+              <label htmlFor="novo-tec-nome">Nome do modelo</label>
               <input
                 id="novo-tec-nome"
                 type="text"
@@ -183,7 +183,7 @@ export function CostTemplateOrigin({ version, productId, canEdit, onChanged }: P
                 disabled={ocupado || !nomeTemplate.trim()}
                 onClick={() => void salvarComoTemplate()}
               >
-                Criar template
+                Criar modelo
               </button>
               <button
                 type="button"
@@ -199,12 +199,12 @@ export function CostTemplateOrigin({ version, productId, canEdit, onChanged }: P
               className="btn btn--ghost btn--sm"
               onClick={() => setSalvandoTemplate(true)}
             >
-              Salvar como template
+              Salvar como modelo
             </button>
           )}
           {salvandoTemplate && (
             <p className="field__hint">
-              O template leva a configuração — recursos, uso, energia e premissas —, nunca as
+              O modelo leva a configuração — recursos, uso, energia e premissas —, nunca as
               tarifas. Esta estrutura continua exatamente como está.
             </p>
           )}

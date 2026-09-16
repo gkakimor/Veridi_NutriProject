@@ -612,6 +612,7 @@ function templateComRascunho(): FormulationTemplateDTO {
     sourceVersionId: null,
     sourceVersionNumber: null,
     usageCount: 0,
+    componentIssues: [],
   };
   return {
     id: "tpl-1",

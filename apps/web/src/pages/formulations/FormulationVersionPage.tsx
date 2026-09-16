@@ -32,7 +32,6 @@ import {
   capsulasPorEmbalagem,
   dosesPorEmbalagemDaApresentacao,
   formaDerivaDoses,
-  secaoDoItem,
   quantidadeBrutaPlanejada,
   rendimentoEsperado,
   resumirDoses,
@@ -93,7 +92,12 @@ import { PremissasDeProducao } from "../formulation-workbench/PremissasDeProduca
 import { ResumoDaReceita } from "../formulation-workbench/ResumoDaReceita";
 import { StickyActionBar } from "../formulation-workbench/StickyActionBar";
 import { TabelaDaReceita } from "../formulation-workbench/TabelaDaReceita";
-import { useCatalogoDeItens, opcaoDoItem, itemDaBancada } from "../formulation-workbench/catalogo-de-itens";
+import {
+  itemDaBancada,
+  itemElegivelParaSecao,
+  opcaoDoItem,
+  useCatalogoDeItens,
+} from "../formulation-workbench/catalogo-de-itens";
 import type { ItemDaBancada } from "../formulation-workbench/catalogo-de-itens";
 import {
   CAMPOS_DO_COMPONENTE,
@@ -546,11 +550,14 @@ export function FormulationVersionPage() {
    * por causa da busca.
    */
   async function buscarItens(row: LinhaDaReceita, termo: string): Promise<EntityOption[]> {
-    const encontrados = await catalogo.buscar(secaoDaLinha(row), termo);
+    const secao = secaoDaLinha(row);
+    const encontrados = await catalogo.buscar(secao, termo);
     const usadosPorOutrasLinhas = new Set(
       components.filter((c) => c.key !== row.key).map((c) => c.itemId),
     );
-    return encontrados.filter((item) => !usadosPorOutrasLinhas.has(item.id)).map(opcaoDoItem);
+    return encontrados
+      .filter((item) => !usadosPorOutrasLinhas.has(item.id) && itemElegivelParaSecao(item, secao))
+      .map(opcaoDoItem);
   }
 
   /**
@@ -725,8 +732,12 @@ export function FormulationVersionPage() {
   function optionsForRow(row: LinhaDaReceita): ItemDaBancada[] {
     const secao = secaoDaLinha(row);
     const usedByOtherRows = new Set(components.filter((c) => c.key !== row.key).map((c) => c.itemId));
+    // A mesma regra do Modelo: nova escolha só entre ativos do tipo da seção,
+    // e o item que a linha já referencia continua à vista.
     const base = activeItems.filter(
-      (item) => !usedByOtherRows.has(item.id) && secaoDoItem(item.type) === secao,
+      (item) =>
+        !usedByOtherRows.has(item.id) &&
+        (item.id === row.itemId || itemElegivelParaSecao(item, secao)),
     );
     if (row.itemId && !base.some((item) => item.id === row.itemId)) {
       return [
@@ -2127,7 +2138,7 @@ export function FormulationVersionPage() {
                 className="btn btn--secondary"
                 onClick={() => setSalvarComoTemplateAberto(true)}
               >
-                Salvar como template
+                Salvar como modelo
               </button>
             )}
           </>

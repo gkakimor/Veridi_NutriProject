@@ -147,6 +147,7 @@ function versao(
     sourceVersionId: null,
     sourceVersionNumber: null,
     usageCount: 0,
+    componentIssues: [],
     ...overrides,
   };
 }

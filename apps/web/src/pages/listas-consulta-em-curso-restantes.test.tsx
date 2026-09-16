@@ -338,9 +338,9 @@ const LISTAS: Lista[] = [
       ...pagina(total),
     }),
     contagem: null,
-    vazio: /Nenhum template encontrado|A biblioteca ainda está vazia/,
+    vazio: /Nenhum modelo encontrado|A biblioteca ainda está vazia/,
     gestos: [
-      busca("Buscar templates"),
+      busca("Buscar modelos"),
       caixa("arquivados", "Mostrar arquivados", (f) => expect(f).toMatchObject({ archived: true })),
     ],
   },
@@ -377,9 +377,9 @@ const LISTAS: Lista[] = [
       ...pagina(total),
     }),
     contagem: null,
-    vazio: /Nenhum template encontrado|A biblioteca ainda está vazia/,
+    vazio: /Nenhum modelo encontrado|A biblioteca ainda está vazia/,
     gestos: [
-      busca("Buscar templates de estrutura"),
+      busca("Buscar modelos de estrutura"),
       caixa("arquivados", "Mostrar arquivados", (f) => expect(f).toMatchObject({ archived: true })),
     ],
   },

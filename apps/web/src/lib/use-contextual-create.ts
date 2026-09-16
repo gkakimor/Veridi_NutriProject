@@ -219,7 +219,7 @@ export function rotuloDaOrigem(rota: string): string {
     [/^\/compras\/item-fornecedor/, "Item × Fornecedor"],
     [/^\/producao\/ordens/, "Ordem de produção"],
     [/^\/producao\/formulacoes/, "Formulação"],
-    [/^\/producao\/templates-formulacao/, "Template de formulação"],
+    [/^\/producao\/templates-formulacao/, "Modelo de formulação"],
     // A estrutura de custos mora sob o produto, não sob produção.
     [/^\/produtos\/[^/]+\/custos/, "Estrutura de custos"],
     [/^\/gestao\/recursos-industriais/, "Recurso industrial"],

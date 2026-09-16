@@ -184,12 +184,20 @@ export function LinhaDaBancada({
           linha simplesmente não o menciona.
         */}
         <span className="cell-sub">
+          {/* O item que a receita já referencia continua à vista mesmo inativo
+              — é o que permite ler e corrigir uma matriz antiga —, e diz que
+              está inativo onde a pessoa olha, não só na lista do seletor. */}
+          {!linha.itemActive && linha.itemId !== "" && (
+            <>
+              <span className="badge badge--inactive">Inativo</span>{" "}
+            </>
+          )}
           {linha.stockUnitCode ? `Estoque em ${linha.stockUnitCode}` : "Estoque: —"}
           {linha.itemExternalCode ? ` · Código legado: ${linha.itemExternalCode}` : ""}
           {linha.itemPackagingSubtype
             ? ` · ${PACKAGING_SUBTYPE_LABELS[linha.itemPackagingSubtype]}`
             : ""}
-          {!linha.itemActive && " · item inativo, mantido pelo histórico"}
+          {!linha.itemActive && linha.itemId !== "" && " · mantido pelo histórico"}
         </span>
       </td>
 

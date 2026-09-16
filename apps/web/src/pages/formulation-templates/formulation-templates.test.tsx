@@ -150,6 +150,7 @@ function versao(
     sourceVersionId: "ftv-2",
     sourceVersionNumber: 2,
     usageCount: 2,
+    componentIssues: [],
     ...overrides,
   };
 }
@@ -219,7 +220,7 @@ describe("Biblioteca de templates", () => {
     expect(screen.getByText("V3")).toBeInTheDocument();
     // A tela precisa dizer que não há vínculo vivo.
     expect(
-      screen.getByText(/alterar o template depois não muda nenhuma formulação já criada/i),
+      screen.getByText(/alterar o modelo depois não muda nenhuma formulação já criada/i),
     ).toBeInTheDocument();
   });
 
@@ -231,7 +232,7 @@ describe("Biblioteca de templates", () => {
     );
     await waitFor(() => expect(listFormulationTemplates).toHaveBeenCalled());
 
-    fireEvent.change(screen.getByLabelText("Buscar templates"), {
+    fireEvent.change(screen.getByLabelText("Buscar modelos"), {
       target: { value: "MP-000001" },
     });
     await waitFor(() =>
@@ -250,8 +251,8 @@ describe("Biblioteca de templates", () => {
     );
     await waitFor(() => expect(screen.getByText("FT-000008")).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("button", { name: "Novo template" }));
-    fireEvent.change(screen.getByLabelText("Nome do template"), {
+    fireEvent.click(screen.getByRole("button", { name: "Novo modelo" }));
+    fireEvent.change(screen.getByLabelText("Nome do modelo"), {
       target: { value: "DEMO — Biotina Base" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Criar" }));
@@ -292,7 +293,7 @@ describe("Detalhe do template", () => {
     await waitFor(() =>
       expect(screen.getByText(/2 formulações de produto nasceram desta versão/)).toBeInTheDocument(),
     );
-    expect(screen.getByText(/Nenhuma delas muda quando este template muda/)).toBeInTheDocument();
+    expect(screen.getByText(/Nenhuma delas muda quando este modelo muda/)).toBeInTheDocument();
   });
 
   it("edita e ativa o rascunho", async () => {
@@ -384,9 +385,9 @@ describe("Escolher template a partir do produto", () => {
     fireEvent.click(screen.getByRole("button", { name: "Revisar" }));
     await waitFor(() => expect(screen.getByText("MP-000001 — Biotina")).toBeInTheDocument());
     expect(screen.getByText("Base")).toBeInTheDocument();
-    expect(screen.getByText(/O fornecimento padrão é uma sugestão do template/)).toBeInTheDocument();
+    expect(screen.getByText(/O fornecimento padrão é uma sugestão do modelo/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Usar este template" }));
+    fireEvent.click(screen.getByRole("button", { name: "Usar este modelo" }));
     expect(aplicar).toHaveBeenCalledWith("ftv-3");
   });
 
@@ -406,14 +407,14 @@ describe("Escolher template a partir do produto", () => {
 
     // Rascunho é trabalho em curso: ninguém revisou aquela matriz ainda.
     await waitFor(() =>
-      expect(screen.getByText(/não tem nenhum template ativo/i)).toBeInTheDocument(),
+      expect(screen.getByText(/não tem nenhum modelo ativo/i)).toBeInTheDocument(),
     );
     expect(screen.queryByRole("button", { name: "Revisar" })).not.toBeInTheDocument();
   });
 });
 
 /**
- * A proveniência com o estado de "Salvar como template" que a PÁGINA controla.
+ * A proveniência com o estado de "Salvar como modelo" que a PÁGINA controla.
  *
  * O botão mora na barra fixa da Formulação desde a fatia 2 da bancada
  * compartilhada; o formulário do nome continua na proveniência. Este harness
@@ -431,7 +432,7 @@ function OrigemComAcoes(props: {
     <>
       {props.canEdit && !aberto && (
         <button type="button" onClick={() => setAberto(true)}>
-          Salvar como template
+          Salvar como modelo
         </button>
       )}
       <FormulationTemplateOrigin
@@ -473,7 +474,7 @@ describe("Origem da formulação", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Salvar como template" })).toBeInTheDocument(),
+      expect(screen.getByRole("button", { name: "Salvar como modelo" })).toBeInTheDocument(),
     );
     expect(screen.queryByText(/Criada a partir de/)).not.toBeInTheDocument();
   });
@@ -496,7 +497,7 @@ describe("Origem da formulação", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByText(/Existe uma versão mais recente do template/)).toBeInTheDocument(),
+      expect(screen.getByText(/Existe uma versão mais recente do modelo/)).toBeInTheDocument(),
     );
     expect(screen.getByRole("button", { name: /Comparar com a V4/ })).toBeInTheDocument();
     expect(
@@ -582,19 +583,19 @@ describe("Origem da formulação", () => {
       </MemoryRouter>,
     );
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Salvar como template" })).toBeInTheDocument(),
+      expect(screen.getByRole("button", { name: "Salvar como modelo" })).toBeInTheDocument(),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Salvar como template" }));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar como modelo" }));
     expect(
       screen.getByText(/É uma cópia: esta formulação continua exatamente como está/),
     ).toBeInTheDocument();
-    expect(screen.getByText(/o template nasce em rascunho/)).toBeInTheDocument();
+    expect(screen.getByText(/o modelo nasce em rascunho/)).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Nome do template"), {
+    fireEvent.change(screen.getByLabelText("Nome do modelo"), {
       target: { value: "DEMO — Biotina Base" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Criar template" }));
+    fireEvent.click(screen.getByRole("button", { name: "Criar modelo" }));
 
     await waitFor(() =>
       expect(createTemplateFromFormulation).toHaveBeenCalledWith("fv-1", {
@@ -611,7 +612,7 @@ describe("Origem da formulação", () => {
     );
 
     await waitFor(() => expect(screen.getByText(/Criada a partir de/)).toBeInTheDocument());
-    expect(screen.queryByRole("button", { name: "Salvar como template" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Salvar como modelo" })).not.toBeInTheDocument();
   });
 });
 

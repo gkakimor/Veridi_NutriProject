@@ -575,8 +575,8 @@ export function IndustrialCostPage() {
                 onChangeValue={setReferenceQuantity}
               />
               <p id="new-reference-output-hint" className="field__hint">
-                Usada por “Criar estrutura de custos”. Ao usar um template, a base vem do próprio
-                template e este campo é ignorado.
+                Usada por “Criar estrutura de custos”. Ao usar um modelo, a base vem do próprio
+                modelo e este campo é ignorado.
               </p>
             </div>
           )}
@@ -629,7 +629,7 @@ export function IndustrialCostPage() {
               disabled={saving}
               onClick={() => setUsarTemplate(true)}
             >
-              Usar template
+              Usar modelo
             </button>
           )}
           {canEdit && missingProductionBase && !missingActiveFormulation && (

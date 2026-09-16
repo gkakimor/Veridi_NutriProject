@@ -342,33 +342,37 @@ export const producaoTopics = {
 
   "producao.templates": {
     module: "producao",
-    title: "Template é matriz reutilizável — usar é copiar",
+    title: "Modelo é matriz reutilizável — usar é copiar",
     summary:
-      "Um template de formulação é uma matriz técnica: a composição que serve de ponto de partida para vários produtos e vários clientes. Ele não é a fórmula de ninguém — nenhum produto produz por um template, e nem custo, preço, orçamento, pedido ou ordem de produção leem daqui. Usar um template COPIA a composição para a formulação do produto; a partir dali as duas vidas seguem separadas, e mexer no template nunca muda uma formulação já criada.",
+      "Um modelo de formulação é uma matriz técnica: a receita que serve de ponto de partida para vários produtos e vários clientes. Ele não é a fórmula de ninguém — nenhum produto produz por um modelo, e nem custo, preço, orçamento, pedido ou ordem de produção leem daqui. Usar um modelo COPIA a receita para a formulação do produto; a partir dali as duas vidas seguem separadas, e mexer no modelo nunca muda uma formulação já criada.",
     concepts: [
       {
-        term: "Matriz (template)",
-        text: "A composição técnica guardada para ser reutilizada. Não pertence a nenhum cliente e não produz nada — por isso o nome é escolhido por quem cria, e não pode ser o nome de um cliente.",
+        term: "Matriz (modelo)",
+        text: "A receita técnica guardada para ser reutilizada: forma do produto, apresentação, premissas da dose, perda prevista, composição e embalagem. Não pertence a nenhum cliente e não produz nada — por isso o nome é escolhido por quem cria, e não pode ser o nome de um cliente.",
       },
       {
-        term: "Versão do template",
-        text: "O que se usa é a versão, não o template. Cada revisão da matriz é uma versão própria, com número e situação, e a biblioteca guarda todas.",
+        term: "Versão do modelo",
+        text: "O que se usa é a versão, não o modelo. Cada revisão da matriz é uma versão própria, com número e situação, e a biblioteca guarda todas.",
       },
       {
         term: "Versão ativa",
-        text: "A única que pode virar formulação de produto — uma por template. Rascunho é trabalho que ninguém revisou e não sai da biblioteca.",
+        text: "A única que pode virar formulação de produto — uma por modelo. Rascunho é trabalho que ninguém revisou e não sai da biblioteca.",
       },
       {
-        term: "Usar o template",
-        text: "Copiar a composição para dentro da formulação de um produto: linhas novas, identidade nova, nada compartilhado. Daí em diante as duas seguem separadas.",
+        term: "Usar o modelo",
+        text: "Copiar a receita para dentro da formulação de um produto: linhas novas, identidade nova, nada compartilhado. Daí em diante as duas seguem separadas.",
       },
       {
-        term: "Salvar como template",
+        term: "Salvar como modelo",
         text: "O caminho inverso, feito na tela da formulação: cria uma matriz nova a partir de uma receita existente. Também é cópia — a formulação original não muda nem troca de dono.",
       },
       {
         term: "Fornecimento padrão",
         text: "Quem fornece cada material, Veridi ou cliente. Aqui é apenas sugestão: a cópia leva o valor como ponto de partida e o produto pode mudar sem mexer na biblioteca.",
+      },
+      {
+        term: "Item que precisa de revisão",
+        text: "Item que o cadastro inativou, que virou produto acabado ou cuja unidade deixou de ser compatível depois que a receita foi gravada. O modelo avisa antes de ser aplicado e não ativa enquanto a pendência existir.",
       },
       {
         term: "Arquivado",
@@ -381,30 +385,30 @@ export const producaoTopics = {
         when: "Vale quando a receita padrão ainda não existe em nenhum produto.",
         steps: [
           {
-            label: "Novo template",
+            label: "Novo modelo",
             detail:
               "A matriz nasce com um código próprio e a V1 em rascunho. O nome é escolhido por quem cria: uma matriz feita para ser reutilizada entre clientes não pode carregar o nome de um deles.",
           },
           {
             label: "Montar o rascunho",
             detail:
-              "Base, unidade e componentes se editam à vontade enquanto a versão é rascunho — inclusive o fornecimento padrão de cada material.",
+              "Forma, apresentação, premissas, composição e embalagem se editam à vontade enquanto a versão é rascunho — na mesma bancada da formulação, com pureza e reserva como colunas.",
           },
           {
             label: "Ativar a versão",
             detail:
-              "Ativar é o que autoriza a reutilização, e exige ao menos um componente. Só versão ativa vira formulação de produto: rascunho é trabalho que ninguém revisou.",
+              "Ativar é o que autoriza a reutilização. Exige ao menos um componente e confere o cadastro de cada item: item inativo, produto acabado ou unidade incompatível impedem a ativação, com o item nomeado.",
           },
           {
             label: "Usar no produto",
             tone: "accent",
             detail:
-              "Aplicar a matriz a um produto cria uma cópia independente dentro da formulação dele: linhas novas, identidade nova, nada compartilhado. Alterar o template depois não muda nenhuma formulação já criada.",
+              "Aplicar a matriz a um produto cria uma cópia independente dentro da formulação dele: linhas novas, identidade nova, nada compartilhado. Alterar o modelo depois não muda nenhuma formulação já criada.",
           },
         ],
       },
       {
-        name: "Fluxo B · Salvar uma formulação existente como template",
+        name: "Fluxo B · Salvar uma formulação existente como modelo",
         when: "Vale quando a receita já foi montada num produto e serve para outros.",
         steps: [
           {
@@ -415,17 +419,17 @@ export const producaoTopics = {
           {
             label: "Cópia para a biblioteca",
             detail:
-              "Salvar como template também é copiar: a formulação original não se move, não se converte e não troca de dono. Ela continua sendo a receita daquele produto.",
+              "Salvar como modelo também é copiar: a formulação original não se move, não se converte e não troca de dono. Ela continua sendo a receita daquele produto.",
           },
           {
             label: "Nasce em rascunho",
             detail:
-              "O template criado começa como rascunho, para alguém revisar antes de a matriz ser reutilizada por outro cliente.",
+              "O modelo criado começa como rascunho, para alguém revisar antes de a matriz ser reutilizada por outro cliente. Item que o cadastro mudou depois atravessa como pendência, e é ali que se corrige.",
           },
           {
             label: "Nada comercial vai junto",
             detail:
-              "Cliente, projeto, orçamento, estrutura de custos, cálculo, precificação e pedido ficam de fora. Só a composição técnica viaja.",
+              "Cliente, projeto, orçamento, estrutura de custos, cálculo, precificação e pedido ficam de fora. Só a receita técnica viaja — premissas, composição e embalagem.",
           },
         ],
       },
@@ -433,9 +437,10 @@ export const producaoTopics = {
     notes: [
       "Não existe sincronizar, atualizar em massa nem “aplicar a todos os produtos”. Se existisse, a mudança pedida por um cliente reescreveria a receita de outro, e a descoberta viria na produção.",
       "Fornecimento padrão (Veridi ou cliente) é sugestão: a cópia leva o valor da matriz como ponto de partida, e o produto pode mudar sem mexer na biblioteca.",
-      "Arquivar tira o template da escolha de novas formulações. As formulações já criadas a partir dele continuam intactas.",
-      "Custo, precificação, orçamento, pedido e ordem de produção nunca leem um template: eles leem a formulação do produto.",
-      "Template não tem parâmetro, variável nem campo configurável. É uma cópia estruturada e versionada, e nada mais.",
+      "Antes de aplicar, o diálogo mostra os itens da versão ativa que o cadastro mudou. Aplicar continua possível: a formulação nasce em rascunho com a receita como está, e só ativa depois da correção.",
+      "Arquivar tira o modelo da escolha de novas formulações. As formulações já criadas a partir dele continuam intactas.",
+      "Custo, precificação, orçamento, pedido e ordem de produção nunca leem um modelo: eles leem a formulação do produto.",
+      "Modelo não tem parâmetro, variável nem campo configurável. É uma cópia estruturada e versionada, e nada mais.",
       "Criar, editar e ativar exigem perfil de Administração ou Produção. Os demais perfis consultam a biblioteca.",
     ],
   },
@@ -444,15 +449,15 @@ export const producaoTopics = {
     module: "producao",
     title: "Rascunho edita, versão ativa é história",
     summary:
-      "Cada matriz guarda a sua linha de versões, e é a versão — não o template — que se usa. Só o rascunho é editável: a versão ativa não se altera porque formulações de produto já nasceram dela e apontam para ela. Mudar uma matriz ativa significa criar uma versão nova; a anterior continua existindo, e nada que já foi copiado dela é reescrito.",
+      "Cada matriz guarda a sua linha de versões, e é a versão — não o modelo — que se usa. Só o rascunho é editável: a versão ativa não se altera porque formulações de produto já nasceram dela e apontam para ela. Mudar uma matriz ativa significa criar uma versão nova; a anterior continua existindo, e nada que já foi copiado dela é reescrito.",
     concepts: [
       {
         term: "Rascunho",
-        text: "A única situação editável. Um rascunho por matriz: dois seriam duas verdades técnicas em edição, e a segunda ativação apagaria em silêncio o trabalho da primeira.",
+        text: "A única situação editável, e a que a bancada mostra quando existe. Um rascunho por matriz: dois seriam duas verdades técnicas em edição, e a segunda ativação apagaria em silêncio o trabalho da primeira.",
       },
       {
         term: "Versão ativa",
-        text: "A versão em vigor, e a única que pode ser usada por um produto. Depois de ativada não se altera — formulações nasceram dela e precisam continuar encontrando o que copiaram.",
+        text: "A versão em vigor, e a única que pode ser usada por um produto. Depois de ativada não se altera — formulações nasceram dela e precisam continuar encontrando o que copiaram. Com rascunho aberto, ela aparece resumida, no histórico e na comparação.",
       },
       {
         term: "Versão arquivada",
@@ -464,19 +469,23 @@ export const producaoTopics = {
       },
       {
         term: "Usada por",
-        text: "Quantas formulações de produto nasceram daquela versão. Nenhuma delas muda quando a matriz muda: usar um template copia.",
+        text: "Quantas formulações de produto nasceram daquela versão. Nenhuma delas muda quando a matriz muda: usar um modelo copia.",
       },
       {
         term: "Base da formulação",
         text: "A quantidade de produto acabado que a matriz produz. Tudo o que os componentes declaram se refere a essa quantidade.",
       },
       {
-        term: "Ajustes da quantidade",
-        text: "O Modelo guarda o mesmo que a Formulação: se a quantidade é física informada ou calculada, a pureza, o overage e quais ajustes entram na conta. Aplicar o Modelo copia tudo; mudar o Modelo depois não muda a Formulação já criada.",
+        term: "Pureza e reserva",
+        text: "As mesmas colunas da formulação: a pureza preenchida corrige a quantidade física; a reserva fica registrada para o lote e não muda a dose. Aplicar o modelo copia os dois valores; mudar o modelo depois não muda a formulação já criada.",
+      },
+      {
+        term: "Pendência de item",
+        text: "Item que o cadastro inativou, que virou produto acabado ou cuja unidade deixou de ser compatível depois que a linha foi gravada. No rascunho, impede ativar; na versão ativa, avisa quem vai aplicar.",
       },
       {
         term: "Comparar versões",
-        text: "Mostra, item a item, o que mudou de uma versão para a outra. É a alternativa a um “atualizar” que não existe: nada é aplicado automaticamente a quem já copiou.",
+        text: "Mostra o que mudou de uma versão para a outra — premissas da forma, da dose e da perda, e cada componente, inclusive a ordem. É a alternativa a um “atualizar” que não existe: nada é aplicado automaticamente a quem já copiou.",
       },
     ],
     flows: [
@@ -487,7 +496,7 @@ export const producaoTopics = {
           {
             label: "Rascunho V1",
             detail:
-              "O template nasce com a V1 em rascunho — uma matriz sem versão nenhuma seria uma pasta vazia. Base, unidade e componentes se editam livremente.",
+              "O modelo nasce com a V1 em rascunho — uma matriz sem versão nenhuma seria uma pasta vazia. Premissas, composição e embalagem se editam livremente.",
           },
           {
             label: "Salvar rascunho",
@@ -498,7 +507,7 @@ export const producaoTopics = {
             label: "Ativar",
             tone: "accent",
             detail:
-              "A ativação exige ao menos um componente e é o que libera a matriz para uso. Só uma versão fica ativa por template.",
+              "A ativação exige ao menos um componente, confere o cadastro de cada item e é o que libera a matriz para uso. Só uma versão fica ativa por modelo.",
           },
           {
             label: "Disponível na biblioteca",
@@ -514,7 +523,7 @@ export const producaoTopics = {
           {
             label: "Criar nova versão",
             detail:
-              "A nova versão nasce em rascunho, copiada da ativa. Um rascunho por template: dois seriam duas verdades técnicas em edição, e a segunda ativação apagaria em silêncio o trabalho da primeira.",
+              "A nova versão nasce em rascunho, copiada da ativa. Um rascunho por modelo: dois seriam duas verdades técnicas em edição, e a segunda ativação apagaria em silêncio o trabalho da primeira.",
           },
           {
             label: "Editar o rascunho",
@@ -524,7 +533,7 @@ export const producaoTopics = {
           {
             label: "Comparar versões",
             detail:
-              "A comparação mostra, item a item, o que mudou de uma versão para a outra — antes de ativar, não depois.",
+              "A comparação mostra o que mudou de uma versão para a outra — premissas e componentes — antes de ativar, não depois.",
           },
           {
             label: "Ativar a nova",
@@ -541,12 +550,13 @@ export const producaoTopics = {
       },
     ],
     notes: [
-      "“Usada por” conta quantas formulações de produto nasceram daquela versão. Nenhuma delas muda quando o template muda.",
+      "“Usada por” conta quantas formulações de produto nasceram daquela versão. Nenhuma delas muda quando o modelo muda.",
       "Não existe “atualizar para a V4”. Sobrescrever reescreveria uma receita que já pode ter sustentado um custo, um preço e uma produção.",
-      "Aplicar um template a um produto preenche a primeira versão quando ela está vazia. Se a formulação de destino já tem componentes, nasce uma versão nova e a anterior fica intacta — nada é sobrescrito.",
-      "Versão em rascunho não pode ser usada por produto nenhum, e template arquivado sai da escolha de novas formulações.",
+      "Aplicar um modelo a um produto preenche a primeira versão quando ela está vazia. Se a formulação de destino já tem componentes, nasce uma versão nova e a anterior fica intacta — nada é sobrescrito.",
+      "Versão em rascunho não pode ser usada por produto nenhum, e modelo arquivado sai da escolha de novas formulações.",
+      "A lista de itens da bancada só oferece item ativo do tipo da seção. O item que a receita já tinha continua à vista, marcado como inativo, para a matriz antiga poder ser corrigida.",
       "Editar e ativar exigem perfil de Administração ou Produção. Os demais perfis leem a matriz e o histórico.",
-      "Nome e descrição do template se editam fora do versionamento, em “Salvar identificação”: renomear não cria versão. Arquivar tira o template da escolha de novas formulações sem apagar versão nenhuma.",
+      "Nome e descrição do modelo se editam fora do versionamento, em “Salvar identificação”: renomear não cria versão. Arquivar tira o modelo da escolha de novas formulações sem apagar versão nenhuma.",
     ],
   },
 
@@ -877,11 +887,11 @@ export const producaoHints = {
   "producao.template.fornecimentoPadrao": {
     module: "producao",
     label: "Fornecimento padrão",
-    text: "Quem fornece o material: Veridi ou o cliente. No template é apenas sugestão — a cópia leva o valor como ponto de partida, e o produto pode mudar sem mexer na biblioteca.",
+    text: "Quem fornece o material: Veridi ou o cliente. No modelo é apenas sugestão — a cópia leva o valor como ponto de partida, e o produto pode mudar sem mexer na biblioteca.",
   },
   "producao.template.usadaPor": {
     module: "producao",
     label: "Usada por",
-    text: "Quantas formulações de produto nasceram desta versão. Nenhuma delas muda quando o template muda: usar um template copia.",
+    text: "Quantas formulações de produto nasceram desta versão. Nenhuma delas muda quando o modelo muda: usar um modelo copia.",
   },
 } satisfies Record<string, HelpHint>;

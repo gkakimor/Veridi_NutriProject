@@ -172,15 +172,15 @@ export const gestaoTopics = {
     module: "gestao",
     title: "Modelos de Estrutura de Custo: configuração reutilizável, sem tarifa",
     summary:
-      "Um modelo de estrutura de custo — o template — é a configuração industrial que se repete entre produtos parecidos: qual base de produção, que recursos e por quanto tempo, como a energia entra e quais premissas se aplicam. Ele não guarda tarifa, preço por hora nem custo calculado. Aplicar um template CRIA UMA CÓPIA — uma estrutura de custos própria do produto, que segue a vida dela sozinha.",
+      "Um modelo de estrutura de custo é a configuração industrial que se repete entre produtos parecidos: qual base de produção, que recursos e por quanto tempo, como a energia entra e quais premissas se aplicam. Ele não guarda tarifa, preço por hora nem custo calculado. Aplicar um modelo CRIA UMA CÓPIA — uma estrutura de custos própria do produto, que segue a vida dela sozinha.",
     concepts: [
       {
-        term: "Template de estrutura",
+        term: "Modelo de estrutura",
         text: "A matriz reutilizável entre produtos e clientes. Ela diz “usar a encapsuladora por 4 horas”; quanto vale essa hora é resolvido no cadastro do recurso, na data de cada cálculo.",
       },
       {
         term: "Versão",
-        text: "Cada template tem uma versão ativa e, no máximo, um rascunho. Só o rascunho é editável — versão ativa é histórica, porque estruturas nasceram dela.",
+        text: "Cada modelo tem uma versão ativa e, no máximo, um rascunho. Só o rascunho é editável — versão ativa é histórica, porque estruturas nasceram dela.",
       },
       {
         term: "Base de produção sugerida",
@@ -196,12 +196,12 @@ export const gestaoTopics = {
       },
       {
         term: "Usada por",
-        text: "Quantas estruturas de custos nasceram desta versão. Nenhuma delas muda quando o template muda.",
+        text: "Quantas estruturas de custos nasceram desta versão. Nenhuma delas muda quando o modelo muda.",
       },
     ],
     flow: [
       {
-        label: "Criar ou salvar como template",
+        label: "Criar ou salvar como modelo",
         detail:
           "Ou começa vazio, ou parte de uma estrutura de custos que já deu certo em um produto — e o que atravessa é só a configuração.",
       },
@@ -229,12 +229,12 @@ export const gestaoTopics = {
     ],
     notes: [
       "A ausência de tarifa é o ponto. Um preço por hora congelado na matriz seria um número sem data: copiado em dez produtos e lido seis meses depois, cotaria a máquina pelo valor do ano passado enquanto o cadastro do recurso mostraria o correto, e nada na tela explicaria a diferença.",
-      "Aplicar copia, não liga. Mudar o template depois não mexe em nenhuma estrutura que já nasceu dele, e mexer na estrutura do produto não volta para o template.",
-      "Versão nova do template é avisada, nunca aplicada por cima. Comparar e criar uma versão nova são as saídas — atualizar no lugar reescreveria uma estrutura que já pode ter explicado um custo, um preço e uma produção.",
-      "Se o produto já tem uma estrutura em rascunho com configuração própria, aplicar o template é recusado, nomeando o rascunho. Ativar ou descartar é decisão de quem está trabalhando nele.",
+      "Aplicar copia, não liga. Mudar o modelo depois não mexe em nenhuma estrutura que já nasceu dele, e mexer na estrutura do produto não volta para o modelo.",
+      "Versão nova do modelo é avisada, nunca aplicada por cima. Comparar e criar uma versão nova são as saídas — atualizar no lugar reescreveria uma estrutura que já pode ter explicado um custo, um preço e uma produção.",
+      "Se o produto já tem uma estrutura em rascunho com configuração própria, aplicar o modelo é recusado, nomeando o rascunho. Ativar ou descartar é decisão de quem está trabalhando nele.",
       "Não se ativa uma versão sem nenhum recurso e nenhuma premissa: ela não descreveria configuração nenhuma.",
-      "Arquivar tira o template dos documentos novos. O que já nasceu dele continua exatamente como está.",
-      "A comparação entre versões mostra configuração, nunca dinheiro resolvido: “R$ 88 → R$ 110” faria parecer que o template mudou quando só a tarifa do cadastro mudou.",
+      "Arquivar tira o modelo dos documentos novos. O que já nasceu dele continua exatamente como está.",
+      "A comparação entre versões mostra configuração, nunca dinheiro resolvido: “R$ 88 → R$ 110” faria parecer que o modelo mudou quando só a tarifa do cadastro mudou.",
     ],
   },
 

@@ -64,13 +64,31 @@ export function opcaoDoItem(item: ItemDaBancada): EntityOption {
     id: item.id,
     code: item.code,
     name: item.name,
-    ...(item.active ? {} : { hint: "inativo" }),
+    ...(item.active ? {} : { hint: "Inativo" }),
   };
 }
 
 /** A seção decide o TIPO: composição é matéria-prima, embalagem é embalagem. */
 export function tipoDaSecao(secao: SecaoDaFormula): ItemType {
   return secao === "EMBALAGEM" ? "PACKAGING" : "RAW_MATERIAL";
+}
+
+/**
+ * O Item pode ser ESCOLHIDO agora numa linha desta seção?
+ *
+ * A bancada não oferece de propósito o que a API vai recusar
+ * (FORMULATION-TEMPLATE-WORKBENCH-01, fatia 3): item inativo não entra como
+ * linha nova, e a seção pede o tipo dela — produto acabado não é componente,
+ * nem na composição. O catálogo já chega assim do servidor, mas um item
+ * cadastrado no meio do caminho entra por fora da busca, e é aqui que ele é
+ * conferido.
+ *
+ * O item que a linha JÁ referencia não passa por esta pergunta: continua à
+ * vista, com a marca de inativo, para a receita antiga poder ser lida e
+ * corrigida.
+ */
+export function itemElegivelParaSecao(item: ItemDaBancada, secao: SecaoDaFormula): boolean {
+  return item.active && item.type === tipoDaSecao(secao);
 }
 
 /**

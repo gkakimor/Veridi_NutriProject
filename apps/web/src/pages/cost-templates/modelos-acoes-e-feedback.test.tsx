@@ -188,6 +188,7 @@ function rascunhoDeFormulacao(
     sourceVersionId: null,
     sourceVersionNumber: null,
     usageCount: 0,
+    componentIssues: [],
     ...overrides,
   };
 }
@@ -306,15 +307,27 @@ describe("Modelos — a barra do rascunho é a da Precificação", () => {
     );
     const container = await abrirFormulacao();
 
-    const barra = botao("Salvar rascunho").closest(".form-actions") as HTMLElement;
-    expect(barra).toHaveClass("form-actions--split");
-    const grupos = barra.querySelectorAll(".form-actions__group");
-    expect(grupos[0]).toContainElement(botao("+ Adicionar componente"));
-    expect(grupos[1]).toContainElement(botao("Ativar versão"));
-    expect(botao("+ Adicionar componente")).toHaveClass("btn--ghost");
+    /*
+     * Desde FORMULATION-TEMPLATE-WORKBENCH-01 (fatia 2) as ações do rascunho
+     * moram na BARRA FIXA do rodapé, a mesma da Formulação: gravar e ativar no
+     * fim dela. Adicionar linha é gesto da SEÇÃO da receita e mora na tabela —
+     * a hierarquia de pesos continua a mesma.
+     */
+    const barra = botao("Salvar rascunho").closest(".sticky-action-bar") as HTMLElement;
+    expect(barra).not.toBeNull();
+    const fim = barra.querySelector(".sticky-action-bar__fim") as HTMLElement;
+    expect(fim).toContainElement(botao("Salvar rascunho"));
+    expect(fim).toContainElement(botao("Ativar versão"));
+    expect(barra).not.toContainElement(botao("+ Adicionar matéria-prima"));
+    // Adicionar é o gesto da tabela, abaixo dela — secundário e pequeno.
+    expect(botao("+ Adicionar matéria-prima")).toHaveClass("btn--secondary", "btn--sm");
     expect(botao("Salvar rascunho")).toHaveClass("btn--secondary");
     expect(botao("Ativar versão")).toHaveClass("btn--accent");
-    expect(container.querySelectorAll(".line-actions")).toHaveLength(0);
+    // A linha de adicionar da tabela não carrega ação do documento.
+    for (const linha of container.querySelectorAll(".line-actions")) {
+      expect(linha).not.toContainElement(botao("Salvar rascunho"));
+      expect(linha).not.toContainElement(botao("Ativar versão"));
+    }
     // Sem pendência, gravar não tem o que fazer — ativar tem.
     expect(botao("Salvar rascunho")).toBeDisabled();
     expect(botao("Ativar versão")).toBeEnabled();

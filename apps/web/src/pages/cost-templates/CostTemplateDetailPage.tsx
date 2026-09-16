@@ -225,7 +225,7 @@ export function CostTemplateDetailPage() {
         }
       })
       .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Falha ao carregar o template"),
+        setError(err instanceof Error ? err.message : "Falha ao carregar o modelo"),
       );
   }, [templateId]);
 
@@ -494,7 +494,7 @@ export function CostTemplateDetailPage() {
 
         <FormSection
           title="Identificação"
-          subtitle="Um template de estrutura é reutilizável entre produtos e clientes."
+          subtitle="Um modelo de estrutura é reutilizável entre produtos e clientes."
         >
           <div className="field-grid-2">
             <div className="field">
@@ -562,7 +562,7 @@ export function CostTemplateDetailPage() {
         {ativa && (
           <FormSection
             title={`Versão ativa — ${ativa.versionLabel}`}
-            subtitle="Versão ativa é histórica: para alterar, crie uma nova versão. As tarifas dos recursos não fazem parte do template — elas são resolvidas na data de cada cálculo."
+            subtitle="Versão ativa é histórica: para alterar, crie uma nova versão. As tarifas dos recursos não fazem parte do modelo — elas são resolvidas na data de cada cálculo."
           >
             {composicao(ativa)}
             {ativa.usageCount > 0 && (
@@ -570,7 +570,7 @@ export function CostTemplateDetailPage() {
                 {ativa.usageCount === 1
                   ? "1 estrutura de custos nasceu desta versão."
                   : `${ativa.usageCount} estruturas de custos nasceram desta versão.`}{" "}
-                Nenhuma delas muda quando este template muda.
+                Nenhuma delas muda quando este modelo muda.
               </p>
             )}
             {/* A ativação é confirmada AQUI: ao dar certo, o bloco do rascunho

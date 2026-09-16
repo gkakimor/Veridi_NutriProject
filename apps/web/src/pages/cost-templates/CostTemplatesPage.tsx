@@ -46,7 +46,7 @@ export function CostTemplatesPage() {
   const consulta = useListQuery(
     listCostTemplates,
     { ...filtrosDaConsulta, page, pageSize: PAGE_SIZE },
-    { fallbackError: "Falha ao carregar os templates" },
+    { fallbackError: "Falha ao carregar os modelos" },
   );
   const templates: CostTemplateSummaryDTO[] = consulta.data?.templates ?? [];
   const total = consulta.data?.total ?? 0;
@@ -58,7 +58,7 @@ export function CostTemplatesPage() {
       const template = await createCostTemplate({ name: newName.trim() });
       navigate(`/gestao/templates-estrutura/${template.id}`);
     } catch (err) {
-      setErroAoCriar(err instanceof Error ? err.message : "Falha ao criar o template");
+      setErroAoCriar(err instanceof Error ? err.message : "Falha ao criar o modelo");
     }
   }
 
@@ -69,13 +69,13 @@ export function CostTemplatesPage() {
           <h1 className="page__title">Modelos de Estrutura de Custo</h1>
           <p className="page__subtitle">
             Configurações industriais reutilizáveis: base de produção, recursos e premissas.
-            Aplicar um template cria uma estrutura independente no produto — e as tarifas
+            Aplicar um modelo cria uma estrutura independente no produto — e as tarifas
             continuam sendo resolvidas na data do cálculo, nunca congeladas aqui.
           </p>
         </div>
         {canEdit && (
           <button type="button" className="btn btn--accent" onClick={() => setCreating(true)}>
-            Novo template
+            Novo modelo
           </button>
         )}
       </div>
@@ -84,7 +84,7 @@ export function CostTemplatesPage() {
 
       {creating && (
         <div className="inline-form">
-          <label htmlFor="cost-template-name">Nome do template</label>
+          <label htmlFor="cost-template-name">Nome do modelo</label>
           <input
             id="cost-template-name"
             type="text"
@@ -117,7 +117,7 @@ export function CostTemplatesPage() {
 
       <LibraryToolbar
         id="cost-templates-search"
-        label="Buscar templates de estrutura"
+        label="Buscar modelos de estrutura"
         placeholder="Buscar por código, nome ou recurso…"
         value={searchInput}
         onChange={setSearchInput}
@@ -191,8 +191,8 @@ export function CostTemplatesPage() {
             ))}
             <ListStatusRow colSpan={8} query={consulta} rowCount={templates.length}>
               {search
-                ? "Nenhum template encontrado para esta busca."
-                : "A biblioteca ainda está vazia. Crie um template ou salve uma estrutura existente como template."}
+                ? "Nenhum modelo encontrado para esta busca."
+                : "A biblioteca ainda está vazia. Crie um modelo ou salve uma estrutura existente como modelo."}
             </ListStatusRow>
           </tbody>
         </table>
