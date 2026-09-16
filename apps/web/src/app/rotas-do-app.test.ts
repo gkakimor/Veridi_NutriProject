@@ -115,6 +115,8 @@ const ROTAS_ANTES_DA_MIGRACAO = [
   "/producao/produto-acabado",
   "/producao/templates-formulacao",
   "/producao/templates-formulacao/:templateId",
+  // Ficha técnica do Modelo em PDF (FORMULATION-TEMPLATE-TECHNICAL-SHEET-PDF-01).
+  "/producao/templates-formulacao/:templateId/versoes/:versionId/ficha-tecnica",
   "/produtos/:productId/cmv",
   "/produtos/:productId/custos",
   "/qualidade/documentos",
