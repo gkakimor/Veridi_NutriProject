@@ -69,8 +69,7 @@ estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0
   ganhou a premissa GLOBAL **Perda prevista de produção (%)** com o **Rendimento esperado** derivado (100 − perda) num
   bloco compacto "Premissas de produção", fora da grade. A perda não altera dose nem cápsula, não altera quantidade
   comercial nenhuma (guarda de alcance no repositório) e entra só no custo estimado interno: quantidade bruta = líquida ÷
-  (1 − perda/100), aplicada pela base que a receita declara — `PER_DOSE`/`FIXED_BASIS` escalam, `PER_FINISHED_UNIT` não —
-  com o custo unitário ainda dividido pela quantidade vendável. A grade ficou mais enxuta (resultado não parece campo,
+  (1 − perda/100), com o custo unitário ainda dividido pela quantidade vendável. A grade ficou mais enxuta (resultado não parece campo,
   Base sai da linha quando não decide material) e passou a ter LARGURA DECLARADA pelo PO em `table-layout: fixed`,
   proporcional à área útil de 1.492px: composição 367/211/152/211/110/96/100/96/104/45 na cápsula — no pó os 96px de
   "Por cápsula" vão para o Ingrediente, que fica em 463 — e embalagem 879/216/204/134/59. A "Apresentação" virou
@@ -92,6 +91,19 @@ estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0
   seção) — a ordem já viajava como `position` e faltava poder mudá-la —, o remover ficou vermelho e "Salvar como
   template" usa o botão primário. **Falta a avaliação
   visual do PO** — é dela que depende o fechamento;
+- **Formulação — escopo da perda prevista:** FECHADO em 2026-09-15 (FORMULATION-LOSS-SCOPE-01), migration aditiva
+  `20260925093030`. Decisão do PO: a perda é do PROCESSO, então recebe o fator quem é consumido proporcionalmente à
+  quantidade BRUTA — matéria-prima, ingrediente e a **cápsula vazia** —, e não a embalagem comercial, que continua na
+  quantidade vendável (5.000 unidades vendáveis não viram 5.051 potes). A base da receita descrevia a aritmética da
+  linha, não a incidência: a cápsula é declarada por unidade acabada (120 por pote) e ficava de fora, subestimando o
+  custo previsto de todo produto em cápsula. Nenhum atributo separava embalagem consumida no processo de embalagem
+  comercial — os dois são `PACKAGING` e `packagingSubtype` não tem valor para a cápsula —, então entrou a marca
+  explícita `Item.consumedInProduction` (booleano, `false` por default), oferecida no cadastro do Item só para
+  embalagem, e a regra canônica `componenteSegueQuantidadeProduzida` (`@veridi/shared`): base que acompanha a produção
+  OU item marcado. Nome, código e subtipo não participam da decisão. O divisor do custo unitário, a quantidade
+  comercial, a Ordem de Produção e o picking seguem intocados, e item já cadastrado nasce `false` — o comportamento
+  anterior. **Marcar as cápsulas vazias existentes é gesto de cadastro**, não backfill: nenhum item foi alterado por
+  nome ou código;
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 
 Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).

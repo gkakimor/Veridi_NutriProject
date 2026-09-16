@@ -288,19 +288,31 @@ considera regra/configuração por tipo ou por Item — hipótese de modelagem:
 "exige lote do fabricante" e "exige validade" —, mas defaults e obrigatoriedade
 operacional precisam ser validados com a Veridi. Relacionado ao #7.
 
-### FORMULATION-LOSS-SCOPE-01 — a cápsula vazia entra na perda prevista? — aguardando o PO
+### ~~FORMULATION-LOSS-SCOPE-01~~ — a cápsula vazia entra na perda prevista — FECHADO em 2026-09-15
 
-Registrado no refinamento final de FORMULATION-WORKBENCH-01 (2026-09-15). A
-perda prevista de produção escala as linhas cuja base acompanha a quantidade
-PRODUZIDA (`PER_DOSE`, `FIXED_BASIS`) e deixa `PER_FINISHED_UNIT` na quantidade
-vendável — pote, tampa, rótulo e caixa não são perdidos com o lote.
+Decisão do PO (2026-09-15): **entra**. A perda prevista é perda do PROCESSO para
+alcançar a quantidade líquida vendável, então recebe o fator quem é consumido
+proporcionalmente à quantidade BRUTA que entra no processo — matérias-primas,
+ingredientes e a cápsula vazia. A embalagem comercial (pote, tampa, rótulo,
+cartucho, caixa de embarque, dosador) continua na quantidade vendável.
 
-Nos dois produtos de homologação a **cápsula vazia** é item `PACKAGING` com base
-`PER_FINISHED_UNIT` (120 un por embalagem), então hoje ela NÃO é escalada.
-Fisicamente uma cápsula perdida no envase leva o invólucro junto. O domínio não
-tem, hoje, nenhuma marca que separe "embalagem consumida na produção" de
-"embalagem comercial": `packagingSubtype` tem `OTHER` para a cápsula, o que não
-é contrato. Decidir isso é decisão de custo do PO — nada foi inventado.
+A auditoria confirmou o que o registro anterior suspeitava: nenhum atributo do
+domínio separava "embalagem consumida na produção" de "embalagem comercial" —
+`packagingSubtype` enumera pote, tampa, rótulo, cartucho, caixa e dosador mas
+não tem valor para a cápsula, e a base do componente descreve a aritmética da
+linha, não a incidência da perda. A menor mudança que diferencia o
+comportamento foi uma marca explícita do cadastro, `Item.consumedInProduction`
+(booleano, `false` por default, migration aditiva `20260925093030`), lida pela
+regra canônica `componenteSegueQuantidadeProduzida` em `@veridi/shared`.
+
+Regra durável em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §52; onde ela é
+protegida em [`TEST_COVERAGE_MAP.md`](TEST_COVERAGE_MAP.md).
+
+**Follow-up de cadastro, não de código:** os itens de cápsula vazia já
+cadastrados nascem `false`, que é o comportamento anterior. Marcá-los é gesto de
+quem cadastra, no formulário do Item — nenhum backfill por nome ou código foi
+feito, e nenhum será: uma regra de custo decidida por `nome.includes("CAPS")` é
+invisível para quem confere o custo.
 
 ### FORMULATION-PRESENTATION-BY-FORM-01 — a tabela Forma × Apresentação — aguardando o PO
 
