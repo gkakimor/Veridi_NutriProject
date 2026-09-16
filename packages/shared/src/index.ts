@@ -22,6 +22,7 @@ export * from "./user-preferences.js";
 export * from "./controlled-documents.js";
 export * from "./attachments.js";
 export * from "./projects.js";
+export * from "./payment.js";
 export * from "./samples.js";
 export * from "./supplier-items.js";
 export * from "./industrial-costs.js";

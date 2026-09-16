@@ -914,6 +914,12 @@ export function CustomerOrderPage() {
         state: customerOrder.customerAddress.state,
         notes: null,
         businessLotSuffix: null,
+        defaultPaymentInstrument: null,
+        defaultPaymentMethod: null,
+        defaultDownPaymentPercent: null,
+        defaultInstallmentCount: null,
+        defaultInstallmentIntervalDays: null,
+        defaultMonthlyInterestPercent: null,
         /*
          * O cliente do Pedido não está na primeira página de ativos: foi
          * bloqueado, inativado, ou só não coube nela. A situação é a ATUAL,

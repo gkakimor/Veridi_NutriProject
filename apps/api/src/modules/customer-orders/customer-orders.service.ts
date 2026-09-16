@@ -250,6 +250,7 @@ function commercialOriginOf(order: CustomerOrder): CustomerOrderCommercialOrigin
       : null,
     totalAmount: order.agreedTotalAmount ? order.agreedTotalAmount.toFixed(2) : null,
     paymentSchedule: (order.agreedPaymentSchedule as QuotePaymentScheduleDTO | null) ?? null,
+    paymentInstrument: order.agreedPaymentInstrument,
   };
 }
 

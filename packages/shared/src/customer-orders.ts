@@ -3,6 +3,7 @@
 import type { CustomerOrderBillingStatus } from "./billings.js";
 import type { CustomerStatus } from "./customer-status.js";
 import type { CustomerAddress } from "./customers.js";
+import type { PaymentInstrument } from "./payment.js";
 import type { ProductionOrderStatus } from "./production-orders.js";
 import type { QuotePaymentScheduleDTO, QuotePriceSource } from "./projects.js";
 
@@ -225,6 +226,11 @@ export interface CustomerOrderCommercialOriginDTO {
   totalAmount: string | null;
   /** Plano como foi apresentado ao cliente. `null` em proposta sem plano. */
   paymentSchedule: QuotePaymentScheduleDTO | null;
+  /**
+   * Forma de pagamento da proposta, congelada quando o Pedido nasceu. `null`
+   * quando a proposta não informou, e em Pedido anterior a esta informação.
+   */
+  paymentInstrument: PaymentInstrument | null;
 }
 
 export interface CustomerOrderDTO {

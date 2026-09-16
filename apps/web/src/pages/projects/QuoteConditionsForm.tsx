@@ -1,25 +1,35 @@
 import { useLayoutEffect, useState } from "react";
 import type {
+  PaymentInstrument,
   QuotePaymentMethod,
   QuotePaymentScheduleDTO,
   QuoteVersionDTO,
   UpdateQuoteVersionInput,
 } from "@veridi/shared";
-import { LIMITES_INTEIROS_DAS_CONDICOES, QUOTE_PAYMENT_METHOD_LABELS } from "@veridi/shared";
+import {
+  LIMITES_INTEIROS_DAS_CONDICOES,
+  PARCELADO_SEM_PARCELAS_MESSAGE,
+  PAYMENT_INSTRUMENTS,
+  PAYMENT_INSTRUMENT_LABELS,
+  QUOTE_PAYMENT_METHOD_LABELS,
+} from "@veridi/shared";
 import { formatBRL } from "../../lib/currency";
 import { formatDate } from "../../lib/dates";
 import { emDias } from "../../lib/duration";
 import { formatPercent } from "../../lib/percent";
+import { condicaoPadraoPorExtenso, formaDePagamentoPorExtenso } from "../../lib/payment-condition";
 import { previewQuotePaymentSchedule } from "../../lib/projects-api";
 import { erroDoDecimal } from "../../lib/decimal-field";
-import { erroDeInteiro } from "../../lib/integer-input";
+import { erroDeInteiro, lerInteiroOpcional } from "../../lib/integer-input";
 import { CASAS_PERCENTUAL, OPCOES_PERCENTUAL } from "../../lib/numeric-scales";
 import { IntegerField, PercentField } from "../../components/NumericField";
 import {
   type CamposDasCondicoes,
   type ChaveInteiraDaCondicao,
+  aplicarPadraoDoCliente,
   condicoesAlteradas,
   hidratarRascunho,
+  padraoDoClienteDifere,
   paraEnvio,
   rascunhoDe,
 } from "./quote-conditions-draft";
@@ -198,16 +208,24 @@ export function QuoteConditionsForm({
    * Antes, `abc` no prazo virava `NaN`, o JSON escrevia `null`, e salvar
    * apagava o prazo gravado sem aviso (QUOTE-INT-FIELDS-01). Vazio segue: é
    * "não informado". À vista, parcelas e intervalo não aparecem nem valem.
+   *
+   * A exceção é Parcelas no parcelado: vazio ali não é "não informado", é a
+   * condição que o servidor recusa — o plano sairia à vista com a proposta
+   * dizendo parcelado (CUSTOMER-PAYMENT-DEFAULTS-01). Trava igual, com a frase
+   * do servidor ao lado do campo.
    */
   const erroDoInteiro = (chave: ChaveInteiraDaCondicao): string | null => {
     const { rotulo, soParcelado } = INTEIROS[chave];
     if (soParcelado && !parcelado) return null;
+    if (chave === "installmentCount" && lerInteiroOpcional(campos[chave]).tipo === "vazio") {
+      return PARCELADO_SEM_PARCELAS_MESSAGE;
+    }
     return erroDeInteiro(rotulo, campos[chave], LIMITES_INTEIROS_DAS_CONDICOES[chave]);
   };
-  const temInteiroIlegivel = (Object.keys(INTEIROS) as ChaveInteiraDaCondicao[]).some(
+  const temInteiroInvalido = (Object.keys(INTEIROS) as ChaveInteiraDaCondicao[]).some(
     (chave) => erroDoInteiro(chave) !== null,
   );
-  const temCondicaoIlegivel = temPercentualIlegivel || temInteiroIlegivel;
+  const temCondicaoInvalida = temPercentualIlegivel || temInteiroInvalido;
   /** Liga o campo ao seu erro: quem usa leitor de tela ouve a regra junto do campo. */
   const ariaDoInteiro = (chave: ChaveInteiraDaCondicao) =>
     erroDoInteiro(chave) === null
@@ -238,9 +256,27 @@ export function QuoteConditionsForm({
     setErroSimulacao(null);
   }
 
+  /*
+   * O padrão ATUAL do cliente nos campos — só na tela. Não grava: vira
+   * "Alterações não salvas", a mesma pendência que prende o envio e a saída
+   * da página, e segue para Simular, Salvar ou Descartar como qualquer
+   * digitação. Só aparece quando mudaria alguma coisa.
+   */
+  const padraoDoCliente = quote.customerPaymentDefaults ?? null;
+  const podeAplicarPadrao = editable && padraoDoClienteDifere(campos, padraoDoCliente);
+
+  function aplicarPadrao() {
+    setRascunho((atual) => ({
+      ...atual,
+      campos: aplicarPadraoDoCliente(atual.campos, padraoDoCliente),
+    }));
+    setSimulacao(null);
+    setErroSimulacao(null);
+  }
+
   async function simular() {
     // Os botões já ficam presos: o que a tela não lê não sai dela por caminho nenhum.
-    if (temCondicaoIlegivel) return;
+    if (temCondicaoInvalida) return;
     setSimulando(true);
     setErroSimulacao(null);
     try {
@@ -254,7 +290,7 @@ export function QuoteConditionsForm({
   }
 
   async function salvar() {
-    if (temCondicaoIlegivel || salvando) return;
+    if (temCondicaoInvalida || salvando) return;
     const gravacao = onSave(paraEnvio(campos));
     // Quem grava sem devolver promessa não tem andamento a mostrar.
     if (!gravacao) return;
@@ -305,8 +341,28 @@ export function QuoteConditionsForm({
             {avisoDoPercentual("discountPercent")}
             <p className="field__hint">Sobre o subtotal das linhas.</p>
           </div>
+          {/* Forma é o meio (PIX, boleto...); condição é o prazo (à vista ou
+              parcelado). A forma não muda valor nem plano. */}
           <div className="field field--narrow">
-            <label htmlFor="quote-payment-method">Forma de pagamento</label>
+            <label htmlFor="quote-payment-instrument">Forma de pagamento</label>
+            <select
+              id="quote-payment-instrument"
+              value={campos.paymentInstrument}
+              onChange={(event) =>
+                set("paymentInstrument", event.target.value as PaymentInstrument | "")
+              }
+            >
+              <option value="">Não informada</option>
+              {PAYMENT_INSTRUMENTS.map((forma) => (
+                <option key={forma} value={forma}>
+                  {PAYMENT_INSTRUMENT_LABELS[forma]}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* O id técnico continua `quote-payment-method`: as E2E o seguem. */}
+          <div className="field field--narrow">
+            <label htmlFor="quote-payment-method">Condição de pagamento</label>
             <select
               id="quote-payment-method"
               value={campos.paymentMethod}
@@ -389,12 +445,24 @@ export function QuoteConditionsForm({
           {/* Ver o efeito de um lado; gravar ou desfazer do outro — simular
               não grava nada, e não pode ficar colado em quem grava. */}
           <div className="form-actions__group">
+            {/* Preencher a tela com o padrão do cliente também não grava. */}
+            {podeAplicarPadrao && (
+              <button
+                type="button"
+                className="btn btn--secondary btn--sm"
+                disabled={saving || salvando}
+                aria-describedby="quote-customer-default-hint"
+                onClick={aplicarPadrao}
+              >
+                Aplicar padrão do cliente
+              </button>
+            )}
             {/* Aparece com a alteração: ver o efeito não pode custar salvar. */}
             {sujo && (
               <button
                 type="button"
                 className="btn btn--secondary"
-                disabled={simulando || temCondicaoIlegivel}
+                disabled={simulando || temCondicaoInvalida}
                 onClick={() => void simular()}
               >
                 {simulando ? "Simulando…" : "Simular"}
@@ -405,7 +473,7 @@ export function QuoteConditionsForm({
             <button
               type="button"
               className="btn btn--secondary"
-              disabled={saving || salvando || !sujo || temCondicaoIlegivel}
+              disabled={saving || salvando || !sujo || temCondicaoInvalida}
               onClick={() => void salvar()}
             >
               {salvando ? "Salvando…" : "Salvar condições"}
@@ -424,6 +492,21 @@ export function QuoteConditionsForm({
             </span>
           </div>
         </div>
+      )}
+
+      {podeAplicarPadrao && padraoDoCliente && (
+        <p className="field__hint" id="quote-customer-default-hint">
+          Padrão do cliente:{" "}
+          {[
+            padraoDoCliente.defaultPaymentInstrument
+              ? formaDePagamentoPorExtenso(padraoDoCliente.defaultPaymentInstrument)
+              : null,
+            padraoDoCliente.defaultPaymentMethod ? condicaoPadraoPorExtenso(padraoDoCliente) : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+          . Aplicar só preenche forma e condição na tela — nada é gravado até salvar.
+        </p>
       )}
 
       {erroSimulacao && <p className="form-alert" role="alert">{erroSimulacao}</p>}
@@ -539,6 +622,8 @@ function CondicoesGravadas({ quote }: { quote: QuoteVersionDTO }) {
       <dt>Desconto</dt>
       <dd>{quote.discountPercent ? formatPercent(quote.discountPercent) : "—"}</dd>
       <dt>Forma de pagamento</dt>
+      <dd>{formaDePagamentoPorExtenso(quote.paymentInstrument)}</dd>
+      <dt>Condição de pagamento</dt>
       <dd>{QUOTE_PAYMENT_METHOD_LABELS[quote.paymentMethod]}</dd>
       {parcelado && (
         <>

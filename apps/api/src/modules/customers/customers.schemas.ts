@@ -10,6 +10,11 @@ import {
 import { optionalCnpjSchema, optionalNullableText } from "../../lib/cnpj-schema.js";
 import { optionalBrPhoneSchema, optionalEmailSchema } from "../../lib/contact-schema.js";
 import { optionalZipCode } from "../../lib/industrial-schema.js";
+import {
+  camposDoParcelamento,
+  paymentInstrumentSchema,
+  paymentMethodSchema,
+} from "../../lib/payment-condition-schema.js";
 
 const optionalStateSchema = z
   .string()
@@ -69,6 +74,22 @@ const optionalStatusListSchema = z
       .optional(),
   );
 
+/**
+ * Pagamento padrão — CUSTOMER-PAYMENT-DEFAULTS-01. Tudo opcional: ausente não
+ * mexe, `null` limpa. Os campos do parcelamento são os MESMOS das condições do
+ * Orçamento, com os mesmos limites e mensagens. A regra que depende do que está
+ * gravado — condição à vista ou não informada limpa o parcelamento, parcelado
+ * exige parcelas — é do service.
+ */
+const pagamentoPadraoFields = {
+  defaultPaymentInstrument: paymentInstrumentSchema.nullable().optional(),
+  defaultPaymentMethod: paymentMethodSchema.nullable().optional(),
+  defaultDownPaymentPercent: camposDoParcelamento.downPaymentPercent,
+  defaultInstallmentCount: camposDoParcelamento.installmentCount,
+  defaultInstallmentIntervalDays: camposDoParcelamento.installmentIntervalDays,
+  defaultMonthlyInterestPercent: camposDoParcelamento.monthlyInterestPercent,
+};
+
 export const createCustomerSchema = z.object({
   legalName: z.string().trim().min(1, "Razão social é obrigatória").max(200),
   tradeName: optionalNullableText(200),
@@ -85,6 +106,7 @@ export const createCustomerSchema = z.object({
   state: optionalStateSchema,
   notes: optionalNullableText(1000),
   businessLotSuffix: optionalNullableText(20),
+  ...pagamentoPadraoFields,
 });
 
 export const updateCustomerSchema = z.object({
@@ -108,6 +130,7 @@ export const updateCustomerSchema = z.object({
   state: optionalStateSchema,
   notes: optionalNullableText(1000),
   businessLotSuffix: optionalNullableText(20),
+  ...pagamentoPadraoFields,
 });
 
 /**

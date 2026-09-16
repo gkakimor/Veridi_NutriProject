@@ -8,6 +8,10 @@ import type {
 } from "@veridi/shared";
 import { CUSTOMER_EDIT_ROLES, CUSTOMER_STATUS_CHANGE_ROLES } from "@veridi/shared";
 import { requireRole } from "../../lib/current-user.js";
+import {
+  InstallmentsWithoutCountError,
+  respostaDaRecusaDeParcelas,
+} from "../../lib/payment-condition.js";
 import { ForbiddenError } from "../auth/auth.errors.js";
 import {
   createCustomer,
@@ -111,6 +115,10 @@ export const customersRoutes: FastifyPluginAsync = async (app) => {
           .status(400)
           .send({ error: "duplicate_cnpj", message: error.message });
       }
+      // Pagamento padrão parcelado sem parcelas: recusa de validação, no campo.
+      if (error instanceof InstallmentsWithoutCountError) {
+        return reply.status(400).send(respostaDaRecusaDeParcelas(error));
+      }
       throw error;
     }
   });
@@ -140,6 +148,9 @@ export const customersRoutes: FastifyPluginAsync = async (app) => {
         return reply
           .status(400)
           .send({ error: "duplicate_cnpj", message: error.message });
+      }
+      if (error instanceof InstallmentsWithoutCountError) {
+        return reply.status(400).send(respostaDaRecusaDeParcelas(error));
       }
       throw error;
     }

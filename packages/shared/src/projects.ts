@@ -15,6 +15,7 @@ import type {
 } from "./products.js";
 import type { CustomerStatus } from "./customer-status.js";
 import type { IndustrialCostQuality } from "./industrial-cost-calculation.js";
+import type { CustomerPaymentDefaultsDTO, PaymentInstrument } from "./payment.js";
 import type { PricingVersionDTO } from "./pricing.js";
 
 export const PROJECT_CODE_PREFIX = "PROJ";
@@ -285,6 +286,12 @@ export interface QuoteLinePricingOptionsResponse {
   agreement: QuoteLineAgreementDTO | null;
 }
 
+/**
+ * A CONDIÇÃO de pagamento — à vista ou parcelado. Na tela e no documento ela
+ * se chama "Condição de pagamento"; "Forma de pagamento" é o meio
+ * (`PaymentInstrument`, `payment.ts`). A coluna continua `paymentMethod`, e o
+ * plano congelado no Pedido guarda `method` com estes valores.
+ */
 export type QuotePaymentMethod = "CASH" | "INSTALLMENTS";
 
 export const QUOTE_PAYMENT_METHOD_LABELS: Record<QuotePaymentMethod, string> = {
@@ -384,6 +391,16 @@ export interface QuoteVersionDTO {
   installmentCount: number | null;
   installmentIntervalDays: number | null;
   monthlyInterestPercent: string | null;
+  /** Forma de pagamento da versão. `null` = não informada (e todo o legado). */
+  paymentInstrument: PaymentInstrument | null;
+  /**
+   * O pagamento padrão ATUAL do cliente — só no rascunho, para a ação "Aplicar
+   * padrão do cliente". `null` fora de rascunho.
+   *
+   * Não é fonte das condições desta versão: forma e condição acima são as
+   * GRAVADAS nela, e nunca caem para o cadastro do cliente.
+   */
+  customerPaymentDefaults: CustomerPaymentDefaultsDTO | null;
   /** Derivado. `null` quando ainda não há total (linha sem preço). */
   paymentSchedule: QuotePaymentScheduleDTO | null;
   /**
@@ -647,6 +664,8 @@ export interface UpdateQuoteVersionInput {
   installmentCount?: number | null;
   installmentIntervalDays?: number | null;
   monthlyInterestPercent?: string | null;
+  /** Ausente não mexe; `null` limpa (não informada). */
+  paymentInstrument?: PaymentInstrument | null;
 }
 
 export interface RejectQuoteInput {

@@ -1,7 +1,10 @@
 import { formatQuantity } from "../../lib/quantity";
 import { Link } from "react-router-dom";
 import type { CustomerOrderDTO, CustomerOrderLineDTO } from "@veridi/shared";
-import { condicaoDePagamentoPorExtenso } from "../../lib/payment-condition";
+import {
+  condicaoDePagamentoPorExtenso,
+  formaDePagamentoPorExtenso,
+} from "../../lib/payment-condition";
 import { entityHref } from "../../components/EntityLink";
 import { rotaDoOrcamento } from "../../lib/rota-do-orcamento";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
@@ -87,9 +90,13 @@ export function CommercialOriginSection({ order }: { order: CustomerOrderDTO }) 
           <strong>{formatBRL(origem.totalAmount)}</strong>
         </dd>
 
+        {/* Congelada quando o Pedido nasceu: nunca relida do Cliente. */}
+        <dt>Forma de pagamento</dt>
+        <dd>{formaDePagamentoPorExtenso(origem.paymentInstrument)}</dd>
+
         {plano && (
           <>
-            <dt>Forma de pagamento</dt>
+            <dt>Condição de pagamento</dt>
             {/* A frase é a MESMA do resumo comercial do Projeto — uma função,
                 duas telas. Ver `lib/payment-condition.ts`. */}
             <dd>{condicaoDePagamentoPorExtenso(plano)}</dd>

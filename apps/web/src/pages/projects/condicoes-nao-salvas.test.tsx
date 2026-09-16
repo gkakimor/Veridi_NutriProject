@@ -278,7 +278,7 @@ describe("QUOTE-DRAFT-STATE-01 — a mesma versão recarregada", () => {
     expect(situacao()).toBe("Alterações não salvas");
   });
 
-  it("os nove campos alterados sobrevivem JUNTOS — não só o último tocado —, e salvar leva os nove", () => {
+  it("os dez campos alterados sobrevivem JUNTOS — não só o último tocado —, e salvar leva os dez", () => {
     const { releitura, onSave } = montarFormulario(versao());
 
     digitar("Validade da proposta", "2026-09-20");
@@ -286,6 +286,9 @@ describe("QUOTE-DRAFT-STATE-01 — a mesma versão recarregada", () => {
     digitar("Observações comerciais", "Frete por conta do cliente");
     digitar("Desconto (%)", "7,5");
     fireEvent.change(screen.getByLabelText("Forma de pagamento"), {
+      target: { value: "PIX" },
+    });
+    fireEvent.change(screen.getByLabelText("Condição de pagamento"), {
       target: { value: "INSTALLMENTS" },
     });
     digitar("Entrada (%)", "20");
@@ -300,7 +303,8 @@ describe("QUOTE-DRAFT-STATE-01 — a mesma versão recarregada", () => {
       leadTimeDays: campo("Prazo de entrega (dias)").value,
       commercialNotes: campo("Observações comerciais").value,
       discountPercent: campo("Desconto (%)").value,
-      paymentMethod: campo("Forma de pagamento").value,
+      paymentInstrument: campo("Forma de pagamento").value,
+      paymentMethod: campo("Condição de pagamento").value,
       downPaymentPercent: campo("Entrada (%)").value,
       installmentCount: campo("Parcelas").value,
       installmentIntervalDays: campo("Intervalo (dias)").value,
@@ -310,6 +314,7 @@ describe("QUOTE-DRAFT-STATE-01 — a mesma versão recarregada", () => {
       leadTimeDays: "15",
       commercialNotes: "Frete por conta do cliente",
       discountPercent: "7,5",
+      paymentInstrument: "PIX",
       paymentMethod: "INSTALLMENTS",
       downPaymentPercent: "20",
       installmentCount: "3",
@@ -325,6 +330,7 @@ describe("QUOTE-DRAFT-STATE-01 — a mesma versão recarregada", () => {
       leadTimeDays: 15,
       commercialNotes: "Frete por conta do cliente",
       discountPercent: "7.5",
+      paymentInstrument: "PIX",
       paymentMethod: "INSTALLMENTS",
       downPaymentPercent: "20",
       installmentCount: 3,
@@ -682,9 +688,11 @@ describe("QUOTE-DRAFT-STATE-01 — a página do Orçamento, com a mutação de l
     digitar("Validade da proposta", "2026-09-20");
     digitar("Desconto (%)", "7,5");
     digitar("Observações comerciais", "Frete por conta do cliente");
-    fireEvent.change(screen.getByLabelText("Forma de pagamento"), {
+    fireEvent.change(screen.getByLabelText("Condição de pagamento"), {
       target: { value: "INSTALLMENTS" },
     });
+    // Parcelado sem parcelas trava salvar (CUSTOMER-PAYMENT-DEFAULTS-01).
+    digitar("Parcelas", "3");
     const validadeAntes = campo("Validade da proposta");
     const antes = leituras();
 
@@ -700,7 +708,8 @@ describe("QUOTE-DRAFT-STATE-01 — a página do Orçamento, com a mutação de l
     expect(campo("Validade da proposta").value).toBe("2026-09-20");
     expect(campo("Desconto (%)").value).toBe("7,5");
     expect(campo("Observações comerciais").value).toBe("Frete por conta do cliente");
-    expect(campo("Forma de pagamento").value).toBe("INSTALLMENTS");
+    expect(campo("Condição de pagamento").value).toBe("INSTALLMENTS");
+    expect(campo("Parcelas").value).toBe("3");
     expect(situacao()).toBe("Alterações não salvas");
     expect(botaoSalvar().disabled).toBe(false);
 
@@ -1002,7 +1011,7 @@ describe("QUOTE-SEND-DIRTY-01 — o botão de envio respeita a pendência das co
     expect(sendQuoteVersion).not.toHaveBeenCalled();
   });
 
-  /** Condição gravada completa e parcelada: os nove campos na tela. */
+  /** Condição gravada completa e parcelada: os campos na tela. */
   const completa = () =>
     pronta({
       leadTimeDays: 30,
@@ -1021,14 +1030,15 @@ describe("QUOTE-SEND-DIRTY-01 — o botão de envio respeita a pendência das co
     ["leadTimeDays", "Prazo de entrega (dias)", "15"],
     ["commercialNotes", "Observações comerciais", "Digitada"],
     ["discountPercent", "Desconto (%)", "7,5"],
-    ["paymentMethod", "Forma de pagamento", "CASH"],
+    ["paymentInstrument", "Forma de pagamento", "PIX"],
+    ["paymentMethod", "Condição de pagamento", "CASH"],
     ["downPaymentPercent", "Entrada (%)", "20"],
     ["installmentCount", "Parcelas", "3"],
     ["installmentIntervalDays", "Intervalo (dias)", "28"],
     ["monthlyInterestPercent", "Juros ao mês (%)", "1,5"],
   ];
 
-  it("a tabela de alterações cobre exatamente as nove condições do formulário", () => {
+  it("a tabela de alterações cobre exatamente as dez condições do formulário", () => {
     expect(ALTERACOES.map(([chave]) => chave).sort()).toEqual(
       Object.keys(camposDe(completa())).sort(),
     );

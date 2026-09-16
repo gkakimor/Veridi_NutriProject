@@ -169,6 +169,19 @@ enum QuotePaymentMethod {
   INSTALLMENTS
 }
 
+/// FORMA de pagamento — o meio (PIX, boleto...). Nao e a CONDICAO (a vista ou
+/// parcelado, `QuotePaymentMethod`), e nao muda valor, juros, desconto nem
+/// vencimento do plano. Serve ao padrao do Cliente, ao Orcamento e ao Pedido;
+/// "nao informada" e NULL em todos. Sem texto livre: detalhe vai nas
+/// observacoes.
+enum PaymentInstrument {
+  PIX
+  BOLETO
+  BANK_TRANSFER
+  CARD
+  OTHER
+}
+
 enum QuoteStatus {
   DRAFT
   SENT
@@ -845,6 +858,11 @@ model QuoteVersion {
   installmentIntervalDays Int?
   /// Juros ao mes sobre o saldo parcelado (2 = 2% a.m.). Null ou zero = sem juros.
   monthlyInterestPercent  Decimal? @db.Decimal(7, 4)
+
+  /// Forma de pagamento da proposta. Null = nao informada (e todo o legado).
+  /// Copiada para a versao: na V1 do padrao do Cliente, dali em diante da
+  /// versao anterior ou da origem da duplicacao — nunca lida do Cliente depois.
+  paymentInstrument PaymentInstrument?
 
   sentAt             DateTime?
   sentByUserId       String?
@@ -2369,6 +2387,19 @@ model Customer {
   /// SUGESTAO de businessLotNumber — nunca obriga nem valida.
   businessLotSuffix String?
 
+  /// PAGAMENTO PADRAO — sugestao para novos orcamentos, nunca autoridade viva.
+  /// Copiado para a V1 do Orcamento quando ela nasce; alterar aqui nao muda
+  /// versao nem Pedido ja criados. Tudo opcional: NULL = nao informado, e o
+  /// cliente que ja existia fica inteiro em NULL. Mesmos tipos e limites das
+  /// condicoes do Orcamento; metodo NULL ou CASH nao guarda parcelamento, e
+  /// INSTALLMENTS exige `defaultInstallmentCount`.
+  defaultPaymentInstrument       PaymentInstrument?
+  defaultPaymentMethod           QuotePaymentMethod?
+  defaultDownPaymentPercent      Decimal?            @db.Decimal(7, 4)
+  defaultInstallmentCount        Int?
+  defaultInstallmentIntervalDays Int?
+  defaultMonthlyInterestPercent  Decimal?            @db.Decimal(7, 4)
+
   products         Product[]
   customerOrders   CustomerOrder[]
   ownedLots        Lot[]
@@ -3872,6 +3903,11 @@ model CustomerOrder {
   /// um plano diferente do que o cliente assinou. Isto nao e financeiro nem
   /// contas a receber — e o registro do que foi acordado.
   agreedPaymentSchedule Json?
+
+  /// Forma de pagamento da proposta aceita, congelada na geracao do Pedido.
+  /// Null em Pedido direto, em Pedido anterior a esta coluna e quando a
+  /// proposta nao informou. Nunca relida do Cliente nem da proposta.
+  agreedPaymentInstrument PaymentInstrument?
 
   confirmedAt DateTime?
   confirmedBy String?

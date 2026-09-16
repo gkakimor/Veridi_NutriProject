@@ -1,6 +1,12 @@
 import { useRef, useState } from "react";
 import type { FormEvent } from "react";
-import type { CustomerDTO, CustomerTaxProfile } from "@veridi/shared";
+import type {
+  CreateCustomerInput,
+  CustomerDTO,
+  CustomerTaxProfile,
+  PaymentInstrument,
+  QuotePaymentMethod,
+} from "@veridi/shared";
 import {
   BR_STATE_CODES,
   CUSTOMER_EDIT_ROLES,
@@ -9,6 +15,12 @@ import {
   CUSTOMER_TAX_PROFILES,
   CUSTOMER_TAX_PROFILE_LABELS,
   DEFAULT_CUSTOMER_TAX_PROFILE,
+  Decimal,
+  LIMITES_INTEIROS_DAS_CONDICOES,
+  PARCELADO_SEM_PARCELAS_MESSAGE,
+  PAYMENT_INSTRUMENTS,
+  PAYMENT_INSTRUMENT_LABELS,
+  QUOTE_PAYMENT_METHOD_LABELS,
   USER_ROLE_LABELS,
   formatBrPhone,
   formatCnpj,
@@ -31,6 +43,15 @@ import { ApiValidationError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
 import { formatDateTime } from "../../lib/dates";
 import { isCompleteZipCode, lookupCep } from "../../lib/cep-api";
+import { erroDoDecimal } from "../../lib/decimal-field";
+import { erroDeInteiro, lerInteiroOpcional } from "../../lib/integer-input";
+import { parsePtBrNumber, toPtBrEditText } from "../../lib/numeric-ptbr";
+import { CASAS_PERCENTUAL, OPCOES_PERCENTUAL } from "../../lib/numeric-scales";
+import {
+  condicaoPadraoPorExtenso,
+  formaDePagamentoPorExtenso,
+} from "../../lib/payment-condition";
+import { IntegerField, PercentField } from "../../components/NumericField";
 import { customerStatusBadgeClass } from "./customer-status-badge";
 
 /** "Comercial e Administrador" — lido da mesma lista que a API aplica. */
@@ -64,8 +85,17 @@ const PERFIS_QUE_EDITAM_O_CADASTRO = CUSTOMER_EDIT_ROLES.map(
 /** O `<form>` que o botão de commit aciona pelo atributo `form`. */
 export const CUSTOMER_FORM_ID = "customer-form";
 
-/** Nenhum campo do Cliente é número: CNPJ, CEP e telefone são texto com máscara. */
-const DECIMAIS: readonly string[] = [];
+/**
+ * Os campos do Cliente que são NÚMERO — só os do pagamento padrão. CNPJ, CEP e
+ * telefone são texto com máscara. Número se compara em forma canônica: `30`
+ * redigitado como `030`, ou `7,5` como `7,50`, não é alteração pendente.
+ */
+const DECIMAIS: readonly string[] = [
+  "defaultDownPaymentPercent",
+  "defaultInstallmentCount",
+  "defaultInstallmentIntervalDays",
+  "defaultMonthlyInterestPercent",
+];
 
 interface FormState {
   legalName: string;
@@ -82,6 +112,98 @@ interface FormState {
   city: string;
   state: string;
   notes: string;
+  /** Pagamento padrão: `""` é "Não informada". */
+  defaultPaymentInstrument: PaymentInstrument | "";
+  defaultPaymentMethod: QuotePaymentMethod | "";
+  defaultDownPaymentPercent: string;
+  defaultInstallmentCount: string;
+  defaultInstallmentIntervalDays: string;
+  defaultMonthlyInterestPercent: string;
+}
+
+/** Percentual da API ("30.0000") no texto que o `PercentField` edita ("30"). */
+function percentualNoCampo(valor: string | null | undefined): string {
+  return valor ? toPtBrEditText(new Decimal(valor).toString(), OPCOES_PERCENTUAL) : "";
+}
+
+/**
+ * Os quatro campos do parcelamento, com os rótulos e os limites das condições
+ * do Orçamento — os mesmos componentes, a mesma leitura, a mesma recusa.
+ */
+const PARCELAMENTO_PADRAO = {
+  defaultDownPaymentPercent: { rotulo: "Entrada (%)", tipo: "percentual" },
+  defaultInstallmentCount: { rotulo: "Parcelas", tipo: "inteiro" },
+  defaultInstallmentIntervalDays: { rotulo: "Intervalo (dias)", tipo: "inteiro" },
+  defaultMonthlyInterestPercent: { rotulo: "Juros ao mês (%)", tipo: "percentual" },
+} as const;
+
+type CampoDoParcelamentoPadrao = keyof typeof PARCELAMENTO_PADRAO;
+
+const LIMITE_DO_INTEIRO = {
+  defaultInstallmentCount: LIMITES_INTEIROS_DAS_CONDICOES.installmentCount,
+  defaultInstallmentIntervalDays: LIMITES_INTEIROS_DAS_CONDICOES.installmentIntervalDays,
+} as const;
+
+/**
+ * O que a tela recusa no pagamento padrão, campo a campo — o mesmo que a API
+ * recusaria. Só vale no parcelado: à vista ou não informada, o parcelamento não
+ * aparece nem vai ao servidor.
+ */
+function errosDoPagamentoPadrao(form: FormState): Record<string, string> {
+  const erros: Record<string, string> = {};
+  if (form.defaultPaymentMethod !== "INSTALLMENTS") return erros;
+  for (const campo of Object.keys(PARCELAMENTO_PADRAO) as CampoDoParcelamentoPadrao[]) {
+    const { rotulo, tipo } = PARCELAMENTO_PADRAO[campo];
+    const erro =
+      tipo === "percentual"
+        ? erroDoDecimal(rotulo, form[campo], OPCOES_PERCENTUAL)
+        : erroDeInteiro(rotulo, form[campo], LIMITE_DO_INTEIRO[campo as keyof typeof LIMITE_DO_INTEIRO]);
+    if (erro) erros[campo] = erro;
+  }
+  if (!erros["defaultInstallmentCount"] && lerInteiroOpcional(form.defaultInstallmentCount).tipo === "vazio") {
+    erros["defaultInstallmentCount"] = PARCELADO_SEM_PARCELAS_MESSAGE;
+  }
+  return erros;
+}
+
+/**
+ * O pagamento padrão no corpo do pedido.
+ *
+ * Na edição vai sempre inteiro — é assim que "Não informada" limpa. Na criação
+ * só vai o que foi escolhido. À vista ou não informada, o parcelamento vai
+ * `null` (o servidor limparia de qualquer forma): texto escondido não grava.
+ */
+function pagamentoPadraoDoCorpo(
+  form: FormState,
+  mode: "create" | "edit",
+): Pick<
+  CreateCustomerInput,
+  | "defaultPaymentInstrument"
+  | "defaultPaymentMethod"
+  | "defaultDownPaymentPercent"
+  | "defaultInstallmentCount"
+  | "defaultInstallmentIntervalDays"
+  | "defaultMonthlyInterestPercent"
+> {
+  const parcelado = form.defaultPaymentMethod === "INSTALLMENTS";
+  const percentual = (texto: string) => {
+    const leitura = parsePtBrNumber(texto, OPCOES_PERCENTUAL);
+    return parcelado && leitura.tipo === "valido" ? leitura.valor : null;
+  };
+  const inteiro = (texto: string) => {
+    const leitura = lerInteiroOpcional(texto);
+    return parcelado && leitura.tipo === "valido" ? leitura.valor : null;
+  };
+  const corpo = {
+    defaultPaymentInstrument: form.defaultPaymentInstrument || null,
+    defaultPaymentMethod: form.defaultPaymentMethod || null,
+    defaultDownPaymentPercent: percentual(form.defaultDownPaymentPercent),
+    defaultInstallmentCount: inteiro(form.defaultInstallmentCount),
+    defaultInstallmentIntervalDays: inteiro(form.defaultInstallmentIntervalDays),
+    defaultMonthlyInterestPercent: percentual(form.defaultMonthlyInterestPercent),
+  };
+  if (mode === "edit") return corpo;
+  return Object.fromEntries(Object.entries(corpo).filter(([, valor]) => valor !== null));
 }
 
 /**
@@ -139,6 +261,16 @@ function initialState(customer: CustomerDTO | null): FormState {
       city: customer.city ?? "",
       state: customer.state ?? "",
       notes: customer.notes ?? "",
+      defaultPaymentInstrument: customer.defaultPaymentInstrument ?? "",
+      defaultPaymentMethod: customer.defaultPaymentMethod ?? "",
+      defaultDownPaymentPercent: percentualNoCampo(customer.defaultDownPaymentPercent),
+      defaultInstallmentCount: customer.defaultInstallmentCount
+        ? String(customer.defaultInstallmentCount)
+        : "",
+      defaultInstallmentIntervalDays: customer.defaultInstallmentIntervalDays
+        ? String(customer.defaultInstallmentIntervalDays)
+        : "",
+      defaultMonthlyInterestPercent: percentualNoCampo(customer.defaultMonthlyInterestPercent),
     };
   }
   return {
@@ -156,6 +288,12 @@ function initialState(customer: CustomerDTO | null): FormState {
     city: "",
     state: "",
     notes: "",
+    defaultPaymentInstrument: "",
+    defaultPaymentMethod: "",
+    defaultDownPaymentPercent: "",
+    defaultInstallmentCount: "",
+    defaultInstallmentIntervalDays: "",
+    defaultMonthlyInterestPercent: "",
   };
 }
 
@@ -284,7 +422,9 @@ export function useCustomerForm({
   }
 
   function handleBlur(field: keyof FormState) {
-    const message = validateField(field, form[field]);
+    // O pagamento padrão se valida com o formulário inteiro: parcelas só
+    // são exigidas no parcelado.
+    const message = validateField(field, form[field]) ?? errosDoPagamentoPadrao(form)[field] ?? null;
     setClientErrors((prev) => {
       const next = { ...prev };
       if (message) next[field] = message;
@@ -375,7 +515,7 @@ export function useCustomerForm({
     event.preventDefault();
     if (saving || readOnly) return;
 
-    const nextClientErrors: Record<string, string> = {};
+    const nextClientErrors: Record<string, string> = errosDoPagamentoPadrao(form);
     for (const field of VALIDATED_FIELDS) {
       const message = validateField(field, form[field]);
       if (message) nextClientErrors[field] = message;
@@ -433,6 +573,7 @@ export function useCustomerForm({
       ...(city ? { city: city.value } : {}),
       ...(state ? { state: state.value } : {}),
       ...(notes ? { notes: notes.value } : {}),
+      ...pagamentoPadraoDoCorpo(form, mode),
     };
 
     try {
@@ -567,6 +708,10 @@ function InformacoesDoCadastro({ customer }: { customer: CustomerDTO }) {
   );
 }
 
+/** A frase da seção de pagamento padrão, igual no formulário e na consulta. */
+const PAGAMENTO_PADRAO_SUBTITULO =
+  "Sugestão para novos orçamentos deste cliente. Alterar aqui não muda orçamentos já criados.";
+
 /** Um campo em consulta: o mesmo rótulo do formulário e o valor, sem caixa de edição. */
 function ValorConsultado({
   rotulo,
@@ -637,6 +782,21 @@ function CustomerConsultaFields({ customer }: { customer: CustomerDTO }) {
           <ValorConsultado rotulo="Bairro" valor={customer.district} />
           <ValorConsultado rotulo="Cidade" valor={customer.city} />
           <ValorConsultado rotulo="UF" valor={customer.state} />
+        </dl>
+      </FormSection>
+
+      {/* Quem não edita o cadastro lê o padrão — ele aparece no rascunho de
+          orçamento de quem negocia. */}
+      <FormSection title="Pagamento padrão" subtitle={PAGAMENTO_PADRAO_SUBTITULO}>
+        <dl className="definition-list">
+          <ValorConsultado
+            rotulo="Forma de pagamento padrão"
+            valor={formaDePagamentoPorExtenso(customer.defaultPaymentInstrument)}
+          />
+          <ValorConsultado
+            rotulo="Condição de pagamento padrão"
+            valor={condicaoPadraoPorExtenso(customer)}
+          />
         </dl>
       </FormSection>
 
@@ -918,6 +1078,103 @@ export function CustomerFormFields({
             </select>
             {fieldError("state")}
           </div>
+        </div>
+      </FormSection>
+
+      {/* Pagamento padrão — sugestão copiada para a V1 dos orçamentos novos,
+          nunca lida ao vivo. `<select>` nativo (enum pequeno, UI_BRAND §15.1);
+          o parcelamento usa os mesmos campos, limites e dicas das condições do
+          Orçamento, e só aparece no parcelado. */}
+      <FormSection title="Pagamento padrão" subtitle={PAGAMENTO_PADRAO_SUBTITULO}>
+        <div className="field-grid-2">
+          <div className="field">
+            <label htmlFor="customer-default-payment-instrument">Forma de pagamento padrão</label>
+            <select
+              id="customer-default-payment-instrument"
+              value={form.defaultPaymentInstrument}
+              onChange={(event) => setField("defaultPaymentInstrument", event.target.value)}
+              {...fieldProps("defaultPaymentInstrument")}
+            >
+              <option value="">Não informada</option>
+              {PAYMENT_INSTRUMENTS.map((forma) => (
+                <option key={forma} value={forma}>
+                  {PAYMENT_INSTRUMENT_LABELS[forma]}
+                </option>
+              ))}
+            </select>
+            {fieldError("defaultPaymentInstrument")}
+          </div>
+
+          <div className="field">
+            <label htmlFor="customer-default-payment-method">Condição de pagamento padrão</label>
+            <select
+              id="customer-default-payment-method"
+              value={form.defaultPaymentMethod}
+              onChange={(event) => setField("defaultPaymentMethod", event.target.value)}
+              {...fieldProps("defaultPaymentMethod")}
+            >
+              <option value="">Não informada</option>
+              {(Object.keys(QUOTE_PAYMENT_METHOD_LABELS) as QuotePaymentMethod[]).map((metodo) => (
+                <option key={metodo} value={metodo}>
+                  {QUOTE_PAYMENT_METHOD_LABELS[metodo]}
+                </option>
+              ))}
+            </select>
+            {fieldError("defaultPaymentMethod")}
+          </div>
+
+          {form.defaultPaymentMethod === "INSTALLMENTS" && (
+            <>
+              <div className="field">
+                <label htmlFor="customer-default-down-payment">Entrada (%)</label>
+                <PercentField
+                  id="customer-default-down-payment"
+                  scale={CASAS_PERCENTUAL}
+                  value={form.defaultDownPaymentPercent}
+                  onChangeValue={(valor) => setField("defaultDownPaymentPercent", valor)}
+                  {...fieldProps("defaultDownPaymentPercent")}
+                />
+                {fieldError("defaultDownPaymentPercent") ?? (
+                  <p className="field__hint">Vazio = sem entrada.</p>
+                )}
+              </div>
+              <div className="field">
+                <label htmlFor="customer-default-installments">Parcelas</label>
+                <IntegerField
+                  id="customer-default-installments"
+                  value={form.defaultInstallmentCount}
+                  onChangeValue={(valor) => setField("defaultInstallmentCount", valor)}
+                  {...fieldProps("defaultInstallmentCount")}
+                />
+                {fieldError("defaultInstallmentCount")}
+              </div>
+              <div className="field">
+                <label htmlFor="customer-default-interval">Intervalo (dias)</label>
+                <IntegerField
+                  id="customer-default-interval"
+                  value={form.defaultInstallmentIntervalDays}
+                  onChangeValue={(valor) => setField("defaultInstallmentIntervalDays", valor)}
+                  {...fieldProps("defaultInstallmentIntervalDays")}
+                />
+                {fieldError("defaultInstallmentIntervalDays") ?? (
+                  <p className="field__hint">Vazio = 30 dias.</p>
+                )}
+              </div>
+              <div className="field">
+                <label htmlFor="customer-default-interest">Juros ao mês (%)</label>
+                <PercentField
+                  id="customer-default-interest"
+                  scale={CASAS_PERCENTUAL}
+                  value={form.defaultMonthlyInterestPercent}
+                  onChangeValue={(valor) => setField("defaultMonthlyInterestPercent", valor)}
+                  {...fieldProps("defaultMonthlyInterestPercent")}
+                />
+                {fieldError("defaultMonthlyInterestPercent") ?? (
+                  <p className="field__hint">Vazio ou 0 = sem juros.</p>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </FormSection>
 

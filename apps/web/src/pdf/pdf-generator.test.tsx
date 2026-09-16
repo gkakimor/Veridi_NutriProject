@@ -201,6 +201,117 @@ describe("Orçamento — cliente e projeto no papel (PDF-DATA-PARITY-01)", () =>
   });
 });
 
+/**
+ * Forma e condição de pagamento no papel — CUSTOMER-PAYMENT-DEFAULTS-01.
+ *
+ * "Forma de pagamento" passou a ser o MEIO (PIX, boleto...) e some quando não
+ * informada; à vista/parcelado é "Condição de pagamento"; o texto livre é
+ * "Observações de pagamento". Os rótulos mudam, a conta do plano não.
+ */
+describe("Orçamento — forma e condição de pagamento no papel", () => {
+  const PARCELADO_3X: QuotePaymentScheduleDTO = {
+    ...A_VISTA_COM_DESCONTO,
+    method: "INSTALLMENTS",
+    downPaymentPercent: "20.0000",
+    downPayment: "541.23",
+    financedAmount: "2164.94",
+    monthlyInterestPercent: "2.0000",
+    installmentIntervalDays: 30,
+    installments: [
+      { number: 1, amount: "750.61", dueInDays: 30 },
+      { number: 2, amount: "750.61", dueInDays: 60 },
+      { number: 3, amount: "750.61", dueInDays: 90 },
+    ],
+    totalPayable: "2793.06",
+    interestAmount: "86.89",
+  };
+
+  it("forma informada: rótulo e valor em português, ao lado da condição; o texto livre vira observações", async () => {
+    const pdf = await gerar(
+      orcamento([linha(1)], { paymentInstrument: "BANK_TRANSFER", paymentTerms: "Depósito em conta" }),
+      "ORC-000001-V1-forma-transferencia.pdf",
+    );
+    const [pagina = ""] = pdf.paginas;
+
+    const rotulos = linhaQueContem(pagina, "FORMA DE PAGAMENTO");
+    expect(rotulos).toContain("CONDIÇÃO DE PAGAMENTO");
+    expect(rotulos).toContain("PRAZO DE ENTREGA");
+    expect(linhaQueContem(pagina, "Transferência")).toContain("À vista");
+    expect(linhaQueContem(pagina, "OBSERVAÇÕES DE PAGAMENTO")).not.toBe("");
+    expect(pagina).toContain("Depósito em conta");
+    // O rótulo antigo do texto livre não volta.
+    expect(pagina).not.toContain("CONDIÇÕES DE PAGAMENTO");
+    // Código interno do enum nunca vai ao papel.
+    expect(pagina).not.toContain("BANK_TRANSFER");
+  });
+
+  it("forma não informada: o campo some; a condição continua", async () => {
+    const pdf = await gerar(
+      orcamento([linha(1)], { paymentInstrument: null, paymentTerms: null }),
+      "ORC-000001-V1-sem-forma.pdf",
+    );
+    const [pagina = ""] = pdf.paginas;
+
+    expect(pagina).not.toContain("FORMA DE PAGAMENTO");
+    expect(pagina).toContain("CONDIÇÃO DE PAGAMENTO");
+    expect(linhaQueContem(pagina, "À vista")).toContain("30 dias");
+    expect(pagina).not.toContain("OBSERVAÇÕES DE PAGAMENTO");
+  });
+
+  it("fixture antiga sem a chave da forma: o documento sai igual ao de forma não informada", async () => {
+    const semChave = orcamento([linha(1)]) as unknown as Record<string, unknown>;
+    delete semChave["paymentInstrument"];
+    const pdf = await gerar(semChave as unknown as QuoteVersionDTO, "ORC-000001-V1-sem-chave.pdf");
+    const [pagina = ""] = pdf.paginas;
+
+    expect(pagina).not.toContain("FORMA DE PAGAMENTO");
+    expect(pagina).toContain("CONDIÇÃO DE PAGAMENTO");
+  });
+
+  it("parcelado: Parcelado em 3× e o plano com os mesmos valores de antes", async () => {
+    const pdf = await gerar(
+      orcamento([linha(1)], {
+        paymentInstrument: "BOLETO",
+        paymentMethod: "INSTALLMENTS",
+        installmentCount: 3,
+        paymentSchedule: PARCELADO_3X,
+      }),
+      "ORC-000001-V1-parcelado-boleto.pdf",
+    );
+    const texto = pdf.paginas.join("\n");
+
+    expect(linhaQueContem(texto, "Parcelado em 3×")).toContain("Boleto");
+    expect(texto).toContain("PLANO DE PAGAMENTO");
+    // O dinheiro sai com espaço rígido entre "R$" e o valor.
+    expect(linhaQueContem(texto, "Entrada (20%)")).toMatch(/R\$\s541,23/);
+    const parcelas = texto.split("\n").filter((linhaDoPapel) => /R\$\s750,61/.test(linhaDoPapel));
+    expect(parcelas).toHaveLength(3);
+    expect(parcelas.some((linhaDoPapel) => linhaDoPapel.includes("90 dias"))).toBe(true);
+    expect(linhaQueContem(texto, "Total a prazo")).toContain("juros de 2% ao mês");
+    expect(linhaQueContem(texto, "Total a prazo")).toMatch(/R\$\s2\.793,06/);
+  });
+
+  it("rascunho sem total: a condição sai da condição gravada, nunca do texto livre", async () => {
+    const pdf = await gerar(
+      orcamento([linha(1, { unitPrice: null, total: null })], {
+        status: "DRAFT",
+        total: null,
+        subtotal: null,
+        paymentSchedule: null,
+        paymentMethod: "INSTALLMENTS",
+        installmentCount: 4,
+        paymentTerms: "Boleto 28 dias",
+      }),
+      "ORC-000001-V1-rascunho-sem-total.pdf",
+    );
+    const [pagina = ""] = pdf.paginas;
+
+    expect(pagina).toContain("Parcelado em 4×");
+    // "Boleto 28 dias" só nas observações de pagamento — uma vez.
+    expect(pagina.split("Boleto 28 dias")).toHaveLength(2);
+  });
+});
+
 describe("gerador de PDF — Orçamento", () => {
   it("1 item: 1 folha A4, rodapé controlado e nenhum rastro de navegador", async () => {
     const pdf = await gerar(

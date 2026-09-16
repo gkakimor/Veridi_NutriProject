@@ -2,6 +2,8 @@
 
 import type { CustomerCommercialStatusDTO } from "./customer-commercial-status.js";
 import type { CustomerBlockDTO, CustomerStatus } from "./customer-status.js";
+import type { CustomerPaymentDefaultsDTO, PaymentInstrument } from "./payment.js";
+import type { QuotePaymentMethod } from "./projects.js";
 import type { UserRole } from "./users.js";
 
 export const CUSTOMER_CODE_PREFIX = "CLI";
@@ -77,7 +79,11 @@ export interface CustomerAddress {
   state: string | null;
 }
 
-export interface CustomerDTO {
+/**
+ * O Cliente carrega o pagamento padrão (`CustomerPaymentDefaultsDTO`, seis
+ * campos, todos `null` quando não informado) — sugestão para novos orçamentos.
+ */
+export interface CustomerDTO extends CustomerPaymentDefaultsDTO {
   id: string;
   code: string;
   legalName: string;
@@ -150,6 +156,13 @@ export interface CreateCustomerInput {
   state?: string;
   notes?: string;
   businessLotSuffix?: string | null;
+  /** Pagamento padrão (ausente = não informado). */
+  defaultPaymentInstrument?: PaymentInstrument | null;
+  defaultPaymentMethod?: QuotePaymentMethod | null;
+  defaultDownPaymentPercent?: string | null;
+  defaultInstallmentCount?: number | null;
+  defaultInstallmentIntervalDays?: number | null;
+  defaultMonthlyInterestPercent?: string | null;
 }
 
 /** Formata o CEP guardado (só dígitos) para exibição. */
@@ -183,4 +196,14 @@ export interface UpdateCustomerInput {
   state?: string;
   notes?: string;
   businessLotSuffix?: string | null;
+  /**
+   * Pagamento padrão: chave ausente não mexe, `null` limpa. Condição `null` ou
+   * `CASH` limpa o parcelamento; `INSTALLMENTS` sem parcelas é recusado.
+   */
+  defaultPaymentInstrument?: PaymentInstrument | null;
+  defaultPaymentMethod?: QuotePaymentMethod | null;
+  defaultDownPaymentPercent?: string | null;
+  defaultInstallmentCount?: number | null;
+  defaultInstallmentIntervalDays?: number | null;
+  defaultMonthlyInterestPercent?: string | null;
 }

@@ -218,6 +218,8 @@ export async function createOrderFromAcceptedQuote(
             : {}),
           agreedTotalAmount: new Prisma.Decimal(plano.total),
           agreedPaymentSchedule: plano as unknown as Prisma.InputJsonValue,
+          // A forma da proposta aceita, congelada — nunca relida do Cliente.
+          agreedPaymentInstrument: proposta.paymentInstrument,
           /*
            * A entrega prevista NÃO é derivada do prazo da proposta.
            *

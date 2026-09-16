@@ -275,6 +275,39 @@ describe("Origem comercial do pedido", () => {
     }
   });
 
+  it("forma e condição de pagamento em duas linhas, a forma congelada no Pedido", () => {
+    render(
+      <MemoryRouter>
+        <CommercialOriginSection
+          order={order({
+            commercialOrigin: { ...order().commercialOrigin!, paymentInstrument: "BOLETO" },
+          })}
+        />
+      </MemoryRouter>,
+    );
+
+    const lido = (rotulo: string) =>
+      [...document.querySelectorAll("dt")].find((dt) => dt.textContent === rotulo)?.nextElementSibling
+        ?.textContent;
+    expect(lido("Forma de pagamento")).toBe("Boleto");
+    // O dinheiro sai com espaço rígido entre "R$" e o valor.
+    expect(lido("Condição de pagamento")).toMatch(/^Parcelado — entrada de R\$\s2\.250,00 e 3×/);
+  });
+
+  it("Pedido sem forma congelada (anterior à informação, ou proposta sem forma): Não informada", () => {
+    // Fixture antiga, sem a chave: a tela decide pelo valor conhecido.
+    render(
+      <MemoryRouter>
+        <CommercialOriginSection order={order()} />
+      </MemoryRouter>,
+    );
+
+    const termo = [...document.querySelectorAll("dt")].find(
+      (dt) => dt.textContent === "Forma de pagamento",
+    );
+    expect(termo?.nextElementSibling?.textContent).toBe("Não informada");
+  });
+
   it("proposta à vista não anuncia parcelas", () => {
     render(
       <MemoryRouter>

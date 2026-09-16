@@ -6,6 +6,10 @@ import { CustomerMismatchError } from "../../lib/product-customer-ownership.js";
 import { createOrderFromAcceptedQuote } from "./quote-to-order.service.js";
 import { requireCurrentUser, requireRole } from "../../lib/current-user.js";
 import {
+  InstallmentsWithoutCountError,
+  respostaDaRecusaDeParcelas,
+} from "../../lib/payment-condition.js";
+import {
   IncompleteCostQuoteError,
   PriceLockedByPricingError,
   PricingNotActiveError,
@@ -121,9 +125,17 @@ function formatZodError(error: ZodError) {
 
 function mapDomainError(
   error: unknown,
-): { status: number; body: { error: string; message: string } } | null {
+): {
+  status: number;
+  body: { error: string; message: string; issues?: { path: string; message: string }[] };
+} | null {
   if (error instanceof ForbiddenError) {
     return { status: 403, body: { error: "forbidden", message: error.message } };
+  }
+  // Parcelado sem parcelas: recusa de validação apontada para o campo, como a
+  // do Zod — a tela mostra a frase, e o envio não congela o estado inválido.
+  if (error instanceof InstallmentsWithoutCountError) {
+    return { status: 400, body: respostaDaRecusaDeParcelas(error) };
   }
   if (
     error instanceof ProjectNotFoundError ||
