@@ -4872,6 +4872,82 @@ pacotes e `validate:migrations:fresh` (80 migrations, sem drift). Sem `pnpm test
 ou restore (modo FAST). A guarda de alcance da perda prevista ganhou os três arquivos do Modelo na lista
 autorizada — o Modelo guarda a premissa e nunca calcula com ela, e nenhum módulo comercial entrou.
 
+## A bancada é a mesma nas duas telas (FORMULATION-TEMPLATE-WORKBENCH-01, Fatia 2, 2026-09-16)
+
+**`FATIA_2_READY = YES`. A capability NÃO está fechada** — falta a fatia 3 (aplicar/salvar, pré-check de itens
+problemáticos, diff das premissas, acabamento do `UseTemplateDialog` e Ficha Técnica do Modelo).
+
+A fatia 1 alinhou o DADO; esta alinhou a TELA. A receita — item, quantidade, unidade, base, fornecimento,
+pureza e reserva — passou a ser editada pelos MESMOS componentes na Formulação de produto e no Modelo de
+Formulação. Não houve cópia da bancada para o Modelo: a bancada saiu de `FormulationVersionPage.tsx` e virou
+pacote próprio, `apps/web/src/pages/formulation-workbench/`.
+
+**O que é compartilhado.** `TabelaDaReceita` e `LinhaDaBancada` (a grade da seção e a linha, com as larguras
+homologadas), `PremissasDaForma` (forma, apresentação, cápsulas por dose e por embalagem, dose e conteúdo,
+doses derivadas), `PremissasDeProducao` (perda prevista e rendimento), `ResumoDaReceita`, `previa-do-calculo`
+(as duas prévias e as contas do `CalcHint`, todas sobre `packages/shared/src/formulation-quantity.ts`),
+`linha-da-receita` (o contrato da linha, a seção pelo tipo do Item, o contrato pureza→correção, a validação
+por campo, a unidade legada) e `catalogo-de-itens` (primeira página, busca no servidor, mesclagem e o item que
+a linha já referencia). `StickyActionBar` é infraestrutura de layout, sem nada de domínio.
+
+**O que NÃO é compartilhado.** Da Formulação: produto, cliente, cabeçalho da versão, ativação e o seu raio de
+impacto, custo estimado, `productProfile`, proveniência no Modelo e Ficha Técnica. Do Modelo: nome e descrição,
+código, arquivamento, ciclo de vida das versões, histórico e comparação V1 × V2.
+
+**Nenhum componente comum sabe em que tela está.** Onde o texto ou o contexto diverge, a diferença chega como
+propriedade explícita — o prefixo dos ids (`version-` e `template-`), o `data-testid` do resultado das doses e
+o ⓘ do fornecimento, que no Modelo continua dizendo que a responsabilidade é SUGESTÃO. Não existe `ehModelo`
+nem equivalente.
+
+**O que o Modelo ganhou.** Composição e embalagem separadas pelo TIPO REAL do Item; pureza e reserva como
+COLUNAS, com o mesmo contrato da Formulação (pureza preenchida corrige a quantidade física; reserva fica
+registrada para o lote e nunca infla a dose); prévia do físico, da física por dose e do por cápsula pelo motor
+canônico; rendimento esperado ao lado da perda prevista; subir e descer dentro da própria seção, com a ordem
+indo ao servidor como `position`; e o mesmo catálogo de itens da Formulação, com busca no servidor e unidade
+limitada pela dimensão do Item.
+
+**O painel saiu de vez.** "O que a quantidade informada significa" era a experiência do Modelo e não voltou:
+a coluna preenchida responde melhor do que três gestos. `PainelDeAjustes`, `useAjustesEmEdicao` e
+`resumoDosAjustes` foram removidos; o que sobrou do módulo é o contrato dos ajustes e a validação dos dois
+percentuais (`formulation-workbench/ajustes-da-quantidade.ts`), compartilhada.
+
+**Barra fixa de ações (decisão do PO nesta rodada).** As ações principais moravam no fim do documento: quem
+editava a décima linha não via "Salvar rascunho" nem "Ativar versão" sem rolar a tela inteira. Agora existe uma
+barra `position: sticky` no rodapé do workspace, com o mesmo alinhamento do conteúdo, nas duas telas. Na
+Formulação: ← Voltar e Salvar como template à esquerda; pendência, Salvar rascunho e Ativar versão à direita.
+No Modelo: ← Voltar à esquerda; pendência, Salvar rascunho e Ativar versão à direita — "Salvar identificação" e
+"Arquivar" continuam no bloco de identificação, que é cadastro e não versão. Há UMA superfície: nenhum botão
+ficou duplicado no topo. "Salvar como template" mudou de LUGAR, não de contrato — o mesmo formulário de nome,
+na proveniência, com a mesma validação e o mesmo destino. Medido no navegador em 1920×1080 e 390×844: a barra
+fica no rodapé da viewport durante a rolagem, todas as ações continuam dentro da tela (em 390 ela quebra em
+duas linhas), não há rolagem horizontal, e a última seção do documento termina ACIMA dela.
+
+**Totais da dose na tabela (pedido do PO nesta rodada).** Alvo total por dose, massa total por dose e massa por
+cápsula passam a fechar a TABELA de matéria-prima, cada um no rodapé da coluna que ele soma. O resumo da
+receita continua trazendo os mesmos números; conferir a soma deixou de exigir rolar até ele. Sem linha somável
+o valor é travessão, nunca zero, e o rodapé DIZ quando alguma linha por dose ficou de fora por não ser massa.
+
+**A Formulação não mudou de comportamento.** A extração foi provada antes de o Modelo ser plugado: as 13 suítes
+de `web pages/formulations` passaram sem mudar expectativa funcional. As duas linhas que mudaram são
+consequência declarada das duas decisões do PO — o grupo da barra deixou de ser `.doc-actions__primary` e
+passou a ser `.sticky-action-bar__fim`, e o mesmo número por dose agora aparece em cinco lugares em vez de
+três, porque o rodapé da tabela passou a mostrá-lo.
+
+**CSS.** As regras da bancada saíram de `components.css` para
+`apps/web/src/pages/formulation-workbench/workbench.css`, byte a byte e na mesma ordem relativa — provado
+comparando o multiconjunto de linhas dos dois arquivos com o original. O arquivo entra depois de
+`components.css` em `main.tsx`, então os empates de especificidade (`.table--sticky-actions th:last-child`
+contra `th.col-acoes`) continuam sendo decididos pela bancada. Nenhuma largura homologada mudou.
+
+**Sem migration e sem contrato novo de API.** A fatia 1 já tinha alinhado os nomes do componente do Modelo aos
+da Formulação, e o servidor já gravava `position` pelo índice do array.
+
+**Validação.** `web pages/formulations`, `web pages/formulation-templates` e as suítes vizinhas que tocam os
+módulos movidos (criação no contexto, catálogo, ajuda) — 25 arquivos, 341 testes, verdes; `shared` — 23
+arquivos, 383 testes, verdes; typecheck do web verde. Sem `pnpm test` global, E2E, build ou fresh (FAST, e sem
+migration). A conferência visual rodou contra a API local com a carga real, no Chromium, nas duas larguras.
+
+
 ## Próxima prioridade
 
 **A ordem vive na fila viva do [`BACKLOG.md`](BACKLOG.md)**, reconciliada em 2026-09-15: WAVE 4; Inventário Físico em
