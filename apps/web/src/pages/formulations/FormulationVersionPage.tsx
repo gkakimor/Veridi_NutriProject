@@ -2077,6 +2077,8 @@ export function FormulationVersionPage() {
                   scale={CASAS_PERCENTUAL_TECNICO}
                   aria-label={`Pureza de ${nomeDoItem}`}
                   placeholder="—"
+                  /* A seta para onde a validação pararia: pureza é 0 < x ≤ 100. */
+                  stepper={{ min: "0", max: "100" }}
                   value={row.purityPercentApplied}
                   onChangeValue={(valor) =>
                     handleComponentFieldChange(row.key, "purityPercentApplied", valor)
@@ -2285,6 +2287,8 @@ export function FormulationVersionPage() {
                   scale={CASAS_PERCENTUAL_TECNICO}
                   aria-label={`Reserva % de ${nomeDoItem}`}
                   placeholder="—"
+                  /* Sem teto: o domínio nunca declarou um para a reserva. */
+                  stepper={{ min: "0" }}
                   value={row.overagePercent}
                   onChangeValue={(valor) =>
                     handleComponentFieldChange(row.key, "overagePercent", valor)
@@ -2936,6 +2940,8 @@ export function FormulationVersionPage() {
                     id="version-expectedLoss"
                     scale={CASAS_PERCENTUAL_TECNICO}
                     placeholder="—"
+                    /* 100% de perda não tem quantidade bruta: a seta para em 99. */
+                    stepper={{ min: "0", max: "99", nome: "Perda prevista de produção" }}
                     value={expectedLossPercent}
                     onChangeValue={setExpectedLossPercent}
                     {...(fieldErrors["expectedLossPercent"]

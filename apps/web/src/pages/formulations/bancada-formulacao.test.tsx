@@ -282,7 +282,9 @@ describe("Bancada — cápsula responde ao vivo", () => {
 
   it("pureza editada na coluna muda a quantidade física na hora", async () => {
     await abrir(versao());
-    fireEvent.change(screen.getByLabelText(/Pureza de MP-000030/), { target: { value: "100" } });
+    fireEvent.change(screen.getByLabelText(/Pureza de MP-000030/, CAMPO_DO_FORMULARIO), {
+      target: { value: "100" },
+    });
     await waitFor(() => expect(linha("MP-000030").textContent).toContain("0,4 mg"));
     expect(linha("MP-000030").textContent).not.toContain("0,571429");
   });

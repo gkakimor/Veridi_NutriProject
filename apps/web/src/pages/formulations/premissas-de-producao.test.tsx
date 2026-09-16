@@ -289,6 +289,52 @@ describe("Premissas de produção — perda e rendimento", () => {
   });
 });
 
+describe("Setas de passo nos percentuais", () => {
+  const seta = (campo: string, direcao: "Aumentar" | "Diminuir") =>
+    screen.getByRole("button", { name: `${direcao} ${campo}` });
+
+  it("o passo é a casa escrita: 70 vira 71, e 1,1 vira 1,2", async () => {
+    await abrir(versao());
+    const pureza = screen.getByRole("textbox", { name: "Pureza de MP-000030" });
+
+    fireEvent.click(seta("Pureza de MP-000030", "Aumentar"));
+    await waitFor(() => expect(pureza).toHaveValue("71"));
+
+    fireEvent.change(pureza, { target: { value: "1,1" } });
+    fireEvent.click(seta("Pureza de MP-000030", "Aumentar"));
+    await waitFor(() => expect(pureza).toHaveValue("1,2"));
+
+    fireEvent.click(seta("Pureza de MP-000030", "Diminuir"));
+    await waitFor(() => expect(pureza).toHaveValue("1,1"));
+  });
+
+  it("ArrowUp e ArrowDown no campo dão o mesmo passo da seta", async () => {
+    await abrir(versao());
+    const reserva = screen.getByRole("textbox", { name: "Reserva % de MP-000030" });
+
+    fireEvent.keyDown(reserva, { key: "ArrowUp" });
+    await waitFor(() => expect(reserva).toHaveValue("11"));
+
+    fireEvent.keyDown(reserva, { key: "ArrowDown" });
+    await waitFor(() => expect(reserva).toHaveValue("10"));
+  });
+
+  it("a seta para onde a validação pararia — pureza não passa de 100", async () => {
+    await abrir(versao());
+    const pureza = screen.getByRole("textbox", { name: "Pureza de MP-000030" });
+
+    fireEvent.change(pureza, { target: { value: "100" } });
+    fireEvent.click(seta("Pureza de MP-000030", "Aumentar"));
+    await waitFor(() => expect(pureza).toHaveValue("100"));
+  });
+
+  it("a perda prevista também tem as setas, e o rendimento acompanha", async () => {
+    await abrir(versao({ expectedLossPercent: "1" }));
+    fireEvent.click(seta("Perda prevista de produção", "Aumentar"));
+    await waitFor(() => expect(rendimento().textContent).toBe("98%"));
+  });
+});
+
 describe("Refinamento da grade", () => {
   it("a embalagem não tem pureza nem reserva de matéria-prima", async () => {
     await abrir(versao());
