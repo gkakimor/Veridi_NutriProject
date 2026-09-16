@@ -116,6 +116,28 @@
 }
 
 /*
+ * DIVISORIA DE COLUNA NA GRADE INTEIRA.
+ *
+ * Com nove colunas e quase todas de numero, tres valores seguidos no rodape
+ * ("532,3026 mg  533,289429 mg  533,289429 mg") nao dizem a qual coluna cada um
+ * pertence: a linha de totais fica longe do cabecalho que a nomeia, e sem
+ * separacao vertical o olho nao consegue descer a coluna. A divisoria resolve
+ * isso na TABELA inteira — cada valor passa a ter uma calha —, e o fechamento
+ * horizontal continua so no rodape dos totais.
+ *
+ * A borda e clara de proposito: e calha, nao gaiola. E vai a ESQUERDA de cada
+ * celula, menos a primeira, para nao desenhar risco na borda externa. Com
+ * `box-sizing: border-box` e `table-layout: fixed`, o 1px sai de dentro da
+ * largura declarada: nenhuma proporcao homologada muda.
+ */
+.table--formulacao th + th,
+.table--formulacao td + td {
+  border-left: 1px solid var(--line);
+}
+
+/* A calha some no cartao (fim deste arquivo): ali nao ha coluna nenhuma. */
+
+/*
  * A GRADE DA BANCADA TEM LARGURA DECLARADA (FORMULATION-WORKBENCH-01).
  *
  * Antes eram larguras MÍNIMAS e o navegador distribuía a sobra: a mesma coluna
@@ -427,6 +449,14 @@
     border: 0;
     white-space: normal;
     padding: var(--sp-1) var(--sp-2);
+  }
+
+  /* A calha vertical some no cartao: cada celula virou bloco, e uma borda a
+     esquerda de todas elas desenharia uma linha solta no meio do cartao. O
+     seletor repete `td + td` porque `.table--formulacao td` sozinho perde para
+     ele na especificidade, media query ou nao. */
+  .table--formulacao td + td {
+    border-left: 0;
   }
 
   /* Rótulo à esquerda, valor à direita — o número continua sob o seu nome. */
