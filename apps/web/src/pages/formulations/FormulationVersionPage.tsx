@@ -2061,7 +2061,7 @@ export function FormulationVersionPage() {
           */}
           <span className="cell-sub">
             {row.stockUnitCode ? `Estoque em ${row.stockUnitCode}` : "Estoque: —"}
-            {row.itemExternalCode ? ` · legado ${row.itemExternalCode}` : ""}
+            {row.itemExternalCode ? ` · Código legado: ${row.itemExternalCode}` : ""}
             {row.itemPackagingSubtype
               ? ` · ${PACKAGING_SUBTYPE_LABELS[row.itemPackagingSubtype]}`
               : ""}
@@ -2118,7 +2118,7 @@ export function FormulationVersionPage() {
             */}
             {cadastroDiferente && (
               <span className="cell-sub">
-                referência atual do cadastro:{" "}
+                Cadastro:{" "}
                 {formatPercentPtBr(row.itemDefaultPurityPercent, OPCOES_PERCENTUAL_TECNICO)}
               </span>
             )}

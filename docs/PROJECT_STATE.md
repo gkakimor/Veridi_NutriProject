@@ -83,7 +83,10 @@ estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0
   aritmética inteira, parando onde a validação pararia. Larguras revistas pelo PO: Pureza e Alvo por dose usam a mesma
   da Reserva (96px em 1.492) e os 171px liberados foram para o Ingrediente (538 na cápsula, 634 no pó); a unidade do
   Alvo desceu para a segunda linha da célula, porque lado a lado sobravam 26px para o número. A linha do Ingrediente
-  mostra o CÓDIGO LEGADO do Item (`Item.externalCode`) junto da unidade de estoque, quando existe. **Falta a avaliação
+  mostra o CÓDIGO LEGADO do Item (`Item.externalCode`) junto da unidade de estoque, quando existe
+  ("Estoque em kg · Código legado: 1042"), e a referência de pureza do cadastro virou "Cadastro: 88,7%" — as duas
+  linhas de apoio cabem numa linha só. A coluna do Alvo ficou em 156px para a unidade voltar ao lado da caixa, que
+  mantém os 88px das demais. **Falta a avaliação
   visual do PO** — é dela que depende o fechamento;
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 
