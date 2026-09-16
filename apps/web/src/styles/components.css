@@ -1168,6 +1168,13 @@
   margin-top: 0;
 }
 
+/* A simulação é uma frase com número, não um campo estreito: o rótulo "Produzir
+   para entregar 1.000 un" não cabe em 220px sem quebrar em três linhas. */
+.premissas-producao__simulacao {
+  max-width: 300px;
+  margin-top: 0;
+}
+
 /*
  * CALCULADO NÃO PARECE CAMPO (FORMULATION-WORKBENCH-01).
  *
