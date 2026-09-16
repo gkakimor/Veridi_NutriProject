@@ -369,7 +369,7 @@ describe("Bancada — separação e dados do Item", () => {
     // A versão usa 70%; o Item cadastra 88,7% HOJE. A linha mostra os dois sem
     // trocar um pelo outro: o snapshot é da versão.
     expect(within(mp).getByRole("textbox", { name: /Pureza de MP-000030/ })).toHaveValue("70");
-    expect(mp.textContent).toContain("referência atual do cadastro");
+    expect(mp.textContent).toContain("Cadastro: 88,7%");
     expect(mp.textContent).toContain("88,7%");
     expect(mp.textContent).toContain("0,571429");
   });

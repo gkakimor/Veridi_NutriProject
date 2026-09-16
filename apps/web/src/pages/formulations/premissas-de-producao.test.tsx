@@ -418,13 +418,13 @@ describe("Código legado do Item", () => {
       } as Partial<FormulationVersionDTO>),
     );
     const composicao = secao(/Composição/);
-    expect(within(composicao).getByText(/Estoque em kg · legado 1042/)).toBeTruthy();
+    expect(within(composicao).getByText(/Estoque em kg · Código legado: 1042/)).toBeTruthy();
   });
 
   it("item sem legado não ganha rótulo vazio nem travessão", async () => {
     await abrir(versao());
     const composicao = secao(/Composição/);
-    expect(within(composicao).queryByText(/legado/)).toBeNull();
+    expect(within(composicao).queryByText(/Código legado/)).toBeNull();
     expect(within(composicao).getByText("Estoque em kg")).toBeTruthy();
   });
 });
