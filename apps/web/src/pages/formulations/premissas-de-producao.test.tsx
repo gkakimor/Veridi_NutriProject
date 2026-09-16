@@ -75,6 +75,7 @@ function acidoFolico(overrides: Record<string, unknown> = {}) {
     itemFamily: "VITAMIN" as const,
     itemPackagingSubtype: null,
     itemDefaultPurityPercent: "70",
+    itemExternalCode: null,
     theoreticalPerDose: "0.4",
     physicalPerDose: "0.571428571428571428",
     physicalPerCapsule: "0.571428571428571428",
@@ -105,6 +106,7 @@ function pote(overrides: Record<string, unknown> = {}) {
     itemFamily: null,
     itemPackagingSubtype: "POT" as const,
     itemDefaultPurityPercent: null,
+    itemExternalCode: null,
     theoreticalPerDose: null,
     physicalPerDose: null,
     physicalPerCapsule: null,
@@ -180,6 +182,7 @@ function versaoDoBeef(): FormulationVersionDTO {
         purityPercentApplied: "95",
         overagePercent: "2",
         itemDefaultPurityPercent: "95",
+        itemExternalCode: null,
         theoreticalPerDose: "26000",
         physicalPerDose: "27368.421052631578947",
         physicalPerCapsule: null,
@@ -404,6 +407,25 @@ describe("Refinamento da grade", () => {
     expect(
       within(composicao).getByRole("combobox", { name: "Base de cálculo do componente" }),
     ).toBeTruthy();
+  });
+});
+
+describe("Código legado do Item", () => {
+  it("aparece junto da unidade de estoque quando o Item tem legado", async () => {
+    await abrir(
+      versao({
+        components: [acidoFolico({ itemExternalCode: "1042" }), pote()],
+      } as Partial<FormulationVersionDTO>),
+    );
+    const composicao = secao(/Composição/);
+    expect(within(composicao).getByText(/Estoque em kg · legado 1042/)).toBeTruthy();
+  });
+
+  it("item sem legado não ganha rótulo vazio nem travessão", async () => {
+    await abrir(versao());
+    const composicao = secao(/Composição/);
+    expect(within(composicao).queryByText(/legado/)).toBeNull();
+    expect(within(composicao).getByText("Estoque em kg")).toBeTruthy();
   });
 });
 

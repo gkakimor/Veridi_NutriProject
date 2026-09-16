@@ -155,6 +155,12 @@ export interface ItemDTO {
   /** Preenchido apenas quando `type = PACKAGING`. */
   packagingSubtype: PackagingSubtype | null;
   externalBarcode: string | null;
+  /**
+   * Código do sistema legado (planilhas). Reconciliação da importação, nunca
+   * identidade operacional — quem identifica o item é `code`. `null` quando o
+   * item nasceu aqui e não veio de planilha nenhuma.
+   */
+  externalCode: string | null;
   active: boolean;
   /**
    * `true` quando o item já tem referência em PurchaseOrderLine, ReceiptLine,

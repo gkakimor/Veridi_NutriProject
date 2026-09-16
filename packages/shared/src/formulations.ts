@@ -201,6 +201,13 @@ export interface FormulationComponentDTO {
   /** Pureza padrão do cadastro HOJE — pode diferir da aplicada nesta versão. */
   itemDefaultPurityPercent: string | null;
   /**
+   * Código legado do Item (planilhas), para quem confere a receita contra a
+   * planilha antiga. Vem na LINHA e não do catálogo carregado: a busca abre com
+   * 50 de 1.211 itens, e uma versão gravada meses atrás tem componente fora
+   * dessa página. `null` quando o item não tem legado — e aí nada aparece.
+   */
+  itemExternalCode: string | null;
+  /**
    * Alvo e física de UMA dose, na unidade declarada (`unitCode`), pelo motor
    * canônico. `null` quando a base não é por dose ou a conta não é possível.
    * Nunca zero.
