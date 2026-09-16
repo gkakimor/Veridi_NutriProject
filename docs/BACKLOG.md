@@ -398,16 +398,6 @@ CHECKs, depois de a jornada semanal estar em produção e o backup lógico
 conferido. Sem impacto funcional até lá — o risco é alguém ler a coluna velha
 achando que ela é a jornada.
 
-### 17. A guarda de paginação da API não conhece a consulta do Inventário — LOW
-
-`apps/api/src/modules/paginacao-da-consulta.test.ts`, caso "toda consulta paginada está na tabela acima", falha na
-`main` desde `86e84c1` (INVENTORY-PHYSICAL-COUNT-01): a guarda conta 60 declarações `page`/`pageSize` com
-`inteiroDeConsultaSchema` e a tabela `CONSULTAS` tem 29 (58). A que falta é `listStockCountsQuerySchema`
-(`inventory/stock-count.schemas.ts`, teto 100, padrão 20). A consulta em si está certa — é a leitura estrita —; o que
-quebrou foi o retrato. Efeito colateral: `pnpm --filter @veridi/api test` para no primeiro `vitest run` e não chega à
-faixa serial (`&&`). Visto em CUSTOMER-PAYMENT-DEFAULTS-01 (2026-09-16), sem relação com a rodada. Correção:
-acrescentar a consulta do Inventário à tabela, com teto e padrão.
-
 ---
 
 ## E. Watchlist — observado, sem ação conhecida
