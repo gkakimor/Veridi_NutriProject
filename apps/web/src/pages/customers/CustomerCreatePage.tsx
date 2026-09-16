@@ -3,6 +3,7 @@ import type { CustomerDTO } from "@veridi/shared";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { useContextualCreateTarget } from "../../lib/use-contextual-create";
 import { CUSTOMER_FORM_ID, CustomerFormFields, useCustomerForm } from "./customer-form";
+import { PEDIR_CADASTRO_DE_CLIENTE, usePodeEditarCliente } from "./customer-permissions";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
 
@@ -27,10 +28,15 @@ import { helpTopics } from "../../help/help-content";
  * A trilha permanece canônica nos dois casos — `Cadastros e Configurações › Clientes › Novo
  * cliente`. De onde a pessoa veio é caminho de volta, não hierarquia do
  * sistema; misturar as duas coisas ensinaria uma estrutura que não existe.
+ *
+ * Só Comercial e Administrador cadastram (CUSTOMER-EDIT-PERMISSIONS-01). Os
+ * outros perfis não recebem o caminho até aqui; quem chega pelo endereço vê a
+ * recusa e a volta, nunca um formulário que terminaria em 403.
  */
 export function CustomerCreatePage() {
   const navigate = useNavigate();
   const contexto = useContextualCreateTarget("customer");
+  const podeCadastrar = usePodeEditarCliente();
 
   const controller = useCustomerForm({
     mode: "create",
@@ -56,15 +62,38 @@ export function CustomerCreatePage() {
     navigate("/cadastros/clientes");
   }
 
+  const trilha = (
+    <PageBreadcrumbs
+      items={[
+        { label: "Cadastros e Configurações" },
+        { label: "Clientes", href: "/cadastros/clientes" },
+        { label: "Novo cliente", current: true },
+      ]}
+    />
+  );
+
+  if (!podeCadastrar) {
+    return (
+      <>
+        {trilha}
+        <div className="page__header">
+          <div>
+            <h1 className="page__title">Novo cliente</h1>
+          </div>
+          <button type="button" className="btn btn--ghost" onClick={cancelar}>
+            ← Voltar para {contexto.isContextual ? contexto.originLabel : "Clientes"}
+          </button>
+        </div>
+        <p className="form-alert" role="alert">
+          Seu perfil não permite cadastrar clientes. {PEDIR_CADASTRO_DE_CLIENTE}
+        </p>
+      </>
+    );
+  }
+
   return (
     <>
-      <PageBreadcrumbs
-        items={[
-          { label: "Cadastros e Configurações" },
-          { label: "Clientes", href: "/cadastros/clientes" },
-          { label: "Novo cliente", current: true },
-        ]}
-      />
+      {trilha}
 
       <div className="page__header">
         <div>

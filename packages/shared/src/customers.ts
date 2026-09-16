@@ -2,8 +2,26 @@
 
 import type { CustomerCommercialStatusDTO } from "./customer-commercial-status.js";
 import type { CustomerBlockDTO, CustomerStatus } from "./customer-status.js";
+import type { UserRole } from "./users.js";
 
 export const CUSTOMER_CODE_PREFIX = "CLI";
+
+/**
+ * Quem CRIA e EDITA o cadastro do Cliente — CUSTOMER-EDIT-PERMISSIONS-01,
+ * decisão do PO.
+ *
+ * O cadastro é do domínio comercial: razão social, CNPJ, perfil tributário,
+ * contato, endereço, observações e o sufixo de lote comercial. Os demais
+ * perfis consultam o Cliente onde já consultam, e escolhem um Cliente
+ * existente nos fluxos em que já trabalham — só não criam nem alteram. A API
+ * recusa os outros com 403, antes de olhar o corpo ou o registro; a tela usa a
+ * MESMA lista só para não oferecer o que seria recusado.
+ *
+ * Não é `CUSTOMER_STATUS_CHANGE_ROLES` (`customer-status.ts`): hoje as duas
+ * listas coincidem, mas respondem perguntas diferentes — editar o cadastro e
+ * mudar a situação cadastral — e podem divergir.
+ */
+export const CUSTOMER_EDIT_ROLES: readonly UserRole[] = ["COMMERCIAL", "ADMIN"];
 
 /**
  * Perfil tributário do Cliente — `PRODUCT_RULES.md` §83.
@@ -141,6 +159,13 @@ export function formatZipCode(zipCode: string | null): string | null {
   return digits.length === 8 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : zipCode;
 }
 
+/**
+ * Alteração do cadastro: chave ausente não mexe, texto vazio limpa. O
+ * endereço estruturado inteiro trafega aqui, como no `CreateCustomerInput` —
+ * a tela sempre enviou CEP, logradouro, número, complemento e bairro, e a API
+ * sempre os aceitou. A situação cadastral NÃO: ela muda só pelas quatro ações
+ * de `customer-status.ts`.
+ */
 export interface UpdateCustomerInput {
   legalName?: string;
   tradeName?: string;
@@ -149,6 +174,11 @@ export interface UpdateCustomerInput {
   phone?: string;
   /** Ausente não mexe no perfil gravado. */
   taxProfile?: CustomerTaxProfile;
+  street?: string;
+  number?: string;
+  complement?: string;
+  district?: string;
+  zipCode?: string;
   city?: string;
   state?: string;
   notes?: string;

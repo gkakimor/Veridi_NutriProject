@@ -25,6 +25,10 @@ import { ContextHelp, InfoHint } from "../../components/help";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
+import {
+  SELETOR_DE_CLIENTE_SEM_CADASTRO,
+  usePodeEditarCliente,
+} from "../customers/customer-permissions";
 
 /** ⓘ de um campo, lido do registro central — o texto nunca mora no JSX. */
 function DicaDoCampo({ id }: { id: HelpHintId }) {
@@ -94,6 +98,8 @@ function emptyLine(): LineDraft {
  */
 export function ReceiveCustomerMaterialPage() {
   const navigate = useNavigate();
+  /* Receber para um Cliente existente é de quem recebe; cadastrar o Cliente, não. */
+  const podeCadastrarCliente = usePodeEditarCliente();
 
   const [customers, setCustomers] = useState<CustomerDTO[]>([]);
   /** Os itens que o servidor já devolveu ao seletor, pelo id — unidade e lote da linha. */
@@ -360,7 +366,8 @@ options={customers.map((customer) => ({
                   .filter(Boolean)
                   .join(" "),
               }))}
-              canCreate
+              canCreate={podeCadastrarCliente}
+              {...(podeCadastrarCliente ? {} : SELETOR_DE_CLIENTE_SEM_CADASTRO)}
               createLabel="Novo cliente"
               /* Sair para cadastrar o cliente NÃO é descartar: o rascunho vai
                  junto e volta aplicado. */

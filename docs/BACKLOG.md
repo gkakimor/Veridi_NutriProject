@@ -34,6 +34,7 @@ zero BLOCKER. O MVP foi entregue; o que está aqui é evolução do produto.
 | 8 | P1 | Decisões de **WAVE-05-GOLDEN-PATH-DISCOVERY-01** → E2E-BASELINE-REDESIGN-WAVE-05 (golden path) | Discovery `EM_ANALISE` · Q3 bloqueia | PO fecha Q3 e as demais; passos 1–2 do plano não dependem de decisão | WAVE 4 entregue |
 | 9 | P1 | ~~**CUSTOMER-STATUS-LIFECYCLE-01**~~ — situação cadastral do Cliente (Ativo · Bloqueado · Inativo), histórico auditável e guardas de venda | **FECHADO em 2026-09-15** · feedback direto da Veridi · migration aditiva (`blocked` + `customer_status_history`) | — (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §95, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md)) | — |
 | 9b | P1 | ~~**CUSTOMER-STATUS-HARDENING-01**~~ — quem muda a situação cadastral e o aviso no documento em andamento (pré-homologação) | **FECHADO em 2026-09-16** · absorve CUSTOMER-STATUS-PERMISSIONS-01 (só ADMIN e COMMERCIAL alteram, 403 na API para os demais, que seguem consultando) e CUSTOMER-STATUS-DRAFT-WARNING-01 (aviso no Orçamento, Projeto e Pedido em andamento, pela situação atual que a leitura traz) · guardas de venda intactas · **sem migration** | — (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §95, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
+| 9c | P1 | ~~**CUSTOMER-EDIT-PERMISSIONS-01**~~ — quem cria e edita o cadastro do Cliente | **FECHADO em 2026-09-16, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · decisão do PO (opção A do [discovery](discovery/CUSTOMER-EDIT-PERMISSIONS-DISCOVERY-01.md)): só ADMIN e COMMERCIAL criam e editam (`CUSTOMER_EDIT_ROLES`, lista própria), 403 na API antes do corpo e da existência · os demais perfis consultam o Cliente no mesmo modal, sem campo editável · "+ Novo cliente" só para quem cadastra, com a ajuda de a quem pedir nos seletores · `UpdateCustomerInput` com o endereço que já trafegava · **sem migration** | Publicação quando o PO decidir (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §98, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
 | 10 | P2 | **Estabilização final ampla do produto** | Sem ID e sem escopo | Abrir ID e escopo quando 4–8 fecharem | WAVE 4, permissões e WAVE 5 |
 | 11 | — | **DEMO-DATASET-01** — ambiente DEMO com massa fictícia determinística | **AGUARDANDO DEFINIÇÃO DO PO** | Massa fictícia determinística + reset protegido para um futuro ambiente Railway DEMO, e o fluxo `main` → `release/demo` → aprovação → o MESMO SHA em `release/prod`. Nada criado: sem ambiente, sem `release/demo` | PO |
 
@@ -44,7 +45,8 @@ watchlist (E). A estabilização final (10) é o lugar natural para varrê-los.
 
 | Item | Por que não está na fila | Onde |
 |---|---|---|
-| **CUSTOMER-EDIT-PERMISSIONS-01** — quem cria e edita o cadastro do Cliente | Aguardando definição do PO (registrado em 2026-09-16) | A |
+| **CUSTOMER-CNPJ-AUTOFILL-01** — consulta automática de CNPJ no cadastro do Cliente (P1) | **Aguardando aprovação explícita da Veridi.** NÃO INICIAR SEM APROVAÇÃO EXPLÍCITA DA VERIDI. Provedor definido: Serpro — Consulta CNPJ Básica | C |
+| **CUSTOMER-MASTER-DATA-AUDIT-01** — histórico de antes/depois do cadastro do Cliente (P2) | Futuro, registrado em 2026-09-16 (CUSTOMER-EDIT-PERMISSIONS-01); avaliar antes de construir | G |
 | **OPS-BACKUP-01** — backup agendado de PROD (HIGH) | Snapshot do Railway recusado e PITR desligado; o backup lógico JSON é restaurável e provado. Rotina agendada é decisão de infraestrutura | A |
 | COST-VAR-02 — variação de CMV e proteção de margem | Bloqueado: sete decisões do PO e dado real em produção | [`archive/COST-VAR-01…`](archive/COST-VAR-01_AUDITORIA_VARIACAO_CMV.md) |
 | #8E, #8F, #8G · PLAN-DATE-01 · UX-HELP-03 | Melhorias aguardando autorização | B, E |
@@ -201,7 +203,6 @@ mudou.
 | ~~**FORMULATION-TEMPLATE-BASIS-EDIT-01**~~ | **ABSORVIDO por FORMULATION-TEMPLATE-WORKBENCH-01 (2026-09-16).** O achado era a falta de seletor de base na linha do Modelo. A base deixou de ser um campo genérico a oferecer: ela é consequência da SEÇÃO — embalagem conta por unidade acabada, composição conta por dose quando a receita é por dose (`baseSugeridaDaSecao`, `packages/shared`) —, e a fatia 1 já a sugere na linha nova pelo tipo real do Item. A linha que já declarou base não é tocada, e `FIXED_BASIS` continua existindo: matriz histórica escrita sobre a base continua sobre a base. O acabamento visual das duas seções é da fatia 2 | UX | — |
 | **UI-NUMERIC-FIELD-STANDARD-01** | Aplicar ao sistema inteiro o padrão de campo numérico homologado na Formulação: caixa compacta, borda única, canto arredondado, número à direita, pt-BR, setas de incremento/decremento respeitando a última casa escrita e limites conforme o domínio. Pedido do PO em 2026-09-16, registrado sem implementar: é varredura de tela por tela, e entra na estabilização final (10) ou numa rodada própria | UX | — |
 | **NAV-TWO-SEARCHES-01** | Convivem "Buscar ou escanear lote" no topo e "Buscar telas…" na coluna; unificar é assunto da busca global de registros. Conferido no código em 2026-09-15: as duas seguem | UX | — |
-| **CUSTOMER-EDIT-PERMISSIONS-01** | Quem cria e edita o cadastro do Cliente. Registrado a pedido do PO em 2026-09-16 (HOMOLOGATION-RELEASE-RAILWAY-01), **AGUARDANDO DEFINIÇÃO DO PO**. Hoje `POST /customers` e `PATCH /customers/:id` só exigem sessão — qualquer perfil cria e edita; CUSTOMER-STATUS-HARDENING-01 restringiu apenas a mudança de situação cadastral (ADMIN e COMMERCIAL, §95). Nada implementado | — | — |
 | **WEB-SUITE-PREEXISTING-FAILURES-01** | Duas falhas da suíte web completa na `main`, vistas em 2026-09-16 (3554 testes, 2 caem, iguais em `3159180` e `5b7c1a3`): `post-e2e-integrity.test.tsx` ("mostra o saldo livre antes de o operador pedir" procura `3.666667`, provável formato pt-BR depois do PTBR-NUMERIC-INPUT-ROLLOUT-01 — conferir se é teste desatualizado ou valor errado) e `ux-acoes-onda-02.test.tsx` (a guarda acusa `pages/industrial-costs/IndustrialCostPage.tsx:1155` com duas ações diretas numa `.line-actions`) | LOW | S |
 
 ### Achados do FAST-DEVELOPMENT-RESET-02 (2026-09-11)
@@ -353,6 +354,17 @@ Também fica para auditar nessa rodada: se a pureza nominal por fornecedor deve
 morar no relacionamento Fornecedor ↔ Item, em vez de só no Item. Nada a decidir
 nem a implementar agora.
 
+### CUSTOMER-CNPJ-AUTOFILL-01 — consulta automática de CNPJ no cadastro do Cliente — P1 · AGUARDANDO A VERIDI
+
+**NÃO INICIAR SEM APROVAÇÃO EXPLÍCITA DA VERIDI.**
+
+Registrado pelo PO em 2026-09-16 (CUSTOMER-EDIT-PERMISSIONS-01). Provedor definido para quando houver aprovação:
+**Serpro — Consulta CNPJ Básica**. Nada implementado: nem integração, nem botão de consulta, nem token ou credencial,
+nem chamada externa. Hoje o sistema confere só a consistência do número (dígitos verificadores, numérico e
+alfanumérico) e não consulta a Receita — é o que dizem [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §83 e a ajuda do Cliente.
+Aprovada a consulta, a rodada revê essas duas frases, decide o que o retorno preenche e o que continua do usuário (o
+perfil tributário segue informado, §83) e respeita quem edita o cadastro (§98).
+
 ---
 
 ## D. Manutenção técnica
@@ -409,6 +421,7 @@ apareceu em nenhuma das 40 execuções completas dessa medição.
 | **W6** | Decisão de domínio pendente: trocar `RESTRICT` por `SET NULL` em alguma das 27 FKs opcionais | Não acontece mais por omissão no modelo (#14). Cada troca é decisão de domínio própria — bloquear a exclusão, desassociar ou arquivar — e exige a migration que a faça no banco |
 | **W8** | Tetos de 100 que SELECTOR-CUTOFF-WAVE-02 revalidou e manteve por não serem corte de escolha: dica de homologação da OC (`PurchaseOrderPage.tsx:380`, relações do fornecedor — acima de 100 a dica some da linha, mas fornecedor e item seguem com busca e a OC não depende dela), relações do cadastro de Item/Fornecedor (`SupplierItemsSection.tsx:29`, tabela só leitura; a lista completa, com filtro, é Compras → Item × Fornecedor), amostras da ficha do Projeto (`ProjectDetailPage.tsx:114`, as 100 mais recentes), usuários (`UsersPage.tsx:41`, listagem, fora da fase — Auth). FO-03 saiu em FO03-PENDING-CUTOFF-01 (2026-09-13): a folha lê todas as páginas de `onlyPending` até o total | Medido no dev: até 59 relações por fornecedor e 9 por item, 1 amostra por projeto; 685 usuários, quase todos resíduo de teste (TEST-USERS-LEGACY-RESIDUE-01, que saiu com a recriação do `veridi_dev` em 2026-09-14). Os de recurso industrial (Modelo de Estrutura de Custo, Roteiro, `porId` do Planejamento) eram seletor e fecharam na wave. Vira item da seção A quando algum passar do teto |
 | **W9** | `pages/print/operational-sheets.test.tsx`: os dois primeiros testes do FO-02 caíram por `waitFor` de 1 s em `abrirFolha` (a folha ainda em "Gerando PDF…") numa execução fria de 19 arquivos em paralelo (FO03-PENDING-CUTOFF-01); o arquivo sozinho e duas reexecuções do mesmo gate passaram | FO-02 intocado na rodada e sem falha de conteúdo: é o primeiro `import()` do documento sob CPU disputada. Se voltar no `pnpm test`, o remédio é o prazo do `waitFor` de `abrirFolha`, não o código da folha |
+| **W10** | `pages/periodo-invertido-listas.test.tsx`, caso "'Recebimentos': a resposta atrasada não aparece; voltar ao período consulta uma vez": caiu uma vez na suíte web completa de CUSTOMER-EDIT-PERMISSIONS-01 (2026-09-16, 3.657 testes) com `Unable to find an element with the text: Carregando…` — o estado de carregamento é transitório e já tinha passado | Sozinho passou 3 de 3, e nenhum módulo da rodada está no caminho da tela de Recebimentos. Se voltar, o remédio é o teste esperar o carregamento sem depender de ver o instante dele |
 
 ---
 
@@ -714,6 +727,15 @@ regras avançadas não entram no escopo por padrão, nem porque o discovery toco
 assunto: promover exige decisão explícita do PO. Os três primeiros já estão em
 [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md), seção Armazém / WMS (Contagem
 cíclica agendada, Coletores industriais, Endereçamento avançado).
+
+### CUSTOMER-MASTER-DATA-AUDIT-01 — histórico do cadastro do Cliente — P2 · FUTURO
+
+Registrado pelo PO em 2026-09-16 (CUSTOMER-EDIT-PERMISSIONS-01), **sem posição e sem implementação**. O cadastro do
+Cliente guarda só quem criou, quem alterou por último e quando (`createdBy*`, `updatedBy*`, `updatedAt`): uma troca de
+CNPJ, de razão social ou de perfil tributário não deixa rastro do valor anterior. A situação cadastral já tem histórico
+append-only (§95); o cadastro, não. A pergunta a responder: vale um histórico append-only de antes/depois para os
+campos estruturais (CNPJ, razão social, perfil tributário e outros), para quais campos, quem lê, e como convive com os
+snapshots que os documentos já congelam. Exigiria migration. Quem pode alterar já está decidido (§98).
 
 ---
 

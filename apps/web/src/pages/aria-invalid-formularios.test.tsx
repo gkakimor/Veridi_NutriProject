@@ -39,7 +39,7 @@ vi.mock("../lib/units-api", () => ({
     { code: "kg", label: "Quilograma", dimension: "MASS", toBaseFactor: "1000" },
   ]),
 }));
-vi.mock("../app/AuthProvider", () => ({ useAuth: vi.fn() }));
+vi.mock("../app/AuthProvider", () => ({ useAuth: vi.fn(), useOptionalAuth: () => null }));
 
 import { useAuth } from "../app/AuthProvider";
 import { ApiValidationError } from "../lib/api-errors";

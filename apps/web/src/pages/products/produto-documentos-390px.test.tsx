@@ -25,7 +25,7 @@ import type { AttachmentDTO, ProductDTO } from "@veridi/shared";
 vi.mock("../../lib/products-api", () => ({ createProduct: vi.fn(), updateProduct: vi.fn() }));
 vi.mock("../../lib/customers-api", () => ({ listCustomers: vi.fn() }));
 vi.mock("../../lib/units-api", () => ({ listUnits: vi.fn() }));
-vi.mock("../../app/AuthProvider", () => ({ useAuth: vi.fn() }));
+vi.mock("../../app/AuthProvider", () => ({ useAuth: vi.fn(), useOptionalAuth: () => null }));
 vi.mock("../../lib/attachments-api", () => ({
   listAttachments: vi.fn(),
   uploadAttachment: vi.fn(),

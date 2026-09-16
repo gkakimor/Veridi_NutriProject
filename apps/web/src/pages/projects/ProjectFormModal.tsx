@@ -23,6 +23,10 @@ import { DecimalField, IntegerField } from "../../components/NumericField";
 import { listCustomers } from "../../lib/customers-api";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { createProject, getProjectVocabulary, updateProject } from "../../lib/projects-api";
+import {
+  SELETOR_DE_CLIENTE_SEM_CADASTRO,
+  usePodeEditarCliente,
+} from "../customers/customer-permissions";
 
 type FormState = {
   customerId: string;
@@ -123,6 +127,8 @@ export function ProjectFormModal({
   onClose: () => void;
   onSaved: (project: ProjectDTO) => void;
 }) {
+  /* Escolher Cliente existente continua de quem monta o Projeto; cadastrar um novo, não. */
+  const podeCadastrarCliente = usePodeEditarCliente();
   const [form, setForm] = useState<FormState>(() => initialState(project));
   const [customers, setCustomers] = useState<CustomerDTO[]>([]);
   const [concepts, setConcepts] = useState<string[]>([]);
@@ -335,7 +341,8 @@ options={customers.map((customer) => ({
                 .filter(Boolean)
                 .join(" "),
             }))}
-            canCreate
+            canCreate={podeCadastrarCliente}
+            {...(podeCadastrarCliente ? {} : SELETOR_DE_CLIENTE_SEM_CADASTRO)}
             createLabel="Novo cliente"
             /* Sair para cadastrar o cliente NÃO é descartar: o rascunho vai
                junto e volta aplicado. Perguntar aqui seria a guarda avisando

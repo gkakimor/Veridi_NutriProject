@@ -6241,7 +6241,8 @@ Administrador** (`CUSTOMER_STATUS_CHANGE_ROLES`). Produção, Qualidade, Compras
 e Consulta continuam lendo situação, motivo e histórico onde já leem o
 Cliente, e recebem 403 nas quatro ações. A API confere o perfil antes do corpo
 e da existência do cliente — esconder a ação na tela é conveniência, não
-autoridade —, e o PATCH do cadastro não muda situação.
+autoridade —, e o PATCH do cadastro não muda situação. Quem cria e edita o
+cadastro responde a outra lista, `CUSTOMER_EDIT_ROLES` (§98).
 
 **Documento em andamento avisa** (mesma rodada). O cliente pode mudar de
 situação depois que o documento nasceu, e quem abre o documento precisa saber
@@ -6357,3 +6358,40 @@ isso, cada um do seu jeito.
 - **Rascunho × ativa.** Com rascunho aberto, a bancada mostra o rascunho; a
   versão ativa continua à vista em seção própria, no histórico e na comparação,
   sem uma segunda receita inteira na mesma página.
+
+## §98 — Cadastro do Cliente: Comercial e Administrador criam e editam
+
+CUSTOMER-EDIT-PERMISSIONS-01, 2026-09-16, decisão do PO
+([discovery](discovery/CUSTOMER-EDIT-PERMISSIONS-DISCOVERY-01.md), opção A).
+
+**Criar e editar o cadastro do Cliente são de Comercial e Administrador**
+(`CUSTOMER_EDIT_ROLES`, `packages/shared/src/customers.ts`). Produção,
+Qualidade, Compras e Consulta leem o Cliente onde já leem — lista, cadastro,
+situação, motivo, histórico e Visão do Cliente — e escolhem um Cliente
+existente nos fluxos em que já trabalham, mas não criam nem alteram.
+
+- **O cadastro inteiro, sem permissão por campo.** Razão social, nome
+  fantasia, CNPJ, perfil tributário, e-mail, telefone, endereço, observações e
+  o sufixo de lote comercial (`businessLotSuffix`, que continua sem campo na
+  tela) ficam sob o mesmo gate.
+- **A API é a autoridade.** `POST /customers` e `PATCH /customers/:id`
+  recusam os demais perfis com 403 `forbidden` ("Seu perfil não permite esta
+  ação."), antes de validar o corpo e antes de olhar se o cliente existe — sem
+  permissão, cliente existente e inexistente recebem a mesma resposta —, e
+  nada é gravado.
+- **Duas listas, duas perguntas.** `CUSTOMER_EDIT_ROLES` não é
+  `CUSTOMER_STATUS_CHANGE_ROLES` (§95): hoje as duas têm os mesmos perfis, e
+  podem divergir. O PATCH do cadastro continua sem mudar a situação.
+- **A tela não finge.** Quem não edita abre o Cliente — pela linha, pelo "Ver"
+  ou pelo link de outra tela — no mesmo modal, em consulta: mesmas seções e
+  rótulos, valores no lugar das caixas, nenhum campo que aceite digitação e
+  "Fechar" no lugar de "Salvar alterações". "+ Novo cliente" não aparece na
+  lista, no Pedido, no recebimento de material do cliente, no Projeto nem no
+  Produto; o endereço `/cadastros/clientes/novo` mostra a recusa e a volta.
+- **Sem beco sem saída.** Quando o Cliente procurado não existe e o perfil não
+  cadastra, a lista do seletor diz: "Solicite ao Comercial ou Administrador o
+  cadastro do cliente."
+- **Só escritas futuras.** Clientes, documentos, snapshots e histórico
+  existentes não mudam. O cadastro não tem trilha de antes/depois dos campos —
+  só autoria e data da criação e da última alteração
+  (CUSTOMER-MASTER-DATA-AUDIT-01, futuro).

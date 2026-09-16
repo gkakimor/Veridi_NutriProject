@@ -36,6 +36,10 @@ import type { NumericOptions } from "../../lib/numeric-ptbr";
 import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
 import { DecimalField, IntegerField } from "../../components/NumericField";
 import { ProductIndustrialCostSummary } from "./ProductIndustrialCostSummary";
+import {
+  SELETOR_DE_CLIENTE_SEM_CADASTRO,
+  usePodeEditarCliente,
+} from "../customers/customer-permissions";
 
 /**
  * O formulário de Produto, uma vez só.
@@ -218,6 +222,12 @@ export function useProductForm({
    */
   customerLock?: ProductCustomerLock | null | undefined;
 }) {
+  /*
+   * Quem hospeda decide O QUE "+ Novo cliente" faz; se ele aparece depende
+   * também do perfil (CUSTOMER-EDIT-PERMISSIONS-01). Sem permissão o campo
+   * continua escolhendo Cliente existente, só não oferece o cadastro.
+   */
+  const podeCadastrarCliente = usePodeEditarCliente();
   const [form, setForm] = useState<ProductFormState>(() => {
     const base = initialState(product);
     return customerLock ? { ...base, customerId: customerLock.id } : base;
@@ -494,7 +504,8 @@ export function useProductForm({
     customerOptions,
     buscarClientes,
     selectCustomer,
-    onCreateCustomer,
+    onCreateCustomer: podeCadastrarCliente ? onCreateCustomer : undefined,
+    podeCadastrarCliente,
     lockedCustomer,
   };
 }
@@ -512,6 +523,7 @@ export function ProductFormFields({
   units,
   customerOptions,
   onCreateCustomer,
+  podeCadastrarCliente,
   lockedCustomer,
   buscarClientes,
 }: ProductFormController) {
@@ -627,6 +639,7 @@ options={customerOptions.map((customer) => ({
                 canCreate={Boolean(onCreateCustomer)}
                 createLabel="Novo cliente"
                 {...(onCreateCustomer ? { onCreateNew: onCreateCustomer } : {})}
+                {...(podeCadastrarCliente ? {} : SELETOR_DE_CLIENTE_SEM_CADASTRO)}
                 {...fieldProps("customerId")}
               />
               {fieldError("customerId")}

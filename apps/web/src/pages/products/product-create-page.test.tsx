@@ -21,7 +21,7 @@ vi.mock("../../lib/products-api", () => ({
 }));
 vi.mock("../../lib/customers-api", () => ({ listCustomers: vi.fn() }));
 vi.mock("../../lib/units-api", () => ({ listUnits: vi.fn() }));
-vi.mock("../../app/AuthProvider", () => ({ useAuth: vi.fn() }));
+vi.mock("../../app/AuthProvider", () => ({ useAuth: vi.fn(), useOptionalAuth: () => null }));
 // Só aparecem na edição e batem na API por conta própria.
 vi.mock("../../components/AttachmentsSection", () => ({ AttachmentsSection: () => null }));
 vi.mock("./ProductIndustrialCostSummary", () => ({ ProductIndustrialCostSummary: () => null }));

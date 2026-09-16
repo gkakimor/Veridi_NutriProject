@@ -29,7 +29,7 @@ vi.mock("../../lib/products-api", () => ({
 }));
 vi.mock("../../lib/customers-api", () => ({ listCustomers: vi.fn() }));
 vi.mock("../../lib/units-api", () => ({ listUnits: vi.fn() }));
-vi.mock("../../app/AuthProvider", () => ({ useAuth: vi.fn() }));
+vi.mock("../../app/AuthProvider", () => ({ useAuth: vi.fn(), useOptionalAuth: () => null }));
 vi.mock("../../components/AttachmentsSection", () => ({ AttachmentsSection: () => null }));
 vi.mock("./ProductIndustrialCostSummary", () => ({ ProductIndustrialCostSummary: () => null }));
 vi.mock("./ProductDefaultRouteSection", () => ({ ProductDefaultRouteSection: () => null }));
