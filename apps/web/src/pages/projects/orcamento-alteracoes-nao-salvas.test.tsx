@@ -90,6 +90,8 @@ function versao(): QuoteVersionDTO {
     installmentCount: null,
     installmentIntervalDays: null,
     monthlyInterestPercent: null,
+    paymentInstrument: null,
+    customerPaymentDefaults: null,
     paymentSchedule: null,
     sourcedOrder: null,
     commercialNotes: null,
@@ -179,8 +181,8 @@ function Raiz() {
   );
 }
 
-function abrir() {
-  const proposta = versao();
+function abrir(overrides: Partial<QuoteVersionDTO> = {}) {
+  const proposta = { ...versao(), ...overrides };
   const router = createMemoryRouter(
     createRoutesFromElements(
       <Route element={<Raiz />}>
@@ -235,6 +237,28 @@ describe("Orçamento — guarda de alterações não salvas", () => {
 
     expect(await screen.findByText("Sair sem salvar?")).toBeInTheDocument();
     expect(screen.getByText(/alterações não salvas neste orçamento/i)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Pedidos" })).toBeNull();
+  });
+
+  it("padrão do cliente aplicado e não salvo pergunta antes de sair — é a mesma pendência", async () => {
+    const user = userEvent.setup();
+    abrir({
+      customerPaymentDefaults: {
+        defaultPaymentInstrument: "PIX",
+        defaultPaymentMethod: "CASH",
+        defaultDownPaymentPercent: null,
+        defaultInstallmentCount: null,
+        defaultInstallmentIntervalDays: null,
+        defaultMonthlyInterestPercent: null,
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Aplicar padrão do cliente" }));
+    expect(screen.getByText(/Alterações não salvas/i)).toBeInTheDocument();
+
+    await user.click(menuPedidos());
+
+    expect(await screen.findByText("Sair sem salvar?")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Pedidos" })).toBeNull();
   });
 

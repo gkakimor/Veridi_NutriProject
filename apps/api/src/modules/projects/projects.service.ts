@@ -16,6 +16,7 @@ import {
 } from "./technical-product.service.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
+import { padraoDePagamentoSelect } from "../../lib/payment-condition.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import {
   CustomerLockedError,
@@ -101,6 +102,8 @@ const projectInclude = {
               district: true,
               city: true,
               state: true,
+              // O mesmo padrão de pagamento de `quoteInclude`, pelo mesmo motivo.
+              ...padraoDePagamentoSelect,
             },
           },
         },

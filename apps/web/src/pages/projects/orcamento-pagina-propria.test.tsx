@@ -408,7 +408,9 @@ describe("Projeto — a seção Orçamentos só lista", () => {
     expect(lido("Total da proposta")).toContain("12.500,00");
     // As condições gravadas, escritas como o documento as escreve.
     expect(lido("Prazo de entrega")).toBe("15 dias");
-    expect(lido("Forma de pagamento")).toBe("À vista");
+    // Forma e condição são duas linhas (CUSTOMER-PAYMENT-DEFAULTS-01).
+    expect(lido("Forma de pagamento")).toBe("Não informada");
+    expect(lido("Condição de pagamento")).toBe("À vista");
     expect(lido("Observações comerciais")).toBe("Frete por conta do cliente");
 
     expect(screen.getByRole("button", { name: "PDF" })).toBeInTheDocument();

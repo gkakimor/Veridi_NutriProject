@@ -16,6 +16,12 @@ import {
   calcularTotaisOrcamento,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import {
+  exigirParcelas,
+  padraoDePagamentoDTO,
+  padraoDePagamentoSelect,
+  pagamentoInicialDoCliente,
+} from "../../lib/payment-condition.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { diaComercialPorExtenso, intervaloDeDiasCivis, venceuEm } from "../../lib/business-day.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
@@ -99,6 +105,9 @@ const cadastroDaPropostaSelect = {
         district: true,
         city: true,
         state: true,
+        // O padrão de pagamento ATUAL, só para oferecer "Aplicar padrão do
+        // cliente" ao rascunho — nunca para completar condição da versão.
+        ...padraoDePagamentoSelect,
       },
     },
   },
@@ -304,6 +313,14 @@ export function toQuoteVersionDTO(
     monthlyInterestPercent: quote.monthlyInterestPercent
       ? quote.monthlyInterestPercent.toFixed(4)
       : null,
+    /*
+     * Forma e condição são as GRAVADAS nesta versão, sempre — nenhuma cai para
+     * o cadastro do cliente quando falta. O padrão atual do cliente vem à
+     * parte, só no rascunho, para a ação explícita "Aplicar padrão do cliente".
+     */
+    paymentInstrument: quote.paymentInstrument,
+    customerPaymentDefaults:
+      quote.status === "DRAFT" ? padraoDePagamentoDTO(quote.project.customer) : null,
     paymentSchedule,
     sourcedOrder: quote.sourcedCustomerOrder
       ? {
@@ -559,6 +576,15 @@ export async function createQuoteVersion(
   assertCustomerCanSell(project.customer);
 
   const previous = project.quoteVersions[0] ?? null;
+  /*
+   * O pagamento padrão do cliente entra UMA vez: na primeira proposta real do
+   * projeto — sem versão anterior de origem MANUAL. É a V1, ou a primeira depois
+   * de só haver versões importadas do legado (arquivadas, sem condição), que
+   * não mudam. Dali em diante a renegociação parte da versão anterior, e o
+   * padrão atual do cliente não é reaplicado: nem na V2, nem na recompra do
+   * projeto aprovado (CUSTOMER-PAYMENT-DEFAULTS-01).
+   */
+  const primeiraPropostaReal = !project.quoteVersions.some((quote) => quote.source === "MANUAL");
   const code = await nextSequenceCode(prisma, CODE_SEQUENCE, QUOTE_CODE_PREFIX);
 
   const created = await prisma.$transaction(async (tx) => {
@@ -593,8 +619,11 @@ export async function createQuoteVersion(
               installmentCount: previous.installmentCount,
               installmentIntervalDays: previous.installmentIntervalDays,
               monthlyInterestPercent: previous.monthlyInterestPercent,
+              paymentInstrument: previous.paymentInstrument,
             }
           : {}),
+        // Copiado para a própria versão: depois disto, mudar o cliente não a muda.
+        ...(primeiraPropostaReal ? pagamentoInicialDoCliente(project.customer) : {}),
         createdByUserId: actor.id,
         createdByNameSnapshot: actor.name,
       },
@@ -802,6 +831,8 @@ export async function duplicateQuoteVersion(
         installmentCount: source.installmentCount,
         installmentIntervalDays: source.installmentIntervalDays,
         monthlyInterestPercent: source.monthlyInterestPercent,
+        // Forma e condição da ORIGEM escolhida — nunca do padrão do cliente.
+        paymentInstrument: source.paymentInstrument,
         createdByUserId: actor.id,
         createdByNameSnapshot: actor.name,
       },
@@ -857,7 +888,6 @@ export async function previewQuotePaymentSchedule(
 ): Promise<QuotePaymentScheduleDTO | null> {
   const quote = await requireQuoteWithLines(id);
   const atual = toQuoteVersionDTO(quote, false);
-  if (atual.subtotal === null) return null;
 
   const decimal = (value: string | null | undefined, atualValue: string | null) => {
     if (value === undefined) return atualValue === null ? null : new Prisma.Decimal(atualValue);
@@ -867,6 +897,15 @@ export async function previewQuotePaymentSchedule(
     value === undefined ? atualValue : value;
 
   const method = input.paymentMethod ?? atual.paymentMethod;
+  // Simular "Parcelado sem parcelas" mostraria um plano à vista chamado de
+  // parcelado — a mesma recusa de salvar, com ou sem total.
+  exigirParcelas(
+    method,
+    method === "CASH" ? null : inteiro(input.installmentCount, atual.installmentCount),
+    "installmentCount",
+  );
+  if (atual.subtotal === null) return null;
+
   return buildPaymentSchedule({
     subtotal: new Prisma.Decimal(atual.subtotal),
     discountPercent: decimal(input.discountPercent, atual.discountPercent),
@@ -892,63 +931,91 @@ export async function updateQuoteVersion(
   id: string,
   input: UpdateQuoteVersionInput,
 ): Promise<QuoteVersionDTO> {
-  const quote = await requireQuoteWithLines(id);
-  // Proposta apresentada é histórico: renegociar cria versão nova.
-  if (quote.status !== "DRAFT") throw new QuoteNotDraftError(quote.status);
+  await getPrisma().$transaction(async (tx) => {
+    /*
+     * A versão travada: a checagem "parcelado com parcelas" vale para o estado
+     * que ESTA gravação produz, sobre o que está gravado — PATCH parcial é
+     * legítimo, e dois PATCHes válidos cada um, lidos antes um do outro, não
+     * podem gravar juntos um parcelado sem parcelas.
+     */
+    const travada = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM quote_versions WHERE id = ${id} FOR UPDATE`;
+    if (travada.length === 0) throw new QuoteNotFoundError(id);
+    const quote = await tx.quoteVersion.findUniqueOrThrow({
+      where: { id },
+      select: { status: true, paymentMethod: true, installmentCount: true },
+    });
+    // Proposta apresentada é histórico: renegociar cria versão nova.
+    if (quote.status !== "DRAFT") throw new QuoteNotDraftError(quote.status);
 
-  await getPrisma().quoteVersion.update({
-    where: { id },
-    data: {
-      ...(input.quoteDate !== undefined ? { quoteDate: input.quoteDate } : {}),
-      ...(input.validUntil !== undefined ? { validUntil: input.validUntil } : {}),
-      ...(input.currencyCode !== undefined ? { currencyCode: input.currencyCode } : {}),
-      ...(input.commercialNotes !== undefined ? { commercialNotes: input.commercialNotes } : {}),
-      ...(input.paymentTerms !== undefined ? { paymentTerms: input.paymentTerms } : {}),
-      ...(input.leadTimeDays !== undefined ? { leadTimeDays: input.leadTimeDays } : {}),
-      ...(input.discountPercent !== undefined
-        ? {
-            discountPercent:
-              input.discountPercent === null ? null : new Prisma.Decimal(input.discountPercent),
-          }
-        : {}),
-      ...(input.paymentMethod !== undefined ? { paymentMethod: input.paymentMethod } : {}),
-      /*
-       * À vista não guarda entrada, parcelas nem juros. Deixar os números da
-       * negociação anterior escondidos no registro faria o plano ressuscitar
-       * sozinho na hora que alguém voltasse para "Parcelado".
-       */
-      ...(input.paymentMethod === "CASH"
-        ? {
-            downPaymentPercent: null,
-            installmentCount: null,
-            installmentIntervalDays: null,
-            monthlyInterestPercent: null,
-          }
-        : {
-            ...(input.downPaymentPercent !== undefined
-              ? {
-                  downPaymentPercent:
-                    input.downPaymentPercent === null
-                      ? null
-                      : new Prisma.Decimal(input.downPaymentPercent),
-                }
-              : {}),
-            ...(input.installmentCount !== undefined
-              ? { installmentCount: input.installmentCount }
-              : {}),
-            ...(input.installmentIntervalDays !== undefined
-              ? { installmentIntervalDays: input.installmentIntervalDays }
-              : {}),
-            ...(input.monthlyInterestPercent !== undefined
-              ? {
-                  monthlyInterestPercent:
-                    input.monthlyInterestPercent === null
-                      ? null
-                      : new Prisma.Decimal(input.monthlyInterestPercent),
-                }
-              : {}),
-          }),
-    },
+    const method = input.paymentMethod ?? quote.paymentMethod;
+    exigirParcelas(
+      method,
+      method === "CASH"
+        ? null
+        : input.installmentCount !== undefined
+          ? input.installmentCount
+          : quote.installmentCount,
+      "installmentCount",
+    );
+
+    await tx.quoteVersion.update({
+      where: { id },
+      data: {
+        ...(input.quoteDate !== undefined ? { quoteDate: input.quoteDate } : {}),
+        ...(input.validUntil !== undefined ? { validUntil: input.validUntil } : {}),
+        ...(input.currencyCode !== undefined ? { currencyCode: input.currencyCode } : {}),
+        ...(input.commercialNotes !== undefined ? { commercialNotes: input.commercialNotes } : {}),
+        ...(input.paymentTerms !== undefined ? { paymentTerms: input.paymentTerms } : {}),
+        ...(input.leadTimeDays !== undefined ? { leadTimeDays: input.leadTimeDays } : {}),
+        ...(input.discountPercent !== undefined
+          ? {
+              discountPercent:
+                input.discountPercent === null ? null : new Prisma.Decimal(input.discountPercent),
+            }
+          : {}),
+        ...(input.paymentMethod !== undefined ? { paymentMethod: input.paymentMethod } : {}),
+        ...(input.paymentInstrument !== undefined
+          ? { paymentInstrument: input.paymentInstrument }
+          : {}),
+        /*
+         * À vista não guarda entrada, parcelas nem juros. Deixar os números da
+         * negociação anterior escondidos no registro faria o plano ressuscitar
+         * sozinho na hora que alguém voltasse para "Parcelado".
+         */
+        ...(input.paymentMethod === "CASH"
+          ? {
+              downPaymentPercent: null,
+              installmentCount: null,
+              installmentIntervalDays: null,
+              monthlyInterestPercent: null,
+            }
+          : {
+              ...(input.downPaymentPercent !== undefined
+                ? {
+                    downPaymentPercent:
+                      input.downPaymentPercent === null
+                        ? null
+                        : new Prisma.Decimal(input.downPaymentPercent),
+                  }
+                : {}),
+              ...(input.installmentCount !== undefined
+                ? { installmentCount: input.installmentCount }
+                : {}),
+              ...(input.installmentIntervalDays !== undefined
+                ? { installmentIntervalDays: input.installmentIntervalDays }
+                : {}),
+              ...(input.monthlyInterestPercent !== undefined
+                ? {
+                    monthlyInterestPercent:
+                      input.monthlyInterestPercent === null
+                        ? null
+                        : new Prisma.Decimal(input.monthlyInterestPercent),
+                  }
+                : {}),
+            }),
+      },
+    });
   });
 
   return (await getQuoteById(id)) as QuoteVersionDTO;
@@ -1158,6 +1225,12 @@ export async function sendQuoteVersion(
    * e uma oferta sem prazo é uma oferta que nunca vence.
    */
   if (!quote.validUntil) throw new QuoteWithoutValidUntilError();
+  /*
+   * Rascunho parcelado sem parcelas — anterior à regra, ou copiado de versão
+   * que já estava assim — não vira documento do cliente: o plano sairia à
+   * vista com a proposta dizendo parcelado.
+   */
+  exigirParcelas(quote.paymentMethod, quote.installmentCount, "installmentCount");
   // Proposta sem produto não é proposta; e linha sem quantidade, unidade ou
   // preço não pode virar documento do cliente.
   if (quote.lines.length === 0) throw new IncompleteQuoteError();

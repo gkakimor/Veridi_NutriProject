@@ -1,10 +1,6 @@
 import { z } from "zod";
 import type { QuoteStatus } from "@veridi/shared";
-import {
-  LIMITES_INTEIROS_DAS_CONDICOES,
-  QUOTE_DUPLICATE_PRICE_STRATEGIES,
-  QUOTE_STATUSES,
-} from "@veridi/shared";
+import { QUOTE_DUPLICATE_PRICE_STRATEGIES, QUOTE_STATUSES } from "@veridi/shared";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import {
   diaCivilDeFiltroSchema,
@@ -12,7 +8,13 @@ import {
   requiredDateSchema,
 } from "../../lib/date-schema.js";
 import { CASAS_PRECO_COMERCIAL, optionalDecimalStringSchema } from "../../lib/decimal-schema.js";
-import { inteiroDeConsultaSchema, lerInteiroDecimal } from "../../lib/integer-schema.js";
+import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
+import {
+  camposDoParcelamento,
+  optionalPercent,
+  optionalPositiveInt,
+  paymentInstrumentSchema,
+} from "../../lib/payment-condition-schema.js";
 import { listaDeStatusSchema } from "../../lib/status-list-schema.js";
 
 const statusEnum = z.enum(["WAITING", "SAMPLE", "APPROVED", "CANCELLED", "STAND_BY"]);
@@ -40,20 +42,6 @@ const optionalDecimal = optionalDecimalStringSchema();
  * pelo banco.
  */
 const precoComercial = optionalDecimalStringSchema({ maxDecimals: CASAS_PRECO_COMERCIAL });
-
-const optionalPositiveInt = z
-  .union([z.string(), z.number(), z.null()])
-  .optional()
-  .transform((value) => {
-    if (value === undefined) return undefined;
-    if (value === null || value === "") return null;
-    // Leitura estrita (API-INT-COERCION-01): o que não é inteiro decimal
-    // canônico vira NaN e cai na mesma recusa abaixo.
-    return lerInteiroDecimal(value) ?? Number.NaN;
-  })
-  .refine((value) => value === undefined || value === null || (Number.isInteger(value) && value > 0), {
-    message: "Informe um número inteiro maior que zero",
-  });
 
 /**
  * Conceito e canal são vocabulário ABERTO: texto livre com sugestão pelos
@@ -142,15 +130,13 @@ export const listQuoteVersionsQuerySchema = z
   })
   .superRefine(recusarPeriodoInvertido("dateFrom", "dateTo"));
 
-/** Cabeçalho da proposta: condições comerciais. Preço vive na linha. */
-/** Percentual opcional com teto — desconto de 100% não é desconto, é doação. */
-function optionalPercent(max: number) {
-  return optionalDecimal.refine(
-    (value) => value === undefined || value === null || Number(value) <= max,
-    { message: `Percentual precisa ser no máximo ${max}` },
-  );
-}
-
+/**
+ * Cabeçalho da proposta: condições comerciais. Preço vive na linha.
+ *
+ * Entrada, parcelas, intervalo e juros saem de `payment-condition-schema.ts`,
+ * os mesmos campos do pagamento padrão do Cliente. "Parcelado sem parcelas"
+ * depende do que está gravado e é recusado no service.
+ */
 export const updateQuoteVersionSchema = z.object({
   quoteDate: requiredDateSchema.optional(),
   validUntil: requiredDateSchema.nullish(),
@@ -160,27 +146,9 @@ export const updateQuoteVersionSchema = z.object({
   leadTimeDays: optionalPositiveInt,
   discountPercent: optionalPercent(99.99),
   paymentMethod: z.enum(["CASH", "INSTALLMENTS"]).optional(),
-  // Entrada de 100% seria a proposta à vista com outro nome.
-  downPaymentPercent: optionalPercent(99.99),
-  // Os tetos são os mesmos que a tela aplica: uma fonte só, em @veridi/shared
-  // (QUOTE-INT-FIELDS-01). O mínimo é o `> 0` de `optionalPositiveInt`.
-  installmentCount: optionalPositiveInt.refine(
-    (value) =>
-      value === undefined ||
-      value === null ||
-      value <= LIMITES_INTEIROS_DAS_CONDICOES.installmentCount.maximo,
-    { message: `No máximo ${LIMITES_INTEIROS_DAS_CONDICOES.installmentCount.maximo} parcelas` },
-  ),
-  installmentIntervalDays: optionalPositiveInt.refine(
-    (value) =>
-      value === undefined ||
-      value === null ||
-      value <= LIMITES_INTEIROS_DAS_CONDICOES.installmentIntervalDays.maximo,
-    {
-      message: `Intervalo entre parcelas: no máximo ${LIMITES_INTEIROS_DAS_CONDICOES.installmentIntervalDays.maximo} dias`,
-    },
-  ),
-  monthlyInterestPercent: optionalPercent(100),
+  ...camposDoParcelamento,
+  // Forma de pagamento: ausente não mexe, `null` limpa.
+  paymentInstrument: paymentInstrumentSchema.nullable().optional(),
 });
 
 /** Só produto já associado ao projeto entra na proposta. */

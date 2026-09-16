@@ -1,7 +1,65 @@
-import { QUOTE_PAYMENT_METHOD_LABELS } from "@veridi/shared";
-import type { QuotePaymentScheduleDTO } from "@veridi/shared";
+import { Decimal, PAYMENT_INSTRUMENT_LABELS, QUOTE_PAYMENT_METHOD_LABELS } from "@veridi/shared";
+import type {
+  CustomerPaymentDefaultsDTO,
+  PaymentInstrument,
+  QuotePaymentScheduleDTO,
+} from "@veridi/shared";
 import { formatBRL } from "./currency";
+import { emDias } from "./duration";
 import { formatPercent } from "./percent";
+
+/**
+ * A forma de pagamento para ler — "PIX", "Boleto"... ou "Não informada".
+ *
+ * Decide pelos valores conhecidos: fixture ou resposta antiga sem o campo
+ * (`undefined`) é "não informada", nunca rótulo vazio.
+ */
+export function formaDePagamentoPorExtenso(
+  forma: PaymentInstrument | null | undefined,
+): string {
+  return forma && forma in PAYMENT_INSTRUMENT_LABELS
+    ? PAYMENT_INSTRUMENT_LABELS[forma]
+    : "Não informada";
+}
+
+/** Percentual maior que zero — `null`, vazio, ilegível e zero não descrevem nada. */
+function positivo(valor: string | null | undefined): boolean {
+  if (!valor) return false;
+  try {
+    return new Decimal(valor).greaterThan(0);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A condição de pagamento PADRÃO do cliente, em uma linha.
+ *
+ * "Parcelado — entrada de 30% e 3× a cada 45 dias, juros de 2% ao mês".
+ *
+ * Diferente de `condicaoDePagamentoPorExtenso`, não há plano: o padrão do
+ * cliente não tem total, então a frase descreve os PARÂMETROS — percentuais,
+ * número de parcelas e intervalo —, nunca valores em reais.
+ */
+export function condicaoPadraoPorExtenso(padrao: CustomerPaymentDefaultsDTO): string {
+  if (!padrao.defaultPaymentMethod) return "Não informada";
+  const metodo = QUOTE_PAYMENT_METHOD_LABELS[padrao.defaultPaymentMethod];
+  if (padrao.defaultPaymentMethod !== "INSTALLMENTS" || !padrao.defaultInstallmentCount) {
+    return metodo;
+  }
+  const entrada = positivo(padrao.defaultDownPaymentPercent)
+    ? `entrada de ${formatPercent(padrao.defaultDownPaymentPercent)} e `
+    : "";
+  // Intervalo vazio é 30 dias, como o plano calcula.
+  const intervalo =
+    padrao.defaultInstallmentIntervalDays && padrao.defaultInstallmentIntervalDays !== 30
+      ? ` a cada ${emDias(padrao.defaultInstallmentIntervalDays)}`
+      : " por mês";
+  const juros = positivo(padrao.defaultMonthlyInterestPercent)
+    ? `, juros de ${formatPercent(padrao.defaultMonthlyInterestPercent)} ao mês`
+    : ", sem juros";
+  return `${metodo} — ${entrada}${padrao.defaultInstallmentCount}×${intervalo}${juros}`;
+}
 
 /**
  * A condição de pagamento de uma proposta, em uma linha legível.

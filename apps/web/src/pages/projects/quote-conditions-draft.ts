@@ -1,5 +1,7 @@
 import type {
+  CustomerPaymentDefaultsDTO,
   LIMITES_INTEIROS_DAS_CONDICOES,
+  PaymentInstrument,
   QuotePaymentMethod,
   QuoteVersionDTO,
   UpdateQuoteVersionInput,
@@ -38,6 +40,9 @@ export interface CamposDasCondicoes {
   leadTimeDays: string;
   commercialNotes: string;
   discountPercent: string;
+  /** Forma de pagamento; `""` é "Não informada". */
+  paymentInstrument: PaymentInstrument | "";
+  /** Condição de pagamento — à vista ou parcelado. */
   paymentMethod: QuotePaymentMethod;
   downPaymentPercent: string;
   installmentCount: string;
@@ -54,15 +59,18 @@ export type ChaveInteiraDaCondicao = keyof typeof LIMITES_INTEIROS_DAS_CONDICOES
 export type TipoDaCondicao = "data" | "inteiro" | "texto" | "percentual" | "opcao";
 
 /**
- * A classificação das nove condições, num lugar só. O tipo exige uma entrada
+ * A classificação das dez condições, num lugar só. O tipo exige uma entrada
  * por chave — condição nova sem classificação não compila —, e é esta tabela
- * que decide como cada campo se compara (QUOTE-INT-FIELDS-01).
+ * que decide como cada campo se compara (QUOTE-INT-FIELDS-01). A forma de
+ * pagamento entrou aqui, e não numa segunda mecânica: pendência, simulação,
+ * salvar e o envio preso leem esta mesma tabela (CUSTOMER-PAYMENT-DEFAULTS-01).
  */
 export const TIPO_DA_CONDICAO: Record<ChaveDaCondicao, TipoDaCondicao> = {
   validUntil: "data",
   leadTimeDays: "inteiro",
   commercialNotes: "texto",
   discountPercent: "percentual",
+  paymentInstrument: "opcao",
   paymentMethod: "opcao",
   downPaymentPercent: "percentual",
   installmentCount: "inteiro",
@@ -79,28 +87,99 @@ export interface RascunhoDasCondicoes {
   campos: CamposDasCondicoes;
 }
 
+/**
+ * Percentual guardado com 4 casas vira "10" na tela, não "10,0000" — e em
+ * português: "7,5", no texto que o `PercentField` edita.
+ */
+function percentualNoCampo(value: string | null | undefined): string {
+  return value === null || value === undefined || value.trim() === ""
+    ? ""
+    : toPtBrEditText(new Decimal(value).toString(), OPCOES_PERCENTUAL);
+}
+
+function inteiroNoCampo(value: number | null | undefined): string {
+  return value ? String(value) : "";
+}
+
 export function camposDe(quote: QuoteVersionDTO): CamposDasCondicoes {
-  /**
-   * Percentual guardado com 4 casas vira "10" na tela, não "10,0000" — e em
-   * português: "7,5", no texto que o `PercentField` edita.
-   */
-  const percent = (value: string | null | undefined) =>
-    value === null || value === undefined || value.trim() === ""
-      ? ""
-      : toPtBrEditText(new Decimal(value).toString(), OPCOES_PERCENTUAL);
   return {
     validUntil: quote.validUntil ? quote.validUntil.slice(0, 10) : "",
-    leadTimeDays: quote.leadTimeDays ? String(quote.leadTimeDays) : "",
+    leadTimeDays: inteiroNoCampo(quote.leadTimeDays),
     commercialNotes: quote.commercialNotes ?? "",
-    discountPercent: percent(quote.discountPercent),
+    discountPercent: percentualNoCampo(quote.discountPercent),
+    paymentInstrument: quote.paymentInstrument ?? "",
     paymentMethod: quote.paymentMethod,
-    downPaymentPercent: percent(quote.downPaymentPercent),
-    installmentCount: quote.installmentCount ? String(quote.installmentCount) : "",
-    installmentIntervalDays: quote.installmentIntervalDays
-      ? String(quote.installmentIntervalDays)
-      : "",
-    monthlyInterestPercent: percent(quote.monthlyInterestPercent),
+    downPaymentPercent: percentualNoCampo(quote.downPaymentPercent),
+    installmentCount: inteiroNoCampo(quote.installmentCount),
+    installmentIntervalDays: inteiroNoCampo(quote.installmentIntervalDays),
+    monthlyInterestPercent: percentualNoCampo(quote.monthlyInterestPercent),
   };
+}
+
+/** O cliente tem algum pagamento padrão — forma, condição ou as duas? */
+export function temPadraoDoCliente(
+  padrao: CustomerPaymentDefaultsDTO | null | undefined,
+): padrao is CustomerPaymentDefaultsDTO {
+  return Boolean(padrao && (padrao.defaultPaymentInstrument || padrao.defaultPaymentMethod));
+}
+
+/**
+ * "Aplicar padrão do cliente": o padrão ATUAL do cliente escrito nos campos —
+ * na tela, sem gravar. Vira alteração pendente como qualquer digitação, e só
+ * chega ao servidor por "Salvar condições".
+ *
+ * Só forma e condição. Validade, prazo, desconto e observações ficam como
+ * estão, e o que o cliente não tem padrão também: cliente só com forma não
+ * mexe na condição, e vice-versa. A condição vem inteira — parcelado com os
+ * seus quatro campos, à vista sem nenhum.
+ */
+export function aplicarPadraoDoCliente(
+  campos: CamposDasCondicoes,
+  padrao: CustomerPaymentDefaultsDTO | null | undefined,
+): CamposDasCondicoes {
+  if (!temPadraoDoCliente(padrao)) return campos;
+  return {
+    ...campos,
+    ...(padrao.defaultPaymentInstrument
+      ? { paymentInstrument: padrao.defaultPaymentInstrument }
+      : {}),
+    ...(padrao.defaultPaymentMethod
+      ? {
+          paymentMethod: padrao.defaultPaymentMethod,
+          downPaymentPercent: percentualNoCampo(padrao.defaultDownPaymentPercent),
+          installmentCount: inteiroNoCampo(padrao.defaultInstallmentCount),
+          installmentIntervalDays: inteiroNoCampo(padrao.defaultInstallmentIntervalDays),
+          monthlyInterestPercent: percentualNoCampo(padrao.defaultMonthlyInterestPercent),
+        }
+      : {}),
+  };
+}
+
+/**
+ * Aplicar o padrão mudaria o que a proposta diz?
+ *
+ * Compara o que VALE, pelo valor: à vista, entrada, parcelas, intervalo e juros
+ * não aparecem nem vão ao servidor, e texto que ficou escondido neles não faz o
+ * botão aparecer.
+ */
+export function padraoDoClienteDifere(
+  campos: CamposDasCondicoes,
+  padrao: CustomerPaymentDefaultsDTO | null | undefined,
+): boolean {
+  if (!temPadraoDoCliente(padrao)) return false;
+  const emVigor = (c: CamposDasCondicoes): CamposDasCondicoes =>
+    c.paymentMethod === "INSTALLMENTS"
+      ? c
+      : {
+          ...c,
+          downPaymentPercent: "",
+          installmentCount: "",
+          installmentIntervalDays: "",
+          monthlyInterestPercent: "",
+        };
+  return (
+    condicoesAlteradas(emVigor(campos), emVigor(aplicarPadraoDoCliente(campos, padrao))).length > 0
+  );
 }
 
 export function paraEnvio(campos: CamposDasCondicoes): UpdateQuoteVersionInput {
@@ -139,6 +218,7 @@ export function paraEnvio(campos: CamposDasCondicoes): UpdateQuoteVersionInput {
     leadTimeDays: inteiro(campos.leadTimeDays),
     commercialNotes: texto(campos.commercialNotes),
     discountPercent: percentual(campos.discountPercent),
+    paymentInstrument: campos.paymentInstrument === "" ? null : campos.paymentInstrument,
     paymentMethod: campos.paymentMethod,
     downPaymentPercent: percentual(campos.downPaymentPercent, parcelado),
     installmentCount: inteiro(campos.installmentCount, parcelado),

@@ -163,7 +163,11 @@ export const comercialTopics = {
       },
       {
         term: "Condições comerciais",
-        text: "Da versão de orçamento: validade da proposta, prazo de entrega, desconto, forma de pagamento, entrada, parcelas, intervalo e juros ao mês, mais observações comerciais. Editáveis só no rascunho. O plano de parcelas (valor e vencimento de cada parcela) é calculado a partir delas e do total.",
+        text: "Da versão de orçamento: validade da proposta, prazo de entrega, desconto, forma de pagamento (PIX, boleto, transferência, cartão ou outro — opcional), condição de pagamento (à vista ou parcelado, com entrada, parcelas, intervalo e juros ao mês), mais observações comerciais. Editáveis só no rascunho. Parcelado exige o número de parcelas. O plano de parcelas (valor e vencimento de cada parcela) é calculado a partir da condição e do total; a forma não muda valor.",
+      },
+      {
+        term: "Aplicar padrão do cliente",
+        text: "No rascunho, traz para a tela a forma e a condição de pagamento que o cadastro do cliente sugere hoje. Não grava: vira alteração não salva, que se simula, salva ou descarta como qualquer outra. Aparece só quando o cliente tem padrão e ele é diferente do que está na tela. A primeira versão do projeto já nasce com o padrão; as seguintes partem da versão anterior.",
       },
       {
         term: "Prévia e total salvo",

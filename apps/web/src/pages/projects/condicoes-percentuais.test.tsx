@@ -267,7 +267,7 @@ describe("QUOTE-PERCENT-FIELDS-01 — percentual ilegível com o tratamento dos 
     digitar("Juros ao mês (%)", "2.500");
     expect(botao("Salvar condições").disabled).toBe(true);
 
-    fireEvent.change(screen.getByLabelText("Forma de pagamento"), { target: { value: "CASH" } });
+    fireEvent.change(screen.getByLabelText("Condição de pagamento"), { target: { value: "CASH" } });
 
     expect(screen.queryByLabelText("Entrada (%)")).toBeNull();
     expect(botao("Salvar condições").disabled).toBe(false);

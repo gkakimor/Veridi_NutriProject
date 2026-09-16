@@ -5,6 +5,12 @@ import { CUSTOMER_CODE_PREFIX, situacaoCadastral } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
+import {
+  condicaoPadraoParaGravar,
+  padraoDePagamentoDTO,
+  padraoDePagamentoSelect,
+  tocaCondicaoPadrao,
+} from "../../lib/payment-condition.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { CustomerNotFoundError, DuplicateCnpjError } from "./customers.errors.js";
 import {
@@ -61,6 +67,8 @@ function toCustomerDTO(customer: CustomerComBloqueio): CustomerDTO {
     state: customer.state,
     notes: customer.notes,
     businessLotSuffix: customer.businessLotSuffix,
+    // Pagamento padrão: sugestão para orçamentos novos, `null` = não informado.
+    ...padraoDePagamentoDTO(customer),
     active: customer.active,
     blocked: customer.blocked,
     // Situação cadastral (§95): derivada dos dois fatos, nunca uma coluna
@@ -157,6 +165,8 @@ export async function createCustomer(
   actor: User,
 ): Promise<CustomerDTO> {
   if (input.cnpj) await assertCnpjAvailable(input.cnpj);
+  // Antes de consumir código: condição parcelada sem parcelas não nasce.
+  const condicaoPadrao = tocaCondicaoPadrao(input) ? condicaoPadraoParaGravar(null, input) : {};
 
   const prisma = getPrisma();
   const code = await nextSequenceCode(prisma, CODE_SEQUENCE, CUSTOMER_CODE_PREFIX);
@@ -178,6 +188,10 @@ export async function createCustomer(
         ...(input.businessLotSuffix !== undefined
           ? { businessLotSuffix: input.businessLotSuffix }
           : {}),
+        ...(input.defaultPaymentInstrument !== undefined
+          ? { defaultPaymentInstrument: input.defaultPaymentInstrument }
+          : {}),
+        ...condicaoPadrao,
         createdByUserId: actor.id,
         createdByNameSnapshot: actor.name,
         updatedByUserId: actor.id,
@@ -209,25 +223,47 @@ export async function updateCustomer(
   if (input.cnpj) await assertCnpjAvailable(input.cnpj, id);
 
   try {
-    const customer = await getPrisma().customer.update({
-      where: { id },
-      data: {
-        ...(input.legalName !== undefined ? { legalName: input.legalName } : {}),
-        ...(input.tradeName !== undefined ? { tradeName: input.tradeName } : {}),
-        ...(input.cnpj !== undefined ? { cnpj: input.cnpj } : {}),
-        ...(input.email !== undefined ? { email: input.email } : {}),
-        ...(input.phone !== undefined ? { phone: input.phone } : {}),
-        ...(input.taxProfile !== undefined ? { taxProfile: input.taxProfile } : {}),
-        ...addressData(input),
-        ...(input.notes !== undefined ? { notes: input.notes } : {}),
-        ...(input.businessLotSuffix !== undefined
-          ? { businessLotSuffix: input.businessLotSuffix }
-          : {}),
-        // Quem criou nao muda numa alteracao — so quem alterou por ultimo.
-        updatedByUserId: actor.id,
-        updatedByNameSnapshot: actor.name,
-      },
-      include: bloqueioVigenteInclude,
+    const customer = await getPrisma().$transaction(async (tx) => {
+      /*
+       * Condição padrão é um bloco: o PATCH parcial se resolve contra o que está
+       * GRAVADO, e a checagem "parcelado com parcelas" vale para o estado que a
+       * gravação produz. A trava da linha impede que dois PATCHes válidos cada
+       * um, lidos antes um do outro, gravem juntos um parcelado sem parcelas.
+       */
+      let condicaoPadrao = {};
+      if (tocaCondicaoPadrao(input)) {
+        await tx.$queryRaw`SELECT id FROM customers WHERE id = ${id} FOR UPDATE`;
+        const gravado = await tx.customer.findUniqueOrThrow({
+          where: { id },
+          select: padraoDePagamentoSelect,
+        });
+        condicaoPadrao = condicaoPadraoParaGravar(gravado, input);
+      }
+
+      return tx.customer.update({
+        where: { id },
+        data: {
+          ...(input.legalName !== undefined ? { legalName: input.legalName } : {}),
+          ...(input.tradeName !== undefined ? { tradeName: input.tradeName } : {}),
+          ...(input.cnpj !== undefined ? { cnpj: input.cnpj } : {}),
+          ...(input.email !== undefined ? { email: input.email } : {}),
+          ...(input.phone !== undefined ? { phone: input.phone } : {}),
+          ...(input.taxProfile !== undefined ? { taxProfile: input.taxProfile } : {}),
+          ...addressData(input),
+          ...(input.notes !== undefined ? { notes: input.notes } : {}),
+          ...(input.businessLotSuffix !== undefined
+            ? { businessLotSuffix: input.businessLotSuffix }
+            : {}),
+          ...(input.defaultPaymentInstrument !== undefined
+            ? { defaultPaymentInstrument: input.defaultPaymentInstrument }
+            : {}),
+          ...condicaoPadrao,
+          // Quem criou nao muda numa alteracao — so quem alterou por ultimo.
+          updatedByUserId: actor.id,
+          updatedByNameSnapshot: actor.name,
+        },
+        include: bloqueioVigenteInclude,
+      });
     });
     return toCustomerDTO(customer);
   } catch (error) {

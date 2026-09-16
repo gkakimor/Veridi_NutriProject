@@ -55,7 +55,7 @@ export const orcamento = {
         "O sistema sugere manter a condição quando ela vige e a quantidade é a mesma; quantidade diferente ou condição vencida exigem um motivo, que fica gravado.",
     },
     {
-      you: 'Preencha validade, prazo, desconto e forma de pagamento e clique em "Salvar condições".',
+      you: 'Preencha validade, prazo, desconto, forma e condição de pagamento e clique em "Salvar condições".',
       system: 'O sistema monta o plano de parcelas e o "Total da proposta (prévia)" enquanto você digita; o gravado fica ao lado como "Total salvo".',
     },
     {

@@ -286,6 +286,10 @@ export const cadastrosTopics = {
         text: "Usado nos documentos impressos. UF precisa ser uma sigla válida e o CEP guarda oito dígitos, sem a máscara. O endereço pertence ao CEP: trocar o CEP limpa o endereço anterior — logradouro, número, complemento, bairro, cidade e UF — antes da nova consulta, porque nada disso está provado no CEP novo. Uma proposta enviada congela o endereço do momento do envio: alterar o cadastro depois não reescreve o que já foi impresso.",
       },
       {
+        term: "Pagamento padrão",
+        text: "Forma de pagamento (PIX, boleto, transferência, cartão ou outro) e condição de pagamento (à vista ou parcelado, com entrada, parcelas, intervalo e juros) sugeridas para os orçamentos novos do cliente. Tudo opcional. O primeiro orçamento do projeto já nasce com o padrão; depois disso o orçamento é dele, e alterar o padrão não muda orçamento nem pedido já criados. No rascunho, “Aplicar padrão do cliente” traz o padrão atual para a tela. Parcelado exige o número de parcelas.",
+      },
+      {
         term: "Sufixo do lote comercial",
         text: "O trecho do cliente na máscara de lote comercial sugerida na ordem de produção. Não é o lote interno, não obriga nada e não altera estoque.",
       },

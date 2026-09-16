@@ -1,4 +1,4 @@
-import { Decimal, QUOTE_STATUS_LABELS } from "@veridi/shared";
+import { Decimal, PAYMENT_INSTRUMENT_LABELS, QUOTE_STATUS_LABELS } from "@veridi/shared";
 import type { QuoteVersionDTO } from "@veridi/shared";
 import {
   PdfBlock,
@@ -74,11 +74,25 @@ export function QuotePdf({ quote, generatedAt }: { quote: QuoteVersionDTO; gener
     .join(", ");
   const cidadeUf = [quote.customerCity, quote.customerState].filter(Boolean).join(" / ");
   const projeto = [quote.projectCode, quote.projectName].filter(Boolean).join(" — ");
-  const formaDePagamento = plano
-    ? plano.method === "CASH"
-      ? "À vista"
-      : `Parcelado em ${plano.installments.length}×`
-    : orDash(quote.paymentTerms);
+  /*
+   * CONDIÇÃO de pagamento — à vista ou parcelado. Com plano, o plano diz (a
+   * mesma conta que as parcelas abaixo); sem total ainda, a condição gravada,
+   * lida pela mesma regra do plano. O texto livre `paymentTerms` não é
+   * condição: sai à parte, como "Observações de pagamento".
+   */
+  const parcelas = plano
+    ? plano.method === "INSTALLMENTS"
+      ? plano.installments.length
+      : 0
+    : quote.paymentMethod === "INSTALLMENTS"
+      ? (quote.installmentCount ?? 0)
+      : 0;
+  const condicaoDePagamento = parcelas > 0 ? `Parcelado em ${parcelas}×` : "À vista";
+  /** FORMA de pagamento — o meio. Some do documento quando não informada. */
+  const formaDePagamento =
+    quote.paymentInstrument && quote.paymentInstrument in PAYMENT_INSTRUMENT_LABELS
+      ? PAYMENT_INSTRUMENT_LABELS[quote.paymentInstrument]
+      : null;
 
   return (
     <PdfDocument
@@ -151,7 +165,8 @@ export function QuotePdf({ quote, generatedAt }: { quote: QuoteVersionDTO; gener
       <PdfSection title="Condições comerciais">
         <PdfDataGrid
           fields={[
-            { label: "Forma de pagamento", value: formaDePagamento, span: 4 },
+            { label: "Forma de pagamento", value: formaDePagamento, span: 4, optional: true },
+            { label: "Condição de pagamento", value: condicaoDePagamento, span: 4 },
             {
               label: "Prazo de entrega",
               // "1 dia", nunca "1 dias"; sem prazo gravado, "—" como sempre.
@@ -160,7 +175,12 @@ export function QuotePdf({ quote, generatedAt }: { quote: QuoteVersionDTO; gener
             },
             { label: "Validade", value: formatDate(quote.validUntil), span: 2 },
             { label: "Moeda", value: quote.currencyCode, span: 2 },
-            { label: "Condições de pagamento", value: quote.paymentTerms, span: 12, optional: true },
+            {
+              label: "Observações de pagamento",
+              value: quote.paymentTerms,
+              span: 12,
+              optional: true,
+            },
             { label: "Observações", value: quote.commercialNotes, span: 12, optional: true },
           ]}
         />

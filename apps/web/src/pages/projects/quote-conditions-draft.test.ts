@@ -13,20 +13,22 @@ import {
 } from "./quote-conditions-draft";
 
 /**
- * O rascunho das condições cobre as NOVE condições — QUOTE-DRAFT-STATE-01.
+ * O rascunho das condições cobre as DEZ condições — QUOTE-DRAFT-STATE-01.
  *
  * O defeito derrubava os nove campos pelo mesmo efeito, e corrigir só a
- * validade deixaria oito com o mesmo defeito. Estes casos provam pela
+ * validade deixaria oito com o mesmo defeito. A forma de pagamento entrou
+ * como décima (CUSTOMER-PAYMENT-DEFAULTS-01), pelas mesmas chaves. Estes casos provam pela
  * ESTRUTURA: a conversão do servidor, o envio, a comparação e a hidratação
- * passam pelas mesmas nove chaves — e uma décima condição que nasça sem passar
+ * passam pelas mesmas dez chaves — e uma condição nova que nasça sem passar
  * por elas quebra o primeiro teste, em vez de ficar de fora em silêncio.
  */
 
-const NOVE: ChaveDaCondicao[] = [
+const DEZ: ChaveDaCondicao[] = [
   "validUntil",
   "leadTimeDays",
   "commercialNotes",
   "discountPercent",
+  "paymentInstrument",
   "paymentMethod",
   "downPaymentPercent",
   "installmentCount",
@@ -45,6 +47,7 @@ function versao(overrides: Partial<QuoteVersionDTO> = {}): QuoteVersionDTO {
     leadTimeDays: 30,
     commercialNotes: "Gravada",
     discountPercent: "5.0000",
+    paymentInstrument: "BOLETO",
     paymentMethod: "CASH",
     downPaymentPercent: "10.0000",
     installmentCount: 2,
@@ -54,12 +57,13 @@ function versao(overrides: Partial<QuoteVersionDTO> = {}): QuoteVersionDTO {
   } as QuoteVersionDTO;
 }
 
-/** O que a pessoa digitou — diferente do gravado nas nove. */
+/** O que a pessoa digitou — diferente do gravado nas dez. */
 const DIGITADO: CamposDasCondicoes = {
   validUntil: "2026-09-20",
   leadTimeDays: "15",
   commercialNotes: "Digitada",
   discountPercent: "7,5",
+  paymentInstrument: "PIX",
   paymentMethod: "INSTALLMENTS",
   downPaymentPercent: "20",
   installmentCount: "3",
@@ -67,12 +71,13 @@ const DIGITADO: CamposDasCondicoes = {
   monthlyInterestPercent: "1,5",
 };
 
-/** Uma leitura em que o servidor mudou as nove — diferente do gravado E do digitado. */
+/** Uma leitura em que o servidor mudou as dez — diferente do gravado E do digitado. */
 const OUTRA_LEITURA = versao({
   validUntil: "2026-10-01T00:00:00.000Z",
   leadTimeDays: 45,
   commercialNotes: "Do servidor",
   discountPercent: "3.0000",
+  paymentInstrument: "CARD",
   paymentMethod: "INSTALLMENTS",
   downPaymentPercent: "30.0000",
   installmentCount: 4,
@@ -81,22 +86,22 @@ const OUTRA_LEITURA = versao({
 });
 
 /**
- * Forma de pagamento tem dois valores: para a leitura discordar do Parcelado
+ * Condição de pagamento tem dois valores: para a leitura discordar do Parcelado
  * digitado, ela continua À vista.
  */
 function leituraQueDiscordaDe(chave: ChaveDaCondicao): QuoteVersionDTO {
   return chave === "paymentMethod" ? { ...OUTRA_LEITURA, paymentMethod: "CASH" } : OUTRA_LEITURA;
 }
 
-describe("as nove condições passam pelo mesmo caminho", () => {
-  it("conversão, envio e comparação cobrem exatamente as nove", () => {
-    expect(ordenadas(Object.keys(camposDe(versao())))).toEqual(ordenadas(NOVE));
-    expect(ordenadas(Object.keys(paraEnvio(DIGITADO)))).toEqual(ordenadas(NOVE));
-    // Diferir em todos os campos é diferir nas nove — nem uma a mais, nem uma a menos.
-    expect(ordenadas(condicoesAlteradas(camposDe(versao()), DIGITADO))).toEqual(ordenadas(NOVE));
+describe("as dez condições passam pelo mesmo caminho", () => {
+  it("conversão, envio e comparação cobrem exatamente as dez", () => {
+    expect(ordenadas(Object.keys(camposDe(versao())))).toEqual(ordenadas(DEZ));
+    expect(ordenadas(Object.keys(paraEnvio(DIGITADO)))).toEqual(ordenadas(DEZ));
+    // Diferir em todos os campos é diferir nas dez — nem uma a mais, nem uma a menos.
+    expect(ordenadas(condicoesAlteradas(camposDe(versao()), DIGITADO))).toEqual(ordenadas(DEZ));
   });
 
-  it.each(NOVE)("%s alterado sobrevive à releitura; as outras oito acompanham o servidor", (chave) => {
+  it.each(DEZ)("%s alterado sobrevive à releitura; as outras nove acompanham o servidor", (chave) => {
     const inicial = rascunhoDe(versao());
     const digitado = { ...inicial, campos: { ...inicial.campos, [chave]: DIGITADO[chave] } };
     const leitura = leituraQueDiscordaDe(chave);
@@ -105,14 +110,14 @@ describe("as nove condições passam pelo mesmo caminho", () => {
     const depois = hidratarRascunho(digitado, leitura, true);
 
     expect(depois.campos[chave]).toBe(DIGITADO[chave]);
-    for (const outra of NOVE.filter((k) => k !== chave)) {
+    for (const outra of DEZ.filter((k) => k !== chave)) {
       expect(depois.campos[outra], outra).toBe(servidor[outra]);
     }
     expect(depois.base).toEqual(servidor);
     expect(condicoesAlteradas(depois.base, depois.campos)).toEqual([chave]);
   });
 
-  it("as nove alteradas juntas sobrevivem a uma releitura que não mudou nada no servidor", () => {
+  it("as dez alteradas juntas sobrevivem a uma releitura que não mudou nada no servidor", () => {
     const inicial = rascunhoDe(versao());
     const digitado = { ...inicial, campos: DIGITADO };
 
@@ -120,16 +125,17 @@ describe("as nove condições passam pelo mesmo caminho", () => {
 
     // Nada mudou no servidor: o rascunho é o MESMO objeto, e nada re-renderiza.
     expect(depois).toBe(digitado);
-    expect(ordenadas(condicoesAlteradas(depois.base, depois.campos))).toEqual(ordenadas(NOVE));
+    expect(ordenadas(condicoesAlteradas(depois.base, depois.campos))).toEqual(ordenadas(DEZ));
   });
 
-  it("salvar as nove: o gravado vira a base, a tela mostra o gravado e nada fica pendente", () => {
+  it("salvar as dez: o gravado vira a base, a tela mostra o gravado e nada fica pendente", () => {
     const inicial = rascunhoDe(versao());
     const salvo = versao({
       validUntil: "2026-09-20T00:00:00.000Z",
       leadTimeDays: 15,
       commercialNotes: "Digitada",
       discountPercent: "7.5000",
+      paymentInstrument: "PIX",
       paymentMethod: "INSTALLMENTS",
       downPaymentPercent: "20.0000",
       installmentCount: 3,
@@ -202,10 +208,10 @@ describe("identidade da versão, nunca do objeto", () => {
  * `NaN`.
  */
 describe("inteiros: classificação, envio e comparação", () => {
-  const INTEIRAS = NOVE.filter((chave) => TIPO_DA_CONDICAO[chave] === "inteiro");
+  const INTEIRAS = DEZ.filter((chave) => TIPO_DA_CONDICAO[chave] === "inteiro");
 
-  it("as nove estão classificadas, e as inteiras são exatamente as que a API limita", () => {
-    expect(ordenadas(Object.keys(TIPO_DA_CONDICAO))).toEqual(ordenadas(NOVE));
+  it("as dez estão classificadas, e as inteiras são exatamente as que a API limita", () => {
+    expect(ordenadas(Object.keys(TIPO_DA_CONDICAO))).toEqual(ordenadas(DEZ));
     expect(ordenadas(INTEIRAS)).toEqual(ordenadas(Object.keys(LIMITES_INTEIROS_DAS_CONDICOES)));
   });
 
