@@ -71,7 +71,9 @@ estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0
   comercial nenhuma (guarda de alcance no repositório) e entra só no custo estimado interno: quantidade bruta = líquida ÷
   (1 − perda/100), aplicada pela base que a receita declara — `PER_DOSE`/`FIXED_BASIS` escalam, `PER_FINISHED_UNIT` não —
   com o custo unitário ainda dividido pela quantidade vendável. A grade ficou mais enxuta (resultado não parece campo,
-  Base sai da linha quando não decide material, embalagem redistribuída com o Item em ~50%), a "Apresentação" virou
+  Base sai da linha quando não decide material) e passou a ter LARGURA DECLARADA pelo PO em `table-layout: fixed`,
+  proporcional à área útil de 1.492px: composição 367/211/152/211/110/96/100/96/104/45 na cápsula — no pó os 96px de
+  "Por cápsula" vão para o Ingrediente, que fica em 463 — e embalagem 879/216/204/134/59. A "Apresentação" virou
   **Apresentação comercial** com as opções coerentes com a Forma, e as frases fixas viraram ⓘ. **Falta a avaliação
   visual do PO** — é dela que depende o fechamento;
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.

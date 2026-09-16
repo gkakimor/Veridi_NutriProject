@@ -3530,86 +3530,109 @@ button.help-flow__box:focus-visible {
 }
 
 /*
- * Larguras MÍNIMAS, não fixas. Com `width` fixa e a tabela a 100%, em 1280px
- * o navegador espremia as colunas abaixo do que o conteúdo precisa e o
- * seletor de base mostrava "Por d" — um número escondido é perigoso, um
- * rótulo cortado também. Com mínimos, a tabela cabe em 1440 e 1920 e, em
- * 1280, rola de lado com a ação fixa e cada célula legível.
+ * A GRADE DA BANCADA TEM LARGURA DECLARADA (FORMULATION-WORKBENCH-01).
+ *
+ * Antes eram larguras MÍNIMAS e o navegador distribuía a sobra: a mesma coluna
+ * media 200px numa tela e 310px na seguinte, e "Pureza" chegava a 193px porque
+ * a frase "referência atual do cadastro: 88,7%" não quebrava linha e puxava a
+ * coluna atrás de si. Quem confere a receita não escolhia nada disso.
+ *
+ * Agora é `table-layout: fixed` e a proporção é declarada, com os números que o
+ * PO fixou na área útil de 1.492px (janela de 1920):
+ *
+ *   composição/cápsula  ingrediente 367 · fonte 211 · pureza 152 · alvo 211 ·
+ *                       física 110 · por cápsula 96 · fornecimento 100 ·
+ *                       reserva 96 · por embalagem 104 · ações 45
+ *   composição/pó       os 96px da coluna "Por cápsula", que o pó não tem,
+ *                       vão para o INGREDIENTE: 463 no lugar de 367
+ *   embalagem           item 879 · quantidade 216 · fornecimento 204 ·
+ *                       por embalagem 134 · ações 59
+ *
+ * As colunas de RESULTADO e de campo curto ficam em px absolutos — o número
+ * que elas mostram não muda de tamanho com a janela. As quatro elásticas
+ * (ingrediente, fonte, pureza, alvo) dividem o que sobra na proporção acima, e
+ * por isso a grade continua respondendo à tela sem que a proporção escorregue.
+ * `min-width` na TABELA — não nas células, que o layout fixo ignora — é o piso
+ * abaixo do qual ela rola de lado em vez de espremer campo.
  */
-/* Item leva a sobra da largura; quantidade e métricas ficam compactas. */
-.table--formulacao .col-item {
-  min-width: 180px;
-  width: 20%;
+.table--formulacao {
+  table-layout: fixed;
+  width: 100%;
 }
 
-.table--formulacao .col-base {
-  min-width: 144px;
-}
+/*
+ * As larguras são PORCENTAGEM, e a soma para em 99,994%.
+ *
+ * Duas armadilhas do layout fixo, as duas medidas, não deduzidas.
+ *
+ * A primeira tentativa foi `calc((100% - <fixas>) * <fator>)`, que descreve a
+ * intenção melhor: colunas de resultado em px absolutos e as elásticas
+ * dividindo a sobra. O Chrome não resolve `calc()` com porcentagem na largura
+ * de COLUNA de tabela — a declaração inteira vira `auto` e o layout fixo
+ * distribui tudo em partes iguais, que é exatamente o que ela existia para
+ * evitar. Medido: as quatro elásticas saíram com 243px cada e a coluna de ações
+ * com 15px.
+ *
+ * A segunda: com as dez porcentagens somando 100,0002%, o Chrome atendeu as
+ * nove primeiras e ZEROU a última — a coluna de ações caiu para 15px, a largura
+ * do conteúdo, e os 30px dela foram redistribuídos, deixando cada coluna ~2%
+ * acima do alvo. Por isso a coluna do ITEM cede 0,006% em cada grade: a soma
+ * fecha em 99,994% e a última coluna sobrevive. A folga de 0,09px em 1.492
+ * não muda nenhum número arredondado.
+ *
+ * A proporção é calculada sobre a área útil de 1.492px (janela de 1920), e a
+ * tabela toda acompanha a largura junto. `min-width` é o piso: abaixo dele a
+ * grade rola de lado em vez de espremer campo.
+ */
+.table--formulacao-composicao { min-width: 1180px; }
+.table--formulacao-embalagem { min-width: 1000px; }
 
-.table--formulacao .col-fornecimento {
-  min-width: 88px;
-}
+/*
+ * COMPOSIÇÃO — pó (367 + 96 = 463 no ingrediente).
+ *
+ * Os 96px da coluna "Por cápsula", que o pó não tem, vão para o INGREDIENTE —
+ * é o nome do que se procura na linha, e é lá que a sobra rende.
+ * 463 · 211 · 152 · 211 · 110 · 100 · 96 · 104 · 45 = 1492px.
+ */
+.table--formulacao-composicao .col-item { width: 31.0261%; }
+.table--formulacao-composicao .col-fonte { width: 14.1421%; }
+.table--formulacao-composicao .col-pureza { width: 10.1877%; text-align: right; }
+.table--formulacao-composicao .col-quantidade { width: 14.1421%; }
+.table--formulacao-composicao .col-dose { width: 7.3727%; text-align: right; }
+.table--formulacao-composicao .col-regras { width: 6.7024%; }
+.table--formulacao-composicao .col-reserva { width: 6.4343%; text-align: right; }
+.table--formulacao-composicao .col-fisico { width: 6.9705%; text-align: right; }
+/* `th.` no seletor não é enfeite: `.table--sticky-actions th:last-child` declara
+   `width: 1%` — o truque de "encolher até o conteúdo" do layout automático — e
+   com uma classe e uma pseudo-classe ele vencia `.table--formulacao-composicao
+   .col-acoes`. A coluna de ações saía com 15px e os 30px que faltavam iam para
+   as outras, deixando cada uma ~2% acima do alvo. */
+.table--formulacao-composicao th.col-acoes,
+.table--formulacao-composicao td.col-acoes { width: 3.0161%; }
 
-.table--formulacao .col-quantidade {
-  min-width: 128px;
-}
+/*
+ * COMPOSIÇÃO — cápsula: a coluna "Por cápsula" existe e o ingrediente devolve
+ * exatamente os 96px dela. 367 · 211 · 152 · 211 · 110 · 96 · 100 · 96 · 104 ·
+ * 45 = 1492px. Nenhuma outra coluna muda entre as duas formas.
+ */
+.table--formulacao-composicao.table--com-capsula .col-item { width: 24.5918%; }
 
-
-/* Equivalente e físico: cada número na SUA coluna, sob o seu cabeçalho,
-   alinhado à direita, com a unidade colada ao valor. */
-.table--formulacao .col-equivalente,
-.table--formulacao .col-fisico {
-  min-width: 104px;
-  width: 104px;
+.table--formulacao-composicao.table--com-capsula .col-capsula {
+  width: 6.4343%;
   text-align: right;
 }
 
 /*
- * Colunas da BANCADA (FORMULATION-WORKBENCH-01): fonte/função, pureza e as
- * grandezas por dose e por cápsula. A composição tem mais colunas que a
- * embalagem porque responde mais perguntas; base e fornecimento passaram a
- * dividir uma célula, um sob o outro, para a largura sobrar onde a conta
- * aparece. Em 1440 a tabela continua cabendo; abaixo disso rola de lado com a
- * ação fixa, e cada célula segue legível.
+ * EMBALAGEM — o ITEM é o que se procura na linha e leva quase 60% da grade;
+ * quantidade e unidade dividem uma célula compacta.
+ * 879 · 216 · 204 · 134 · 59 = 1492px.
  */
-.table--formulacao .col-fonte {
-  min-width: 116px;
-}
-
-/* Pureza e reserva de produção: dois percentuais editáveis na própria linha.
-   A reserva pede um pouco mais que a pureza porque o rótulo é mais longo e a
-   coluna não pode espremer o campo até esconder o número. */
-.table--formulacao .col-pureza,
-.table--formulacao .col-reserva {
-  min-width: 88px;
-  width: 88px;
-  text-align: right;
-}
-
-.table--formulacao .col-reserva {
-  min-width: 96px;
-  width: 96px;
-}
-
-.table--formulacao .col-dose,
-.table--formulacao .col-capsula {
-  min-width: 96px;
-  width: 96px;
-  text-align: right;
-}
-
-/* Com a base fora da linha sobra UM seletor: a coluna deixou de precisar da
-   largura de dois campos empilhados. */
-.table--formulacao .col-regras {
-  min-width: 100px;
-  width: 100px;
-}
-
-.table--formulacao .col-regras__campos {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
+.table--formulacao-embalagem .col-item { width: 58.9083%; }
+.table--formulacao-embalagem .col-quantidade { width: 14.4772%; text-align: right; }
+.table--formulacao-embalagem .col-regras { width: 13.6729%; }
+.table--formulacao-embalagem .col-fisico { width: 8.9812%; text-align: right; }
+.table--formulacao-embalagem th.col-acoes,
+.table--formulacao-embalagem td.col-acoes { width: 3.9544%; }
 
 .table--formulacao td select,
 .table--formulacao td input[type="text"] {
@@ -3662,33 +3685,6 @@ button.help-flow__box:focus-visible {
   color: var(--ink-2);
 }
 
-/*
- * EMBALAGEM — a distribuição da grade (FORMULATION-WORKBENCH-01).
- *
- * A grade da embalagem nasceu com as larguras da composição, que tem nove
- * colunas: com quatro, a quantidade herdava um campo do tamanho do nome do
- * item e o Item — que é o que se procura na linha — ficava espremido. Aqui o
- * Item leva metade da largura, quantidade e unidade ficam compactas na mesma
- * célula e o fornecimento ocupa o necessário para o seletor.
- */
-.table--formulacao-embalagem .col-item {
-  width: 50%;
-}
-
-.table--formulacao-embalagem .col-quantidade {
-  width: 20%;
-  min-width: 132px;
-}
-
-.table--formulacao-embalagem .col-regras {
-  width: 18%;
-  min-width: 132px;
-}
-
-.table--formulacao-embalagem .col-fisico {
-  width: auto;
-}
-
 /* Quantidade de embalagem é 1, 2, 120 — número curto. O campo acompanha. */
 .table--formulacao-embalagem .quantidade-unidade input {
   flex: 0 1 72px;
@@ -3707,6 +3703,8 @@ button.help-flow__box:focus-visible {
  * mostrar. O número em si continua `nowrap` — é ele que não pode partir.
  */
 .table--formulacao .col-fisico .cell-sub,
+.table--formulacao .col-pureza .cell-sub,
+.table--formulacao .col-item .cell-sub,
 .table--formulacao .col-fonte,
 .table--formulacao .col-fonte .cell-sub {
   white-space: normal;
