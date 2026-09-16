@@ -5148,6 +5148,58 @@ foco que sai, espiada, dica, celular, saída do mouse). Smoke no Chromium real (
 gravado): 47 verificações em 1440, 1366×600, 390 com toque, 1024 com toque e expandido, console só com os 503
 declarados das telas sem API. Typecheck web. Sem migration.
 
+## Pagamento padrão do Cliente (CUSTOMER-PAYMENT-DEFAULTS-01, 2026-09-16)
+
+**Fecha CUSTOMER-PAYMENT-DEFAULTS-01** ([discovery](discovery/CUSTOMER-PAYMENT-DEFAULTS-DISCOVERY-01.md), D1–D6 do PO).
+Regra durável no §99. Na `main`, fora de PROD (`release/prod` segue `5b7c1a3`).
+
+**Schema.** Migration aditiva `20260925093032_customer_payment_defaults`: enum `PaymentInstrument` (PIX, BOLETO,
+BANK_TRANSFER, CARD, OTHER); `customers` + seis colunas `default*` nulas; `quote_versions.paymentInstrument`;
+`customer_orders.agreedPaymentInstrument`. Sem DEFAULT, NOT NULL, UPDATE nem backfill. `pnpm validate:migrations:fresh`
+verde.
+
+**Shared.** `packages/shared/src/payment.ts`: `PAYMENT_INSTRUMENTS` e rótulos, `CustomerPaymentDefaultsDTO`,
+`PARCELADO_SEM_PARCELAS_MESSAGE` e `parceladoSemParcelas`. `CustomerDTO` estende o DTO do padrão; contratos de criação e
+alteração do Cliente com os seis campos; `QuoteVersionDTO` com `paymentInstrument` e `customerPaymentDefaults` (só em
+rascunho); `UpdateQuoteVersionInput.paymentInstrument`; `CustomerOrderCommercialOriginDTO.paymentInstrument`.
+
+**API.** Campos da condição num lugar só (`lib/payment-condition-schema.ts`, os mesmos limites do Orçamento para o
+Cliente) e a regra em `lib/payment-condition.ts`: `condicaoPadraoParaGravar` (PATCH parcial contra o gravado, à vista ou
+não informada limpa o parcelamento, parcelado sem parcelas recusa), `pagamentoInicialDoCliente` (a cópia da primeira
+proposta real) e `InstallmentsWithoutCountError` → 400 `validation_error` com `issues[].path`. O PATCH do Cliente resolve
+o bloco sob `FOR UPDATE` quando o corpo toca a condição. `createQuoteVersion` copia o padrão quando não há versão MANUAL
+no projeto (V1 ou primeira depois de só legado) e copia `paymentInstrument` da anterior nas demais; `duplicateQuoteVersion`
+copia a forma da origem; `updateQuoteVersion` passou a gravar em transação com `FOR UPDATE` e recusa parcelado sem
+parcelas no estado resultante; a simulação e o envio recusam o mesmo. O DTO da versão lê só colunas da versão;
+`customerPaymentDefaults` vem do cadastro atual e só no rascunho. `createOrderFromAcceptedQuote` congela
+`agreedPaymentInstrument`.
+
+**Web.** Orçamento: select "Forma de pagamento" (Não informada + cinco) e o antigo renomeado para "Condição de
+pagamento" (id `quote-payment-method` mantido); a forma é a 10ª condição de `quote-conditions-draft` (tabela de tipos,
+`camposDe`, `paraEnvio`, comparação) — pendência, simulação, salvar, envio preso e guarda de saída sem mecânica nova.
+"Aplicar padrão do cliente" (`aplicarPadraoDoCliente`, `padraoDoClienteDifere`) preenche só a tela, com a frase do padrão
+ao lado; Parcelas vazio no parcelado mostra a frase do servidor e prende Salvar e Simular. Leitura da versão com Forma e
+Condição. Cliente: seção "Pagamento padrão" no formulário e na consulta, com os mesmos `PercentField`/`IntegerField`,
+limites e dicas do Orçamento; criação envia só o escolhido, edição envia o bloco. Pedido: Origem comercial com Forma
+(congelada) e Condição. PDF do Orçamento: "Forma de pagamento" opcional, "Condição de pagamento" e "Observações de
+pagamento". Ajuda do Cliente e do Orçamento atualizada.
+
+**Preservado.** Matemática do plano (`buildPaymentSchedule`), JSON congelado do Pedido, coluna `paymentMethod`, versões
+legadas, Pedido direto (sem forma), permissões do §98.
+
+**Validação.** API: suíte inteira (174 arquivos, 4.151 testes) com 1 falha que já existia na base — a guarda
+`paginacao-da-consulta.test.ts` conta 60 declarações de paginação e a tabela tem 29 consultas, porque
+`stock-count.schemas.ts` (INVENTORY-PHYSICAL-COUNT-01) não entrou nela; nada desta rodada toca paginação (BACKLOG
+D-17) — e a faixa serial à parte (8 arquivos). Dois arquivos novos: `customer-payment-defaults.test.ts` (34 casos) e
+`pagamento-padrao-no-orcamento.test.ts` (22, com o Pedido gerado pelo caminho real: envio, aceite, aprovação). Shared:
+`payment.test.ts` (10). Web: áreas tocadas e ajuda — 95 arquivos e 1.313 testes antes do rebase, 103 e 1.398 depois,
+com o shell novo da `main`; novos `aplicar-padrao-do-cliente.test.tsx` (14) e `pagamento-padrao.test.tsx` (13), e
+casos novos na guarda de saída do Orçamento, na Origem comercial e no PDF (5, pelo texto do arquivo gerado). Os testes
+que liam "Forma de pagamento" como à vista/parcelado passaram a ler "Condição de pagamento", e as tabelas de nove
+condições viraram dez. Mutação provada: 21 (API 12, web 9). `pnpm validate:migrations:fresh` verde (81 migrations,
+sem drift, banco descartável removido). Typecheck dos três pacotes antes e depois do rebase. Sem smoke no navegador,
+E2E, suíte web completa ou Railway.
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a

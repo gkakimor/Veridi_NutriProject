@@ -6395,3 +6395,61 @@ existente nos fluxos em que já trabalham, mas não criam nem alteram.
   existentes não mudam. O cadastro não tem trilha de antes/depois dos campos —
   só autoria e data da criação e da última alteração
   (CUSTOMER-MASTER-DATA-AUDIT-01, futuro).
+
+## §99 — Forma e condição de pagamento: o padrão do Cliente é sugestão copiada
+
+CUSTOMER-PAYMENT-DEFAULTS-01, 2026-09-16, decisões D1–D6 do PO
+([discovery](discovery/CUSTOMER-PAYMENT-DEFAULTS-DISCOVERY-01.md)).
+
+**Vocabulário.** *Forma de pagamento* é o MEIO — PIX, Boleto, Transferência,
+Cartão, Outro (`PaymentInstrument`, lista e rótulos em
+`packages/shared/src/payment.ts`); não muda valor, juros, desconto nem
+vencimento, e "não informada" é `null`. *Condição de pagamento* é o PRAZO — à
+vista ou parcelado, com entrada, parcelas, intervalo e juros (`paymentMethod` e
+os quatro campos, nomes de coluna mantidos). O texto livre `paymentTerms`,
+quando exibido, é *Observações de pagamento*.
+
+- **O Cliente guarda um padrão OPCIONAL.** Seis colunas nulas
+  (`defaultPaymentInstrument`, `defaultPaymentMethod`,
+  `defaultDownPaymentPercent`, `defaultInstallmentCount`,
+  `defaultInstallmentIntervalDays`, `defaultMonthlyInterestPercent`), com os
+  mesmos tipos, limites e mensagens das condições do Orçamento. Cliente que já
+  existia fica inteiro em `null`; nada é inferido. Condição não informada ou à
+  vista não guarda parcelamento. Criar e alterar o padrão seguem o §98 (ADMIN e
+  COMMERCIAL); os demais perfis leem o padrão na consulta.
+- **Parcelado exige parcelas — no Cliente e no Orçamento.** A API recusa com
+  400 `validation_error` no campo das parcelas ("Parcelado exige o número de
+  parcelas.") o estado que a gravação produziria: PATCH parcial se resolve
+  contra o gravado, sob trava da linha. Vale para salvar, simular e enviar; a
+  tela recusa o mesmo ao lado do campo. Rascunho que já estava assim não é
+  enviado até ser corrigido. A conta do plano não mudou.
+- **Uma cópia, na primeira proposta real.** A versão criada sem nenhuma versão
+  anterior de origem MANUAL — a V1, ou a primeira depois de só haver legado
+  (`LEGACY_IMPORT`/`ARCHIVED`, que não mudam) — grava na PRÓPRIA versão a forma
+  do cliente e, quando o cliente tem condição, a condição inteira; sem condição
+  no cliente, a versão nasce como nascia. Forma e condição vêm cada uma de uma
+  fonte só.
+- **Depois disso a versão é dela.** Nenhuma leitura cai para o cliente
+  (`quote.x ?? customer.defaultX` é proibido). V2 em diante e a recompra em
+  projeto aprovado copiam a versão anterior; duplicar copia a versão escolhida
+  como origem; pedir versão nova com rascunho aberto devolve o rascunho como
+  está. Mudar ou limpar o padrão do cliente não altera versão nem Pedido.
+- **Trocar o Cliente do Projeto não sobrescreve** forma nem condição do
+  rascunho. O rascunho recebe o padrão ATUAL do cliente à parte
+  (`customerPaymentDefaults`, só em DRAFT) e oferece **"Aplicar padrão do
+  cliente"** — só a ADMIN/COMMERCIAL, com cliente que tem padrão e padrão
+  diferente dos campos. Aplicar preenche forma e condição NA TELA, sem gravar
+  (validade, prazo, desconto e observações ficam); vira "Alterações não
+  salvas", prende o envio e a saída da página, e segue para Simular, Salvar ou
+  Descartar.
+- **O Pedido congela a forma.** `CustomerOrder.agreedPaymentInstrument` recebe a
+  forma da proposta aceita na geração do Pedido; a Origem comercial mostra
+  Forma e Condição de pagamento. `null` em Pedido direto, anterior à coluna ou
+  de proposta sem forma. O Cliente não é lido depois da conversão.
+- **Documento.** O PDF do Orçamento mostra, em Condições comerciais, "Forma de
+  pagamento" (some quando não informada), "Condição de pagamento" (À vista ou
+  Parcelado em N×, pelo plano; sem total, pela condição gravada) e
+  "Observações de pagamento" (o texto livre, quando houver). Proposta antiga
+  reimpressa: mesmos valores, rótulos novos.
+- **Só escritas futuras.** Migration aditiva, sem UPDATE nem backfill; nada é
+  preenchido em cliente, versão ou Pedido existentes.
