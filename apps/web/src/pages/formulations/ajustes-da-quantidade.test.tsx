@@ -46,7 +46,7 @@ import {
   updateFormulationVersion,
 } from "../../lib/formulations-api";
 import { FormulationVersionPage } from "./FormulationVersionPage";
-import { resumoDosAjustes } from "./AjustesDaQuantidade";
+import { resumoDosAjustes } from "../formulation-workbench/AjustesDaQuantidade";
 
 function componente(overrides: Partial<FormulationComponentDTO> = {}): FormulationComponentDTO {
   return {

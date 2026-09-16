@@ -73,8 +73,8 @@ import {
   normalizarAjustes,
   resumoDosAjustes,
   useAjustesEmEdicao,
-} from "../formulations/AjustesDaQuantidade";
-import type { AjustesDaQuantidade } from "../formulations/AjustesDaQuantidade";
+} from "../formulation-workbench/AjustesDaQuantidade";
+import type { AjustesDaQuantidade } from "../formulation-workbench/AjustesDaQuantidade";
 import { TableEmptyRow } from "../../components/TableEmptyRow";
 
 /**

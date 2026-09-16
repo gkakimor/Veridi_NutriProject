@@ -7,14 +7,9 @@ import type {
   FormulationActivationImpactDTO,
   FormulationCalculationMode,
   FormulationComponentBasis,
-  FormulationComponentQuantityMode,
   FormulationCostEstimateDTO,
   FormulationVersionDTO,
   IndustrialMaterialCostSource,
-  ItemDTO,
-  ItemFamily,
-  ItemType,
-  PackagingSubtype,
   PresentationType,
   SecaoDaFormula,
   SupplyResponsibility,
@@ -24,39 +19,30 @@ import {
   COST_QUALITY_LABELS,
   FORMULATION_CALCULATION_MODES,
   FORMULATION_CALCULATION_MODE_LABELS,
-  FORMULATION_COMPONENT_BASES,
-  FORMULATION_COMPONENT_BASIS_LABELS,
   FORMULATION_VERSION_STATUS_LABELS,
   INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS,
-  SUPPLY_RESPONSIBILITIES,
-  SUPPLY_RESPONSIBILITY_LABELS,
   DOSAGE_FORM_LABELS,
   FORMAS_DA_BANCADA,
-  SECAO_DO_TIPO_DE_ITEM,
-  ITEM_FAMILY_LABELS,
   MENSAGENS_DA_APRESENTACAO,
-  PACKAGING_SUBTYPE_LABELS,
   PRESENTATION_TYPES,
   PRESENTATION_TYPE_LABELS,
   TARGET_AGE_GROUP_LABELS,
   ajustesAutorizados,
   apresentacoesDaForma,
-  calcularQuantidadeDaDose,
-  calcularQuantidadeDoComponente,
   capsulasPorEmbalagem,
   dosesPorEmbalagemDaApresentacao,
   formaDerivaDoses,
+  secaoDoItem,
   quantidadeBrutaPlanejada,
   rendimentoEsperado,
   resumirDoses,
 } from "@veridi/shared";
 import { CalcHint } from "../../components/help/CalcHint";
-import { DecimalField, IntegerField, PercentField } from "../../components/NumericField";
+import { DecimalField, IntegerField } from "../../components/NumericField";
 import { decimalDaApiComparavel } from "../../lib/dirty-fields";
 import { lerInteiroOpcional } from "../../lib/integer-input";
 import { numericInvalidMessage, parsePtBrNumber, toPtBrEditText, formatIntegerPtBr, formatPercentPtBr } from "../../lib/numeric-ptbr";
 import {
-  CASAS_PERCENTUAL_TECNICO,
   CASAS_QUANTIDADE,
   OPCOES_PERCENTUAL_TECNICO,
   OPCOES_QUANTIDADE,
@@ -68,7 +54,7 @@ import {
   getFormulationVersion,
   updateFormulationVersion,
 } from "../../lib/formulations-api";
-import { getItem, listItems } from "../../lib/items-api";
+import { getItem } from "../../lib/items-api";
 import { listUnits } from "../../lib/units-api";
 import { unidadesDaDimensao } from "../../lib/uom-options";
 import { ApiValidationError } from "../../lib/api-errors";
@@ -76,70 +62,59 @@ import { decimalLegivel, exigirDecimal, exigirDecimalOpcional } from "../../lib/
 import { getFormulationCostEstimate } from "../../lib/costs-api";
 import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
-import { ContextHelp, InfoHint } from "../../components/help";
-import { helpHints, helpTopics } from "../../help/help-content";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
 import { FormulationTemplateOrigin } from "../formulation-templates/FormulationTemplateOrigin";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink, entityHref } from "../../components/EntityLink";
 import { useAuth } from "../../app/AuthProvider";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
-import { formatQuantity, formatQuantityWithUnit } from "../../lib/quantity";
+import { formatQuantity } from "../../lib/quantity";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
-import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 /*
-  O painel "O que a quantidade informada significa" saiu da Formulação
-  (FORMULATION-WORKBENCH-01, homologação). Pureza e reserva de produção são
-  COLUNAS da linha, e o que a pureza faz deixou de ser uma marca escondida
-  atrás de um expansível. O componente continua vivo: o Modelo de Formulação
-  é outra tela e continua com ele. O que fica aqui é a VALIDAÇÃO dos dois
-  percentuais, que é a mesma nas duas telas e não pode divergir.
+  A BANCADA MORA EM `formulation-workbench` (FORMULATION-TEMPLATE-WORKBENCH-01,
+  fatia 2).
+
+  A grade da receita, as premissas da forma, a prévia do cálculo e o catálogo de
+  itens deixaram esta página e viraram componentes: o Modelo de Formulação edita
+  a MESMA receita, e enquanto cada tela tinha a sua cópia da bancada, a correção
+  feita de um lado só não alcançava o outro. O que ficou aqui é o DOCUMENTO —
+  produto, cliente, ciclo de vida da versão, custo estimado, proveniência e
+  ficha técnica —, que é o que esta tela tem e o Modelo não.
 */
-import { errosDosAjustes } from "./AjustesDaQuantidade";
-import type { AjustesDaQuantidade } from "./AjustesDaQuantidade";
-import { TableEmptyRow } from "../../components/TableEmptyRow";
-
-/**
- * As duas seções da bancada, pelo TIPO REAL do Item — nunca pelo texto do
- * cadastro: "Cápsula" é matéria-prima num produto e embalagem em outro, e quem
- * responde isso é o tipo, não o nome.
- */
-/*
- * A tabela mora no shared (FORMULATION-TEMPLATE-WORKBENCH-01): a Formulação e o
- * Modelo mostram a MESMA divisão, e duas cópias divergiriam no primeiro tipo de
- * Item reclassificado. O mapa é idêntico ao que estava aqui — produto acabado
- * segue visível na composição, onde `componentIssues` explica por que a versão
- * não ativa.
- */
-const SECAO_DO_TIPO = SECAO_DO_TIPO_DE_ITEM;
-
-interface ItemOption {
-  id: string;
-  code: string;
-  name: string;
-  type: ItemType;
-  unitCode: string;
-  unitDimension: string;
-  active: boolean;
-  /** Dados técnicos do cadastro — a linha nova nasce com eles preenchidos. */
-  sourceName: string | null;
-  declaredNutrient: string | null;
-  family: ItemFamily | null;
-  packagingSubtype: PackagingSubtype | null;
-  defaultPurityPercent: string | null;
-  externalCode: string | null;
-}
-
-/**
- * Primeira página do catálogo — o que a lista mostra antes de digitar.
- *
- * Era 1000 por tipo, e o catálogo tem 1.211 matérias-primas ativas: 211
- * existiam e não apareciam na busca, sem aviso. Quem digita agora pergunta
- * ao servidor (`buscarItens`), que conhece o catálogo inteiro.
- */
-const PRIMEIRA_PAGINA = 50;
+import { Dica } from "../formulation-workbench/dicas";
+import { PremissasDaForma } from "../formulation-workbench/PremissasDaForma";
+import type { PremissasDaFormaValores } from "../formulation-workbench/PremissasDaForma";
+import { PremissasDeProducao } from "../formulation-workbench/PremissasDeProducao";
+import { ResumoDaReceita } from "../formulation-workbench/ResumoDaReceita";
+import { StickyActionBar } from "../formulation-workbench/StickyActionBar";
+import { TabelaDaReceita } from "../formulation-workbench/TabelaDaReceita";
+import { useCatalogoDeItens, opcaoDoItem, itemDaBancada } from "../formulation-workbench/catalogo-de-itens";
+import type { ItemDaBancada } from "../formulation-workbench/catalogo-de-itens";
+import {
+  CAMPOS_DO_COMPONENTE,
+  absorverChaves,
+  chaveDeErro,
+  comAjustesDaBancada,
+  comItemEscolhido,
+  errosDaLinha,
+  idDoCampo,
+  linhaNova,
+  proximaChaveDaLinha,
+  purezaRegistradaSemAplicar,
+  secaoDaLinha,
+} from "../formulation-workbench/linha-da-receita";
+import type { CampoDoComponente, LinhaDaReceita } from "../formulation-workbench/linha-da-receita";
+import {
+  operandosDoFisico,
+  previaDaDose,
+  previaDoComponente,
+  unidadesDoMotor,
+} from "../formulation-workbench/previa-do-calculo";
 
 /**
  * Lote de referência da simulação da perda, em unidade do produto acabado.
@@ -150,82 +125,6 @@ const PRIMEIRA_PAGINA = 50;
  */
 const LOTE_DA_SIMULACAO = "1000";
 
-/** Uma conversão só de item do catálogo para opção da tela. */
-function itemOption(item: ItemDTO): ItemOption {
-  return {
-    id: item.id,
-    code: item.code,
-    name: item.name,
-    type: item.type,
-    unitCode: item.unitCode,
-    unitDimension: item.unit.dimension,
-    active: item.active,
-    sourceName: item.sourceName,
-    declaredNutrient: item.declaredNutrient,
-    family: item.family,
-    packagingSubtype: item.packagingSubtype,
-    defaultPurityPercent: item.defaultPurityPercent,
-    externalCode: item.externalCode,
-  };
-}
-
-/** Um formato só de rótulo: o da lista inicial e o da busca não podem divergir. */
-function opcaoDoItem(item: ItemOption): EntityOption {
-  return {
-    id: item.id,
-    code: item.code,
-    name: item.name,
-    ...(item.active ? {} : { hint: "inativo" }),
-  };
-}
-
-interface ComponentRow {
-  key: string;
-  itemId: string;
-  itemCode: string;
-  itemName: string;
-  itemActive: boolean;
-  stockUnitCode: string;
-  quantity: string;
-  unitCode: string;
-  basis: FormulationComponentBasis;
-  supplyResponsibility: SupplyResponsibility;
-  purityPercentApplied: string;
-  overagePercent: string;
-  quantityMode: FormulationComponentQuantityMode;
-  applyPurityAdjustment: boolean;
-  applyOverageAdjustment: boolean;
-  notes: string;
-  /**
-   * Grandezas AUTORITATIVAS do servidor, por unidade acabada e na unidade de
-   * estoque. Nada aqui é recalculado a partir de pureza, overage, doses ou
-   * conversão: a prévia do rascunho chama a mesma função do motor, e a versão
-   * gravada usa o que a API já respondeu.
-   */
-  theoreticalPerUnit: string | null;
-  physicalPerUnit: string | null;
-  /**
-   * As mesmas grandezas por DOSE e por CÁPSULA, na unidade declarada. Do
-   * servidor na versão gravada; da prévia (mesma função) enquanto se edita.
-   */
-  theoreticalPerDose: string | null;
-  physicalPerDose: string | null;
-  physicalPerCapsule: string | null;
-  /** Tipo real do Item — decide a seção. `null` enquanto a linha não tem item. */
-  itemType: ItemType | null;
-  /** Onde a linha nasceu, usado só enquanto ela não tem item. */
-  secao: SecaoDaFormula;
-  /** Cadastro do Item, para a linha explicar de onde veio — nunca cálculo. */
-  itemSourceName: string | null;
-  itemDeclaredNutrient: string | null;
-  itemFamily: ItemFamily | null;
-  itemPackagingSubtype: PackagingSubtype | null;
-  /** Pureza do cadastro HOJE; a aplicada nesta versão é `purityPercentApplied`. */
-  itemDefaultPurityPercent: string | null;
-  /** Código do sistema legado do Item. `null` = item sem legado, e a linha cala. */
-  itemExternalCode: string | null;
-}
-
 function statusBadgeClass(status: FormulationVersionDTO["status"]): string {
   switch (status) {
     case "ACTIVE":
@@ -234,25 +133,6 @@ function statusBadgeClass(status: FormulationVersionDTO["status"]): string {
       return "badge badge--warn";
     case "INACTIVE":
       return "badge badge--neutral";
-  }
-}
-
-let rowKeySeq = 0;
-function nextRowKey(): string {
-  rowKeySeq += 1;
-  return `component-${rowKeySeq}`;
-}
-
-/**
- * O contador reinicia junto com o módulo, e o rascunho atravessa um F5 na
- * tela de cadastro de item: sem empurrá-lo para além das chaves
- * restauradas, "Adicionar componente" devolveria uma chave que uma linha já
- * usa — e duas linhas passariam a mudar juntas.
- */
-function absorverChaves(linhas: ComponentRow[]) {
-  for (const linha of linhas) {
-    const numero = Number(linha.key.split("-")[1]);
-    if (Number.isFinite(numero) && numero > rowKeySeq) rowKeySeq = numero;
   }
 }
 
@@ -276,7 +156,7 @@ type RascunhoVersao = {
   packageContentAmount: string;
   packageContentUomCode: string;
   notes: string;
-  components: ComponentRow[];
+  components: LinhaDaReceita[];
 };
 
 /**
@@ -395,9 +275,9 @@ function campoDaRecusaNaTela(motivo: ApresentacaoBlock): string {
   return "doseUomCode";
 }
 
-function rowFromDTO(component: FormulationVersionDTO["components"][number]): ComponentRow {
+function rowFromDTO(component: FormulationVersionDTO["components"][number]): LinhaDaReceita {
   return {
-    key: nextRowKey(),
+    key: proximaChaveDaLinha(),
     itemId: component.itemId,
     itemCode: component.itemCode,
     itemName: component.itemName,
@@ -420,119 +300,13 @@ function rowFromDTO(component: FormulationVersionDTO["components"][number]): Com
     physicalPerDose: component.physicalPerDose ?? null,
     physicalPerCapsule: component.physicalPerCapsule ?? null,
     itemType: component.itemType,
-    secao: SECAO_DO_TIPO[component.itemType] ?? "COMPOSICAO",
+    secao: secaoDaLinha({ itemType: component.itemType, secao: "COMPOSICAO" }),
     itemSourceName: component.itemSourceName ?? null,
     itemDeclaredNutrient: component.itemDeclaredNutrient ?? null,
     itemFamily: component.itemFamily ?? null,
     itemPackagingSubtype: component.itemPackagingSubtype ?? null,
     itemDefaultPurityPercent: component.itemDefaultPurityPercent ?? null,
     itemExternalCode: component.itemExternalCode ?? null,
-  };
-}
-
-/** A configuração de ajustes da linha — a forma que a validação compartilhada lê. */
-function ajustesDaLinha(row: ComponentRow): AjustesDaQuantidade {
-  return {
-    quantityMode: row.quantityMode,
-    purityPercentApplied: row.purityPercentApplied,
-    overagePercent: row.overagePercent,
-    applyPurityAdjustment: row.applyPurityAdjustment,
-    applyOverageAdjustment: row.applyOverageAdjustment,
-  };
-}
-
-/**
- * O CONTRATO da bancada, numa linha de matéria-prima: a pureza informada
- * participa da conta, e a reserva de produção não.
- *
- * Antes, preencher a pureza não bastava — era preciso abrir um painel, trocar
- * o modo da quantidade e marcar uma caixa. Três gestos para dizer o que a
- * planilha da Veridi diz com um número, e dois estados possíveis para a mesma
- * coluna preenchida: quem lia "70" não sabia se a conta usava 70. Agora a
- * coluna É a resposta — física por dose = alvo ÷ (pureza ÷ 100), pelo motor de
- * sempre.
- *
- * A RESERVA DE PRODUÇÃO (`overagePercent`) fica registrada e NUNCA multiplica a
- * dose: ela é percentual previsto para o lote, e a planilha real traz 10% no
- * Ácido Fólico e 2% no Beef sem que a dose formulada mude. Aplicá-la aqui
- * inflaria a dose de cada cápsula.
- *
- * Vale só na COMPOSIÇÃO: a linha de embalagem não tem pureza, e mexer no modo
- * dela seria reescrever configuração que ninguém pediu para mudar.
- */
-function comAjustesDaBancada(row: ComponentRow): ComponentRow {
-  if (secaoDaLinha(row) !== "COMPOSICAO") return row;
-  const pureza = decimalLegivel(row.purityPercentApplied, OPCOES_PERCENTUAL_TECNICO);
-  const corrigePelaPureza = pureza !== null && Number(pureza) > 0;
-  return {
-    ...row,
-    quantityMode: corrigePelaPureza ? "THEORETICAL_WITH_ADJUSTMENTS" : "PHYSICAL_DIRECT",
-    applyPurityAdjustment: corrigePelaPureza,
-    applyOverageAdjustment: false,
-  };
-}
-
-/**
- * Esta linha tem pureza gravada que a conta NÃO usa?
- *
- * Só acontece em versão histórica, gravada sob o contrato antigo (pureza
- * registrada sem autorizar a correção). A tela diz isso onde acontece, porque
- * um documento fechado que mostra "70%" ao lado de um físico não corrigido
- * estaria mentindo por omissão. Num rascunho a resposta é sempre `false`: o
- * contrato de hoje não produz esse estado.
- */
-function purezaRegistradaSemAplicar(row: ComponentRow): boolean {
-  return row.purityPercentApplied.trim() !== "" && !ajustesAutorizados(row).purity;
-}
-
-/**
- * Validação por CAMPO e por LINHA, antes de qualquer chamada.
- *
- * `exigirDecimal` interrompia na primeira recusa com uma frase na faixa do
- * topo. Numa receita de doze linhas isso obrigava a procurar a linha — e se o
- * campo morasse no painel de ajustes fechado, nem havia pista. Cada erro agora
- * nomeia o componente E o campo, marca o próprio campo (`aria-invalid`, mensagem
- * ligada por `aria-describedby`) e a tela leva a pessoa até o primeiro deles.
- */
-type CampoDoComponente = "quantity" | "unitCode" | "purityPercentApplied" | "overagePercent";
-
-/** Ordem de leitura na linha: é a ordem em que o primeiro erro é escolhido. */
-const CAMPOS_DO_COMPONENTE: readonly CampoDoComponente[] = [
-  "quantity",
-  "unitCode",
-  "purityPercentApplied",
-  "overagePercent",
-];
-
-/** Um id só por campo: o input, a mensagem e o foco falam dele pelo mesmo nome. */
-function idDoCampo(rowKey: string, campo: CampoDoComponente): string {
-  return `comp-${rowKey}-${campo}`;
-}
-
-function chaveDeErro(rowKey: string, campo: CampoDoComponente): string {
-  return `components.${rowKey}.${campo}`;
-}
-
-/** Regras de uma linha — as mesmas que o servidor aplica, ditas antes de enviar. */
-function errosDaLinha(row: ComponentRow): Partial<Record<CampoDoComponente, string>> {
-  const nome = row.itemCode || row.itemName || "Componente";
-  const erros: Partial<Record<CampoDoComponente, string>> = {};
-
-  const quantidade = parsePtBrNumber(row.quantity, OPCOES_QUANTIDADE);
-  if (quantidade.tipo === "vazio") {
-    erros.quantity = `${nome} — Quantidade é obrigatória.`;
-  } else if (quantidade.tipo === "invalido") {
-    erros.quantity = `${nome} — ${numericInvalidMessage("Quantidade", quantidade.motivo, OPCOES_QUANTIDADE)}`;
-  } else if (/^[0.]+$/.test(quantidade.valor)) {
-    erros.quantity = `${nome} — Quantidade deve ser maior que zero.`;
-  }
-  if (!row.unitCode) erros.unitCode = `${nome} — Unidade é obrigatória.`;
-
-  // Pureza e reserva: as mesmas regras do Modelo de Formulação, num lugar só —
-  // só o rótulo da recusa muda, porque o campo se chama outra coisa aqui.
-  return {
-    ...erros,
-    ...errosDosAjustes(ajustesDaLinha(row), nome, "Reserva %"),
   };
 }
 
@@ -544,329 +318,10 @@ function seloDaFonte(source: IndustrialMaterialCostSource): string {
 }
 
 /**
- * Prévia do físico ENQUANTO se digita.
- *
- * As colunas de equivalente e de físico vinham do servidor, então uma linha
- * nova ou recém-editada mostrava um travessão até salvar — e é justamente
- * enquanto se edita que a pessoa precisa ver o efeito do que está fazendo.
- * Descobrir o número depois de gravar é descobrir tarde.
- *
- * A conta vem de `@veridi/shared`, a MESMA função que a API chama. Recalcular
- * aqui com uma cópia da fórmula criaria um segundo motor, e duas contas para o
- * mesmo número acabam discordando — com a agravante de que a que aparece na
- * tela seria a que ninguém usa.
- *
- * Devolve `null` quando a conta não é possível (premissa ausente, unidade
- * incompatível). `null` vira travessão, nunca zero: zero seria "não precisa de
- * material".
- */
-function previaDoComponente(
-  row: ComponentRow,
-  basisQuantity: string,
-  dosesPerPackage: number | null,
-  units: UnitOfMeasureDTO[],
-): { teorico: string; fisico: string } | null {
-  const quantidade = decimalLegivel(row.quantity, OPCOES_QUANTIDADE);
-  if (quantidade === null) return null;
-
-  const resultado = calcularQuantidadeDoComponente(
-    {
-      basis: row.basis,
-      quantity: quantidade,
-      unitCode: row.unitCode,
-      stockUnitCode: row.stockUnitCode,
-      purityPercent: decimalLegivel(row.purityPercentApplied, OPCOES_PERCENTUAL_TECNICO),
-      overagePercent: decimalLegivel(row.overagePercent, OPCOES_PERCENTUAL_TECNICO),
-      quantityMode: row.quantityMode,
-      applyPurityAdjustment: row.applyPurityAdjustment,
-      applyOverageAdjustment: row.applyOverageAdjustment,
-    },
-    1,
-    { basisQuantity: decimalLegivel(basisQuantity, OPCOES_QUANTIDADE) ?? "0", dosesPerPackage },
-    units.map((u) => ({ code: u.code, dimension: u.dimension, toBaseFactor: u.toBaseFactor })),
-  );
-
-  if (typeof resultado === "string") return null;
-  return { teorico: resultado.theoretical.toString(), fisico: resultado.physical.toString() };
-}
-
-/** As unidades como o motor compartilhado as consome. */
-function unidadesDoMotor(units: UnitOfMeasureDTO[]) {
-  return units.map((unit) => ({
-    code: unit.code,
-    dimension: unit.dimension,
-    toBaseFactor: unit.toBaseFactor,
-  }));
-}
-
-/**
- * Prévia da DOSE — alvo, física e por cápsula — enquanto se digita.
- *
- * É a mesma função que a API chama (`calcularQuantidadeDaDose`), pelo mesmo
- * motivo da prévia por embalagem: a bancada existe para mostrar o efeito da
- * pureza e das cápsulas ANTES de gravar, e um número que a API não confirmaria
- * é pior que número nenhum. `null` vira travessão — nunca zero.
- */
-function previaDaDose(
-  row: ComponentRow,
-  capsulasPorDose: number | null,
-  units: UnitOfMeasureDTO[],
-): { teorica: string; fisica: string; porCapsula: string | null } | null {
-  const quantidade = decimalLegivel(row.quantity, OPCOES_QUANTIDADE);
-  if (quantidade === null) return null;
-
-  const resultado = calcularQuantidadeDaDose(
-    {
-      basis: row.basis,
-      quantity: quantidade,
-      unitCode: row.unitCode,
-      purityPercent: decimalLegivel(row.purityPercentApplied, OPCOES_PERCENTUAL_TECNICO),
-      overagePercent: decimalLegivel(row.overagePercent, OPCOES_PERCENTUAL_TECNICO),
-      quantityMode: row.quantityMode,
-      applyPurityAdjustment: row.applyPurityAdjustment,
-      applyOverageAdjustment: row.applyOverageAdjustment,
-    },
-    capsulasPorDose,
-    unidadesDoMotor(units),
-  );
-  if (resultado === null || typeof resultado === "string") return null;
-  return {
-    teorica: resultado.teorica.toFixed(),
-    fisica: resultado.fisica.toFixed(),
-    porCapsula: resultado.porCapsula ? resultado.porCapsula.toFixed() : null,
-  };
-}
-
-/** Onde a linha aparece: o tipo real do Item manda; sem item, onde ela nasceu. */
-function secaoDaLinha(row: ComponentRow): SecaoDaFormula {
-  return row.itemType ? SECAO_DO_TIPO[row.itemType] : row.secao;
-}
-
-/**
- * A linha com o item escolhido — e com o que o cadastro do Item já sabe.
- *
- * Fonte, nutriente, família e pureza vêm do cadastro: redigitar o que já está
- * cadastrado é trabalho repetido e é divergência esperando acontecer. A pureza
- * entra como a APLICADA desta versão (snapshot) — mudar o cadastro depois não
- * reescreve versão nenhuma —, e ela é do ITEM: trocar o item não mantém a
- * pureza do anterior.
- *
- * A unidade mantém a que estava quando ela serve ao item novo (trocar o item
- * não pode transformar `500 mg` em `500 kg`) e só cai na unidade de estoque
- * quando a atual é de outra dimensão. Linha por dose em massa nasce em mg, que
- * é como a formulação é escrita.
- */
-function comItemEscolhido(
-  row: ComponentRow,
-  item: ItemOption | undefined,
-  units: UnitOfMeasureDTO[],
-): ComponentRow {
-  if (!item) {
-    return {
-      ...row,
-      itemId: "",
-      itemCode: "",
-      itemName: "",
-      itemActive: true,
-      itemType: null,
-      stockUnitCode: "",
-      unitCode: "",
-      itemSourceName: null,
-      itemDeclaredNutrient: null,
-      itemFamily: null,
-      itemPackagingSubtype: null,
-      itemDefaultPurityPercent: null,
-      itemExternalCode: null,
-    };
-  }
-  const dimensaoAtual = units.find((unit) => unit.code === row.unitCode)?.dimension ?? null;
-  const mantemUnidade = dimensaoAtual !== null && dimensaoAtual === item.unitDimension;
-  const unidadePadrao =
-    item.unitDimension === "MASS" && row.basis === "PER_DOSE" && units.some((u) => u.code === "mg")
-      ? "mg"
-      : item.unitCode;
-  const daComposicao = SECAO_DO_TIPO[item.type] === "COMPOSICAO";
-  return comAjustesDaBancada({
-    ...row,
-    itemId: item.id,
-    itemCode: item.code,
-    itemName: item.name,
-    itemActive: item.active,
-    itemType: item.type,
-    stockUnitCode: item.unitCode,
-    unitCode: mantemUnidade ? row.unitCode : unidadePadrao,
-    itemSourceName: item.sourceName,
-    itemDeclaredNutrient: item.declaredNutrient,
-    itemFamily: item.family,
-    itemPackagingSubtype: item.packagingSubtype,
-    itemDefaultPurityPercent: item.defaultPurityPercent,
-    itemExternalCode: item.externalCode,
-    purityPercentApplied: daComposicao
-      ? toPtBrEditText(item.defaultPurityPercent, OPCOES_PERCENTUAL_TECNICO)
-      : "",
-  });
-}
-
-/**
- * A conta da dose, escrita como se lê: alvo ativo ÷ pureza.
- *
- * É a mesma aritmética da planilha da Veridi, com os números desta linha. O
- * `CalcHint` confere a explicação contra o resultado exibido, então o que
- * aparece aqui não pode ser uma versão resumida da conta.
- */
-function operandosDaDose(
-  row: ComponentRow,
-): { valor: string; papel: string; operador?: string; numero?: number }[] {
-  const alvo = decimalLegivel(row.quantity, OPCOES_QUANTIDADE);
-  const operandos: { valor: string; papel: string; operador?: string; numero?: number }[] = [
-    {
-      valor: `${formatQuantity(alvo ?? row.quantity)} ${row.unitCode}`,
-      papel: "alvo ativo por dose",
-      numero: Number(alvo),
-    },
-  ];
-  const teorico = row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS";
-  if (teorico && row.applyPurityAdjustment && row.purityPercentApplied) {
-    const pureza = Number(decimalLegivel(row.purityPercentApplied, OPCOES_PERCENTUAL_TECNICO));
-    if (pureza > 0) {
-      operandos.push({
-        valor: formatPercentPtBr(
-          decimalLegivel(row.purityPercentApplied, OPCOES_PERCENTUAL_TECNICO),
-          OPCOES_PERCENTUAL_TECNICO,
-        ),
-        papel: "pureza",
-        operador: "÷",
-        numero: pureza / 100,
-      });
-    }
-  }
-  if (teorico && row.applyOverageAdjustment && row.overagePercent) {
-    const overage = Number(decimalLegivel(row.overagePercent, OPCOES_PERCENTUAL_TECNICO));
-    if (overage >= 0) {
-      operandos.push({
-        valor: `(1 + ${formatPercentPtBr(decimalLegivel(row.overagePercent, OPCOES_PERCENTUAL_TECNICO), OPCOES_PERCENTUAL_TECNICO)})`,
-        papel: "reserva de produção",
-        numero: 1 + overage / 100,
-      });
-    }
-  }
-  return operandos;
-}
-
-/**
- * A conta da quantidade física, escrita como se lê — e refazível à mão.
- *
- * A versão anterior listava só `quantidade × (1 + overage) ÷ pureza` e omitia
- * dois fatores que o motor aplica: a base da fórmula e a conversão de unidade.
- * Com base 300, isso mostrava `22 kg × 1,23 ÷ 0,99`, que dá 27,33, ao lado do
- * valor exibido de 0,091111 kg. O número da tela estava certo; a explicação,
- * não — e explicação errada convence mais do que explicação nenhuma.
- *
- * A ordem segue a do motor: base, unidade, pureza, reserva.
- */
-function operandosDoFisico(
-  row: ComponentRow,
-  basisQuantity: string,
-  dosesPerPackage: number | null,
-  units: UnitOfMeasureDTO[],
-): { valor: string; papel: string; operador?: string; numero?: number }[] {
-  const teorico = row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS";
-  const operandos: { valor: string; papel: string; operador?: string; numero?: number }[] = [
-    {
-      valor: `${formatQuantity(decimalLegivel(row.quantity, OPCOES_QUANTIDADE) ?? row.quantity)} ${row.unitCode}`,
-      papel: teorico ? "quantidade teórica" : "quantidade informada",
-      numero: Number(decimalLegivel(row.quantity, OPCOES_QUANTIDADE)),
-    },
-  ];
-
-  if (row.basis === "FIXED_BASIS") {
-    const base = decimalLegivel(basisQuantity, OPCOES_QUANTIDADE);
-    if (base !== null && Number(base) !== 0) {
-      operandos.push({
-        valor: formatQuantity(base),
-        papel: "base da fórmula",
-        operador: "÷",
-        numero: Number(base),
-      });
-    }
-  } else if (row.basis === "PER_DOSE" && dosesPerPackage) {
-    operandos.push({
-      valor: formatIntegerPtBr(dosesPerPackage),
-      papel: "doses por embalagem",
-      numero: dosesPerPackage,
-    });
-  }
-
-  // Conversão de unidade só entra na conta quando as duas diferem.
-  const de = units.find((u) => u.code === row.unitCode);
-  const para = units.find((u) => u.code === row.stockUnitCode);
-  if (de && para && de.code !== para.code && Number(para.toBaseFactor) !== 0) {
-    const fator = Number(de.toBaseFactor) / Number(para.toBaseFactor);
-    operandos.push({
-      valor: formatQuantity(String(fator)),
-      papel: `${de.code} para ${para.code}`,
-      numero: fator,
-    });
-  }
-
-  if (teorico && row.applyPurityAdjustment && row.purityPercentApplied) {
-    const pureza = Number(decimalLegivel(row.purityPercentApplied, OPCOES_PERCENTUAL_TECNICO));
-    if (pureza > 0) {
-      operandos.push({
-        valor: formatPercentPtBr(
-          decimalLegivel(row.purityPercentApplied, OPCOES_PERCENTUAL_TECNICO),
-          OPCOES_PERCENTUAL_TECNICO,
-        ),
-        papel: "pureza",
-        operador: "÷",
-        numero: pureza / 100,
-      });
-    }
-  }
-  if (teorico && row.applyOverageAdjustment && row.overagePercent) {
-    const overage = Number(decimalLegivel(row.overagePercent, OPCOES_PERCENTUAL_TECNICO));
-    if (overage >= 0) {
-      operandos.push({
-        valor: `(1 + ${formatPercentPtBr(decimalLegivel(row.overagePercent, OPCOES_PERCENTUAL_TECNICO), OPCOES_PERCENTUAL_TECNICO)})`,
-        papel: "reserva de produção",
-        numero: 1 + overage / 100,
-      });
-    }
-  }
-  return operandos;
-}
-
-/**
  * Editor de versão de formulação — página própria (documento transacional),
  * não modal. DRAFT é totalmente editável; ACTIVE/INACTIVE são read-only por
  * construção (backend também bloqueia).
  */
-/** ⓘ de um conceito da tela — o texto vive no registro de ajuda. */
-type DicaDaBancada =
-  | "formulacao.base"
-  | "formulacao.modoCalculo"
-  | "formulacao.fornecimento"
-  | "formulacao.pureza"
-  | "formulacao.overage"
-  | "formulacao.equivalenteEstoque"
-  | "formulacao.perdaPrevista"
-  | "formulacao.rendimentoEsperado"
-  | "formulacao.simulacaoDeLote"
-  | "formulacao.forma"
-  | "formulacao.apresentacaoComercial"
-  | "formulacao.capsulasPorDose"
-  | "formulacao.capsulasPorEmbalagem"
-  | "formulacao.dose"
-  | "formulacao.conteudo"
-  | "formulacao.dosesPorEmbalagem"
-  | "formulacao.loteMinimo"
-  | "formulacao.caixaEmbarque"
-  | "formulacao.faixaEtaria";
-
-function Dica({ id }: { id: DicaDaBancada }) {
-  const dica = helpHints[id];
-  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
-}
 
 export function FormulationVersionPage() {
   const navigate = useNavigate();
@@ -895,9 +350,11 @@ export function FormulationVersionPage() {
    */
   const [expectedLossPercent, setExpectedLossPercent] = useState("");
   const [notes, setNotes] = useState("");
-  const [components, setComponents] = useState<ComponentRow[]>([]);
+  const [components, setComponents] = useState<LinhaDaReceita[]>([]);
 
-  const [activeItems, setActiveItems] = useState<ItemOption[]>([]);
+  /* O catálogo da bancada — primeira página, busca no servidor e mesclagem. */
+  const catalogo = useCatalogoDeItens();
+  const activeItems = catalogo.itens;
   const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
 
   /*
@@ -917,6 +374,17 @@ export function FormulationVersionPage() {
   const [impact, setImpact] = useState<FormulationActivationImpactDTO | null>(null);
   const { user } = useAuth();
   const [costEstimate, setCostEstimate] = useState<FormulationCostEstimateDTO | null>(null);
+  /*
+   * "Salvar como template": o BOTÃO mora na barra fixa, o formulário de nome
+   * continua na proveniência.
+   *
+   * O estado sobe para cá porque as duas metades da mesma ação passaram a morar
+   * em cantos diferentes da tela. O que a ação FAZ não mudou em nada — mesma
+   * validação de nome, mesma chamada, mesmo destino —, e é por isso que ela não
+   * virou diálogo: trocar o gesto junto com o lugar seria mudar duas coisas de
+   * uma vez numa ação homologada.
+   */
+  const [salvarComoTemplateAberto, setSalvarComoTemplateAberto] = useState(false);
 
   /**
    * O rascunho como ele está GRAVADO, serializado.
@@ -1064,14 +532,6 @@ export function FormulationVersionPage() {
   }, [carregarCustoEstimado]);
 
   useEffect(() => {
-    Promise.all([
-      listItems({ type: "RAW_MATERIAL", active: true, pageSize: PRIMEIRA_PAGINA }),
-      listItems({ type: "PACKAGING", active: true, pageSize: PRIMEIRA_PAGINA }),
-    ])
-      .then(([raw, packaging]) =>
-        setActiveItems([...raw.items, ...packaging.items].map(itemOption)),
-      )
-      .catch(() => setActiveItems([]));
     listUnits()
       .then(setUnits)
       .catch(() => setUnits([]));
@@ -1079,35 +539,14 @@ export function FormulationVersionPage() {
 
   /**
    * Busca no servidor, com os MESMOS filtros de negócio da carga inicial:
-   * só matéria-prima e embalagem, só ativos, e fora o que outra linha já
-   * consome — as duas primeiras no servidor, a terceira aqui, exatamente
-   * como `optionsForRow` já faz com a primeira página. Componente encontrado
-   * é componente que já era elegível; nada passa a ser escolhível por causa
-   * da busca.
+   * só o tipo da seção, só ativos, e fora o que outra linha já consome — os
+   * dois primeiros no servidor (`catalogo.buscar`), o terceiro aqui,
+   * exatamente como `optionsForRow` já faz com a primeira página. Componente
+   * encontrado é componente que já era elegível; nada passa a ser escolhível
+   * por causa da busca.
    */
-  async function buscarItens(row: ComponentRow, termo: string): Promise<EntityOption[]> {
-    // A seção decide o TIPO: na composição só matéria-prima, na embalagem só
-    // material de embalagem. É a mesma separação que a tabela mostra.
-    const tipo: ItemType = secaoDaLinha(row) === "EMBALAGEM" ? "PACKAGING" : "RAW_MATERIAL";
-    const resposta = await listItems({
-      type: tipo,
-      active: true,
-      search: termo,
-      pageSize: PRIMEIRA_PAGINA,
-    });
-    const encontrados = resposta.items.map(itemOption);
-    /*
-     * O achado entra no catálogo da tela porque a escolha é resolvida por
-     * ele: `handleComponentItemChange` lê código, nome e unidade de estoque
-     * de `activeItems`, e `unitOptionsForRow` limita as unidades pela
-     * dimensão do item. Sem a mesclagem, escolher um item de fora da
-     * primeira página deixaria a linha sem unidade.
-     */
-    setActiveItems((atual) => {
-      const conhecidos = new Set(atual.map((item) => item.id));
-      const ineditos = encontrados.filter((item) => !conhecidos.has(item.id));
-      return ineditos.length === 0 ? atual : [...atual, ...ineditos];
-    });
+  async function buscarItens(row: LinhaDaReceita, termo: string): Promise<EntityOption[]> {
+    const encontrados = await catalogo.buscar(secaoDaLinha(row), termo);
     const usadosPorOutrasLinhas = new Set(
       components.filter((c) => c.key !== row.key).map((c) => c.itemId),
     );
@@ -1173,8 +612,8 @@ export function FormulationVersionPage() {
        */
       void getItem(result.entityId)
         .then((item) => {
-          const opcao = itemOption(item);
-          setActiveItems((prev) => [opcao, ...prev.filter((row) => row.id !== item.id)]);
+          const opcao = itemDaBancada(item);
+          catalogo.adicionar(opcao);
           setComponents((prev) =>
             prev.map((row) => (row.key === chave ? comItemEscolhido(row, opcao, units) : row)),
           );
@@ -1184,6 +623,8 @@ export function FormulationVersionPage() {
   });
 
   const isDraft = version?.status === "DRAFT";
+  /* Quem pode promover esta formulação a Modelo — a mesma regra de sempre. */
+  const podeSalvarComoTemplate = user?.role === "ADMIN" || user?.role === "PRODUCTION";
 
   /*
    * Doses por embalagem: quem exige é a base do COMPONENTE.
@@ -1281,11 +722,11 @@ export function FormulationVersionPage() {
     ...(fieldErrors["dosesPerPackage"] ? ["version-dosesPerPackage-error"] : []),
   ];
 
-  function optionsForRow(row: ComponentRow): ItemOption[] {
+  function optionsForRow(row: LinhaDaReceita): ItemDaBancada[] {
     const secao = secaoDaLinha(row);
     const usedByOtherRows = new Set(components.filter((c) => c.key !== row.key).map((c) => c.itemId));
     const base = activeItems.filter(
-      (item) => !usedByOtherRows.has(item.id) && SECAO_DO_TIPO[item.type] === secao,
+      (item) => !usedByOtherRows.has(item.id) && secaoDoItem(item.type) === secao,
     );
     if (row.itemId && !base.some((item) => item.id === row.itemId)) {
       return [
@@ -1321,7 +762,7 @@ export function FormulationVersionPage() {
    * depois de a pessoa escolher e salvar: oferecer o que não é aceito é mandar
    * errar.
    */
-  function unitOptionsForRow(row: ComponentRow): UnitOfMeasureDTO[] {
+  function unitOptionsForRow(row: LinhaDaReceita): UnitOfMeasureDTO[] {
     const selected = activeItems.find((item) => item.id === row.itemId);
     const dimensao =
       selected?.unitDimension ??
@@ -1336,56 +777,14 @@ export function FormulationVersionPage() {
    *
    * MATÉRIA-PRIMA nasce como a bancada pergunta: a quantidade digitada é o ALVO
    * ATIVO por dose, e a pureza do cadastro corrige a quantidade física
-   * (FORMULATION-WORKBENCH-01). A correção fica visível na coluna Pureza e no
-   * resumo dos ajustes — é escolha declarada da linha, não regra escondida, e
-   * o modo continua trocável no painel.
+   * (FORMULATION-WORKBENCH-01). A correção fica visível na coluna Pureza — é
+   * escolha declarada da linha, não regra escondida.
    *
    * EMBALAGEM nasce por unidade acabada e com quantidade FÍSICA informada:
    * pureza não se aplica a um pote.
    */
   function handleAddComponent(secao: SecaoDaFormula) {
-    const daComposicao = secao === "COMPOSICAO";
-    setComponents((prev) => [
-      ...prev,
-      {
-        key: nextRowKey(),
-        itemId: "",
-        itemCode: "",
-        itemName: "",
-        itemActive: true,
-        stockUnitCode: "",
-        quantity: "",
-        unitCode: "",
-        basis: daComposicao
-          ? receitaPorDose
-            ? "PER_DOSE"
-            : "FIXED_BASIS"
-          : "PER_FINISHED_UNIT",
-        // Default do domínio: a Veridi fornece, salvo declaração explícita.
-        supplyResponsibility: "VERIDI",
-        purityPercentApplied: "",
-        overagePercent: "",
-        quantityMode: daComposicao ? "THEORETICAL_WITH_ADJUSTMENTS" : "PHYSICAL_DIRECT",
-        applyPurityAdjustment: daComposicao,
-        applyOverageAdjustment: false,
-        notes: "",
-        // Linha em branco não tem grandeza calculada: `null` vira travessão,
-        // e a prévia assume assim que houver item e quantidade.
-        theoreticalPerUnit: null,
-        physicalPerUnit: null,
-        theoreticalPerDose: null,
-        physicalPerDose: null,
-        physicalPerCapsule: null,
-        itemType: null,
-        secao,
-        itemSourceName: null,
-        itemDeclaredNutrient: null,
-        itemFamily: null,
-        itemPackagingSubtype: null,
-        itemDefaultPurityPercent: null,
-        itemExternalCode: null,
-      },
-    ]);
+    setComponents((prev) => [...prev, linhaNova(secao, receitaPorDose)]);
   }
 
   function handleRemoveComponent(key: string) {
@@ -1424,6 +823,30 @@ export function FormulationVersionPage() {
     });
   }
 
+  /**
+   * Uma premissa da forma muda — a bancada fala com a página por um nome só.
+   *
+   * Os campos continuam em estados separados: eles são independentes de fato, e
+   * juntá-los num objeto só para atender ao componente trocaria uma repetição
+   * curta por uma indireção em toda leitura da tela.
+   */
+  function mudarPremissa<K extends keyof PremissasDaFormaValores>(
+    campo: K,
+    valor: PremissasDaFormaValores[K],
+  ) {
+    const destinos: { [C in keyof PremissasDaFormaValores]: (v: PremissasDaFormaValores[C]) => void } = {
+      dosageForm: setDosageForm,
+      presentationType: setPresentationType,
+      capsulesPerDose: setCapsulesPerDose,
+      capsulesPerPackage: setCapsulesPerPackage,
+      doseAmount: setDoseAmount,
+      doseUomCode: setDoseUomCode,
+      packageContentAmount: setPackageContentAmount,
+      packageContentUomCode: setPackageContentUomCode,
+    };
+    destinos[campo](valor);
+  }
+
   function handleComponentBasisChange(key: string, basis: FormulationComponentBasis) {
     setComponents((prev) => prev.map((row) => (row.key === key ? { ...row, basis } : row)));
   }
@@ -1449,10 +872,10 @@ export function FormulationVersionPage() {
    * e vale para qualquer campo, então nenhum caminho de edição escapa dele —
    * era essa a brecha por onde a configuração ficava fora do que a coluna diz.
    */
-  function handleComponentFieldChange<K extends keyof ComponentRow>(
+  function handleComponentFieldChange<K extends keyof LinhaDaReceita>(
     key: string,
     field: K,
-    value: ComponentRow[K],
+    value: LinhaDaReceita[K],
   ) {
     setComponents((prev) =>
       prev.map((row) => (row.key === key ? comAjustesDaBancada({ ...row, [field]: value }) : row)),
@@ -1466,7 +889,7 @@ export function FormulationVersionPage() {
    * própria célula do "Por embalagem". Explicação longe do resultado obriga a
    * pessoa a confiar no número em vez de conferi-lo.
    */
-  function explicacaoDoFisico(linha: ComponentRow, fisico: string | null) {
+  function explicacaoDoFisico(linha: LinhaDaReceita, fisico: string | null) {
     if (fisico === null) return null;
     return (
       <CalcHint
@@ -1860,7 +1283,7 @@ export function FormulationVersionPage() {
    * gravada — a mesma regra das colunas por embalagem.
    */
   function valoresDaDose(
-    row: ComponentRow,
+    row: LinhaDaReceita,
   ): { teorica: string; fisica: string; porCapsula: string | null } | null {
     const previa = isDraft ? previaDaDose(row, capsulasPorDose, units) : null;
     if (previa) return previa;
@@ -1930,7 +1353,7 @@ export function FormulationVersionPage() {
    * aqui é o que vale nas duas e não é editável na Formulação — e só quando o
    * domínio TEM o dado. Linha ausente é melhor que linha com traço inventado.
    */
-  const premissasDeReferencia: { rotulo: string; valor: string; dica?: DicaDaBancada }[] = [];
+  const premissasDeReferencia: { rotulo: string; valor: string; dica?: HelpHintId }[] = [];
   if (perfil?.targetAgeGroup) {
     premissasDeReferencia.push({
       rotulo: "Faixa etária",
@@ -2034,527 +1457,76 @@ export function FormulationVersionPage() {
     unidadesDoMotor(units),
   );
 
-  function linhaDaTabela(row: ComponentRow, secao: SecaoDaFormula) {
-    const daComposicao = secao === "COMPOSICAO";
-    /*
-      O físico ENQUANTO se digita, não só depois de salvar. A prévia usa a mesma
-      função que a API chama; quando a conta não é possível, cai no valor
-      gravado, e `null` vira travessão — nunca zero.
-    */
-    const previa = isDraft ? previaDoComponente(row, basisQuantity, dosesPorEmbalagem, units) : null;
-    const fisicoExibido = previa?.fisico ?? row.physicalPerUnit;
-    const equivalenteExibido = previa?.teorico ?? row.theoreticalPerUnit;
-    const dose = valoresDaDose(row);
-    const nomeDoItem = row.itemCode || "componente";
-    /** Base canônica da seção — o que `handleAddComponent` já escolhe sozinho. */
-    const baseDaSecao: FormulationComponentBasis = daComposicao
+  /** Base canônica da seção — o que `handleAddComponent` já escolhe sozinho. */
+  function baseDaSecao(secao: SecaoDaFormula): FormulationComponentBasis {
+    return secao === "COMPOSICAO"
       ? receitaPorDose
         ? "PER_DOSE"
         : "FIXED_BASIS"
       : "PER_FINISHED_UNIT";
-    const baseEditavelNaLinha = baseMultiplicaMaterial || row.basis !== baseDaSecao;
-    /*
-      Uma unidade compatível só: o Item decide, e não há o que perguntar. Vale
-      apenas com Item escolhido — linha em branco ainda não tem cadastro que
-      responda, e ali o seletor continua sendo a pergunta certa.
-    */
-    /* Onde a linha está DENTRO da seção — é o que decide se ela ainda sobe ou desce. */
-    const irmas = daComposicao ? linhasDaComposicao : linhasDaEmbalagem;
-    const posicaoNaSecao = irmas.findIndex((irma) => irma.key === row.key);
-    const unidadesDaLinha = unitOptionsForRow(row);
-    const unidadeUnica = row.itemId !== "" && unidadesDaLinha.length === 1 && row.unitCode !== "";
-    const erroDe = (campo: CampoDoComponente) => fieldErrors[chaveDeErro(row.key, campo)];
-    const marcaDeErro = (campo: CampoDoComponente) =>
-      erroDe(campo)
-        ? {
-            "aria-invalid": true as const,
-            "aria-describedby": `${idDoCampo(row.key, campo)}-error`,
-          }
-        : {};
-    const mensagemDeErro = (campo: CampoDoComponente) =>
-      erroDe(campo) ? (
-        <p className="field__error" id={`${idDoCampo(row.key, campo)}-error`}>
-          {erroDe(campo)}
-        </p>
-      ) : null;
-    /* Pureza do cadastro de HOJE ao lado da aplicada, quando as duas divergem:
-       é o que explica uma versão histórica não bater com o item de agora. */
-    const purezaDaLinha = decimalLegivel(row.purityPercentApplied, OPCOES_PERCENTUAL_TECNICO);
-    const cadastroDiferente =
-      row.itemDefaultPurityPercent !== null &&
-      decimalDaApiComparavel(row.itemDefaultPurityPercent) !== decimalDaApiComparavel(purezaDaLinha);
-
-    return (
-      <tr
-        key={row.key}
-        className={CAMPOS_DO_COMPONENTE.some((campo) => erroDe(campo)) ? "is-invalid" : undefined}
-      >
-        <td className="col-item">
-          {isDraft ? (
-            <SearchableEntitySelect
-              id={`componente-${row.key}`}
-              value={row.itemId}
-              onChange={(itemId) => handleComponentItemChange(row.key, itemId)}
-              placeholder={
-                daComposicao
-                  ? "Buscar matéria-prima por código ou nome…"
-                  : "Buscar embalagem por código ou nome…"
-              }
-              options={optionsForRow(row).map(opcaoDoItem)}
-              onSearch={(termo) => buscarItens(row, termo)}
-              canCreate
-              createLabel="Novo item de estoque"
-              /* Sair para cadastrar o item NÃO é descartar: o rascunho vai
-                 junto e volta aplicado na linha. */
-              onCreateNew={() =>
-                liberarGuarda(() =>
-                  origem.goCreate({
-                    route: "/cadastros/itens/novo",
-                    fieldKey: "itemId",
-                    entityType: "item",
-                    context: { rowKey: row.key },
-                  }),
-                )
-              }
-            />
-          ) : (
-            <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
-          )}
-          {/*
-            O CÓDIGO LEGADO ao lado da unidade de estoque, e só quando existe.
-            Quem confere a receita contra a planilha antiga procura por ele, e
-            sair para o cadastro do Item a cada linha era o que essa conferência
-            custava. Item sem legado não ganha rótulo vazio nem travessão: a
-            linha simplesmente não o menciona.
-          */}
-          <span className="cell-sub">
-            {row.stockUnitCode ? `Estoque em ${row.stockUnitCode}` : "Estoque: —"}
-            {row.itemExternalCode ? ` · Código legado: ${row.itemExternalCode}` : ""}
-            {row.itemPackagingSubtype
-              ? ` · ${PACKAGING_SUBTYPE_LABELS[row.itemPackagingSubtype]}`
-              : ""}
-            {!row.itemActive && " · item inativo, mantido pelo histórico"}
-          </span>
-        </td>
-
-        {daComposicao && (
-          <td className="col-fonte" data-label="Fonte / Função">
-            {row.itemSourceName ?? "—"}
-            {(row.itemFamily || row.itemDeclaredNutrient) && (
-              <span className="cell-sub">
-                {[
-                  row.itemFamily ? ITEM_FAMILY_LABELS[row.itemFamily] : null,
-                  row.itemDeclaredNutrient,
-                ]
-                  .filter((parte): parte is string => Boolean(parte))
-                  .join(" · ")}
-              </span>
-            )}
-          </td>
-        )}
-
-        {daComposicao && (
-          <td className="col-pureza is-numeric" data-label="Pureza (%)">
-            {isDraft ? (
-              <>
-                <PercentField
-                  id={idDoCampo(row.key, "purityPercentApplied")}
-                  scale={CASAS_PERCENTUAL_TECNICO}
-                  aria-label={`Pureza de ${nomeDoItem}`}
-                  placeholder="—"
-                  /* A seta para onde a validação pararia: pureza é 0 < x ≤ 100. */
-                  stepper={{ min: "0", max: "100" }}
-                  value={row.purityPercentApplied}
-                  onChangeValue={(valor) =>
-                    handleComponentFieldChange(row.key, "purityPercentApplied", valor)
-                  }
-                  {...marcaDeErro("purityPercentApplied")}
-                />
-                {mensagemDeErro("purityPercentApplied")}
-              </>
-            ) : (
-              <span>
-                {row.purityPercentApplied
-                  ? formatPercentPtBr(purezaDaLinha, OPCOES_PERCENTUAL_TECNICO)
-                  : "—"}
-              </span>
-            )}
-            {/*
-              A referência do cadastro de HOJE, discreta, só quando diverge do
-              que esta versão usa: é o que explica uma versão histórica não
-              bater com o Item de agora, sem transformar a coluna num debate.
-            */}
-            {cadastroDiferente && (
-              <span className="cell-sub">
-                Cadastro:{" "}
-                {formatPercentPtBr(row.itemDefaultPurityPercent, OPCOES_PERCENTUAL_TECNICO)}
-              </span>
-            )}
-            {/* Versão gravada sob o contrato antigo: a pureza está ali e não
-                corrigiu nada. Calar seria deixar a coluna mentir. */}
-            {purezaRegistradaSemAplicar(row) && (
-              <span className="cell-sub">registrada, não aplicada</span>
-            )}
-          </td>
-        )}
-
-        <td
-          className="col-quantidade is-numeric"
-          data-label={daComposicao ? "Alvo por dose" : "Quantidade"}
-        >
-          {isDraft ? (
-            <>
-              <div
-                className={
-                  unidadeUnica
-                    ? "quantidade-unidade quantidade-unidade--fixa"
-                    : "quantidade-unidade"
-                }
-              >
-                <DecimalField
-                  id={idDoCampo(row.key, "quantity")}
-                  scale={CASAS_QUANTIDADE}
-                  placeholder="0"
-                  aria-label={`Quantidade de ${nomeDoItem}`}
-                  value={row.quantity}
-                  onChangeValue={(valor) =>
-                    handleComponentFieldChange(row.key, "quantity", valor)
-                  }
-                  {...marcaDeErro("quantity")}
-                />
-                {/*
-                  ESCOLHER ENTRE UMA OPÇÃO NÃO É ESCOLHA.
-                  A unidade da linha só vira campo quando o cadastro oferece
-                  mais de uma unidade compatível com o Item. Embalagem é o caso
-                  claro: a dimensão do pote é contagem, e `un` é a única unidade
-                  cadastrada nela — o seletor gastava a largura da coluna para
-                  repetir o que o cadastro já diz, e o número, que é o que se
-                  digita ali, ficava espremido ao lado dele. A unidade continua
-                  viajando no payload; ela passa a ser lida do Item em vez de
-                  redigitada. Matéria-prima em massa segue com o seletor: mg, g
-                  e kg são três escolhas reais.
-                */}
-                {unidadeUnica ? (
-                  <span className="quantidade-unidade__unidade">{row.unitCode}</span>
-                ) : (
-                  <select
-                    id={idDoCampo(row.key, "unitCode")}
-                    aria-label={`Unidade de ${nomeDoItem}`}
-                    value={row.unitCode}
-                    onChange={(event) =>
-                      handleComponentFieldChange(row.key, "unitCode", event.target.value)
-                    }
-                    {...marcaDeErro("unitCode")}
-                  >
-                    <option value="">—</option>
-                    {unidadesDaLinha.map((unit) => (
-                      <option key={unit.code} value={unit.code}>
-                        {unit.code}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-              {mensagemDeErro("quantity")}
-              {mensagemDeErro("unitCode")}
-            </>
-          ) : (
-            `${formatQuantity(decimalLegivel(row.quantity, OPCOES_QUANTIDADE) ?? row.quantity)} ${row.unitCode}`
-          )}
-        </td>
-
-        {daComposicao && (
-          <td className="col-dose is-numeric" data-label="Física por dose">
-            <span className="estoque-valor__numero estoque-valor--dose">
-              {formatQuantityWithUnit(dose?.fisica ?? null, row.unitCode)}
-            </span>
-            {dose && (
-              <CalcHint
-                label="Física por dose"
-                operandos={operandosDaDose(row)}
-                resultado={`${formatQuantity(dose.fisica)} ${row.unitCode}`}
-                nota="Mesmo motor da Ordem de Produção e do CMV — a pureza corrige a quantidade física do ingrediente."
-              />
-            )}
-          </td>
-        )}
-
-        {daComposicao && mostrarPorCapsula && (
-          <td className="col-capsula is-numeric" data-label="Por cápsula">
-            <span className="estoque-valor__numero estoque-valor--capsula">
-              {formatQuantityWithUnit(dose?.porCapsula ?? null, row.unitCode)}
-            </span>
-          </td>
-        )}
-
-        {/*
-          BASE e FORNECIMENTO dividem a célula, mas não têm o mesmo peso.
-
-          A base de cada linha já é decidida pela seção e pelo modo: matéria-prima
-          numa fórmula por dose nasce por dose, embalagem nasce por unidade
-          acabada, e a seção vem do TIPO do Item, que a linha não escolhe. Um
-          seletor repetindo essa escolha em cada linha ocupava a largura de uma
-          coluna inteira para oferecer uma decisão que ninguém toma. Ele volta a
-          ser seletor quando a base multiplica material de verdade (alguma linha
-          por base fixa) ou quando ESTA linha já tem base fora do padrão da seção
-          — linha herdada de cópia antiga continua corrigível. Fora disso a base
-          fica como texto de apoio: a capacidade do domínio continua inteira, o
-          que saiu foi o peso visual.
-        */}
-        <td
-          className="col-regras"
-          data-label={baseEditavelNaLinha ? "Base · Fornecimento" : "Fornecimento"}
-        >
-          {isDraft ? (
-            <div className="col-regras__campos">
-              {baseEditavelNaLinha && (
-                <select
-                  aria-label="Base de cálculo do componente"
-                  value={row.basis}
-                  onChange={(event) =>
-                    handleComponentBasisChange(
-                      row.key,
-                      event.target.value as FormulationComponentBasis,
-                    )
-                  }
-                >
-                  {FORMULATION_COMPONENT_BASES.map((basis) => (
-                    <option key={basis} value={basis}>
-                      {FORMULATION_COMPONENT_BASIS_LABELS[basis]}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <select
-                aria-label="Responsabilidade de fornecimento"
-                value={row.supplyResponsibility}
-                onChange={(event) =>
-                  handleComponentSupplyChange(
-                    row.key,
-                    event.target.value as SupplyResponsibility,
-                  )
-                }
-              >
-                {SUPPLY_RESPONSIBILITIES.map((responsibility) => (
-                  <option key={responsibility} value={responsibility}>
-                    {SUPPLY_RESPONSIBILITY_LABELS[responsibility]}
-                  </option>
-                ))}
-              </select>
-              {!baseEditavelNaLinha && (
-                <span className="cell-sub">
-                  {FORMULATION_COMPONENT_BASIS_LABELS[row.basis]}
-                </span>
-              )}
-            </div>
-          ) : (
-            <>
-              {SUPPLY_RESPONSIBILITY_LABELS[row.supplyResponsibility]}
-              <span className="cell-sub">
-                {FORMULATION_COMPONENT_BASIS_LABELS[row.basis]}
-              </span>
-            </>
-          )}
-        </td>
-
-        {/*
-          RESERVA DE PRODUÇÃO — coluna, como a pureza, e pelo mesmo motivo: o
-          número da planilha (10% no Ácido Fólico, 2% no Beef) tem de estar
-          à vista e editável na linha. Ela NÃO entra na dose: o campo ao lado
-          continua igual depois de digitar aqui.
-        */}
-        {daComposicao && (
-          <td className="col-reserva is-numeric" data-label="Reserva %">
-            {isDraft ? (
-              <>
-                <PercentField
-                  id={idDoCampo(row.key, "overagePercent")}
-                  scale={CASAS_PERCENTUAL_TECNICO}
-                  aria-label={`Reserva % de ${nomeDoItem}`}
-                  placeholder="—"
-                  /* Sem teto: o domínio nunca declarou um para a reserva. */
-                  stepper={{ min: "0" }}
-                  value={row.overagePercent}
-                  onChangeValue={(valor) =>
-                    handleComponentFieldChange(row.key, "overagePercent", valor)
-                  }
-                  {...marcaDeErro("overagePercent")}
-                />
-                {mensagemDeErro("overagePercent")}
-              </>
-            ) : (
-              <span>
-                {row.overagePercent
-                  ? formatPercentPtBr(
-                      decimalLegivel(row.overagePercent, OPCOES_PERCENTUAL_TECNICO),
-                      OPCOES_PERCENTUAL_TECNICO,
-                    )
-                  : "—"}
-              </span>
-            )}
-          </td>
-        )}
-
-        <td className="col-fisico is-numeric" data-label="Por embalagem">
-          <span className="estoque-valor__numero estoque-valor--fisico">
-            {formatQuantityWithUnit(fisicoExibido, row.stockUnitCode)}
-          </span>
-          <span className="cell-sub">
-            equivalente{" "}
-            <span className="estoque-valor__numero estoque-valor--equivalente">
-              {formatQuantityWithUnit(equivalenteExibido, row.stockUnitCode)}
-            </span>
-          </span>
-          {explicacaoDoFisico(row, fisicoExibido)}
-        </td>
-
-        {isDraft && (
-          <td className="col-acoes">
-            <div className="col-acoes__grupo">
-              {/* Subir e descer, e o remover em vermelho — apagar uma linha da
-                  receita não se parece com reordená-la. */}
-              <span className="col-acoes__ordem">
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--icone"
-                  aria-label={`Subir ${nomeDoItem}`}
-                  disabled={posicaoNaSecao <= 0}
-                  onClick={() => handleMoveComponent(row.key, -1)}
-                >
-                  <svg viewBox="0 0 10 6" aria-hidden="true" focusable="false">
-                    <path d="M5 0 10 6H0z" fill="currentColor" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--icone"
-                  aria-label={`Descer ${nomeDoItem}`}
-                  disabled={posicaoNaSecao === irmas.length - 1}
-                  onClick={() => handleMoveComponent(row.key, 1)}
-                >
-                  <svg viewBox="0 0 10 6" aria-hidden="true" focusable="false">
-                    <path d="M5 6 0 0h10z" fill="currentColor" />
-                  </svg>
-                </button>
-              </span>
-              <button
-                type="button"
-                className="btn btn--ghost-danger btn--sm"
-                aria-label={`Remover ${nomeDoItem}`}
-                onClick={() => handleRemoveComponent(row.key)}
-              >
-                ✕
-              </button>
-            </div>
-          </td>
-        )}
-      </tr>
-    );
   }
 
   /**
-   * Quantas colunas a tabela da seção tem — só a linha de vazio precisa saber.
+   * As grandezas que a linha exibe.
    *
-   * Composição: ingrediente, fonte, pureza, alvo, física por dose, base,
-   * reserva e por embalagem — mais "por cápsula" quando a forma é cápsula.
-   * Embalagem: item, quantidade, base, por embalagem. A coluna de ações só
-   * existe no rascunho.
+   * O físico ENQUANTO se digita, não só depois de salvar: a prévia usa a mesma
+   * função que a API chama e, quando a conta não é possível, a linha cai no
+   * valor gravado. `null` vira travessão — nunca zero.
    */
-  function colunasDaSecao(daComposicao: boolean): number {
-    const fixas = daComposicao ? 8 + (mostrarPorCapsula ? 1 : 0) : 4;
-    return fixas + (isDraft ? 1 : 0);
+  function valoresDaLinha(row: LinhaDaReceita) {
+    const previa = isDraft
+      ? previaDoComponente(row, basisQuantity, dosesPorEmbalagem, units)
+      : null;
+    return {
+      fisicoExibido: previa?.fisico ?? row.physicalPerUnit,
+      equivalenteExibido: previa?.teorico ?? row.theoreticalPerUnit,
+      dose: valoresDaDose(row),
+    };
   }
 
+  /**
+   * A seção da receita, na bancada COMPARTILHADA com o Modelo de Formulação.
+   *
+   * A grade, as colunas, as larguras e a ordenação moram em
+   * `formulation-workbench`: esta página entrega os dados e os gestos, e não
+   * sabe desenhar linha nenhuma. Foi essa duplicação — cada tela com a sua
+   * tabela — que fez a bancada existir só aqui durante duas capabilities.
+   */
   function tabelaDaSecao(secao: SecaoDaFormula) {
-    const daComposicao = secao === "COMPOSICAO";
-    const linhas = daComposicao ? linhasDaComposicao : linhasDaEmbalagem;
     return (
-      <FormSection
-        title={daComposicao ? "Composição — matérias-primas" : "Embalagem"}
-        subtitle={
-          daComposicao
-            ? "Busque por código ou nome — digitar procura no catálogo inteiro. A quantidade é o alvo ATIVO por dose."
-            : "Itens do tipo Material de embalagem, pela classificação do cadastro. A quantidade é por embalagem acabada: 120 cápsulas, 1 pote, 1 tampa."
+      <TabelaDaReceita
+        secao={secao}
+        linhas={secao === "COMPOSICAO" ? linhasDaComposicao : linhasDaEmbalagem}
+        editavel={isDraft}
+        mostrarPorCapsula={mostrarPorCapsula}
+        baseMultiplicaMaterial={baseMultiplicaMaterial}
+        baseDaSecao={baseDaSecao(secao)}
+        unidadesDaLinha={unitOptionsForRow}
+        opcoesDeItem={(row) => optionsForRow(row).map(opcaoDoItem)}
+        onBuscarItem={buscarItens}
+        /* Sair para cadastrar o item NÃO é descartar: o rascunho vai junto e
+           volta aplicado na linha. */
+        onCriarItem={(row) =>
+          liberarGuarda(() =>
+            origem.goCreate({
+              route: "/cadastros/itens/novo",
+              fieldKey: "itemId",
+              entityType: "item",
+              context: { rowKey: row.key },
+            }),
+          )
         }
-      >
-        <div className="table-container">
-          {/*
-            A largura de cada coluna é DECLARADA no CSS, e a declaração depende
-            de três coisas que só a tela sabe: qual seção é, se a forma tem
-            coluna "Por cápsula" e se a linha tem a coluna de ações. São as três
-            variantes da proporção — no pó, os 96px da coluna que não existe vão
-            para o Ingrediente, e fora do rascunho a sobra elástica é maior.
-          */}
-          <table
-            className={[
-              "table",
-              "table--sticky-actions",
-              "table--formulacao",
-              daComposicao ? "table--formulacao-composicao" : "table--formulacao-embalagem",
-              daComposicao && mostrarPorCapsula ? "table--com-capsula" : "",
-              isDraft ? "" : "table--sem-acoes",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-          >
-            <thead>
-              <tr>
-                <th className="col-item">{daComposicao ? "Ingrediente" : "Item"}</th>
-                {daComposicao && <th className="col-fonte">Fonte / Função</th>}
-                {daComposicao && (
-                  <th className="col-pureza is-numeric">
-                    Pureza (%) <Dica id="formulacao.pureza" />
-                  </th>
-                )}
-                <th className="col-quantidade is-numeric">
-                  {/* A unidade tem controle próprio na segunda linha da célula;
-                      repeti-la no cabeçalho gastava três linhas de altura. */}
-                  {daComposicao ? "Alvo por dose" : "Quantidade"}
-                </th>
-                {daComposicao && <th className="col-dose is-numeric">Física por dose</th>}
-                {daComposicao && mostrarPorCapsula && (
-                  <th className="col-capsula is-numeric">Por cápsula</th>
-                )}
-                <th className="col-regras">
-                  {baseMultiplicaMaterial ? "Base · Fornecimento" : "Fornecimento"}{" "}
-                  <Dica id="formulacao.fornecimento" />
-                </th>
-                {daComposicao && (
-                  <th className="col-reserva is-numeric">
-                    Reserva % <Dica id="formulacao.overage" />
-                  </th>
-                )}
-                <th className="col-fisico is-numeric">
-                  Por embalagem <Dica id="formulacao.equivalenteEstoque" />
-                </th>
-                {isDraft && <th className="col-acoes" aria-hidden="true" />}
-              </tr>
-            </thead>
-            <tbody>
-              {linhas.map((row) => linhaDaTabela(row, secao))}
-              {linhas.length === 0 && (
-                <TableEmptyRow colSpan={colunasDaSecao(daComposicao)}>
-                  {daComposicao
-                    ? "Nenhuma matéria-prima adicionada."
-                    : "Nenhum item de embalagem adicionado."}
-                </TableEmptyRow>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {isDraft && (
-          <div className="line-actions">
-            <button
-              type="button"
-              className="btn btn--secondary btn--sm"
-              onClick={() => handleAddComponent(secao)}
-            >
-              {daComposicao ? "+ Adicionar matéria-prima" : "+ Adicionar embalagem"}
-            </button>
-          </div>
-        )}
-      </FormSection>
+        valoresDaLinha={valoresDaLinha}
+        explicacaoDoFisico={explicacaoDoFisico}
+        erros={fieldErrors}
+        onCampo={handleComponentFieldChange}
+        onBase={handleComponentBasisChange}
+        onFornecimento={handleComponentSupplyChange}
+        onItem={handleComponentItemChange}
+        onMover={handleMoveComponent}
+        onRemover={handleRemoveComponent}
+        onAdicionar={handleAddComponent}
+      />
     );
   }
 
@@ -2623,12 +1595,9 @@ export function FormulationVersionPage() {
           >
             Ficha técnica (PDF)
           </button>
-          <Link
-            className="btn btn--ghost"
-            to={`/producao/formulacoes/${productId}`}
-          >
-            ← Voltar
-          </Link>
+          {/* "← Voltar" foi para a barra fixa do rodapé, junto das outras ações
+              da versão. Duas cópias do mesmo botão em pontas opostas da tela
+              seriam duas respostas para "onde ficam as ações desta página?". */}
         </div>
       </div>
 
@@ -2674,8 +1643,10 @@ export function FormulationVersionPage() {
         {/* Origem no template e o que mudou nela desde então. */}
         <FormulationTemplateOrigin
           version={version}
-          canEdit={user?.role === "ADMIN" || user?.role === "PRODUCTION"}
+          canEdit={podeSalvarComoTemplate}
           onChanged={load}
+          salvandoComoTemplate={salvarComoTemplateAberto}
+          onSalvandoComoTemplateChange={setSalvarComoTemplateAberto}
         />
 
         <FormSection
@@ -2707,243 +1678,28 @@ export function FormulationVersionPage() {
             </dd>
           </dl>
 
-          {/*
-            AS PREMISSAS LADO A LADO, e não uma embaixo da outra.
-            Empilhadas, cada campo ocupava 220px numa tela de 1900 e o resumo da
-            apresentação — que é o que a pessoa confere de relance — virava uma
-            coluna de rolagem com o texto de apoio entre um campo e o seguinte.
-            A grade acomoda quantas colunas couberem e cai para uma só em tela
-            estreita.
-          */}
-          <div className="form-premissas">
-          {/*
-            FORMA e APRESENTAÇÃO são coisas diferentes: a forma é cápsula ou pó
-            — o que a bancada calcula por dose —, e a apresentação é a embalagem
-            comercial. Misturar as duas num campo só ("pote/cápsula") produz um
-            vocabulário que não descreve nem produto nem embalagem.
-          */}
-          <div className="field field--narrow">
-            <label htmlFor="version-dosageForm">
-              Forma do produto <Dica id="formulacao.forma" />
-            </label>
-            {isDraft ? (
-              <select
-                id="version-dosageForm"
-                value={dosageForm}
-                onChange={(event) => setDosageForm(event.target.value as DosageForm | "")}
-              >
-                <option value="">—</option>
-                {formasOferecidas.map((forma) => (
-                  <option key={forma} value={forma}>
-                    {DOSAGE_FORM_LABELS[forma]}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <p className="field-readonly-value">
-                {dosageForm ? DOSAGE_FORM_LABELS[dosageForm] : "—"}
-              </p>
-            )}
-          </div>
-
-          <div className="field field--narrow">
-            <label htmlFor="version-presentationType">
-              Apresentação comercial <Dica id="formulacao.apresentacaoComercial" />
-            </label>
-            {isDraft ? (
-              <select
-                id="version-presentationType"
-                value={presentationType}
-                onChange={(event) =>
-                  setPresentationType(event.target.value as PresentationType | "")
-                }
-              >
-                <option value="">—</option>
-                {apresentacoesOferecidas.map((tipo) => (
-                  <option key={tipo} value={tipo}>
-                    {PRESENTATION_TYPE_LABELS[tipo]}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <p className="field-readonly-value">
-                {presentationType ? PRESENTATION_TYPE_LABELS[presentationType] : "—"}
-              </p>
-            )}
-          </div>
-
-          {dosageForm === "CAPSULE" && (
-            <>
-              <div className="field field--narrow">
-                <label htmlFor="version-capsulesPerDose">
-                  Cápsulas por dose <Dica id="formulacao.capsulasPorDose" />
-                </label>
-                {isDraft ? (
-                  <IntegerField
-                    id="version-capsulesPerDose"
-                    value={capsulesPerDose}
-                    onChangeValue={setCapsulesPerDose}
-                    {...(fieldErrors["capsulesPerDose"]
-                      ? {
-                          "aria-invalid": true as const,
-                          "aria-describedby": "version-capsulesPerDose-error",
-                        }
-                      : {})}
-                  />
-                ) : (
-                  <p className="field-readonly-value">
-                    {capsulesPerDose ? formatIntegerPtBr(Number(capsulesPerDose)) : "—"}
-                  </p>
-                )}
-                {fieldErrors["capsulesPerDose"] && (
-                  <p className="field__error" id="version-capsulesPerDose-error">
-                    {fieldErrors["capsulesPerDose"]}
-                  </p>
-                )}
-              </div>
-
-              <div className="field field--narrow">
-                <label htmlFor="version-capsulesPerPackage">
-                  Cápsulas por embalagem <Dica id="formulacao.capsulasPorEmbalagem" />
-                </label>
-                {isDraft ? (
-                  <IntegerField
-                    id="version-capsulesPerPackage"
-                    value={capsulesPerPackage}
-                    onChangeValue={setCapsulesPerPackage}
-                    {...(fieldErrors["capsulesPerPackage"]
-                      ? {
-                          "aria-invalid": true as const,
-                          "aria-describedby": "version-capsulesPerPackage-error",
-                        }
-                      : {})}
-                  />
-                ) : (
-                  <p className="field-readonly-value">
-                    {capsulesPerPackage ? formatIntegerPtBr(Number(capsulesPerPackage)) : "—"}
-                  </p>
-                )}
-                {fieldErrors["capsulesPerPackage"] && (
-                  <p className="field__error" id="version-capsulesPerPackage-error">
-                    {fieldErrors["capsulesPerPackage"]}
-                  </p>
-                )}
-              </div>
-            </>
-          )}
-
-          {dosageForm === "POWDER" && (
-            <>
-              <div className="field field--narrow">
-                <label htmlFor="version-doseAmount">
-                  Dose <Dica id="formulacao.dose" />
-                </label>
-                {isDraft ? (
-                  <div className="quantidade-unidade">
-                    <DecimalField
-                      id="version-doseAmount"
-                      scale={CASAS_QUANTIDADE}
-                      placeholder="0"
-                      value={doseAmount}
-                      onChangeValue={setDoseAmount}
-                      {...(fieldErrors["doseAmount"]
-                        ? {
-                            "aria-invalid": true as const,
-                            "aria-describedby": "version-doseAmount-error",
-                          }
-                        : {})}
-                    />
-                    <select
-                      id="version-doseUomCode"
-                      aria-label="Unidade da dose"
-                      value={doseUomCode}
-                      onChange={(event) => setDoseUomCode(event.target.value)}
-                    >
-                      <option value="">—</option>
-                      {unidadesDeMassa.map((unit) => (
-                        <option key={unit.code} value={unit.code}>
-                          {unit.code}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <p className="field-readonly-value">
-                    {doseAmount ? `${doseAmount} ${doseUomCode}` : "—"}
-                  </p>
-                )}
-                {fieldErrors["doseAmount"] && (
-                  <p className="field__error" id="version-doseAmount-error">
-                    {fieldErrors["doseAmount"]}
-                  </p>
-                )}
-                {fieldErrors["doseUomCode"] && (
-                  <p className="field__error" id="version-doseUomCode-error">
-                    {fieldErrors["doseUomCode"]}
-                  </p>
-                )}
-              </div>
-
-              <div className="field field--narrow">
-                <label htmlFor="version-packageContentAmount">
-                  Conteúdo da embalagem <Dica id="formulacao.conteudo" />
-                </label>
-                {isDraft ? (
-                  <div className="quantidade-unidade">
-                    <DecimalField
-                      id="version-packageContentAmount"
-                      scale={CASAS_QUANTIDADE}
-                      placeholder="0"
-                      value={packageContentAmount}
-                      onChangeValue={setPackageContentAmount}
-                      {...(fieldErrors["packageContentAmount"]
-                        ? {
-                            "aria-invalid": true as const,
-                            "aria-describedby": "version-packageContentAmount-error",
-                          }
-                        : {})}
-                    />
-                    <select
-                      id="version-packageContentUomCode"
-                      aria-label="Unidade do conteúdo da embalagem"
-                      value={packageContentUomCode}
-                      onChange={(event) => setPackageContentUomCode(event.target.value)}
-                    >
-                      <option value="">—</option>
-                      {unidadesDeMassa.map((unit) => (
-                        <option key={unit.code} value={unit.code}>
-                          {unit.code}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <p className="field-readonly-value">
-                    {packageContentAmount
-                      ? `${packageContentAmount} ${packageContentUomCode}`
-                      : "—"}
-                  </p>
-                )}
-                {fieldErrors["packageContentAmount"] && (
-                  <p className="field__error" id="version-packageContentAmount-error">
-                    {fieldErrors["packageContentAmount"]}
-                  </p>
-                )}
-              </div>
-            </>
-          )}
-
-          {derivaDoses && (
-            <div className="field field--narrow field--calculado">
-              <span className="field__label-static">
-                Doses por embalagem <Dica id="formulacao.dosesPorEmbalagem" />
-              </span>
-              <p className="field-readonly-value field-readonly-value--calculado" data-testid="doses-derivadas">
-                {dosesPorEmbalagem === null ? "—" : formatIntegerPtBr(dosesPorEmbalagem)}
-              </p>
-            </div>
-          )}
-
+          <PremissasDaForma
+            idPrefixo="version"
+            valores={{
+              dosageForm,
+              presentationType,
+              capsulesPerDose,
+              capsulesPerPackage,
+              doseAmount,
+              doseUomCode,
+              packageContentAmount,
+              packageContentUomCode,
+            }}
+            onChange={mudarPremissa}
+            editavel={isDraft}
+            erros={fieldErrors}
+            formasOferecidas={formasOferecidas}
+            apresentacoesOferecidas={apresentacoesOferecidas}
+            unidadesDeMassa={unidadesDeMassa}
+            derivaDoses={derivaDoses}
+            dosesDerivadas={dosesPorEmbalagem}
+            testIdDasDoses="doses-derivadas"
+          >
           <div className="field field--narrow">
             <label htmlFor="version-basis">
               Base da formulação ({version.outputUnitCode})
@@ -3051,82 +1807,36 @@ export function FormulationVersionPage() {
               )}
             </div>
           )}
-          </div>
+          </PremissasDaForma>
 
-          {/*
-            PREMISSAS DE PRODUÇÃO — a perda prevista e o rendimento que sai dela.
-            Bloco próprio, e não mais um campo no meio da apresentação: a
-            apresentação descreve o que se vende, esta linha descreve o processo.
-            Compacta de propósito — é uma premissa e o seu resultado, não um
-            assunto que mereça cartão inteiro.
-          */}
-          <div className="premissas-producao">
-            <span className="premissas-producao__titulo">Premissas de produção</span>
-            <div className="premissas-producao__campos">
-              <div className="field field--narrow">
-                <label htmlFor="version-expectedLoss">
-                  Perda prevista de produção (%) <Dica id="formulacao.perdaPrevista" />
-                </label>
-                {isDraft ? (
-                  <PercentField
-                    id="version-expectedLoss"
-                    scale={CASAS_PERCENTUAL_TECNICO}
-                    placeholder="—"
-                    /* 100% de perda não tem quantidade bruta: a seta para em 99. */
-                    stepper={{ min: "0", max: "99", nome: "Perda prevista de produção" }}
-                    value={expectedLossPercent}
-                    onChangeValue={setExpectedLossPercent}
-                    {...(fieldErrors["expectedLossPercent"]
-                      ? {
-                          "aria-invalid": true as const,
-                          "aria-describedby": "version-expectedLossPercent-error",
-                        }
-                      : {})}
-                  />
-                ) : (
-                  <p className="field-readonly-value">
-                    {version.expectedLossPercent
-                      ? formatPercentPtBr(version.expectedLossPercent, OPCOES_PERCENTUAL_TECNICO)
-                      : "—"}
-                  </p>
-                )}
-                {fieldErrors["expectedLossPercent"] && (
-                  <p className="field__error" id="version-expectedLossPercent-error">
-                    {fieldErrors["expectedLossPercent"]}
-                  </p>
-                )}
-              </div>
-
-              <div className="field field--narrow field--calculado">
-                <span className="field__label-static">
-                  Rendimento esperado <Dica id="formulacao.rendimentoEsperado" />
-                </span>
-                <p
-                  className="field-readonly-value field-readonly-value--calculado"
-                  data-testid="rendimento-esperado"
-                >
-                  {rendimentoExibido === null
-                    ? "—"
-                    : formatPercentPtBr(rendimentoExibido, OPCOES_PERCENTUAL_TECNICO)}
-                </p>
-              </div>
-
-              <div className="field field--calculado premissas-producao__simulacao">
-                <span className="field__label-static">
-                  Produzir para entregar {formatIntegerPtBr(Number(LOTE_DA_SIMULACAO))}{" "}
-                  {version.outputUnitCode} <Dica id="formulacao.simulacaoDeLote" />
-                </span>
-                <p
-                  className="field-readonly-value field-readonly-value--calculado"
-                  data-testid="simulacao-de-lote"
-                >
-                  {simulacaoExibida === null
-                    ? "—"
-                    : `${formatQuantity(simulacaoExibida)} ${version.outputUnitCode}`}
-                </p>
-              </div>
+          <PremissasDeProducao
+            idPrefixo="version"
+            expectedLossPercent={expectedLossPercent}
+            onChange={setExpectedLossPercent}
+            editavel={isDraft}
+            erro={fieldErrors["expectedLossPercent"]}
+            rendimentoExibido={rendimentoExibido}
+          >
+            {/*
+              SIMULAÇÃO DE LOTE — só a Formulação tem produto acabado e unidade
+              de saída para responder "para entregar mil, produzo quanto?". O
+              Modelo não tem: a premissa é a mesma, a régua não.
+            */}
+            <div className="field field--calculado premissas-producao__simulacao">
+              <span className="field__label-static">
+                Produzir para entregar {formatIntegerPtBr(Number(LOTE_DA_SIMULACAO))}{" "}
+                {version.outputUnitCode} <Dica id="formulacao.simulacaoDeLote" />
+              </span>
+              <p
+                className="field-readonly-value field-readonly-value--calculado"
+                data-testid="simulacao-de-lote"
+              >
+                {simulacaoExibida === null
+                  ? "—"
+                  : `${formatQuantity(simulacaoExibida)} ${version.outputUnitCode}`}
+              </p>
             </div>
-          </div>
+          </PremissasDeProducao>
 
           {/*
             PREMISSAS QUE A FORMULAÇÃO NÃO EDITA, mas que quem confere precisa ver
@@ -3177,81 +1887,20 @@ export function FormulationVersionPage() {
 
         {tabelaDaSecao("EMBALAGEM")}
 
-        <FormSection
-          title="Resumo da formulação"
-          subtitle="Totais técnicos desta receita, pelo mesmo motor das linhas: o que uma dose pesa, o que cada cápsula leva e quantas doses a embalagem entrega."
-        >
-          <dl className="definition-list">
-            <dt>Forma e apresentação</dt>
-            <dd>
-              {dosageForm ? DOSAGE_FORM_LABELS[dosageForm] : "—"}
-              {presentationType ? ` · ${PRESENTATION_TYPE_LABELS[presentationType]}` : ""}
-            </dd>
-
-            {mostrarPorCapsula && (
-              <>
-                <dt>Cápsulas</dt>
-                <dd>
-                  {capsulasPorDose === null ? "—" : formatIntegerPtBr(capsulasPorDose)} por dose ·{" "}
-                  {capsulasNaEmbalagem === null ? "—" : formatIntegerPtBr(capsulasNaEmbalagem)} por
-                  embalagem
-                </dd>
-              </>
-            )}
-
-            {dosageForm === "POWDER" && (
-              <>
-                <dt>Dose e conteúdo</dt>
-                <dd>
-                  {doseAmount.trim() ? `${doseAmount} ${doseUomCode}` : "—"} por dose ·{" "}
-                  {packageContentAmount.trim()
-                    ? `${packageContentAmount} ${packageContentUomCode}`
-                    : "—"}{" "}
-                  por embalagem
-                </dd>
-              </>
-            )}
-
-            <dt>Doses por embalagem</dt>
-            <dd>{dosesPorEmbalagem === null ? "—" : formatIntegerPtBr(dosesPorEmbalagem)}</dd>
-
-            {/*
-              Soma o que É massa, e diz quando deixou linha de fora: total que
-              omite em silêncio parece completo. Sem linha somável o valor é
-              travessão — zero seria "esta dose não pesa nada".
-            */}
-            <dt>Massa por dose</dt>
-            <dd>
-              {resumoDaDose.somadas === 0
-                ? "—"
-                : `${formatQuantity(resumoDaDose.fisicaTotal.toFixed())} mg físicos · alvo ativo ${formatQuantity(resumoDaDose.teoricaTotal.toFixed())} mg`}
-            </dd>
-
-            {mostrarPorCapsula && (
-              <>
-                <dt>Massa por cápsula</dt>
-                <dd>
-                  {resumoDaDose.somadas > 0 && resumoDaDose.porCapsulaTotal
-                    ? `${formatQuantity(resumoDaDose.porCapsulaTotal.toFixed())} mg`
-                    : "—"}
-                </dd>
-              </>
-            )}
-
-            <dt>Linhas</dt>
-            <dd>
-              {formatIntegerPtBr(linhasDaComposicao.length)} na composição ·{" "}
-              {formatIntegerPtBr(linhasDaEmbalagem.length)} na embalagem
-            </dd>
-          </dl>
-
-          {resumoDaDose.foraDaSoma > 0 && (
-            <p className="field__hint">
-              {formatIntegerPtBr(resumoDaDose.foraDaSoma)} linha(s) por dose ficaram fora da soma
-              porque a unidade não é de massa. O total diz só o que pôde somar.
-            </p>
-          )}
-        </FormSection>
+        <ResumoDaReceita
+          dosageForm={dosageForm}
+          presentationType={presentationType}
+          capsulasPorDose={capsulasPorDose}
+          capsulasNaEmbalagem={capsulasNaEmbalagem}
+          doseAmount={doseAmount}
+          doseUomCode={doseUomCode}
+          packageContentAmount={packageContentAmount}
+          packageContentUomCode={packageContentUomCode}
+          dosesPorEmbalagem={dosesPorEmbalagem}
+          resumoDaDose={resumoDaDose}
+          linhasNaComposicao={linhasDaComposicao.length}
+          linhasNaEmbalagem={linhasDaEmbalagem.length}
+        />
 
         {costEstimate && (
           <FormSection
@@ -3451,49 +2100,80 @@ export function FormulationVersionPage() {
         </FormSection>
       </div>
 
-      <div className="doc-actions">
-        <div className="doc-actions__primary">
-          {/* Pendência antes de confirmação: "salvo" ao lado de campo já
-              alterado de novo mentiria sobre o que está gravado. É a mesma
-              pendência da guarda de saída, não uma conta paralela. */}
-          {isDraft && temAlteracaoPendente() ? (
-            <span className="form-status form-status--dirty" role="status">
-              Alterações não salvas
-            </span>
-          ) : (
-            feito && (
-              <span className="form-status" role="status">
-                {feito}
+      {/*
+        A BARRA FIXA DAS AÇÕES (FORMULATION-TEMPLATE-WORKBENCH-01, fatia 2).
+
+        Antes as ações moravam no fim do documento, depois do custo estimado e
+        das observações: quem editava a receita não via "Salvar rascunho" nem
+        "Ativar versão" sem rolar a tela inteira. A barra continua sendo a
+        ÚNICA superfície dessas ações — nem o topo nem o rodapé guardam uma
+        segunda cópia.
+      */}
+      <StickyActionBar
+        rotulo="Ações da formulação"
+        inicio={
+          <>
+            <Link className="btn btn--ghost" to={`/producao/formulacoes/${productId}`}>
+              ← Voltar
+            </Link>
+            {/* "Salvar como template" mudou de lugar, não de contrato: o botão
+                abre o MESMO formulário de nome, na proveniência, com a mesma
+                validação e o mesmo destino. */}
+            {podeSalvarComoTemplate && !salvarComoTemplateAberto && (
+              <button
+                type="button"
+                className="btn btn--secondary"
+                onClick={() => setSalvarComoTemplateAberto(true)}
+              >
+                Salvar como template
+              </button>
+            )}
+          </>
+        }
+        fim={
+          <>
+            {/* Pendência antes de confirmação: "salvo" ao lado de campo já
+                alterado de novo mentiria sobre o que está gravado. É a mesma
+                pendência da guarda de saída, não uma conta paralela. */}
+            {isDraft && temAlteracaoPendente() ? (
+              <span className="form-status form-status--dirty" role="status">
+                Alterações não salvas
               </span>
-            )
-          )}
-          {isDraft && (
-            <button type="button" className="btn btn--secondary" disabled={saving} onClick={handleSaveDraft}>
-              {acaoEmCurso === "rascunho" ? "Salvando…" : "Salvar rascunho"}
-            </button>
-          )}
-          {isDraft && (
-            <button
-              type="button"
-              className="btn btn--accent"
-              disabled={saving}
-              onClick={() => void abrirDialogoDeAtivacao()}
-            >
-              {acaoEmCurso === "ativar" ? "Ativando…" : "Ativar versão"}
-            </button>
-          )}
-          {version.status === "ACTIVE" && (
-            <button
-              type="button"
-              className="btn btn--accent"
-              disabled={saving}
-              onClick={handleCreateNewVersion}
-            >
-              {acaoEmCurso === "nova-versao" ? "Criando…" : "Criar nova versão"}
-            </button>
-          )}
-        </div>
-      </div>
+            ) : (
+              feito && (
+                <span className="form-status" role="status">
+                  {feito}
+                </span>
+              )
+            )}
+            {isDraft && (
+              <button type="button" className="btn btn--secondary" disabled={saving} onClick={handleSaveDraft}>
+                {acaoEmCurso === "rascunho" ? "Salvando…" : "Salvar rascunho"}
+              </button>
+            )}
+            {isDraft && (
+              <button
+                type="button"
+                className="btn btn--accent"
+                disabled={saving}
+                onClick={() => void abrirDialogoDeAtivacao()}
+              >
+                {acaoEmCurso === "ativar" ? "Ativando…" : "Ativar versão"}
+              </button>
+            )}
+            {version.status === "ACTIVE" && (
+              <button
+                type="button"
+                className="btn btn--accent"
+                disabled={saving}
+                onClick={handleCreateNewVersion}
+              >
+                {acaoEmCurso === "nova-versao" ? "Criando…" : "Criar nova versão"}
+              </button>
+            )}
+          </>
+        }
+      />
 
       <ConfirmDialog
         open={activateDialogOpen}

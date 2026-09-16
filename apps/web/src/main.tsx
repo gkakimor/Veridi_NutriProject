@@ -5,6 +5,7 @@ import { instalarMensagensObrigatorias } from "./lib/native-validation-ptbr";
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/components.css";
+import "./pages/formulation-workbench/workbench.css";
 
 // O sistema inteiro fala português — inclusive o balão de campo obrigatório.
 instalarMensagensObrigatorias();
