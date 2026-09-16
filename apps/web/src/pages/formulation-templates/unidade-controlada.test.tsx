@@ -236,20 +236,31 @@ describe("FORM-UOM-01 — unidade da base", () => {
 });
 
 describe("FORM-UOM-01 — unidade do componente", () => {
-  it("sem Item escolhido, a unidade fica indisponível", async () => {
+  /*
+   * A linha em branco não tem Item, e sem Item não há dimensão: a bancada
+   * oferece o catálogo inteiro e deixa o Item decidir na escolha. O que NÃO
+   * passa é gravar sem unidade — aí a linha diz o que falta e prende o salvar,
+   * que é a garantia que importa.
+   */
+  it("linha sem unidade escolhida diz o que falta e prende o salvar", async () => {
     await abrir(comRascunho());
+    fireEvent.click(screen.getByRole("button", { name: "+ Adicionar matéria-prima" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "+ Adicionar componente" }));
+    const vazia = screen.getByRole("combobox", { name: "Unidade de componente" });
+    expect(vazia.tagName).toBe("SELECT");
+    expect(valor(vazia)).toBe("");
 
-    const unidade = screen.getByRole("combobox", { name: "Unidade" });
-    expect(unidade.tagName).toBe("SELECT");
-    expect(unidade).toBeDisabled();
-    expect(valor(unidade)).toBe("");
+    await escolherItem(0, "Vitamina", /Vitamina C/);
+    const unidade = await screen.findByRole("combobox", { name: "Unidade de MP-000010" });
+    fireEvent.change(unidade, { target: { value: "" } });
+
+    expect(await screen.findByText("Escolha a unidade do componente.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Salvar rascunho" })).toBeDisabled();
   });
 
   it("escolher o Item traz a unidade dele, e a lista só tem a dimensão dele", async () => {
     await abrir(comRascunho());
-    fireEvent.click(screen.getByRole("button", { name: "+ Adicionar componente" }));
+    fireEvent.click(screen.getByRole("button", { name: "+ Adicionar matéria-prima" }));
 
     await escolherItem(0, "Vitamina", /Vitamina C/);
 
@@ -261,14 +272,14 @@ describe("FORM-UOM-01 — unidade do componente", () => {
 
   it("outra unidade da mesma dimensão salva com o código do catálogo", async () => {
     await abrir(comRascunho());
-    fireEvent.click(screen.getByRole("button", { name: "+ Adicionar componente" }));
+    fireEvent.click(screen.getByRole("button", { name: "+ Adicionar matéria-prima" }));
     await escolherItem(0, "Vitamina", /Vitamina C/);
     const unidade = await screen.findByRole("combobox", { name: "Unidade de MP-000010" });
 
     fireEvent.change(unidade, { target: { value: "g" } });
     const linha = unidade.closest("tr");
     if (!linha) throw new Error("unidade fora da linha");
-    fireEvent.change(within(linha).getByRole("textbox"), { target: { value: "0,5" } });
+    fireEvent.change(within(linha).getByRole("textbox", { name: /^Quantidade de/ }), { target: { value: "0,5" } });
     salvarRascunho();
 
     await waitFor(() => expect(updateFormulationTemplateVersion).toHaveBeenCalledTimes(1));
@@ -279,7 +290,7 @@ describe("FORM-UOM-01 — unidade do componente", () => {
 
   it("trocar para um Item de contagem: a unidade de massa não fica", async () => {
     await abrir(comRascunho());
-    fireEvent.click(screen.getByRole("button", { name: "+ Adicionar componente" }));
+    fireEvent.click(screen.getByRole("button", { name: "+ Adicionar matéria-prima" }));
     await escolherItem(0, "Vitamina", /Vitamina C/);
     fireEvent.change(await screen.findByRole("combobox", { name: "Unidade de MP-000010" }), {
       target: { value: "g" },
@@ -294,13 +305,13 @@ describe("FORM-UOM-01 — unidade do componente", () => {
 
   it("trocar para outro Item de massa: a unidade escolhida continua valendo, e a quantidade não muda", async () => {
     await abrir(comRascunho());
-    fireEvent.click(screen.getByRole("button", { name: "+ Adicionar componente" }));
+    fireEvent.click(screen.getByRole("button", { name: "+ Adicionar matéria-prima" }));
     await escolherItem(0, "Vitamina", /Vitamina C/);
     const unidade = await screen.findByRole("combobox", { name: "Unidade de MP-000010" });
     fireEvent.change(unidade, { target: { value: "mg" } });
     const linha = unidade.closest("tr");
     if (!linha) throw new Error("unidade fora da linha");
-    fireEvent.change(within(linha).getByRole("textbox"), { target: { value: "500" } });
+    fireEvent.change(within(linha).getByRole("textbox", { name: /^Quantidade de/ }), { target: { value: "500" } });
 
     await escolherItem(0, "Zinco", /Zinco/);
 
@@ -308,7 +319,7 @@ describe("FORM-UOM-01 — unidade do componente", () => {
     expect(valor(depois)).toBe("mg");
     const linhaDepois = depois.closest("tr");
     if (!linhaDepois) throw new Error("unidade fora da linha");
-    expect(valor(within(linhaDepois).getByRole("textbox"))).toBe("500");
+    expect(valor(within(linhaDepois).getByRole("textbox", { name: /^Quantidade de/ }))).toBe("500");
   });
 
   it.each([

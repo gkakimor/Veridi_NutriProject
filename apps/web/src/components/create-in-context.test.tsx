@@ -385,7 +385,7 @@ function templateComRascunho(): FormulationTemplateDTO {
 
 /** Os seletores de item do rascunho, em ordem de linha. */
 function camposDeItem(): HTMLInputElement[] {
-  return Array.from(document.querySelectorAll<HTMLInputElement>('input[id^="template-item-"]'));
+  return Array.from(document.querySelectorAll<HTMLInputElement>('input[id^="componente-"]'));
 }
 
 describe("Criação no contexto — coluna de tabela (Template de formulação)", () => {
@@ -409,20 +409,19 @@ describe("Criação no contexto — coluna de tabela (Template de formulação)"
     );
   }
 
-  it("o campo do item respeita quem não pode editar, como os vizinhos", () => {
-    // Era o único campo do rascunho sem `disabled`: quem não é ADMIN nem
-    // PRODUCTION trocava o item na tela e só descobria a recusa ao salvar.
+  it("quem não pode editar não ganha campo de item — vê o item, como as outras colunas", async () => {
+    /*
+     * Era o único campo do rascunho sem `disabled`: quem não é ADMIN nem
+     * PRODUCTION trocava o item na tela e só descobria a recusa ao salvar. Na
+     * bancada compartilhada a receita que não se edita não tem campo nenhum —
+     * ela é lida, com o link do Item, como na Formulação de produto.
+     */
     vi.mocked(useAuth).mockReturnValue({ user: { role: "COMMERCIAL" } } as never);
     abrir();
 
-    return waitFor(() => {
-      const campos = camposDeItem();
-      expect(campos).toHaveLength(2);
-      expect(campos[0]!.disabled).toBe(true);
-      // Campo que não se pode alterar não oferece cadastrar.
-      fireEvent.focus(campos[0]!);
-      expect(screen.queryByRole("option", { name: /Novo item/ })).toBeNull();
-    });
+    await waitFor(() => expect(screen.getByText(/^Rascunho —/)).toBeInTheDocument());
+    expect(camposDeItem()).toHaveLength(0);
+    expect(screen.queryByRole("option", { name: /Novo item/ })).toBeNull();
   });
 });
 

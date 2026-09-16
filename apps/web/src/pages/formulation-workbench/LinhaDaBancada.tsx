@@ -29,7 +29,13 @@ import {
 } from "../../lib/numeric-scales";
 import { formatQuantity, formatQuantityWithUnit } from "../../lib/quantity";
 import type { CampoDoComponente, LinhaDaReceita } from "./linha-da-receita";
-import { CAMPOS_DO_COMPONENTE, chaveDeErro, idDoCampo, purezaRegistradaSemAplicar } from "./linha-da-receita";
+import {
+  CAMPOS_DO_COMPONENTE,
+  chaveDeErro,
+  idDoCampo,
+  purezaRegistradaSemAplicar,
+  unidadeLegadaDaLinha,
+} from "./linha-da-receita";
 import { operandosDaDose } from "./previa-do-calculo";
 
 /**
@@ -57,6 +63,11 @@ export interface LinhaDaBancadaProps {
   onBuscarItem: (termo: string) => Promise<EntityOption[]>;
   /** Ausente = a tela não oferece cadastrar item daqui. */
   onCriarItem?: (() => void) | undefined;
+  /**
+   * O que falta no ITEM desta linha, quando a tela prende o salvar por isso.
+   * Ausente = nada a dizer; a coluna não inventa recusa.
+   */
+  erroDoItem?: string | undefined;
   /** Grandezas exibidas: prévia enquanto se edita, servidor no que está gravado. */
   fisicoExibido: string | null;
   equivalenteExibido: string | null;
@@ -85,6 +96,7 @@ export function LinhaDaBancada({
   opcoesDeItem,
   onBuscarItem,
   onCriarItem,
+  erroDoItem,
   fisicoExibido,
   equivalenteExibido,
   dose,
@@ -124,6 +136,10 @@ export function LinhaDaBancada({
   /* Pureza do cadastro de HOJE ao lado da aplicada, quando as duas divergem:
      é o que explica uma versão histórica não bater com o item de agora. */
   const purezaDaLinha = decimalLegivel(linha.purityPercentApplied, OPCOES_PERCENTUAL_TECNICO);
+  const idDoErroDoItem = `comp-${linha.key}-item-error`;
+  /* Unidade gravada que a lista não oferece — legado, dito onde acontece. */
+  const unidadeLegada = unidadeLegadaDaLinha(linha, unidades);
+  const idDoErroDaUnidade = `comp-${linha.key}-unidade-legada`;
   const cadastroDiferente =
     linha.itemDefaultPurityPercent !== null &&
     decimalDaApiComparavel(linha.itemDefaultPurityPercent) !== decimalDaApiComparavel(purezaDaLinha);
@@ -148,9 +164,17 @@ export function LinhaDaBancada({
             /* Sair para cadastrar o item NÃO é descartar: o rascunho vai
                junto e volta aplicado na linha. */
             onCreateNew={onCriarItem ?? (() => undefined)}
+            {...(erroDoItem
+              ? { "aria-invalid": true as const, "aria-describedby": idDoErroDoItem }
+              : {})}
           />
         ) : (
           <EntityLink kind="item" id={linha.itemId} code={linha.itemCode} name={linha.itemName} />
+        )}
+        {erroDoItem && (
+          <p className="field__error" id={idDoErroDoItem}>
+            {erroDoItem}
+          </p>
         )}
         {/*
           O CÓDIGO LEGADO ao lado da unidade de estoque, e só quando existe.
@@ -269,8 +293,19 @@ export function LinhaDaBancada({
                   value={linha.unitCode}
                   onChange={(event) => onCampo("unitCode", event.target.value)}
                   {...marcaDeErro("unitCode")}
+                  {...(unidadeLegada
+                    ? { "aria-invalid": true as const, "aria-describedby": idDoErroDaUnidade }
+                    : {})}
                 >
                   <option value="">—</option>
+                  {/* A unidade GRAVADA continua à vista mesmo fora da lista:
+                      tirá-la faria o seletor cair no vazio e apagar, no
+                      primeiro salvamento, o que a receita declarou. */}
+                  {linha.unitCode && unidadeLegada && (
+                    <option value={linha.unitCode} disabled={linha.itemId !== ""}>
+                      {linha.unitCode}
+                    </option>
+                  )}
                   {unidades.map((unit) => (
                     <option key={unit.code} value={unit.code}>
                       {unit.code}
@@ -281,6 +316,11 @@ export function LinhaDaBancada({
             </div>
             {mensagemDeErro("quantity")}
             {mensagemDeErro("unitCode")}
+            {unidadeLegada && (
+              <p className="field__error" id={idDoErroDaUnidade}>
+                {unidadeLegada}
+              </p>
+            )}
           </>
         ) : (
           `${formatQuantity(decimalLegivel(linha.quantity, OPCOES_QUANTIDADE) ?? linha.quantity)} ${linha.unitCode}`

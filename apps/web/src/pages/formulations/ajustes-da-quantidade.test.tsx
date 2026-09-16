@@ -13,8 +13,9 @@ import type { FormulationComponentDTO, FormulationVersionDTO } from "@veridi/sha
  * caixa para marcar; a reserva fica registrada para o lote e nunca multiplica a
  * dose. "Overage" não é palavra desta tela.
  *
- * `resumoDosAjustes` continua testada aqui porque continua viva — quem a usa
- * agora é o Modelo de Formulação, que mantém o painel.
+ * O painel de ajustes não existe em tela nenhuma desde a fatia 2 da bancada
+ * compartilhada: o Modelo passou a usar as MESMAS colunas, e o resumo em texto
+ * que só ele mostrava saiu junto.
  *
  * E as duas grandezas por embalagem, equivalente e físico, seguem na mesma
  * célula, sob o cabeçalho que diz de que embalagem se fala.
@@ -46,7 +47,6 @@ import {
   updateFormulationVersion,
 } from "../../lib/formulations-api";
 import { FormulationVersionPage } from "./FormulationVersionPage";
-import { resumoDosAjustes } from "../formulation-workbench/AjustesDaQuantidade";
 
 function componente(overrides: Partial<FormulationComponentDTO> = {}): FormulationComponentDTO {
   return {
@@ -286,50 +286,6 @@ describe("Pureza e reserva de produção — colunas da linha", () => {
 
     expect(celula("fisico")).toBe("0,22 kg");
     expect(screen.getByText("registrada, não aplicada")).toBeInTheDocument();
-  });
-});
-
-describe("Resumo dos ajustes na linha", () => {
-  const base = {
-    quantityMode: "THEORETICAL_WITH_ADJUSTMENTS" as const,
-    purityPercentApplied: "98",
-    overagePercent: "2",
-    applyPurityAdjustment: true,
-    applyOverageAdjustment: true,
-  };
-
-  it("calculada com os dois ajustes", () => {
-    expect(resumoDosAjustes(base)).toBe("Calculada · Pureza 98% · Overage 2%");
-  });
-
-  it("física informada: os percentuais são só registro", () => {
-    expect(resumoDosAjustes({ ...base, quantityMode: "PHYSICAL_DIRECT" })).toBe(
-      "Física informada · Pureza 98% · Overage 2% · só registro",
-    );
-  });
-
-  it("marca desligada não se apresenta como aplicada", () => {
-    expect(resumoDosAjustes({ ...base, applyOverageAdjustment: false })).toBe(
-      "Calculada · Pureza 98% · Overage 2% não aplicado",
-    );
-  });
-
-  it("calculada sem nada marcado não afirma correção", () => {
-    expect(
-      resumoDosAjustes({
-        ...base,
-        purityPercentApplied: "",
-        overagePercent: "",
-        applyPurityAdjustment: false,
-        applyOverageAdjustment: false,
-      }),
-    ).toBe("Calculada · nenhum ajuste marcado");
-  });
-
-  it("pureza vazia não vira 0% nem 100%", () => {
-    expect(resumoDosAjustes({ ...base, purityPercentApplied: "" })).toBe(
-      "Calculada · Pureza não informada · Overage 2%",
-    );
   });
 });
 

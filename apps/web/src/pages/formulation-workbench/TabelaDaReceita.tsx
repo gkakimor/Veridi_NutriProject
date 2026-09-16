@@ -1,14 +1,19 @@
 import type { ReactNode } from "react";
 import type {
   FormulationComponentBasis,
+  ResumoDaDose,
   SecaoDaFormula,
   SupplyResponsibility,
   UnitOfMeasureDTO,
 } from "@veridi/shared";
+import { UNIDADE_DE_MASSA_DA_DOSE } from "@veridi/shared";
+import { formatQuantity } from "../../lib/quantity";
+import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { FormSection } from "../../components/FormSection";
 import { TableEmptyRow } from "../../components/TableEmptyRow";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { Dica } from "./dicas";
+import type { HelpHintId } from "../../help/help-content";
 import { LinhaDaBancada } from "./LinhaDaBancada";
 import type { LinhaDaReceita } from "./linha-da-receita";
 
@@ -35,6 +40,8 @@ export interface TabelaDaReceitaProps {
   opcoesDeItem: (linha: LinhaDaReceita) => EntityOption[];
   onBuscarItem: (linha: LinhaDaReceita, termo: string) => Promise<EntityOption[]>;
   onCriarItem?: ((linha: LinhaDaReceita) => void) | undefined;
+  /** O que falta no Item da linha, quando a tela prende o salvar por isso. */
+  erroDoItem?: ((linha: LinhaDaReceita) => string | undefined) | undefined;
   valoresDaLinha: (linha: LinhaDaReceita) => {
     fisicoExibido: string | null;
     equivalenteExibido: string | null;
@@ -53,6 +60,26 @@ export interface TabelaDaReceitaProps {
   onMover: (key: string, direcao: -1 | 1) => void;
   onRemover: (key: string) => void;
   onAdicionar: (secao: SecaoDaFormula) => void;
+  /**
+   * Os totais técnicos da dose, somados pelo mesmo motor das linhas.
+   *
+   * Vão no RODAPÉ da composição, cada um sob a coluna que ele soma: o alvo sob
+   * "Alvo por dose", a massa física sob "Física por dose" e a massa por cápsula
+   * sob "Por cápsula". Conferir a receita é conferir a soma, e ter de procurar
+   * esses três números num cartão de resumo mais abaixo é conferir de memória.
+   *
+   * A embalagem não recebe: pote e tampa não somam massa de dose.
+   */
+  totaisDaDose?: ResumoDaDose | undefined;
+  /**
+   * Qual ⓘ explica a coluna de fornecimento.
+   *
+   * A regra é a mesma — Veridi ou cliente —, mas o que ela SIGNIFICA muda com o
+   * documento: na Formulação é a decisão da versão; no Modelo é sugestão, e a
+   * cópia leva o valor como ponto de partida. Texto que diverge vira propriedade
+   * explícita, nunca um `ehModelo` dentro do componente.
+   */
+  dicaDoFornecimento?: HelpHintId | undefined;
 }
 
 /**
@@ -83,6 +110,7 @@ export function TabelaDaReceita({
   opcoesDeItem,
   onBuscarItem,
   onCriarItem,
+  erroDoItem,
   valoresDaLinha,
   explicacaoDoFisico,
   erros,
@@ -93,6 +121,8 @@ export function TabelaDaReceita({
   onMover,
   onRemover,
   onAdicionar,
+  totaisDaDose,
+  dicaDoFornecimento = "formulacao.fornecimento",
 }: TabelaDaReceitaProps) {
   const daComposicao = secao === "COMPOSICAO";
   return (
@@ -144,7 +174,7 @@ export function TabelaDaReceita({
               )}
               <th className="col-regras">
                 {baseMultiplicaMaterial ? "Base · Fornecimento" : "Fornecimento"}{" "}
-                <Dica id="formulacao.fornecimento" />
+                <Dica id={dicaDoFornecimento} />
               </th>
               {daComposicao && (
                 <th className="col-reserva is-numeric">
@@ -172,6 +202,7 @@ export function TabelaDaReceita({
                   opcoesDeItem={opcoesDeItem(linha)}
                   onBuscarItem={(termo) => onBuscarItem(linha, termo)}
                   onCriarItem={onCriarItem ? () => onCriarItem(linha) : undefined}
+                  erroDoItem={erroDoItem ? erroDoItem(linha) : undefined}
                   fisicoExibido={valores.fisicoExibido}
                   equivalenteExibido={valores.equivalenteExibido}
                   dose={valores.dose}
@@ -198,6 +229,54 @@ export function TabelaDaReceita({
               </TableEmptyRow>
             )}
           </tbody>
+          {/*
+            O TOTAL FICA SOB A COLUNA QUE ELE SOMA.
+            Cada número no pé da sua coluna: o alvo sob "Alvo por dose", a massa
+            física sob "Física por dose", a massa por cápsula sob "Por cápsula".
+            Sem linha somável o valor é travessão — zero afirmaria que a dose não
+            pesa nada —, e quando alguma linha por dose ficou de fora por não ser
+            massa, o rodapé DIZ, em vez de apresentar um total que parece
+            completo.
+          */}
+          {daComposicao && totaisDaDose && linhas.length > 0 && (
+            <tfoot className="table--formulacao__totais">
+              <tr>
+                <td colSpan={3} data-label="Total">
+                  Total por dose
+                  {totaisDaDose.foraDaSoma > 0 && (
+                    <span className="cell-sub">
+                      {formatIntegerPtBr(totaisDaDose.foraDaSoma)} linha(s) fora da soma: a unidade
+                      não é de massa.
+                    </span>
+                  )}
+                </td>
+                <td className="col-quantidade is-numeric" data-label="Alvo total por dose">
+                  <span className="estoque-valor__numero">
+                    {totaisDaDose.somadas === 0
+                      ? "—"
+                      : `${formatQuantity(totaisDaDose.teoricaTotal.toFixed())} ${UNIDADE_DE_MASSA_DA_DOSE}`}
+                  </span>
+                </td>
+                <td className="col-dose is-numeric" data-label="Massa total por dose">
+                  <span className="estoque-valor__numero">
+                    {totaisDaDose.somadas === 0
+                      ? "—"
+                      : `${formatQuantity(totaisDaDose.fisicaTotal.toFixed())} ${UNIDADE_DE_MASSA_DA_DOSE}`}
+                  </span>
+                </td>
+                {mostrarPorCapsula && (
+                  <td className="col-capsula is-numeric" data-label="Massa por cápsula">
+                    <span className="estoque-valor__numero">
+                      {totaisDaDose.somadas > 0 && totaisDaDose.porCapsulaTotal
+                        ? `${formatQuantity(totaisDaDose.porCapsulaTotal.toFixed())} ${UNIDADE_DE_MASSA_DA_DOSE}`
+                        : "—"}
+                    </span>
+                  </td>
+                )}
+                <td colSpan={3 + (editavel ? 1 : 0)} aria-hidden="true" />
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
 

@@ -523,8 +523,50 @@ describe("Campo que navega — Cliente proprietário (material do cliente)", () 
  * ------------------------------------------------------------------ */
 
 const ROTA_TEMPLATE = "/producao/templates-formulacao/tpl-1";
-/** Chave da segunda linha: `${id do componente}-${índice}`. */
-const LINHA_2 = "comp-2-1";
+/**
+ * Chave da segunda linha do RASCUNHO restaurado.
+ *
+ * Desde a bancada compartilhada a linha é uma `LinhaDaReceita` e a chave sai de
+ * `proximaChaveDaLinha()` — `component-N`. O rascunho declara a sua, e a tela
+ * absorve o contador para não reemitir a mesma.
+ */
+const LINHA_1 = "component-901";
+const LINHA_2 = "component-902";
+
+/** Uma linha do rascunho guardado, no contrato inteiro que a bancada edita. */
+function linhaGuardada(key: string, itemId: string, quantity: string, unitCode: string) {
+  return {
+    key,
+    itemId,
+    itemCode: itemId ? "MP-000001" : "",
+    itemName: itemId ? "Maltodextrina" : "",
+    itemActive: true,
+    stockUnitCode: unitCode,
+    quantity,
+    unitCode,
+    basis: "FIXED_BASIS" as const,
+    supplyResponsibility: "VERIDI" as const,
+    purityPercentApplied: "",
+    overagePercent: "",
+    quantityMode: "PHYSICAL_DIRECT" as const,
+    applyPurityAdjustment: false,
+    applyOverageAdjustment: false,
+    notes: "",
+    theoreticalPerUnit: null,
+    physicalPerUnit: null,
+    theoreticalPerDose: null,
+    physicalPerDose: null,
+    physicalPerCapsule: null,
+    itemType: itemId ? ("RAW_MATERIAL" as const) : null,
+    secao: "COMPOSICAO" as const,
+    itemSourceName: null,
+    itemDeclaredNutrient: null,
+    itemFamily: null,
+    itemPackagingSubtype: null,
+    itemDefaultPurityPercent: null,
+    itemExternalCode: null,
+  };
+}
 
 function templateComRascunho(): FormulationTemplateDTO {
   const versao = {
@@ -589,7 +631,7 @@ function templateComRascunho(): FormulationTemplateDTO {
 
 /** Os seletores de item do rascunho, em ordem de linha. */
 function camposDeItem(): HTMLInputElement[] {
-  return Array.from(document.querySelectorAll<HTMLInputElement>('input[id^="template-item-"]'));
+  return Array.from(document.querySelectorAll<HTMLInputElement>('input[id^="componente-"]'));
 }
 
 describe("Coluna que navega — Item (template de formulação)", () => {
@@ -619,9 +661,20 @@ describe("Coluna que navega — Item (template de formulação)", () => {
       descricao: "",
       base: "25",
       unidade: "kg",
+      premissas: {
+        dosageForm: "" as const,
+        presentationType: "" as const,
+        capsulesPerDose: "",
+        capsulesPerPackage: "",
+        doseAmount: "",
+        doseUomCode: "",
+        packageContentAmount: "",
+        packageContentUomCode: "",
+        expectedLossPercent: "",
+      },
       linhas: [
-        { chave: "comp-1-0", itemId: ITEM_EXISTENTE.id, quantity: "10", unitCode: "kg" },
-        { chave: LINHA_2, itemId: "", quantity: "3", unitCode: "" },
+        linhaGuardada(LINHA_1, ITEM_EXISTENTE.id, "10", "kg"),
+        linhaGuardada(LINHA_2, "", "3", ""),
       ],
     };
   }
@@ -638,6 +691,7 @@ describe("Coluna que navega — Item (template de formulação)", () => {
 
     // A SEGUNDA linha é quem pede: sem guardar qual, o item voltaria para a
     // primeira — que já está resolvida.
+    const chaveDaSegundaLinha = camposDeItem()[1]!.id.replace(/^componente-/, "");
     await acionarCadastro(user, camposDeItem()[1]!, "creatina que ainda nao existe");
 
     expect(await screen.findByText("cadastro de item")).toBeInTheDocument();
@@ -645,7 +699,7 @@ describe("Coluna que navega — Item (template de formulação)", () => {
     expect(registro?.entityType).toBe("item");
     expect(registro?.fieldKey).toBe("itemId");
     expect(registro?.originRoute).toBe(ROTA_TEMPLATE);
-    expect(registro?.context).toEqual({ rowKey: LINHA_2 });
+    expect(registro?.context).toEqual({ rowKey: chaveDaSegundaLinha });
     expect(registro?.draft).toMatchObject({ base: "25" });
     // Só o rascunho: o catálogo de itens volta do servidor.
     expect(registro?.draft).not.toHaveProperty("items");

@@ -309,12 +309,14 @@ describe("Modelo de Formulação — premissas técnicas na bancada", () => {
     );
     await abrir();
 
-    const campoDoItem = document.querySelector<HTMLInputElement>('input[id^="template-item-"]')!;
+    const campoDoItem = document.querySelector<HTMLInputElement>('input[id^="componente-"]')!;
     await usuario.click(campoDoItem);
     await usuario.type(campoDoItem, "Biotina");
     await usuario.click(await screen.findByRole("option", { name: /MP-000001/ }));
 
-    // Pureza do cadastro entra como a APLICADA — snapshot, não vínculo.
-    await waitFor(() => expect(screen.getByText(/98,5%/)).toBeInTheDocument());
+    /* Pureza do cadastro entra como a APLICADA — snapshot, não vínculo. Na
+       bancada ela é COLUNA: o número fica no campo da linha, editável. */
+    const pureza = await screen.findByRole("textbox", { name: "Pureza de MP-000001" });
+    expect(pureza).toHaveValue("98,5");
   });
 });

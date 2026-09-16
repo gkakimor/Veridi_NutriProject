@@ -158,10 +158,12 @@ async function abrir() {
 const base = () => screen.getByLabelText(/Base da formulação/, { selector: "input" });
 /** As quantidades das linhas, na ordem da tabela. */
 const quantidades = () =>
-  Array.from(document.querySelectorAll<HTMLInputElement>('table input[inputmode="decimal"]'));
+  Array.from(
+    document.querySelectorAll<HTMLInputElement>('table input[aria-label^="Quantidade de"]'),
+  );
 /** Os campos de item das linhas — unidade e fornecimento também são combobox. */
 const itens = () =>
-  Array.from(document.querySelectorAll<HTMLInputElement>('table input[id^="template-item-"]'));
+  Array.from(document.querySelectorAll<HTMLInputElement>('table input[id^="componente-"]'));
 const salvar = () => screen.getByRole("button", { name: "Salvar rascunho" });
 const FALTA_QUANTIDADE = "Informe a quantidade deste componente ou remova a linha.";
 const FALTA_ITEM = "Escolha o item deste componente ou remova a linha.";
@@ -212,7 +214,7 @@ describe("Modelo de Formulação — linha incompleta não some ao salvar", () =
     const user = userEvent.setup();
     await abrir();
 
-    await user.click(screen.getByRole("button", { name: "+ Adicionar componente" }));
+    await user.click(screen.getByRole("button", { name: "+ Adicionar matéria-prima" }));
     fireEvent.change(quantidades()[1]!, { target: { value: "2" } });
     await user.click(salvar());
 
@@ -229,8 +231,9 @@ describe("Modelo de Formulação — linha incompleta não some ao salvar", () =
     expect(screen.getAllByText(FALTA_ITEM)).toHaveLength(1);
 
     // Remover a linha também resolve: sem aviso, e nada a salvar.
-    const remover = screen.getAllByRole("button", { name: "Remover componente" });
-    await user.click(remover[1]!);
+    /* A linha sem Item chama-se "componente" no rótulo de remover; a que já
+       tem Item é nomeada pelo código dele. */
+    await user.click(screen.getByRole("button", { name: "Remover componente" }));
     expect(screen.queryByText(FALTA_ITEM)).toBeNull();
     expect(salvar()).toBeDisabled();
   });
@@ -239,7 +242,7 @@ describe("Modelo de Formulação — linha incompleta não some ao salvar", () =
     const user = userEvent.setup();
     await abrir();
 
-    await user.click(screen.getByRole("button", { name: "+ Adicionar componente" }));
+    await user.click(screen.getByRole("button", { name: "+ Adicionar matéria-prima" }));
     fireEvent.change(base(), { target: { value: "1000" } });
     getFormulationTemplate.mockResolvedValue(template({ draftVersion: versao({ basisQuantity: "1000" }) }));
     await user.click(salvar());

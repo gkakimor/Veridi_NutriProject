@@ -286,9 +286,13 @@ describe("Premissas de produção — perda e rendimento", () => {
     const doses = () =>
       screen.getAllByText("0,571429 mg").map((no) => no.textContent);
     const antes = doses();
-    // O mesmo número em três lugares, todos lendo o mesmo motor: física por
-    // dose, por cápsula e a massa da dose no resumo.
-    expect(antes.length).toBe(3);
+    /*
+      O mesmo número em CINCO lugares, todos lendo o mesmo motor: física por
+      dose, por cápsula, os dois totais no rodapé da composição
+      (FORMULATION-TEMPLATE-WORKBENCH-01, fatia 2) e a massa da dose no resumo.
+      Com uma matéria-prima só, o total da coluna é o valor da linha.
+    */
+    expect(antes.length).toBe(5);
 
     fireEvent.change(perda(), { target: { value: "1" } });
     await waitFor(() => expect(rendimento().textContent).toBe("99%"));
@@ -595,7 +599,9 @@ describe("Golden — as duas versões de homologação", () => {
     expect(screen.getByTestId("doses-derivadas").textContent).toBe("120");
     // A perda de 1% está declarada e a dose continua a da planilha.
     expect(rendimento().textContent).toBe("99%");
-    expect(screen.getAllByText("0,571429 mg").length).toBe(3);
+    /* Linha, cápsula, os dois totais do rodapé e o resumo — cinco leituras do
+       mesmo motor, e todas com o número da planilha. */
+    expect(screen.getAllByText("0,571429 mg").length).toBe(5);
     expect(
       (screen.getByRole("textbox", { name: /Reserva % de MP-000030/ }) as HTMLInputElement)
         .value,

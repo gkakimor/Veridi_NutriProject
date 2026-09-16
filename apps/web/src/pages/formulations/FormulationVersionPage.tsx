@@ -1526,6 +1526,8 @@ export function FormulationVersionPage() {
         onMover={handleMoveComponent}
         onRemover={handleRemoveComponent}
         onAdicionar={handleAddComponent}
+        /* Os totais da dose fecham a COMPOSIÇÃO: a embalagem não soma massa. */
+        totaisDaDose={secao === "COMPOSICAO" ? resumoDaDose : undefined}
       />
     );
   }

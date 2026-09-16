@@ -542,3 +542,43 @@
     flex: 1 1 auto;
   }
 }
+
+/*
+ * TOTAIS DA DOSE NO RODAPE DA COMPOSICAO.
+ *
+ * Cada numero fica sob a coluna que ele soma, e a linha se le como fechamento
+ * da tabela: borda superior mais firme, rotulo em peso normal e o numero com o
+ * mesmo peso dos resultados da linha. Nao e mais uma linha de dados — e o
+ * fechamento delas.
+ */
+.table--formulacao__totais td {
+  border-top: 2px solid var(--line-strong);
+  padding-top: var(--sp-2);
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  vertical-align: top;
+}
+
+.table--formulacao__totais .estoque-valor__numero {
+  display: block;
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Em cartao (390px) o rodape vira mais um bloco rotulado, como as celulas. */
+@media (max-width: 720px) {
+  .table--formulacao__totais,
+  .table--formulacao__totais tr,
+  .table--formulacao__totais td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .table--formulacao__totais td[aria-hidden="true"] {
+    display: none;
+  }
+}

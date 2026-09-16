@@ -12,8 +12,8 @@ import { SECAO_DO_TIPO_DE_ITEM, ajustesAutorizados } from "@veridi/shared";
 import { decimalLegivel } from "../../lib/decimal-field";
 import { numericInvalidMessage, parsePtBrNumber, toPtBrEditText } from "../../lib/numeric-ptbr";
 import { OPCOES_PERCENTUAL_TECNICO, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
-import { errosDosAjustes } from "./AjustesDaQuantidade";
-import type { AjustesDaQuantidade } from "./AjustesDaQuantidade";
+import { errosDosAjustes } from "./ajustes-da-quantidade";
+import type { AjustesDaQuantidade } from "./ajustes-da-quantidade";
 import type { ItemDaBancada } from "./catalogo-de-itens";
 
 /**
@@ -194,6 +194,28 @@ export function chaveDeErro(rowKey: string, campo: CampoDoComponente): string {
  * `overagePercent` continua interno; a recusa nomeia o campo que a pessoa vê.
  */
 export const ROTULO_DA_RESERVA = "Reserva %";
+
+/**
+ * A unidade GRAVADA que a lista da linha não oferece — `null` quando está tudo
+ * certo.
+ *
+ * Acontece em receita antiga: unidade fora do catálogo (`abc`) ou de outra
+ * dimensão que a do Item (um `un` numa matéria-prima em massa). Ela NÃO é
+ * trocada em silêncio — o que está gravado continua à vista, porque trocar
+ * sozinho mudaria o que a quantidade quer dizer —, e a linha diz o que fazer.
+ * Só se julga com o Item na mão e com o catálogo carregado: antes disso, "não
+ * está na lista" é só "ainda não chegou".
+ */
+export function unidadeLegadaDaLinha(
+  row: Pick<LinhaDaReceita, "itemId" | "unitCode">,
+  unidades: { code: string }[],
+): string | null {
+  if (row.itemId === "" || unidades.length === 0) return null;
+  if (unidades.some((unidade) => unidade.code === row.unitCode)) return null;
+  return row.unitCode
+    ? `Unidade inválida ou legada: ${row.unitCode}. Escolha uma unidade da lista.`
+    : "Escolha a unidade do componente.";
+}
 
 /** Regras de uma linha — as mesmas que o servidor aplica, ditas antes de enviar. */
 export function errosDaLinha(row: LinhaDaReceita): Partial<Record<CampoDoComponente, string>> {
