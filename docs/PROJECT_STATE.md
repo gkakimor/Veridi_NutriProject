@@ -4892,6 +4892,49 @@ predicados. Smoke no navegador contra o `veridi_dev`, sem escrita (situação in
 aviso à vista em 1440 nas três telas, fora na releitura depois da reativação, VIEWER sem menu, console limpo.
 Typecheck dos três pacotes. Sem migration; sem `pnpm test` global, E2E, stress, security ou restore (homologação).
 
+## Quem cria e edita o Cliente (CUSTOMER-EDIT-PERMISSIONS-01, 2026-09-16)
+
+**Fecha CUSTOMER-EDIT-PERMISSIONS-01** ([discovery](discovery/CUSTOMER-EDIT-PERMISSIONS-DISCOVERY-01.md), opção A do
+PO). Regra durável no §98. Na `main`, fora de PROD (`release/prod` segue `5b7c1a3`).
+
+**API.** `POST /customers` e `PATCH /customers/:id` exigem ADMIN ou COMMERCIAL (`CUSTOMER_EDIT_ROLES`, em
+`packages/shared/src/customers.ts`), conferidos por `exigirPerfil` (`customers.routes.ts`) antes do corpo e antes da
+existência do cliente: os demais perfis recebem 403 `forbidden` com a frase padrão — também com corpo inválido e com id
+inexistente —, e nada é gravado. As quatro ações de situação passaram a usar o mesmo helper, com a lista delas
+(`CUSTOMER_STATUS_CHANGE_ROLES`); as duas listas coincidem hoje e continuam separadas. Autoria, validação, unicidade do
+CNPJ e o PATCH que não muda situação ficaram como estavam; a leitura (lista, detalhe, histórico, Visão do Cliente) segue
+aberta a toda sessão. `UpdateCustomerInput` do shared passou a declarar `zipCode`, `street`, `number`, `complement` e
+`district`, que a tela sempre enviou; o teste da API compara as chaves dos dois contratos com as dos schemas, nos dois
+sentidos, e o typecheck reprova a divergência.
+
+**Web.** `apps/web/src/pages/customers/customer-permissions.ts` lê a mesma lista (`usePodeEditarCliente`, sobre
+`useOptionalAuth`: fora do provider a tela se comporta como antes — seis testes antigos ganharam `useOptionalAuth` no
+mock). Na lista de Clientes, quem não edita não vê "+ Novo cliente", e o botão da linha diz "Ver". O modal abre em
+CONSULTA — trilha "Consulta", rodapé só com "Fechar" —, com as mesmas seções e rótulos em `definition-list`: nenhum
+input, nenhuma consulta de CEP, CNPJ, telefone e CEP formatados, notas com as quebras de linha (`dd.is-multiline`),
+situação, motivo, autoria e atalhos. O `EntityLink` de Cliente (`?ids=…&open=…`) chega ao mesmo modal em consulta.
+`/cadastros/clientes/novo` mostra "Seu perfil não permite cadastrar clientes. Solicite ao Comercial ou Administrador o
+cadastro do cliente." e a volta (à origem, no cadastro contextual). Pedido, recebimento de material do cliente, Projeto e
+Produto (página e modal) continuam escolhendo Cliente existente; "+ Novo cliente" só aparece para ADMIN e COMMERCIAL, e
+para os demais a busca sem resultado diz a quem pedir. A ajuda "Como funciona" do Cliente ganhou a mesma frase de
+permissão. O comentário de `customer-form.tsx` que dizia que o servidor recusa nome duplicado foi corrigido: só o CNPJ
+é único.
+
+**Preservado.** Situação cadastral e suas ações (§95); `businessLotSuffix` sem campo na tela; clientes, documentos e
+snapshots existentes intocados. Sem histórico de antes/depois do cadastro (CUSTOMER-MASTER-DATA-AUDIT-01, P2, futuro) e
+sem consulta de CNPJ (CUSTOMER-CNPJ-AUTOFILL-01, P1, **não iniciar sem aprovação explícita da Veridi**).
+
+**Validação.** API: faixa de Clientes (7 arquivos, 97 testes, 12 novos — tabela dos seis perfis, 403 antes do corpo e
+da existência, linha idêntica depois da recusa, VIEWER explícito) e as suítes que gravam Cliente fora do módulo (17
+arquivos, 201). Web: 25 casos na lista, no modal, no link e na página de Novo cliente, 30 nos seletores das cinco telas
+× seis perfis; suíte web completa com 3.657 testes e 3 falhas — as duas já registradas em WEB-SUITE-PREEXISTING-FAILURES-01
+e uma intermitente sob carga, sem módulo da rodada (W10 do BACKLOG). Mutação provada: API 6 (gate fora do POST e do
+PATCH, gate depois do corpo nos dois, existência antes do perfil, contrato sem o endereço); web 11 (lista, modal,
+formulário, página de criação, hook, os quatro seletores, a ajuda e o rótulo "Ver"). Smoke no navegador contra o
+`veridi_dev`, Vite do worktree com a API 3333, sem escrita (não-GET abortado, perfil trocado só na resposta de
+`/auth/session`): 31 verificações em 1440 para ADMIN, VIEWER, PRODUCTION, PURCHASING e COMMERCIAL, console limpo.
+Typecheck dos três pacotes. Sem migration.
+
 ## O Modelo guarda a premissa técnica (FORMULATION-TEMPLATE-WORKBENCH-01, Fatia 1, 2026-09-16)
 
 **`FATIA_1_READY = YES`.** A capability fechou com a fatia 3 ([abaixo](#as-bordas-do-modelo-e-a-capability-fechada-formulation-template-workbench-01-fatia-3-2026-09-16)).
