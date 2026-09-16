@@ -1151,12 +1151,8 @@ sempre a da versão; quando o cadastro do Item mudou desde então, o valor de ho
 sai como nota ao lado ("hoje 88,7%"), nunca no lugar.
 
 O read model (`pdf/documents/technical-sheet-model.ts`) é NEUTRO: converte uma
-fonte na estrutura que o documento desenha. O Modelo de Formulação ganha a sua
-ficha com um adaptador novo, sem copiar o documento
-(FORMULATION-TEMPLATE-WORKBENCH-01). **Modelos não foram tocados nesta rodada.**
-A fatia 1 daquela capability (2026-09-16) deu ao Modelo as premissas com os
-MESMOS nomes que este read model lê — e **não** criou PDF do Modelo: o
-adaptador continua sendo trabalho futuro.
+fonte na estrutura que o documento desenha. Desde 2026-09-16 o Modelo de
+Formulação tem a sua ficha sobre o MESMO documento (seção seguinte).
 
 Decisões de conteúdo:
 - **Rascunho** gera ficha, com a marca RASCUNHO no cabeçalho e uma frase
@@ -1184,6 +1180,51 @@ Validado com as duas formulações de referência do `veridi_dev`: **PROD-000174
 (Ácido Fólico, cápsula, 7 matérias-primas e 6 embalagens) e **PROD-000175**
 (Beef Protein, pó, 8 matérias-primas e 5 embalagens), pelo navegador e pelo
 arquivo real. Absorve FORMULATION-PRINT-ADJUSTMENTS-01 no que toca à Formulação.
+
+## Ficha Técnica do Modelo de Formulação (FORMULATION-TEMPLATE-TECHNICAL-SHEET-PDF-01, 2026-09-16)
+
+O Modelo de Formulação tem **Ficha técnica (PDF)**. A ação fica em dois lugares:
+
+- no cabeçalho do Modelo, para a versão da bancada (o rascunho quando há, senão a ativa);
+- em cada linha do histórico, inclusive a arquivada.
+
+A rota é `/producao/templates-formulacao/:templateId/versoes/:versionId/ficha-tecnica`, fora do `AppShell`. Não há
+migration, endpoint novo nem mudança de API: a tela carrega o Modelo e as unidades, e uma versão que não é daquele
+Modelo não vira ficha dele.
+
+**Um documento só.** `TechnicalSheetPdf` desenha um read model neutro em duas partes:
+
+- a MOLDURA — título, cabeçalho, rodapé, identificação, avisos e nome do arquivo — vem do adaptador da fonte;
+- o corpo técnico (`corpoTecnico`) é o mesmo para as duas fichas.
+
+`fichaTecnicaDaVersao` (Produto) manteve a assinatura e o papel: o texto das três fichas de referência saiu idêntico,
+folha a folha. `fichaTecnicaDoModelo` calcula alvo e física por dose, por cápsula e por embalagem pelas MESMAS funções
+de `@veridi/shared` que a API e a bancada usam; a mesma receita sai com o mesmo corpo técnico nas duas fichas.
+
+Decisões do PO:
+
+- **Moldura.** Título "Ficha técnica do modelo de formulação", subtítulo "Matriz de biblioteca — não é documento de
+  Produto", e nada do Produto: sem item de saída, faixa etária, lote mínimo ou caixa de embarque.
+- **Identificação.** Nome, código FT, versão, situação, criado, ativado e arquivado em, gerado em e origem. A situação
+  sai Rascunho, Ativo ou Arquivado no papel; a tela segue com "Ativa"/"Arquivada".
+- **Avisos.** Rascunho tem a marca RASCUNHO e a frase de que a matriz ainda muda. Versão arquivada é avisada como
+  histórica, e Modelo arquivado na biblioteca tem aviso próprio.
+- **Modelo legado** sem forma diz "Não informada" e omite tudo que depende da forma.
+- **Conteúdo.** Pureza, reserva e perda impressas são as da VERSÃO, e o cadastro de hoje só aparece como nota ao lado
+  da pureza. Nada de economia; observações e descrição do Modelo não vão ao papel. Material do cliente aparece só como
+  "Material do cliente".
+- **Arquivo:** `ficha-tecnica-modelo-FT-000001-v1.pdf`.
+- **Apresentação:** sai como gravada na versão. FORMULATION-PRESENTATION-BY-FORM-01 segue aguardando a Veridi.
+
+**Validação:**
+
+- 48 testes novos (conteúdo, arquivo real, ação e tela do documento), com 12 mutações pegas;
+- 49 arquivos focados verdes (652 testes: `pdf`, impressos, Modelos, Formulações, bancada, rotas);
+- texto do PDF do Produto idêntico antes × depois;
+- typecheck e build da web;
+- no Chromium, contra a API de DEV, com toda escrita bloqueada: 12/12, com uma receita real injetada só na leitura.
+
+**Não publicado:** `release/prod` continua em `5b7c1a3`.
 
 ## Perfis de Produção — primeira fundação do Planejamento (PLANNING-PRODUCTION-PROFILE-01, 2026-09-11)
 
@@ -5034,15 +5075,16 @@ três pacotes. Conferência visual no Chromium contra a API do worktree sobre o 
 com dados de pendência sintéticos e toda escrita bloqueada: painel, marca "Inativo", diff, diálogo e "Salvar como
 modelo" à vista, sem rolagem horizontal e console limpo. Sem `pnpm test` global, E2E, stress, security ou restore.
 
-**Próximo passo imediato: FORMULATION-TEMPLATE-TECHNICAL-SHEET-PDF-01** — a Ficha Técnica do Modelo, sobre o read
-model neutro da ficha do Produto. Continua aberto, fora desta capability: FORMULATION-PRESENTATION-BY-FORM-01
+**FORMULATION-TEMPLATE-TECHNICAL-SHEET-PDF-01 fechado em 2026-09-16** (seção própria acima): a Ficha Técnica do
+Modelo está na `main` e fora de PROD. Continua aberto, fora desta capability: FORMULATION-PRESENTATION-BY-FORM-01
 (aguardando a Veridi).
 
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a
 homologação com a Veridi. **Publicado em PROD no mesmo dia** (HOMOLOGATION-RELEASE-RAILWAY-01, `5b7c1a3`, seção
-"Produção"), sem a Ficha Técnica do Modelo: a atividade imediata seguinte é FORMULATION-TEMPLATE-TECHNICAL-SHEET-PDF-01.
+"Produção"), sem a Ficha Técnica do Modelo. Ela fechou na `main` logo depois
+(FORMULATION-TEMPLATE-TECHNICAL-SHEET-PDF-01) e espera a próxima decisão de publicação do PO.
 
 **A ordem vive na fila viva do [`BACKLOG.md`](BACKLOG.md)**, reconciliada em 2026-09-15: WAVE 4; Inventário Físico em
 fatias (a próxima é a Fatia 2, telas); decisões de permissões da Produção; WAVE 5; estabilização final. Os parágrafos
