@@ -653,7 +653,8 @@
   transition: background var(--transition), color var(--transition);
 }
 
-.sidebar__rail-btn:hover {
+.sidebar__rail-btn:hover,
+.sidebar__rail-btn.is-open {
   background: var(--v-green-800);
   color: var(--on-dark);
   text-decoration: none;
@@ -698,6 +699,83 @@
   background: rgba(8, 42, 32, 0.2);
 }
 
+/*
+ * Catálogo da seção ao lado do trilho (NAV-SIDEBAR-HOVER-01): por cima do
+ * conteúdo, sem empurrar a tela. `fixed` escapa do `overflow` da coluna e não
+ * alarga a página. Acima do modal de workspace (51): a sidebar segue saída de
+ * navegação com ele aberto.
+ */
+.sidebar__rail-group {
+  display: contents;
+}
+
+.sidebar-flyout {
+  position: fixed;
+  z-index: 65;
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  max-width: var(--sidebar-w);
+  max-height: calc(100vh - var(--topbar-h) - 2 * var(--sp-2));
+  padding: 0 var(--sp-2) var(--sp-2);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--v-green-900);
+  box-shadow: var(--shadow-modal);
+  animation: sidebar-flyout-in 120ms ease;
+}
+
+/* Ponte invisível sobre a folga entre o ícone e o catálogo: o mouse atravessa sem sair. */
+.sidebar-flyout::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 100%;
+  bottom: 0;
+  width: var(--sp-2);
+}
+
+/* Mesma altura do ícone: o nome da seção fica na linha dele. */
+.sidebar-flyout__title {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  margin: 0;
+  padding: 0 var(--sp-2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--on-dark);
+  font-size: 13.5px;
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+
+/* Só a lista rola quando a janela é baixa; o nome da seção fica. */
+.sidebar-flyout__items {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: var(--sp-1) 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--on-dark-3) transparent;
+}
+
+.sidebar-flyout .sidebar__link {
+  font-weight: var(--fw-regular);
+}
+
+@keyframes sidebar-flyout-in {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .sidebar-tooltip {
   position: fixed;
   z-index: 70;
@@ -714,7 +792,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sidebar.is-peek {
+  .sidebar.is-peek,
+  .sidebar-flyout {
     animation: none;
   }
 }
