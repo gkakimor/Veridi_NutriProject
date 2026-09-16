@@ -374,8 +374,8 @@ export const baseHints = {
   },
   "formulacao.overage": {
     module: "producao",
-    label: "Reserva de matéria-prima (%)",
-    text: "Percentual adicional previsto para o lote, POR LINHA: um ingrediente pode ter 10% e o seguinte 0%. Não altera a dose formulada — a quantidade física por dose e por cápsula continua a mesma depois de preenchê-lo — e nunca entra no que é declarado ao cliente. É diferente da pureza, que corrige o teor do próprio insumo, e da perda prevista de produção, que é do processo inteiro e não de um material.",
+    label: "Reserva %",
+    text: "Reserva de MATÉRIA-PRIMA: percentual a mais desta linha, previsto para o lote. É por ingrediente — um pode ter 10% e o seguinte 0%. Não altera a dose formulada: a quantidade física por dose e por cápsula continua a mesma depois de preenchê-lo, e ela nunca entra no que é declarado ao cliente. Não confundir com a pureza, que corrige o teor do próprio insumo, nem com a perda prevista de produção, que é do processo inteiro e não de um material.",
   },
   "formulacao.perdaPrevista": {
     module: "producao",

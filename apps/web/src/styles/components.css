@@ -3658,6 +3658,25 @@ button.help-flow__box:focus-visible {
   flex: 0 0 58px;
 }
 
+/*
+ * Unidade que o Item decide: texto, não campo.
+ *
+ * Quando a dimensão do Item tem uma unidade só — embalagem é sempre `un` —
+ * o seletor sai e sobra a unidade escrita ao lado do número, no mesmo lugar em
+ * que o seletor estava. O campo passa a ocupar a coluna inteira: com os dois
+ * lado a lado, o número, que é o que se digita ali, era o que cedia espaço.
+ */
+.table--formulacao .quantidade-unidade--fixa input {
+  flex: 1 1 auto;
+}
+
+.table--formulacao .quantidade-unidade__unidade {
+  flex: 0 0 auto;
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
 /* O número e a unidade não se separam em duas linhas. */
 .table--formulacao .estoque-valor__numero {
   white-space: nowrap;
@@ -3686,10 +3705,8 @@ button.help-flow__box:focus-visible {
 }
 
 /* Quantidade de embalagem é 1, 2, 120 — número curto. O campo acompanha. */
-.table--formulacao-embalagem .quantidade-unidade input {
-  flex: 0 1 72px;
-}
-
+/* Quantidade de embalagem é 1, 2, 120 — número curto, e a unidade ao lado é
+   texto. O campo leva a coluna. */
 .table--formulacao-embalagem .quantidade-unidade select {
   flex: 0 0 60px;
 }

@@ -303,8 +303,32 @@ describe("Refinamento da grade", () => {
       within(embalagem).queryByRole("textbox", { name: /Pureza de ME-000455/ }),
     ).toBeNull();
     expect(
-      within(embalagem).queryByRole("textbox", { name: /Reserva de matéria-prima de ME-000455/ }),
+      within(embalagem).queryByRole("textbox", { name: /Reserva % de ME-000455/ }),
     ).toBeNull();
+  });
+
+  it("embalagem não pergunta a unidade: `un` é a única da dimensão e vem do Item", async () => {
+    await abrir(versao());
+    const embalagem = secao(/^Embalagem$/);
+
+    // Escolher entre uma opção não é escolha: o seletor sai e a unidade fica
+    // escrita ao lado do número, no mesmo lugar.
+    expect(
+      within(embalagem).queryByRole("combobox", { name: /Unidade de ME-000455/ }),
+    ).toBeNull();
+    const quantidade = within(embalagem).getByRole("textbox", { name: /Quantidade de ME-000455/ });
+    expect(quantidade.closest(".quantidade-unidade")?.textContent).toContain("un");
+    expect(within(embalagem).getByRole("columnheader", { name: "Quantidade" })).toBeTruthy();
+  });
+
+  it("matéria-prima em massa continua escolhendo a unidade — mg, g e kg são três", async () => {
+    await abrir(versao());
+    const composicao = secao(/Composição/);
+    const unidade = within(composicao).getByRole("combobox", {
+      name: /Unidade de MP-000030/,
+    }) as HTMLSelectElement;
+    // As três de massa, e nenhuma de contagem ou volume — a ordem é a do cadastro.
+    expect([...unidade.options].map((o) => o.value).sort()).toEqual(["", "g", "kg", "mg"]);
   });
 
   it("no modo Por dose a base não é campo, e a coluna da linha é só Fornecimento", async () => {
@@ -422,7 +446,7 @@ describe("Golden — as duas versões de homologação", () => {
     expect(rendimento().textContent).toBe("99%");
     expect(screen.getAllByText("0,571429 mg").length).toBe(3);
     expect(
-      (screen.getByRole("textbox", { name: /Reserva de matéria-prima de MP-000030/ }) as HTMLInputElement)
+      (screen.getByRole("textbox", { name: /Reserva % de MP-000030/ }) as HTMLInputElement)
         .value,
     ).toBe("10");
   });
@@ -442,7 +466,7 @@ describe("Golden — as duas versões de homologação", () => {
       .map((th) => th.textContent ?? "");
     expect(cabecalhos.some((texto) => texto.includes("Por cápsula"))).toBe(false);
     expect(
-      (screen.getByRole("textbox", { name: /Reserva de matéria-prima de MP-000498/ }) as HTMLInputElement)
+      (screen.getByRole("textbox", { name: /Reserva % de MP-000498/ }) as HTMLInputElement)
         .value,
     ).toBe("2");
   });

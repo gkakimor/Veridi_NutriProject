@@ -205,9 +205,9 @@ describe("Validação inline por componente", () => {
 
     await salvar(user);
 
-    const reserva = screen.getByRole("textbox", { name: "Reserva de matéria-prima de MP-000003" });
+    const reserva = screen.getByRole("textbox", { name: "Reserva % de MP-000003" });
     await waitFor(() => expect(reserva).toHaveAttribute("aria-invalid", "true"));
-    expect(mensagemDo(reserva)).toMatch(/^MP-000003 — Reserva de matéria-prima %: use só números/);
+    expect(mensagemDo(reserva)).toMatch(/^MP-000003 — Reserva %: use só números/);
     expect(vi.mocked(updateFormulationVersion)).not.toHaveBeenCalled();
   });
 
