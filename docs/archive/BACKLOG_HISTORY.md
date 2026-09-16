@@ -1196,6 +1196,77 @@ sem posição: quem pode bloquear, desbloquear, inativar e reativar (hoje qualqu
 inativação de antes) e o aviso na tela do rascunho cujo cliente foi bloqueado depois da abertura (hoje a recusa aparece
 no enviar/confirmar)".
 
+### FORMULATION-TEMPLATE-WORKBENCH-01 — a bancada no Modelo de Formulação — **FECHADO em 2026-09-16**
+
+Decididas em 2026-09-16, sobre `FORMULATION-TEMPLATE-WORKBENCH-DISCOVERY-01`, e já **em vigor** na fatia 1:
+
+- **D-1 · forma é premissa técnica da receita.** O Modelo guarda `dosageForm` e o que cada forma usa: cápsulas
+  por dose na cápsula; dose e conteúdo da embalagem no pó. Nenhum enum novo.
+- **D-2 · apresentação comercial é DEFAULT, não vínculo.** O Modelo pode guardar `presentationType`, conteúdo e
+  unidade; a Formulação nasce com eles e segue editável enquanto rascunho. Mudar o Modelo depois não alcança
+  formulação nenhuma.
+- **D-3 · composição e embalagem, sem schema novo.** A seção sai do TIPO REAL do Item
+  (`SECAO_DO_TIPO_DE_ITEM`, `packages/shared`): matéria-prima é composição, embalagem é embalagem. O Modelo
+  continua usando Item REAL — nenhuma categoria genérica, nenhum placeholder, nenhum `PackagingSpec`.
+- **D-4 · perda prevista no Modelo.** `expectedLossPercent Decimal(9,6)?`, `null` = NÃO INFORMADA (nunca 0%
+  presumido), copiada como default ao aplicar. Continua interna: nunca altera quantidade comercial.
+- **D-5 · pureza padrão do Item, congelada na versão.** Escolher a matéria-prima traz
+  `Item.defaultPurityPercent` como ponto de partida da linha; salvar congela o valor; aplicar copia o que a
+  matriz declarou. A aplicação **não** relê o cadastro do Item — Modelo precisa ser reproduzível.
+- **D-8 · vocabulário.** Na tela, MODELO e MODELO DE FORMULAÇÃO. Classes, tabelas e rotas continuam
+  `Template` — nenhum rename estrutural foi feito (o achado de palavra na UI segue em NAV-TEMPLATE-WORDING-01).
+- **D-9 · reserva.** A experiência alvo do Modelo é a mesma da Formulação, com Reserva (%) como coluna.
+  `overagePercent` continua interno. O painel antigo "O que a quantidade informada significa" não volta.
+
+**Aprovado conceitualmente, ainda NÃO implementado:**
+
+- **D-6 · itens problemáticos ao aplicar** (item inativo, produto acabado, unidade incompatível): avisar antes
+  de aplicar e ainda assim permitir gerar rascunho para correção, com a ativação continuando fail-closed. O
+  pré-check e o diálogo são da **fatia 3**; hoje a recusa continua aparecendo na ativação, como sempre foi.
+
+**O que a fatia 1 deliberadamente NÃO fez:** a cirurgia visual em `FormulationVersionPage.tsx` (tabela
+compartilhada, W1..W8) — é a **fatia 2**, e a Formulação está em homologação final com o comportamento visual
+preservado *integralmente*. O Modelo também não ganhou custo, preço, margem, markup, fornecedor com preço nem
+PDF próprio: a matriz guarda premissa técnica, e a Ficha Técnica do Modelo fica para depois, sobre o mesmo read
+model.
+
+**Decididas em 2026-09-16, sobre a homologação da fatia 2, e já em vigor:**
+
+- **D-10 · barra de ações fixa.** As ações principais das telas longas ficam numa barra fixa no rodapé,
+  visível enquanto se trabalha, nas duas bancadas. Na Formulação: ← Voltar e Salvar como template à esquerda;
+  Salvar rascunho e Ativar versão à direita. No Modelo: ← Voltar à esquerda; Salvar rascunho e Ativar versão à
+  direita. Uma superfície só — nada duplicado no topo. "Salvar como template" mudou de lugar, não de contrato.
+- **D-11 · totais da dose na tabela.** Alvo total por dose, massa total por dose e massa por cápsula fecham a
+  TABELA de matéria-prima, no rodapé da coluna que cada um soma. O resumo da receita continua trazendo os
+  mesmos números.
+
+**O que a fatia 2 fez:** a bancada saiu de `FormulationVersionPage.tsx` e virou
+`apps/web/src/pages/formulation-workbench/` — grade, linha, premissas da forma, premissas de produção, resumo,
+prévia do cálculo e catálogo de itens, usados pelas DUAS telas, sem nenhum booleano de domínio dentro deles. O
+Modelo passou a ter composição × embalagem pelo tipo do Item, pureza e reserva como colunas, prévia pelo motor
+compartilhado e ordenação dentro da seção; o painel "O que a quantidade informada significa" saiu de vez. A
+Formulação manteve o comportamento homologado — a extração foi provada antes de o Modelo ser plugado.
+
+**O que a fatia 2 deliberadamente NÃO fez:** o pré-check de itens problemáticos e o diálogo do D-6, o diff das
+novas premissas, o acabamento do `UseTemplateDialog`, a padronização textual de MODELO na UI
+(NAV-TEMPLATE-WORDING-01 — o botão continua "Salvar como template") e a Ficha Técnica do Modelo. Tudo isso é a
+**fatia 3**.
+
+**Fechamento (fatia 3, 2026-09-16).** O D-6 saiu do papel: a ativação do Modelo relê o cadastro do Item e recusa
+nomeando cada item; a versão do Modelo traz `componentIssues` (o contrato da Formulação); o diálogo "Usar modelo da
+biblioteca" avisa antes e ainda gera o rascunho, com a ativação da Formulação fechada até a correção. Salvar como
+Modelo virou uma escrita só, com a receita copiada fiel; o diff explica premissas e ordem; o seletor oferece só item
+ativo do tipo da seção e mostra o histórico com a marca "Inativo"; a tela diz MODELO em toda superfície (absorve
+NAV-TEMPLATE-WORDING-01). A Ficha Técnica do Modelo ficou para FORMULATION-TEMPLATE-TECHNICAL-SHEET-PDF-01. Regras em
+[`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §96–§97; estado em [`PROJECT_STATE.md`](../PROJECT_STATE.md); proteção em
+[`TEST_COVERAGE_MAP.md`](../TEST_COVERAGE_MAP.md). Fatias 2 e 3 sem migration.
+
+Registro original (BACKLOG, fila viva, 2026-09-16): posição 2, P0 — "FATIA 2 ENTREGUE", próxima ação "Fatia 3 —
+aplicar/salvar, pré-check de itens problemáticos, diff das premissas, acabamento do `UseTemplateDialog` e Ficha Técnica
+do Modelo", dependência "FORMULATION-WORKBENCH-01 homologado". A narrativa acima é a seção de decisões como estava na
+fila, antes do fechamento.
+
+
 ## Seção A — linhas fechadas das tabelas
 
 | ID | Título | Sev. | Tam. |
@@ -1236,6 +1307,7 @@ no enviar/confirmar)".
 | ~~PAGED-DOCUMENT-SNAPSHOT-01~~ | **Fechado em 2026-09-14** por REPORT-ROBUSTNESS-WAVE-01 ([`PROJECT_STATE.md`](../PROJECT_STATE.md), seção própria): `GET /quality/coa-queue?all=true` devolve o recorte inteiro de uma leitura numa transação `RepeatableRead`, com teto de 1.000 lotes (acima: 400 `quality_queue_too_large`, nunca os primeiros N); a FO-03 faz um pedido só e `loadAllPages` saiu. Texto original: `loadAllPages` (`web lib/all-pages.ts`) lê por deslocamento: se entre uma requisição e a seguinte uma pendência sai da fila antes do deslocamento E outra entra depois dele, o total fica igual, nenhuma chave repete e um lote fica de fora sem aviso. Total mudando e chave repetida já lançam; a janela é o intervalo entre as páginas (~ms), só acima de 100 pendências. Fechar pede retrato no servidor (`all=true` com `ALL_ROWS` na fila da Qualidade, ou cursor) — contrato de API, fora de FO03-PENDING-CUTOFF-01 | LOW | S |
 | ~~PRICING-PRINT-THOUSANDS-TEST-01~~ | **Fechado em 2026-09-14** por PRICING-MODEL-VIEW-01 ([`PROJECT_STATE.md`](../PROJECT_STATE.md), seção própria): o teste procura `1.000 un`, a quantidade pt-BR que o PDF já escrevia, e recusa `1000 un`; a formatação ficou. Texto original: `web pages/print/base-calculada-impressos.test.tsx` falhava na `main` desde PTBR-NUMERIC-DISPLAY-AUDIT-01 (3459833) procurando `startsWith("1000 un")` | — | — |
 | ~~REPORTS-PRINT-FILTER-KEYS-DRIFT-01~~ | **Fechado em 2026-09-14** por REPORT-ROBUSTNESS-WAVE-01 ([`PROJECT_STATE.md`](../PROJECT_STATE.md), seção própria): `REPORT_FILTER_CONTRACTS` (shared) guarda `csvPath` e `filterKeys` dos 18 relatórios impressos; a web os lê sem cópia e `api modules/exports/report-filter-contracts.test.ts` compara cada contrato com as chaves do schema da rota CSV. Texto original: `filterKeys` de `REPORT_PRINT_DEFINITIONS` (web) copia à mão as chaves dos schemas de `api modules/reports/reports.schemas.ts`; nenhum teste liga os dois. Filtro novo na API sem a chave na web some do papel (falha segura: o papel omite, nunca inventa). Fechar pede o contrato de chaves no shared ou guarda que leia os dois | — | — |
+| ~~NAV-TEMPLATE-WORDING-01~~ | **Fechado em 2026-09-16** por FORMULATION-TEMPLATE-WORKBENCH-01, fatia 3 ([`PROJECT_STATE.md`](../PROJECT_STATE.md), seção própria; regra em [`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §97): Modelos de Formulação e Modelos de Estrutura de Custo dizem "Novo modelo", "Usar modelo", "Nome do modelo", "Salvar como modelo" e "Criar modelo" — botões, rótulos, mensagens da API e ajuda; classes, tabelas, rotas e apelidos da busca de telas continuam `template` — `web formulation-templates/bordas-do-modelo.test.tsx` ("Nomenclatura"). Registro original (UX): "As telas se chamam Modelos de Formulação e Modelos de Estrutura de Custo, mas botões, campos e diálogos seguem dizendo template" | UX | — |
 
 | ID | Título | Sev. | Tam. |
 |---|---|---|---|
