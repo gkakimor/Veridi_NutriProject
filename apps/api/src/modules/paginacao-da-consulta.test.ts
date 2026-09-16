@@ -17,6 +17,7 @@ import {
   listInventoryMovementsQuerySchema,
   listInventoryQuerySchema,
 } from "./inventory/inventory.schemas.js";
+import { listStockCountsQuerySchema } from "./inventory/stock-count.schemas.js";
 import { listItemsQuerySchema } from "./items/items.schemas.js";
 import { listLotsQuerySchema } from "./lots/lots.schemas.js";
 import { listPricingVersionsQuerySchema } from "./pricing/pricing.schemas.js";
@@ -69,6 +70,8 @@ const CONSULTAS: { nome: string; campos: Campos; maximo: number; padrao: number 
   { nome: "inventory", campos: camposDe(listInventoryQuerySchema), maximo: 100, padrao: 20 },
   { nome: "inventory/movements", campos: camposDe(listInventoryMovementsQuerySchema), maximo: 100, padrao: 20 },
   { nome: "inventory/customer-materials", campos: camposDe(listCustomerMaterialsQuerySchema), maximo: 100, padrao: 20 },
+  // INVENTORY-PHYSICAL-COUNT-01: as sessões de Inventário Físico (`GET /stock-counts`).
+  { nome: "stock-counts", campos: camposDe(listStockCountsQuerySchema), maximo: 100, padrao: 20 },
   { nome: "items", campos: camposDe(listItemsQuerySchema), maximo: 1000, padrao: 20 },
   { nome: "lots", campos: camposDe(listLotsQuerySchema), maximo: 100, padrao: 20 },
   { nome: "pricing", campos: camposDe(listPricingVersionsQuerySchema), maximo: 100, padrao: 20 },
