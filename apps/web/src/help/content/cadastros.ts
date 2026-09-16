@@ -886,7 +886,7 @@ export const cadastrosHints = {
   "cliente.situacao": {
     module: "cadastros",
     label: "Situação cadastral",
-    text: "Ativo recebe venda nova. Bloqueado é decisão comercial com motivo registrado: projeto, orçamento, envio, aceite e pedido novos são recusados, e o que já existe continua valendo. Inativo é cadastro arquivado — fora da lista padrão e também sem venda nova, sem excluir nada. Bloquear, desbloquear, inativar e reativar exigem motivo e ficam no histórico do cliente.",
+    text: "Ativo recebe venda nova. Bloqueado é decisão comercial com motivo registrado: projeto, orçamento, envio, aceite e pedido novos são recusados, e o que já existe continua valendo. Inativo é cadastro arquivado — fora da lista padrão e também sem venda nova, sem excluir nada. Bloquear, desbloquear, inativar e reativar são ações dos perfis Comercial e Administrador, exigem motivo e ficam no histórico do cliente; os demais perfis consultam a situação e o histórico.",
   },
 
   /* Colunas do cadastro de Fornecedores. */

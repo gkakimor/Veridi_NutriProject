@@ -3,9 +3,12 @@ import type { FormEvent } from "react";
 import type { CustomerDTO, CustomerTaxProfile } from "@veridi/shared";
 import {
   BR_STATE_CODES,
+  CUSTOMER_STATUS_CHANGE_ROLES,
+  CUSTOMER_STATUS_LABELS,
   CUSTOMER_TAX_PROFILES,
   CUSTOMER_TAX_PROFILE_LABELS,
   DEFAULT_CUSTOMER_TAX_PROFILE,
+  USER_ROLE_LABELS,
   formatBrPhone,
   isValidBrPhone,
   isValidCnpj,
@@ -26,6 +29,12 @@ import { ApiValidationError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
 import { formatDateTime } from "../../lib/dates";
 import { isCompleteZipCode, lookupCep } from "../../lib/cep-api";
+import { customerStatusBadgeClass } from "./customer-status-badge";
+
+/** "Comercial e Administrador" — lido da mesma lista que a API aplica. */
+const PERFIS_QUE_MUDAM_A_SITUACAO = CUSTOMER_STATUS_CHANGE_ROLES.map(
+  (role) => USER_ROLE_LABELS[role],
+).join(" e ");
 
 /**
  * O formulário de Cliente, uma vez só.
@@ -763,18 +772,23 @@ export function CustomerFormFields({
         </div>
       </FormSection>
 
+      {/* A situação CADASTRAL (§95), a mesma da coluna da lista — um cliente
+          bloqueado não aparece aqui como "Ativo". A frase vale para qualquer
+          perfil: diz onde a situação muda e quem pode mudá-la. */}
       {mode === "edit" && customer && (
-        <FormSection title="Status">
+        <FormSection title="Situação cadastral">
           <div className="status-line">
-            <span
-              className={customer.active ? "badge badge--active" : "badge badge--inactive"}
-            >
-              {customer.active ? "Ativo" : "Inativo"}
+            <span className={customerStatusBadgeClass(customer.status)}>
+              {CUSTOMER_STATUS_LABELS[customer.status]}
             </span>
             <span className="field__hint">
-              Use "Inativar"/"Reativar" na lista para alterar o status.
+              Bloquear, desbloquear, inativar e reativar ficam no menu “⋯” da linha, na lista
+              de Clientes — sempre com motivo, e só para os perfis {PERFIS_QUE_MUDAM_A_SITUACAO}.
             </span>
           </div>
+          {customer.status === "BLOCKED" && customer.block && (
+            <p className="field__hint">Motivo do bloqueio: {customer.block.reason}</p>
+          )}
         </FormSection>
       )}
 

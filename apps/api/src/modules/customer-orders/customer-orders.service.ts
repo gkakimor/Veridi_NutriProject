@@ -38,6 +38,7 @@ import {
   calcularTotaisFaturamento,
   calcularTotaisOrdemCompra,
   roteiroPendente,
+  situacaoCadastral,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { assertProductOperational } from "../../lib/product-lifecycle.js";
@@ -515,6 +516,9 @@ function toCustomerOrderDTO(order: OrderWithRelations): CustomerOrderDTO {
       city: usingSnapshot ? order.customerCity : order.customer.city,
       state: usingSnapshot ? order.customerState : order.customer.state,
     },
+    // Fora do snapshot de propósito: é a situação de AGORA (§95), lida do
+    // cadastro que `customerOrderInclude` já traz — nenhuma consulta a mais.
+    customerStatus: situacaoCadastral(order.customer),
     orderDate: order.orderDate.toISOString(),
     requestedDeliveryDate: order.requestedDeliveryDate ? order.requestedDeliveryDate.toISOString() : null,
     status: order.status,

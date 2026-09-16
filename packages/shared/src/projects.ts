@@ -13,6 +13,7 @@ import type {
   ProductLifecycle,
   TargetAgeGroup,
 } from "./products.js";
+import type { CustomerStatus } from "./customer-status.js";
 import type { IndustrialCostQuality } from "./industrial-cost-calculation.js";
 import type { PricingVersionDTO } from "./pricing.js";
 
@@ -484,6 +485,15 @@ export interface ProjectDTO {
    */
   customerPhone: string | null;
   customerEmail: string | null;
+  /**
+   * Situação cadastral ATUAL do Cliente (§95), projetada do cadastro a cada
+   * leitura como o contato acima — nunca congelada no Projeto.
+   *
+   * Existe para a ficha e o Orçamento avisarem que o cliente foi bloqueado ou
+   * inativado depois que a negociação começou. É aviso: quem recusa a ação
+   * continua sendo a guarda de venda do servidor.
+   */
+  customerStatus: CustomerStatus;
   name: string;
   concept: string | null;
   channel: string | null;

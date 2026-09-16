@@ -17,6 +17,7 @@ import { formatDateTime } from "../../lib/dates";
 import { getProject, getQuoteVersion } from "../../lib/projects-api";
 import { rotaDoOrcamento } from "../../lib/rota-do-orcamento";
 import { rotuloDaOrigem } from "../../lib/use-contextual-create";
+import { CustomerStatusNotice, orcamentoAindaAvanca } from "../customers/CustomerStatusNotice";
 import { QuoteWorkspace } from "./QuoteWorkspace";
 import { formatQuoteDate, quoteBadgeClass } from "./quote-display";
 
@@ -217,6 +218,15 @@ function QuoteVersionDocument({ id }: { id: string }) {
               Tentar novamente
             </button>
           </p>
+        )}
+
+        {/* Cliente bloqueado ou inativado depois que a proposta nasceu (§95). */}
+        {orcamentoAindaAvanca(quote, project.status) && (
+          <CustomerStatusNotice
+            documento="quote"
+            customerId={project.customerId}
+            status={project.customerStatus}
+          />
         )}
 
         <ContextHelp topic={helpTopics["comercial.orcamento"]} />

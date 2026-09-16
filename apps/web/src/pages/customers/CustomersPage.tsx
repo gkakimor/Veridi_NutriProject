@@ -15,12 +15,14 @@ import {
   CUSTOMER_STATUSES,
   CUSTOMER_STATUS_ACTIONS_BY_STATUS,
   CUSTOMER_STATUS_ACTION_LABELS,
+  CUSTOMER_STATUS_CHANGE_ROLES,
   CUSTOMER_STATUS_FILTER_LABELS,
   CUSTOMER_STATUS_LABELS,
   DEFAULT_CUSTOMER_STATUS_FILTER,
   formatBrPhone,
   formatCnpj,
 } from "@veridi/shared";
+import { useAuth } from "../../app/AuthProvider";
 import { commercialStatusBadgeClass } from "./commercial-status-badge";
 import { customerStatusBadgeClass } from "./customer-status-badge";
 import type { ListCustomersParams } from "../../lib/customers-api";
@@ -72,6 +74,14 @@ const PAGE_SIZE = 20;
 
 /** Cadastros → Clientes. Mesmo padrao de tabela densa + modal de Items. */
 export function CustomersPage() {
+  const { user } = useAuth();
+  /*
+   * Bloquear, desbloquear, inativar e reativar são de Comercial e
+   * Administrador — a MESMA lista que a API aplica. Os demais perfis leem a
+   * situação e o motivo na coluna, e o histórico na Visão do Cliente; só não
+   * recebem a ação que seria recusada.
+   */
+  const podeMudarSituacao = user !== null && CUSTOMER_STATUS_CHANGE_ROLES.includes(user.role);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState("");
@@ -361,11 +371,15 @@ export function CustomersPage() {
                 <td onClick={(event) => event.stopPropagation()}>
                   <RowActions
                     label={`Mais ações de ${customer.code}`}
-                    actions={CUSTOMER_STATUS_ACTIONS_BY_STATUS[customer.status].map((action) => ({
-                      label: CUSTOMER_STATUS_ACTION_LABELS[action],
-                      destructive: action === "BLOCK" || action === "DEACTIVATE",
-                      onSelect: () => abrirAcao(action, customer),
-                    }))}
+                    actions={
+                      podeMudarSituacao
+                        ? CUSTOMER_STATUS_ACTIONS_BY_STATUS[customer.status].map((action) => ({
+                            label: CUSTOMER_STATUS_ACTION_LABELS[action],
+                            destructive: action === "BLOCK" || action === "DEACTIVATE",
+                            onSelect: () => abrirAcao(action, customer),
+                          }))
+                        : []
+                    }
                   >
                     <button
                       type="button"

@@ -29,6 +29,7 @@ import {
   INVENTORY_UNAVAILABLE_REASON_LABELS,
   CUSTOMER_ORDER_BILLING_STATUS_LABELS,
   CUSTOMER_ORDER_STATUS_LABELS,
+  CUSTOMER_STATUS_LABELS,
   PRODUCTION_ORDER_STATUS_LABELS,
   PURCHASE_ORDER_STATUS_LABELS,
   SHIPMENT_STATUS_LABELS,
@@ -84,6 +85,7 @@ import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { TableEmptyRow } from "../../components/TableEmptyRow";
+import { CustomerStatusNotice, pedidoAindaAvanca } from "../customers/CustomerStatusNotice";
 
 /**
  * Ícone de ajuda de uma coluna do Plano, lido do registro central.
@@ -907,13 +909,13 @@ export function CustomerOrderPage() {
         notes: null,
         businessLotSuffix: null,
         /*
-         * Placeholder: o cliente do Pedido não está entre os ativos, e daqui
-         * não dá para saber se ele foi bloqueado ou arquivado. A tela não lê
-         * a situação desta opção — ela só mantém o campo legível.
+         * O cliente do Pedido não está na primeira página de ativos: foi
+         * bloqueado, inativado, ou só não coube nela. A situação é a ATUAL,
+         * que o próprio Pedido traz (§95) — é ela que decide a dica da opção.
          */
-        active: false,
-        blocked: false,
-        status: "INACTIVE",
+        active: customerOrder.customerStatus !== "INACTIVE",
+        blocked: customerOrder.customerStatus === "BLOCKED",
+        status: customerOrder.customerStatus,
         block: null,
         createdAt: "",
         createdByName: null,
@@ -1531,6 +1533,21 @@ export function CustomerOrderPage() {
           </p>
         )}
 
+        {/*
+          Cliente bloqueado ou inativado depois que o rascunho nasceu (§95).
+          Vale para o cliente GRAVADO: trocado no campo por outro, o aviso
+          sai — o seletor só oferece cliente ativo, e confirmar grava antes.
+        */}
+        {customerOrder &&
+          pedidoAindaAvanca(customerOrder.status) &&
+          customerId === customerOrder.customerId && (
+            <CustomerStatusNotice
+              documento="order"
+              customerId={customerOrder.customerId}
+              status={customerOrder.customerStatus}
+            />
+          )}
+
         {customerOrder?.status === "CANCELLED" && (
           <FormSection title="Cancelamento">
             <div className="status-line">
@@ -1574,7 +1591,9 @@ options={customerOptions.map((customer) => ({
                     id: customer.id,
                     code: customer.code,
                     name: customer.tradeName ?? customer.legalName,
-                    ...(customer.active ? {} : { hint: "inativo" }),
+                    ...(customer.status === "BLOCKED" || customer.status === "INACTIVE"
+                      ? { hint: CUSTOMER_STATUS_LABELS[customer.status].toLowerCase() }
+                      : {}),
                   }))}
                   canCreate
                   createLabel="Novo cliente"

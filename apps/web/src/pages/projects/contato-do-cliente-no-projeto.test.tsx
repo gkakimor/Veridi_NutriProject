@@ -63,6 +63,7 @@ const BASE: ProjectDTO = {
   customerName: "G S TEZOTTO",
   customerPhone: "15999998888",
   customerEmail: "contato@empresa.com.br",
+  customerStatus: "ACTIVE",
   name: "Multivitamínico Detox",
   concept: "Detox",
   channel: "Distribuidora",

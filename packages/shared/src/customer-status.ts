@@ -14,6 +14,8 @@
  * cadastro: o próximo evento o sobrescreveria.
  */
 
+import type { UserRole } from "./users.js";
+
 export const CUSTOMER_STATUSES = ["ACTIVE", "BLOCKED", "INACTIVE"] as const;
 
 export type CustomerStatus = (typeof CUSTOMER_STATUSES)[number];
@@ -75,6 +77,17 @@ export const CUSTOMER_STATUS_ACTION_LABELS: Record<CustomerStatusAction, string>
   DEACTIVATE: "Inativar",
   ACTIVATE: "Reativar",
 };
+
+/**
+ * Quem MUDA a situação cadastral — CUSTOMER-STATUS-HARDENING-01, decisão do PO.
+ *
+ * Bloquear, desbloquear, inativar e reativar são decisões comerciais: só
+ * Comercial e Administrador. Os demais perfis continuam lendo a situação, o
+ * motivo e o histórico onde já leem o Cliente. A API recusa os outros com 403,
+ * antes de olhar o corpo; a tela usa a MESMA lista só para não oferecer a ação
+ * que seria recusada.
+ */
+export const CUSTOMER_STATUS_CHANGE_ROLES: readonly UserRole[] = ["COMMERCIAL", "ADMIN"];
 
 /** Recusa de operação comercial nova — a mesma frase em todo fluxo. */
 export const CUSTOMER_BLOCKED_FOR_SALES_MESSAGE = "Cliente bloqueado para novas vendas.";

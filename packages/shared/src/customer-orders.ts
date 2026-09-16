@@ -1,6 +1,7 @@
 /** Contratos do módulo de Pedido do Cliente + Plano de Atendimento, consumidos por `apps/api` e `apps/web`. */
 
 import type { CustomerOrderBillingStatus } from "./billings.js";
+import type { CustomerStatus } from "./customer-status.js";
 import type { CustomerAddress } from "./customers.js";
 import type { ProductionOrderStatus } from "./production-orders.js";
 import type { QuotePaymentScheduleDTO, QuotePriceSource } from "./projects.js";
@@ -236,6 +237,15 @@ export interface CustomerOrderDTO {
   customerCnpj: string | null;
   /** Endereço congelado no CONFIRM; `null` em pedidos anteriores à cap. 33. */
   customerAddress: CustomerAddress;
+  /**
+   * Situação cadastral ATUAL do Cliente (§95) — o cadastro de agora, também
+   * no Pedido confirmado. É situação, não identidade do documento, por isso
+   * não entra no snapshot.
+   *
+   * O rascunho avisa com ela; quem recusa a confirmação continua sendo a
+   * guarda de venda do servidor.
+   */
+  customerStatus: CustomerStatus;
   orderDate: string;
   requestedDeliveryDate: string | null;
   status: CustomerOrderStatus;
