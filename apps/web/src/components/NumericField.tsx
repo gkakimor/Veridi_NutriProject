@@ -4,10 +4,12 @@ import type {
   ClipboardEvent,
   ComponentPropsWithRef,
   FocusEvent,
+  KeyboardEvent,
   PointerEvent,
 } from "react";
 import { comSimboloReal, formatarDecimalTexto } from "../lib/decimal-format";
 import { formatDecimalInput } from "../lib/decimal-input";
+import { passoNaUltimaCasa } from "../lib/numeric-step";
 import {
   isPtBrNumberDraft,
   normalizePastedNumber,
@@ -56,6 +58,33 @@ type NativeInputProps = Omit<
   "type" | "value" | "defaultValue" | "onChange" | "children" | "min" | "max" | "step" | "pattern"
 >;
 
+/**
+ * Setas de mais e menos DENTRO do campo.
+ *
+ * O passo é a última casa escrita — `1` sobe para `2`, `1,1` para `1,2` — e não
+ * uma unidade fixa: quem clica está incrementando o dígito que está vendo. A
+ * faixa é a do domínio do campo, em forma canônica (`"0"`, `"100"`), e existe
+ * para a seta parar onde a validação pararia, em vez de escrever um número que
+ * será recusado ao salvar.
+ *
+ * É opcional de propósito. Campo de quantidade livre não ganha nada com seta;
+ * percentual que se ajusta de meio em meio ponto, sim.
+ */
+export interface StepperDoCampo {
+  min?: string;
+  max?: string;
+  /**
+   * Como a seta se chama para quem não a vê: "Aumentar <nome>".
+   *
+   * O padrão é o `aria-label` do campo, que é o que a maioria das grades já
+   * passa ("Pureza de MP-000030"). Campo nomeado por `<label htmlFor>` não tem
+   * `aria-label` para herdar, e aí o nome vem daqui — sem ele a seta se
+   * chamaria "Aumentar valor", que em três campos percentuais na mesma tela
+   * não distingue nada.
+   */
+  nome?: string;
+}
+
 interface NumericFieldBaseProps extends NativeInputProps {
   /** Texto do campo em português. `""` é vazio, e vazio não é zero. */
   value: string;
@@ -72,6 +101,8 @@ export interface DecimalFieldProps extends NumericFieldBaseProps {
   scale: number;
   /** Casas que aparecem mesmo zeradas, fora do foco. */
   minFractionDigits?: number;
+  /** Setas de passo dentro do campo. Ausente = campo sem setas, como sempre foi. */
+  stepper?: StepperDoCampo;
 }
 
 interface NumericInputProps extends NumericFieldBaseProps {
@@ -79,6 +110,7 @@ interface NumericInputProps extends NumericFieldBaseProps {
   minFractionDigits: number;
   inputModePadrao: "numeric" | "decimal";
   simbolo?: "moeda" | "percentual";
+  stepper?: StepperDoCampo;
 }
 
 /** `true` quando `proposto` é `anterior` com um trecho contíguo apagado. */
@@ -97,6 +129,7 @@ function NumericInput({
   minFractionDigits,
   inputModePadrao,
   simbolo,
+  stepper,
   inputMode,
   className,
   readOnly,
@@ -107,6 +140,7 @@ function NumericInput({
   onBlur,
   onPaste,
   onPointerDown,
+  onKeyDown,
   ref,
   "aria-invalid": ariaInvalid,
   ...rest
@@ -237,13 +271,37 @@ function NumericInput({
     onBlur?.(evento);
   }
 
+  /**
+   * Um passo, pela seta ou pela tecla.
+   *
+   * O campo não é `type="number"`, então nem a seta nem `ArrowUp` existem de
+   * graça: as duas chamam a MESMA função, e o passo é o da última casa escrita.
+   * Passo sem efeito (limite da faixa, texto ilegível) não reescreve o texto —
+   * senão um clique no fim da faixa marcaria o rascunho como alterado sem
+   * mudar número nenhum.
+   */
+  function passar(direcao: 1 | -1) {
+    if (!editavel || !stepper) return;
+    const proximo = passoNaUltimaCasa(value, direcao, { ...opcoes, ...stepper });
+    if (proximo !== null && proximo !== value) onChangeValue(proximo);
+  }
+
+  function aoTeclar(evento: KeyboardEvent<HTMLInputElement>) {
+    onKeyDown?.(evento);
+    if (!stepper || evento.defaultPrevented) return;
+    if (evento.key !== "ArrowUp" && evento.key !== "ArrowDown") return;
+    // Sem isto o cursor salta para o começo ou o fim do texto junto com o passo.
+    evento.preventDefault();
+    passar(evento.key === "ArrowUp" ? 1 : -1);
+  }
+
   // Quem usa o campo e passa `aria-invalid` decide; sem isso, vale a leitura.
   const acusado = ariaInvalid === undefined ? invalido : ariaInvalid !== false && ariaInvalid !== "false";
   const classes = [className, acusado && !className?.split(" ").includes("is-invalid") ? "is-invalid" : null]
     .filter(Boolean)
     .join(" ");
 
-  return (
+  const campo = (
     <input
       {...rest}
       ref={conectar}
@@ -261,7 +319,53 @@ function NumericInput({
       onPointerDown={aoApontar}
       onFocus={aoFocar}
       onBlur={aoSair}
+      onKeyDown={aoTeclar}
     />
+  );
+
+  if (!stepper || !editavel) return campo;
+
+  /*
+   * As setas ficam DENTRO do campo, na borda direita, como as de um `number`
+   * nativo — e o CSS reserva o espaço delas no `padding`, para o número
+   * alinhado à direita não correr por baixo.
+   *
+   * `tabIndex={-1}` e `preventDefault` no ponteiro: quem usa teclado passa uma
+   * vez pelo campo e dá o passo com ArrowUp/ArrowDown; quem usa mouse clica sem
+   * tirar o foco de onde estava. Dois paradas a mais por campo numa grade de
+   * dez linhas seria o Tab virando trabalho.
+   */
+  const nomeDoCampo =
+    stepper.nome ?? (typeof rest["aria-label"] === "string" ? rest["aria-label"] : "valor");
+
+  return (
+    <span className="numeric-stepper">
+      {campo}
+      {/* Sem `aria-hidden`: são controles com nome, não enfeite. O que sai da
+          ordem do Tab é o `tabIndex`, não a existência deles. */}
+      <span className="numeric-stepper__setas">
+        <button
+          type="button"
+          className="numeric-stepper__seta"
+          tabIndex={-1}
+          aria-label={`Aumentar ${nomeDoCampo}`}
+          onPointerDown={(evento) => evento.preventDefault()}
+          onClick={() => passar(1)}
+        >
+          <svg viewBox="0 0 10 6" focusable="false" aria-hidden="true"><path d="M5 0 10 6H0z" fill="currentColor" /></svg>
+        </button>
+        <button
+          type="button"
+          className="numeric-stepper__seta"
+          tabIndex={-1}
+          aria-label={`Diminuir ${nomeDoCampo}`}
+          onPointerDown={(evento) => evento.preventDefault()}
+          onClick={() => passar(-1)}
+        >
+          <svg viewBox="0 0 10 6" focusable="false" aria-hidden="true"><path d="M5 6 0 0h10z" fill="currentColor" /></svg>
+        </button>
+      </span>
+    </span>
   );
 }
 

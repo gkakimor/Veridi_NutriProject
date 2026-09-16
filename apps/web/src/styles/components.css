@@ -3634,11 +3634,120 @@ button.help-flow__box:focus-visible {
 .table--formulacao-embalagem th.col-acoes,
 .table--formulacao-embalagem td.col-acoes { width: 3.9544%; }
 
+/*
+ * CAMPO DA GRADE COM A MESMA CARA DO CAMPO DO INGREDIENTE.
+ *
+ * `.field input` dá altura, borda, raio e fundo aos campos do formulário, e
+ * célula de tabela não é `.field`: os campos da bancada caíam no desenho nativo
+ * do navegador — canto reto, borda dupla, 2px mais baixos — ao lado do seletor
+ * de item, que é estilizado. Na mesma linha, dois desenhos de campo diferentes.
+ * A folga lateral é menor que a do seletor porque a coluna é estreita; o resto
+ * é igual.
+ */
 .table--formulacao td select,
 .table--formulacao td input[type="text"] {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
+  height: 34px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--fs-base);
+  font-family: inherit;
+}
+
+.table--formulacao td select:focus-visible,
+.table--formulacao td input[type="text"]:focus-visible {
+  outline: none;
+  border-color: var(--v-green-700);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--v-green-700);
+}
+
+/* Percentual é número: alinha à direita, como as colunas de resultado ao lado. */
+.table--formulacao .col-pureza input[type="text"],
+.table--formulacao .col-reserva input[type="text"] {
+  text-align: right;
+}
+
+/*
+ * SETAS DE PASSO DENTRO DO CAMPO.
+ *
+ * O campo numérico da casa é `type="text"` — é assim que `1,5` é lido igual em
+ * qualquer máquina, em vez de depender do idioma do navegador. O preço disso é
+ * que o `spinner` nativo não vem junto, e ele é justamente o gesto esperado num
+ * percentual que se ajusta de meio em meio ponto. Estas setas o reconstroem,
+ * com o desenho do nativo: duas pontas empilhadas na borda direita, dentro da
+ * moldura do campo.
+ *
+ * O `padding-right` do campo reserva a faixa delas, para o número alinhado à
+ * direita não passar por baixo. Discretas em repouso e nítidas no hover ou com
+ * o campo em foco: é controle de ajuste fino, não o assunto da célula.
+ */
+.numeric-stepper {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.numeric-stepper input[type="text"] {
+  padding-right: 22px;
+}
+
+.table--formulacao td .numeric-stepper input[type="text"] {
+  padding-right: 22px;
+}
+
+.numeric-stepper__setas {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  right: 1px;
+  width: 18px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  overflow: hidden;
+}
+
+.numeric-stepper__seta {
+  flex: 1 1 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+.numeric-stepper__seta svg {
+  width: 7px;
+  height: 5px;
+  display: block;
+}
+
+.numeric-stepper:hover .numeric-stepper__seta,
+.numeric-stepper:focus-within .numeric-stepper__seta {
+  color: var(--ink-2);
+}
+
+.numeric-stepper__seta:hover {
+  background: var(--canvas);
+  color: var(--v-green-700);
+}
+
+/* Toque não tem hover: no celular as setas ficam sempre à mostra e maiores. */
+@media (pointer: coarse) {
+  .numeric-stepper__setas { width: 26px; }
+  .numeric-stepper input[type="text"],
+  .table--formulacao td .numeric-stepper input[type="text"] { padding-right: 30px; }
+  .numeric-stepper__seta { color: var(--ink-2); }
+  .numeric-stepper__seta svg { width: 9px; height: 6px; }
 }
 
 /* Quantidade e unidade na mesma célula: o número decide, a unidade qualifica. */

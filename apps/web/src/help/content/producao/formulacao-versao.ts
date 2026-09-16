@@ -77,15 +77,15 @@ export const formulacaoVersao = {
   },
 
   terms: [
-    { term: "Modo de cálculo", text: "Base fixa: as quantidades produzem a base inteira. Por dose: a quantidade de cada componente é para UMA dose." },
-    { term: "Doses por embalagem", text: "Quantas doses cabem numa embalagem. É o multiplicador do modo por dose; em branco, não há quantidade física nem custo." },
+    { term: "Modo de cálculo", text: "Base fixa: as quantidades produzem a base inteira. Por dose: cada componente é para UMA dose." },
+    { term: "Doses por embalagem", text: "Quantas doses cabem numa embalagem. Multiplica o modo por dose; em branco, não há quantidade física nem custo." },
     { term: "Alvo por dose", text: "A quantidade ATIVA que uma dose deve entregar. É o que a fórmula promete; o que a fábrica pesa sai dela pela pureza." },
-    { term: "Pureza", text: "Teor real do insumo. Corrige a física: com 70%, 0,4 mg de alvo viram 0,571429 mg pesados. Em branco é desconhecida, nunca 100% — é assim que se evita a dupla correção, quando o alvo já vem corrigido." },
-    { term: "Reserva de matéria-prima", text: "Percentual a mais previsto para o lote, POR LINHA. Fica registrado na linha e NÃO altera a dose: a física por dose e por cápsula continua a mesma." },
-    { term: "Perda prevista de produção", text: "Percentual estimado de perda normal do processo produtivo, premissa da VERSÃO inteira. Entra no planejamento e no custo estimado interno por unidade vendável, e nunca altera a quantidade comercial do Orçamento, do Pedido ou do faturamento." },
-    { term: "Por embalagem", text: "Equivalente é por unidade acabada, ANTES da pureza; ao lado, o físico é depois — é o que a ordem reserva." },
-    { term: "Fornecimento", text: "Veridi compra e custeia. Cliente envia o material: ele entra na receita e na necessidade, nunca no custo da Veridi." },
-    { term: "Custo estimado de materiais", text: "Prévia de apoio, calculada com os preços de hoje. Não é gravada e não substitui o cálculo salvo." },
+    { term: "Pureza", text: "Teor real do insumo. Corrige a física: com 70%, 0,4 mg de alvo viram 0,571429 mg pesados. Em branco é desconhecida, nunca 100% — é assim que se evita a dupla correção." },
+    { term: "Reserva de matéria-prima", text: "Percentual a mais para o lote, por linha. Fica registrado e NÃO altera a dose." },
+    { term: "Perda prevista de produção", text: "Perda normal do processo, premissa da versão. Entra no planejamento e no custo por unidade vendável; nunca na quantidade comercial." },
+    { term: "Por embalagem", text: "Equivalente é por unidade acabada, antes da pureza; ao lado, o físico é depois — o que a ordem reserva." },
+    { term: "Fornecimento", text: "Veridi compra e custeia. Cliente envia o material: entra na receita e na necessidade, nunca no custo da Veridi." },
+    { term: "Custo estimado de materiais", text: "Prévia com os preços de hoje. Não é gravada e não substitui o cálculo salvo." },
   ],
   states: [
     { name: "Rascunho", allows: "Edita e salva; não produz e não custeia." },
@@ -95,8 +95,7 @@ export const formulacaoVersao = {
   cautions: [
     "Não tem volta: versão ativada não se edita. Mudar a receita é criar outra versão.",
     "A pureza SEMPRE corrige. Se o alvo já vier corrigido, deixe-a em branco — senão o sistema divide duas vezes e a ordem reserva material a mais.",
-    "A reserva de matéria-prima não entra na dose: é previsão de lote, linha a linha.",
-    "A perda prevista de produção não entra na dose nem na quantidade vendida: ela aumenta a quantidade BRUTA planejada e o custo estimado interno, e o Orçamento, o Pedido e o faturamento continuam na quantidade contratada.",
+    "Nem a reserva nem a perda prevista entram na dose. A perda também não muda quantidade vendida: ela aumenta a quantidade bruta planejada e o custo estimado; Orçamento, Pedido e faturamento seguem o contratado.",
     'O botão "Ativar" grava antes o que está na tela: o que você vê é o que vira ativa.',
     "Observações e notas técnicas não entram em cálculo.",
   ],

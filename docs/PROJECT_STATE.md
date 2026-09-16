@@ -77,7 +77,10 @@ estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0
   **Apresentação comercial** com as opções coerentes com a Forma, e as frases fixas viraram ⓘ. A coluna da reserva
   ficou em **Reserva %**, com o significado no ⓘ, e o seletor de unidade da Embalagem saiu: a dimensão de contagem tem
   só `un` cadastrada, então a unidade vem do Item e o campo numérico ocupa a coluna inteira — o seletor por linha volta
-  apenas quando o cadastro oferece mais de uma unidade compatível. **Falta a avaliação
+  apenas quando o cadastro oferece mais de uma unidade compatível. Os campos da grade ganharam o desenho do campo do
+  Ingrediente (altura, borda e canto), os dois percentuais alinham o valor à direita, e Pureza, Reserva e Perda
+  prevista ganharam setas de passo dentro do campo — o passo é a ÚLTIMA CASA escrita (`1`→`2`, `1,1`→`1,2`), em
+  aritmética inteira, parando onde a validação pararia. **Falta a avaliação
   visual do PO** — é dela que depende o fechamento;
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 
