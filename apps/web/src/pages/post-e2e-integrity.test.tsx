@@ -73,8 +73,10 @@ describe("Adicionar consumo extra", () => {
     abrirConsumoExtra();
     // Antes, o limite só aparecia na recusa — tarde demais para decidir
     // quanto pedir.
-    expect(screen.getByText("Disponível não reservado")).toBeTruthy();
-    expect(screen.getByText(/3\.666667/)).toBeTruthy();
+    const rotulo = screen.getByText("Disponível não reservado");
+    // O `3.666667` da API é lido em pt-BR, com a unidade, ao lado do rótulo —
+    // nunca cru (PTBR-NUMERIC-DISPLAY-AUDIT-01).
+    expect(rotulo.nextElementSibling?.textContent).toBe("3,666667 kg");
   });
 
   it("mostra reservado, já consumido e saldo reservado lado a lado", () => {
