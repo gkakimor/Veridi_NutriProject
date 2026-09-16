@@ -320,7 +320,18 @@ function componentIssues(
 
 const versionInclude = {
   product: true,
-  components: { include: { item: true } },
+  /*
+   * ORDENADO POR `position`, como todo documento com linhas nesta base.
+   *
+   * A gravação sempre escreveu `position` pelo índice do array, e a leitura não
+   * pedia ordem nenhuma: o banco devolvia na ordem que quisesse. Funcionava por
+   * acaso — `deleteMany` seguido de `createMany` costuma devolver na ordem de
+   * inserção —, e acaso não é contrato: basta um UPDATE numa linha para ela
+   * mudar de lugar físico e a receita aparecer embaralhada. O motor de
+   * necessidade já ordenava (`requirement-calc.ts`); quem não ordenava era a
+   * leitura que a TELA usa, e foi a reordenação manual que tornou isso visível.
+   */
+  components: { include: { item: true }, orderBy: { position: "asc" as const } },
   // Nome atual do template de origem, só para o rótulo "criada a partir de".
   originTemplateVersion: { include: { formulationTemplate: true } },
 } as const;

@@ -211,6 +211,63 @@ describe("Perda prevista — snapshot da versão", () => {
   });
 });
 
+describe("Ordem das linhas da receita", () => {
+  it("a ordem gravada volta na leitura, e não a ordem de inserção do banco", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const a = await criarItem(app, { type: "RAW_MATERIAL", unitCode: "kg" });
+    const b = await criarItem(app, { type: "RAW_MATERIAL", unitCode: "kg" });
+    const c = await criarItem(app, { type: "RAW_MATERIAL", unitCode: "kg" });
+    const produto = await criarProduto(app);
+    const versao = await primeiraVersao(app, produto.id);
+
+    const linha = (itemId: string) => ({ itemId, quantity: "1", unitCode: "kg" });
+
+    const original = await gravarOk(app, versao.id, {
+      basisQuantity: "1",
+      components: [linha(a.id), linha(b.id), linha(c.id)],
+    });
+    expect(original.components.map((x: { itemCode: string }) => x.itemCode)).toEqual([
+      a.code,
+      b.code,
+      c.code,
+    ]);
+
+    // Reordenado na tela: C, A, B. A gravação escreve `position` pelo índice.
+    const reordenado = await gravarOk(app, versao.id, {
+      components: [linha(c.id), linha(a.id), linha(b.id)],
+    });
+    expect(reordenado.components.map((x: { itemCode: string }) => x.itemCode)).toEqual([
+      c.code,
+      a.code,
+      b.code,
+    ]);
+
+    /*
+     * A ordem sobrevive a uma LEITURA NOVA, e não só à resposta do PATCH.
+     *
+     * Nota honesta sobre o alcance deste caso: ele NÃO distingue a leitura com
+     * `orderBy: position` da leitura sem. Tentei construir a diferença — pondo
+     * a ordem física e a de `position` em desacordo com UPDATEs diretos — e o
+     * Postgres devolveu na ordem de `position` nas duas versões. O `orderBy` do
+     * serviço é garantia explícita, do mesmo tipo que Pedido, Faturamento e
+     * Ordem de Produção já têm, não correção de um defeito observado. O que
+     * este caso guarda de verdade é a ESCRITA: `position` pelo índice do array
+     * e o DTO devolvendo nessa ordem — é isso que quebra se alguém passar a
+     * ordenar o payload ou parar de gravar a posição.
+     */
+    const relido = await app.inject({ method: "GET", url: `/formulation-versions/${versao.id}` });
+    expect(relido.json().components.map((x: { itemCode: string }) => x.itemCode)).toEqual([
+      c.code,
+      a.code,
+      b.code,
+    ]);
+
+    await app.close();
+  });
+});
+
 describe("Perda prevista — o que ela NÃO muda", () => {
   it("a física por dose e por cápsula do Ácido Fólico continua 0,571428… mg", async () => {
     const app = buildTestApp();
