@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -437,7 +439,87 @@ describe("Refinamento da grade", () => {
       within(composicao).getByRole("combobox", { name: "Base de cálculo do componente" }),
     ).toBeTruthy();
   });
+
+  /*
+   * Em PROD (base fixa) o seletor de Fornecimento saía ~90px da célula e ficava
+   * por baixo do campo da Reserva: `.table td` declara `nowrap`, e os dois
+   * seletores de 100% ficavam na mesma linha. O jsdom não faz layout — a prova
+   * visual é do navegador; aqui fica o contrato que a sustenta.
+   */
+  it("na base fixa, Base e Fornecimento ficam um sobre o outro na mesma coluna, sem mudar largura nenhuma", async () => {
+    await abrir(versao({ components: [acidoFolico({ basis: "FIXED_BASIS" }), pote()] }));
+
+    // Composição e embalagem: os dois seletores na MESMA célula, a Base antes.
+    const fornecimentos = screen.getAllByRole("combobox", {
+      name: "Responsabilidade de fornecimento",
+    });
+    expect(fornecimentos).toHaveLength(2);
+    for (const fornecimento of fornecimentos) {
+      const celula = fornecimento.closest("td") as HTMLElement;
+      expect(celula.classList.contains("col-regras")).toBe(true);
+      expect(
+        within(celula).getByRole("combobox", { name: "Base de cálculo do componente" })
+          .nextElementSibling,
+      ).toBe(fornecimento);
+    }
+
+    const regras = regrasDaBancada();
+    expect(regras.get(".table--formulacao .col-regras__campos select + select")).toMatch(
+      /display:\s*block/,
+    );
+    // A coluna continua com a largura declarada nas duas seções, e nenhuma
+    // outra coluna pagou a conta: as larguras do PO, uma a uma.
+    const larguras = (secao: string, colunas: string[]) =>
+      Object.fromEntries(
+        colunas.map((coluna) => [coluna, largura(regras, `.table--formulacao-${secao} .col-${coluna}`)]),
+      );
+    expect(
+      larguras("composicao", ["item", "fonte", "pureza", "quantidade", "dose", "regras", "reserva", "fisico"]),
+    ).toEqual({
+      item: 36.6562,
+      fonte: 14.1421,
+      pureza: 6.4343,
+      quantidade: 10.4558,
+      dose: 7.3727,
+      regras: 6.7024,
+      reserva: 6.4343,
+      fisico: 6.9705,
+    });
+    expect(largura(regras, ".table--formulacao-composicao td.col-acoes")).toBe(4.8257);
+    expect(largura(regras, ".table--formulacao-composicao.table--com-capsula .col-item")).toBe(30.2219);
+    expect(largura(regras, ".table--formulacao-composicao.table--com-capsula .col-capsula")).toBe(6.4343);
+    expect(larguras("embalagem", ["item", "quantidade", "regras", "fisico"])).toEqual({
+      item: 58.037,
+      quantidade: 14.4772,
+      regras: 13.6729,
+      fisico: 8.9812,
+    });
+    expect(largura(regras, ".table--formulacao-embalagem td.col-acoes")).toBe(4.8257);
+  });
 });
+
+/** Regras de `workbench.css` por seletor, sem comentários — a folha que as duas bancadas usam. */
+function regrasDaBancada(): Map<string, string> {
+  const css = readFileSync(
+    join(process.cwd(), "src", "pages", "formulation-workbench", "workbench.css"),
+    "utf8",
+  )
+    .replace(/\r\n/g, "\n")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+  const regras = new Map<string, string>();
+  for (const [, seletores = "", corpo = ""] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    for (const seletor of seletores.split(",")) {
+      regras.set(seletor.trim().replace(/\s+/g, " "), corpo.trim());
+    }
+  }
+  return regras;
+}
+
+function largura(regras: Map<string, string>, seletor: string): number {
+  const declarada = regras.get(seletor)?.match(/width:\s*([\d.]+)%/)?.[1];
+  if (!declarada) throw new Error(`sem largura declarada para ${seletor}`);
+  return Number(declarada);
+}
 
 describe("Ordem dos itens da formulação", () => {
   const codigos = (bloco: HTMLElement) =>

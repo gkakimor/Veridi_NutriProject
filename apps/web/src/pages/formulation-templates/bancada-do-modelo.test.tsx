@@ -449,6 +449,33 @@ describe("Bancada do Modelo — fornecimento", () => {
     await waitFor(() => expect(updateFormulationTemplateVersion).toHaveBeenCalledTimes(1));
     expect(corpoEnviado().components[0]).toMatchObject({ supplyResponsibility: "CUSTOMER" });
   });
+
+  it("na base fixa, Base e Fornecimento dividem a mesma célula, a Base primeiro", async () => {
+    await abrir(
+      template(
+        versao({
+          calculationMode: "FIXED_BASIS",
+          components: [materiaPrima({ basis: "FIXED_BASIS" }), embalagem()],
+        }),
+      ),
+    );
+
+    const fornecimentos = screen.getAllByRole("combobox", {
+      name: "Responsabilidade de fornecimento",
+    });
+    expect(fornecimentos).toHaveLength(2);
+    for (const fornecimento of fornecimentos) {
+      const celula = fornecimento.closest("td") as HTMLElement;
+      expect(celula.classList.contains("col-regras")).toBe(true);
+      // É este par que `workbench.css` empilha (`select + select`), na mesma
+      // folha da Formulação; a guarda da folha está em
+      // `formulations/premissas-de-producao.test.tsx`.
+      expect(
+        within(celula).getByRole("combobox", { name: "Base de cálculo do componente" })
+          .nextElementSibling,
+      ).toBe(fornecimento);
+    }
+  });
 });
 
 describe("Bancada do Modelo — versão legada sem forma", () => {
