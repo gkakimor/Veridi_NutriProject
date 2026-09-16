@@ -30,6 +30,7 @@ import { changeCustomerStatus, listCustomers } from "../../lib/customers-api";
 import { useFilteredPage, useListQuery } from "../../lib/list-query";
 import { CustomerFormModal } from "./CustomerFormModal";
 import { CustomerStatusDialog } from "./CustomerStatusDialog";
+import { PEDIR_CADASTRO_DE_CLIENTE, podeEditarCliente } from "./customer-permissions";
 import { RowActions } from "../../components/RowActions";
 import {
   RecordContextChip,
@@ -82,6 +83,13 @@ export function CustomersPage() {
    * recebem a ação que seria recusada.
    */
   const podeMudarSituacao = user !== null && CUSTOMER_STATUS_CHANGE_ROLES.includes(user.role);
+  /*
+   * Criar e editar o cadastro também são de Comercial e Administrador, por
+   * outra lista (`CUSTOMER_EDIT_ROLES`). Os demais perfis abrem o Cliente em
+   * consulta — pela linha, pelo "Ver" ou por link de outra tela — e não
+   * recebem "+ Novo cliente".
+   */
+  const podeEditar = podeEditarCliente(user?.role);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState("");
@@ -204,9 +212,11 @@ export function CustomersPage() {
         {/* Leva à tela oficial, não ao modal: o cadastro passou a ter URL
             própria, e é ela que sobrevive a um F5 e vale como link. O modal
             continua servindo à EDIÇÃO, aberta a partir da linha. */}
-        <Link className="btn btn--primary" to="/cadastros/clientes/novo">
-          + Novo cliente
-        </Link>
+        {podeEditar && (
+          <Link className="btn btn--primary" to="/cadastros/clientes/novo">
+            + Novo cliente
+          </Link>
+        )}
         <ExportCsvButton
           path="/customers/export.csv"
           filters={{
@@ -386,7 +396,7 @@ export function CustomersPage() {
                       className="btn btn--ghost btn--sm"
                       onClick={() => setModalState({ mode: "edit", customer })}
                     >
-                      Editar
+                      {podeEditar ? "Editar" : "Ver"}
                     </button>
                   </RowActions>
                 </td>
@@ -419,8 +429,10 @@ export function CustomersPage() {
                     Ver todos
                   </button>
                 </>
-              ) : (
+              ) : podeEditar ? (
                 "Nenhum cliente cadastrado ainda. O cliente é a raiz de projeto, pedido e produto — comece por ele."
+              ) : (
+                `Nenhum cliente cadastrado ainda. ${PEDIR_CADASTRO_DE_CLIENTE}`
               )}
             </ListStatusRow>
           </tbody>
@@ -463,6 +475,7 @@ export function CustomersPage() {
           key={modalState.mode === "edit" ? modalState.customer.id : "create"}
           mode={modalState.mode}
           customer={modalState.mode === "edit" ? modalState.customer : null}
+          readOnly={!podeEditar}
           onClose={() => setModalState({ mode: "closed" })}
           onSaved={() => {
             setModalState({ mode: "closed" });

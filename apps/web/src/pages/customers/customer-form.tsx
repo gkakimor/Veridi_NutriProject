@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import type { CustomerDTO, CustomerTaxProfile } from "@veridi/shared";
 import {
   BR_STATE_CODES,
+  CUSTOMER_EDIT_ROLES,
   CUSTOMER_STATUS_CHANGE_ROLES,
   CUSTOMER_STATUS_LABELS,
   CUSTOMER_TAX_PROFILES,
@@ -10,6 +11,7 @@ import {
   DEFAULT_CUSTOMER_TAX_PROFILE,
   USER_ROLE_LABELS,
   formatBrPhone,
+  formatCnpj,
   isValidBrPhone,
   isValidCnpj,
   isValidEmail,
@@ -33,6 +35,11 @@ import { customerStatusBadgeClass } from "./customer-status-badge";
 
 /** "Comercial e Administrador" — lido da mesma lista que a API aplica. */
 const PERFIS_QUE_MUDAM_A_SITUACAO = CUSTOMER_STATUS_CHANGE_ROLES.map(
+  (role) => USER_ROLE_LABELS[role],
+).join(" e ");
+
+/** Quem altera o cadastro — a lista do cadastro, que não é a da situação. */
+const PERFIS_QUE_EDITAM_O_CADASTRO = CUSTOMER_EDIT_ROLES.map(
   (role) => USER_ROLE_LABELS[role],
 ).join(" e ");
 
@@ -177,11 +184,17 @@ export function useCustomerForm({
   mode,
   customer,
   onSaved,
+  readOnly = false,
 }: {
   mode: "create" | "edit";
   customer: CustomerDTO | null;
   /** Recebe o registro criado — permite selecioná-lo de volta na origem. */
   onSaved: (created?: CustomerDTO) => void;
+  /**
+   * Consulta: o perfil não edita o cadastro (CUSTOMER-EDIT-PERMISSIONS-01).
+   * Os campos viram valores e nada é enviado — a API recusaria com 403.
+   */
+  readOnly?: boolean;
 }) {
   const [form, setForm] = useState<FormState>(() => initialState(customer));
   const [saving, setSaving] = useState(false);
@@ -360,7 +373,7 @@ export function useCustomerForm({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (saving) return;
+    if (saving || readOnly) return;
 
     const nextClientErrors: Record<string, string> = {};
     for (const field of VALIDATED_FIELDS) {
@@ -468,10 +481,176 @@ export function useCustomerForm({
     errorFor,
     mode,
     customer,
+    readOnly,
   };
 }
 
 export type CustomerFormController = ReturnType<typeof useCustomerForm>;
+
+/**
+ * Os quatro atalhos continuam levando ao módulo, como sempre levaram: "quero
+ * ir trabalhar em Pedidos deste cliente". A Visão do Cliente é a alternativa,
+ * não a substituta — "quero acompanhar o cliente como contexto".
+ */
+function AtalhosDoCliente({ customer }: { customer: CustomerDTO }) {
+  return (
+    <RelatedLinks
+      links={[
+        {
+          label: "Visão do Cliente",
+          to: `/consultas/clientes/${customer.id}/resumo`,
+          highlight: true,
+        },
+        { label: "Projetos", to: `/comercial/projetos?customerId=${customer.id}` },
+        { label: "Pedidos", to: `/comercial/pedidos?customerId=${customer.id}` },
+        { label: "Faturamentos", to: `/comercial/faturamento?customerId=${customer.id}` },
+        {
+          label: "Materiais do cliente",
+          to: `/estoque/materiais-de-clientes?customerId=${customer.id}`,
+        },
+      ]}
+    />
+  );
+}
+
+/**
+ * A situação CADASTRAL (§95), a mesma da coluna da lista — um cliente
+ * bloqueado não aparece aqui como "Ativo". A frase vale para qualquer perfil:
+ * diz onde a situação muda e quem pode mudá-la.
+ */
+function SituacaoDoCadastro({ customer }: { customer: CustomerDTO }) {
+  return (
+    <FormSection title="Situação cadastral">
+      <div className="status-line">
+        <span className={customerStatusBadgeClass(customer.status)}>
+          {CUSTOMER_STATUS_LABELS[customer.status]}
+        </span>
+        <span className="field__hint">
+          Bloquear, desbloquear, inativar e reativar ficam no menu “⋯” da linha, na lista
+          de Clientes — sempre com motivo, e só para os perfis {PERFIS_QUE_MUDAM_A_SITUACAO}.
+        </span>
+      </div>
+      {customer.status === "BLOCKED" && customer.block && (
+        <p className="field__hint">Motivo do bloqueio: {customer.block.reason}</p>
+      )}
+    </FormSection>
+  );
+}
+
+/**
+ * Só depois de existir registro: em "Novo cliente" não há o que mostrar, e um
+ * bloco de metadados vazio só ocupa a tela.
+ */
+function InformacoesDoCadastro({ customer }: { customer: CustomerDTO }) {
+  return (
+    <FormSection
+      title="Informações do cadastro"
+      subtitle="Quem registrou e quando. Preenchido a partir do usuário autenticado."
+    >
+      <dl className="definition-list">
+        <dt>Cadastrado em</dt>
+        <dd>{formatDateTime(customer.createdAt)}</dd>
+        <dt>Por</dt>
+        <dd>{customer.createdByName ?? "Não disponível"}</dd>
+        <dt>Última alteração</dt>
+        <dd>{formatDateTime(customer.updatedAt)}</dd>
+        <dt>Por</dt>
+        <dd>{customer.updatedByName ?? "Não disponível"}</dd>
+      </dl>
+      {!customer.createdByName && (
+        <p className="field__hint">
+          Cliente cadastrado antes do registro de autoria, ou importado do sistema
+          anterior. O autor não foi atribuído a ninguém.
+        </p>
+      )}
+    </FormSection>
+  );
+}
+
+/** Um campo em consulta: o mesmo rótulo do formulário e o valor, sem caixa de edição. */
+function ValorConsultado({
+  rotulo,
+  valor,
+  multilinha = false,
+}: {
+  rotulo: string;
+  valor: string | null;
+  multilinha?: boolean;
+}) {
+  const texto = valor?.trim() ? valor : "—";
+  return (
+    <>
+      <dt>{rotulo}</dt>
+      <dd {...(multilinha ? { className: "is-multiline" } : {})}>{texto}</dd>
+    </>
+  );
+}
+
+/**
+ * O Cliente em CONSULTA — CUSTOMER-EDIT-PERMISSIONS-01.
+ *
+ * Mesmas seções, mesma ordem e mesmos rótulos do formulário, com os valores
+ * no lugar das caixas: quem não edita o cadastro lê tudo o que o formulário
+ * mostraria, sem campo que aceite digitação e sem "Salvar alterações" que
+ * terminaria em 403. Nenhuma consulta de CEP parte daqui.
+ */
+function CustomerConsultaFields({ customer }: { customer: CustomerDTO }) {
+  return (
+    <div>
+      <AtalhosDoCliente customer={customer} />
+
+      <p className="field__hint">
+        Consulta. Só os perfis {PERFIS_QUE_EDITAM_O_CADASTRO} alteram o cadastro do cliente.
+      </p>
+
+      <FormSection
+        title="Identificação"
+        subtitle="Dados básicos do cliente usados em produtos e ordens de produção."
+      >
+        <dl className="definition-list">
+          <ValorConsultado rotulo="Razão Social / Nome" valor={customer.legalName} />
+          <ValorConsultado rotulo="Nome Fantasia" valor={customer.tradeName} />
+          <ValorConsultado
+            rotulo="CNPJ"
+            valor={customer.cnpj ? formatCnpj(customer.cnpj) : null}
+          />
+          <ValorConsultado
+            rotulo="Perfil tributário"
+            valor={CUSTOMER_TAX_PROFILE_LABELS[customer.taxProfile]}
+          />
+        </dl>
+      </FormSection>
+
+      <FormSection title="Contato">
+        <dl className="definition-list">
+          <ValorConsultado rotulo="Email" valor={customer.email} />
+          <ValorConsultado rotulo="Telefone" valor={formatBrPhone(customer.phone)} />
+        </dl>
+      </FormSection>
+
+      <FormSection title="Endereço">
+        <dl className="definition-list">
+          <ValorConsultado rotulo="CEP" valor={formatZipCode(customer.zipCode)} />
+          <ValorConsultado rotulo="Logradouro" valor={customer.street} />
+          <ValorConsultado rotulo="Número" valor={customer.number} />
+          <ValorConsultado rotulo="Complemento" valor={customer.complement} />
+          <ValorConsultado rotulo="Bairro" valor={customer.district} />
+          <ValorConsultado rotulo="Cidade" valor={customer.city} />
+          <ValorConsultado rotulo="UF" valor={customer.state} />
+        </dl>
+      </FormSection>
+
+      <FormSection title="Observações">
+        <dl className="definition-list">
+          <ValorConsultado rotulo="Notas internas" valor={customer.notes} multilinha />
+        </dl>
+      </FormSection>
+
+      <SituacaoDoCadastro customer={customer} />
+      <InformacoesDoCadastro customer={customer} />
+    </div>
+  );
+}
 
 export function CustomerFormFields({
   form,
@@ -485,7 +664,10 @@ export function CustomerFormFields({
   errorFor,
   mode,
   customer,
+  readOnly,
 }: CustomerFormController) {
+  if (readOnly && customer) return <CustomerConsultaFields customer={customer} />;
+
   /** Liga input, `aria-invalid` e a mensagem, para leitor de tela também. */
   function fieldProps(field: keyof FormState) {
     const message = errorFor(field);
@@ -510,30 +692,7 @@ export function CustomerFormFields({
     <form id={CUSTOMER_FORM_ID} onSubmit={handleSubmit}>
       {error && <p className="form-alert" role="alert">{error}</p>}
 
-      {customer && (
-        <RelatedLinks
-          links={[
-            /*
-             * Os quatro atalhos abaixo continuam levando ao módulo, como
-             * sempre levaram: "quero ir trabalhar em Pedidos deste
-             * cliente". A Visão do Cliente é a alternativa, não a
-             * substituta — "quero acompanhar o cliente como contexto".
-             */
-            {
-              label: "Visão do Cliente",
-              to: `/consultas/clientes/${customer.id}/resumo`,
-              highlight: true,
-            },
-            { label: "Projetos", to: `/comercial/projetos?customerId=${customer.id}` },
-            { label: "Pedidos", to: `/comercial/pedidos?customerId=${customer.id}` },
-            { label: "Faturamentos", to: `/comercial/faturamento?customerId=${customer.id}` },
-            {
-              label: "Materiais do cliente",
-              to: `/estoque/materiais-de-clientes?customerId=${customer.id}`,
-            },
-          ]}
-        />
-      )}
+      {customer && <AtalhosDoCliente customer={customer} />}
 
       <FormSection
         title="Identificação"
@@ -544,10 +703,12 @@ export function CustomerFormFields({
             <label htmlFor="customer-legal-name">
               Razão Social / Nome <span className="req">*</span>
             </label>
-            {/* Usa o helper do próprio arquivo: o servidor recusa nome
-                duplicado ou vazio, e sem isto a recusa aparecia na tela e não
-                era ligada ao campo para quem usa leitor de tela — no campo
-                obrigatório do formulário que é referência dos outros. */}
+            {/* Usa o helper do próprio arquivo: o servidor recusa razão
+                social vazia (só espaços também) ou longa demais — nome
+                repetido, não: a única unicidade do cadastro é o CNPJ, quando
+                informado. Sem isto a recusa aparecia na tela e não era ligada
+                ao campo para quem usa leitor de tela — no campo obrigatório
+                do formulário que é referência dos outros. */}
             <input
               id="customer-legal-name"
               type="text"
@@ -772,51 +933,8 @@ export function CustomerFormFields({
         </div>
       </FormSection>
 
-      {/* A situação CADASTRAL (§95), a mesma da coluna da lista — um cliente
-          bloqueado não aparece aqui como "Ativo". A frase vale para qualquer
-          perfil: diz onde a situação muda e quem pode mudá-la. */}
-      {mode === "edit" && customer && (
-        <FormSection title="Situação cadastral">
-          <div className="status-line">
-            <span className={customerStatusBadgeClass(customer.status)}>
-              {CUSTOMER_STATUS_LABELS[customer.status]}
-            </span>
-            <span className="field__hint">
-              Bloquear, desbloquear, inativar e reativar ficam no menu “⋯” da linha, na lista
-              de Clientes — sempre com motivo, e só para os perfis {PERFIS_QUE_MUDAM_A_SITUACAO}.
-            </span>
-          </div>
-          {customer.status === "BLOCKED" && customer.block && (
-            <p className="field__hint">Motivo do bloqueio: {customer.block.reason}</p>
-          )}
-        </FormSection>
-      )}
-
-      {/* Só depois de existir registro: em "Novo cliente" não há o que
-          mostrar, e um bloco de metadados vazio só ocupa a tela. */}
-      {mode === "edit" && customer && (
-        <FormSection
-          title="Informações do cadastro"
-          subtitle="Quem registrou e quando. Preenchido a partir do usuário autenticado."
-        >
-          <dl className="definition-list">
-            <dt>Cadastrado em</dt>
-            <dd>{formatDateTime(customer.createdAt)}</dd>
-            <dt>Por</dt>
-            <dd>{customer.createdByName ?? "Não disponível"}</dd>
-            <dt>Última alteração</dt>
-            <dd>{formatDateTime(customer.updatedAt)}</dd>
-            <dt>Por</dt>
-            <dd>{customer.updatedByName ?? "Não disponível"}</dd>
-          </dl>
-          {!customer.createdByName && (
-            <p className="field__hint">
-              Cliente cadastrado antes do registro de autoria, ou importado do sistema
-              anterior. O autor não foi atribuído a ninguém.
-            </p>
-          )}
-        </FormSection>
-      )}
+      {mode === "edit" && customer && <SituacaoDoCadastro customer={customer} />}
+      {mode === "edit" && customer && <InformacoesDoCadastro customer={customer} />}
     </form>
   );
 }

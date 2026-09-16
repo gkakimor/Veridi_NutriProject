@@ -1,9 +1,13 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import type { User } from "@prisma/client";
 import type { ZodError } from "zod";
-import type { CustomerStatusAction, CustomerStatusHistoryResponse } from "@veridi/shared";
-import { CUSTOMER_STATUS_CHANGE_ROLES } from "@veridi/shared";
-import { requireCurrentUser, requireRole } from "../../lib/current-user.js";
+import type {
+  CustomerStatusAction,
+  CustomerStatusHistoryResponse,
+  UserRole,
+} from "@veridi/shared";
+import { CUSTOMER_EDIT_ROLES, CUSTOMER_STATUS_CHANGE_ROLES } from "@veridi/shared";
+import { requireRole } from "../../lib/current-user.js";
 import { ForbiddenError } from "../auth/auth.errors.js";
 import {
   createCustomer,
@@ -32,11 +36,37 @@ function formatZodError(error: ZodError) {
 }
 
 /**
+ * O perfil, conferido ANTES do corpo e do cliente: quem não pode recebe 403 —
+ * nunca o 400 da validação, nem o 404 que diria se o cliente existe. Esconder
+ * a ação na tela é conveniência; a autoridade é a rota.
+ *
+ * Devolve o usuário da sessão, ou `null` quando a recusa já foi respondida.
+ */
+function exigirPerfil(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  roles: readonly UserRole[],
+): User | null {
+  try {
+    return requireRole(request, ...roles);
+  } catch (error) {
+    if (error instanceof ForbiddenError) {
+      reply.status(403).send({ error: "forbidden", message: error.message });
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
  * `GET /customers`, `GET /customers/:id`, `POST /customers`,
  * `PATCH /customers/:id`, `GET /customers/:id/status-history` e as quatro
  * ações de situação cadastral (§95): `POST /customers/:id/block`,
- * `/unblock`, `/deactivate` e `/activate`, todas com motivo obrigatório e só
- * para Comercial e Administrador (`CUSTOMER_STATUS_CHANGE_ROLES`).
+ * `/unblock`, `/deactivate` e `/activate`, todas com motivo obrigatório.
+ *
+ * Criar e editar o cadastro são de Comercial e Administrador
+ * (`CUSTOMER_EDIT_ROLES`); mudar a situação também
+ * (`CUSTOMER_STATUS_CHANGE_ROLES`) — duas listas, porque são duas perguntas.
  *
  * Sem exclusão física: clientes bloqueados e inativos permanecem consultáveis,
  * com o histórico inteiro — a leitura segue aberta a toda sessão.
@@ -62,6 +92,9 @@ export const customersRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/customers", async (request, reply) => {
+    const actor = exigirPerfil(request, reply, CUSTOMER_EDIT_ROLES);
+    if (!actor) return reply;
+
     const parsed = createCustomerSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply
@@ -70,7 +103,7 @@ export const customersRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const customer = await createCustomer(parsed.data, requireCurrentUser(request));
+      const customer = await createCustomer(parsed.data, actor);
       return reply.status(201).send(customer);
     } catch (error) {
       if (error instanceof DuplicateCnpjError) {
@@ -83,6 +116,11 @@ export const customersRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.patch("/customers/:id", async (request, reply) => {
+    // Antes do `id` servir para qualquer leitura: sem permissão, cliente
+    // existente e inexistente recebem a mesma resposta.
+    const actor = exigirPerfil(request, reply, CUSTOMER_EDIT_ROLES);
+    if (!actor) return reply;
+
     const { id } = request.params as { id: string };
     const parsed = updateCustomerSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -92,7 +130,7 @@ export const customersRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const customer = await updateCustomer(id, parsed.data, requireCurrentUser(request));
+      const customer = await updateCustomer(id, parsed.data, actor);
       return reply.send(customer);
     } catch (error) {
       if (error instanceof CustomerNotFoundError) {
@@ -117,24 +155,10 @@ export const customersRoutes: FastifyPluginAsync = async (app) => {
     reply: FastifyReply,
     action: CustomerStatusAction,
   ) {
+    const actor = exigirPerfil(request, reply, CUSTOMER_STATUS_CHANGE_ROLES);
+    if (!actor) return reply;
+
     const { id } = request.params as { id: string };
-
-    /*
-     * O perfil é conferido ANTES do corpo e do cliente: quem não pode mudar a
-     * situação recebe 403 — nunca o 400 do motivo, nem o 404 que diria se o
-     * cliente existe. Esconder a ação na tela é conveniência; a autoridade é
-     * esta rota.
-     */
-    let actor: User;
-    try {
-      actor = requireRole(request, ...CUSTOMER_STATUS_CHANGE_ROLES);
-    } catch (error) {
-      if (error instanceof ForbiddenError) {
-        return reply.status(403).send({ error: "forbidden", message: error.message });
-      }
-      throw error;
-    }
-
     const parsed = customerStatusChangeSchema.safeParse(request.body ?? {});
     if (!parsed.success) {
       return reply

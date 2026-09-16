@@ -10,6 +10,12 @@ interface CustomerFormModalProps {
   onClose: () => void;
   /** Recebe o registro criado — permite selecioná-lo de volta na origem. */
   onSaved: (created?: CustomerDTO) => void;
+  /**
+   * Abre o Cliente existente em CONSULTA: o perfil não edita o cadastro
+   * (CUSTOMER-EDIT-PERMISSIONS-01). Quem hospeda decide pela sessão; o modal
+   * só não oferece o que a API recusaria.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -20,8 +26,16 @@ interface CustomerFormModalProps {
  * rodapé. Editar continua sendo exclusividade deste modal — a página oficial
  * cobre a criação, que é a que precisa de URL própria.
  */
-export function CustomerFormModal({ mode, customer, onClose, onSaved }: CustomerFormModalProps) {
-  const controller = useCustomerForm({ mode, customer, onSaved });
+export function CustomerFormModal({
+  mode,
+  customer,
+  onClose,
+  onSaved,
+  readOnly = false,
+}: CustomerFormModalProps) {
+  // Consulta só existe para registro que já existe: criar é sempre edição.
+  const consulta = readOnly && mode === "edit" && customer !== null;
+  const controller = useCustomerForm({ mode, customer, onSaved, readOnly: consulta });
 
   /**
    * Cancelar, ✕ e Esc: o router não vê nada disso — a guarda vê.
@@ -38,7 +52,7 @@ export function CustomerFormModal({ mode, customer, onClose, onSaved }: Customer
 
   const codeChip = mode === "create" ? "Código gerado ao salvar" : customer?.code;
 
-  const footer =
+  const rodapeDeEdicao =
     mode === "create" ? (
       <>
         <span className="modal-fullscreen__foot-meta">
@@ -79,12 +93,28 @@ export function CustomerFormModal({ mode, customer, onClose, onSaved }: Customer
       </>
     );
 
+  // Consulta: nada a gravar, então nada de "Cancelar" nem de "Salvar".
+  const footer = consulta ? (
+    <>
+      <span className="modal-fullscreen__foot-meta">
+        Última alteração: {customer ? formatDate(customer.updatedAt) : "—"}
+      </span>
+      <div className="modal-fullscreen__actions">
+        <button type="button" className="btn btn--secondary" onClick={fechar}>
+          Fechar
+        </button>
+      </div>
+    </>
+  ) : (
+    rodapeDeEdicao
+  );
+
   return (
     <FullWorkspaceModal
       open
       onClose={fechar}
       crumb="Cadastros / Clientes"
-      crumbActive={mode === "create" ? "Novo" : "Editar"}
+      crumbActive={mode === "create" ? "Novo" : consulta ? "Consulta" : "Editar"}
       title={mode === "create" ? "Novo cliente" : customer?.legalName}
       {...(codeChip ? { codeChip } : {})}
       footer={footer}

@@ -286,8 +286,10 @@ describe("CUSTOMER-STATUS-HARDENING-01 — ações de situação por perfil", ()
       for (const acao of ["Bloquear", "Desbloquear", "Inativar", "Reativar"]) {
         expect(screen.queryByText(acao), `${role} ${acao}`).toBeNull();
       }
-      // A abertura do cadastro continua na linha.
-      expect(screen.getAllByRole("button", { name: "Editar" }), role).toHaveLength(3);
+      // A abertura do cadastro continua na linha — em consulta, pelo "Ver"
+      // (CUSTOMER-EDIT-PERMISSIONS-01: estes perfis não editam o cadastro).
+      expect(screen.getAllByRole("button", { name: "Ver" }), role).toHaveLength(3);
+      expect(screen.queryByRole("button", { name: "Editar" }), role).toBeNull();
       expect(changeCustomerStatus, role).not.toHaveBeenCalled();
     },
   );

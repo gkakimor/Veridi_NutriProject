@@ -323,6 +323,7 @@ export const cadastrosTopics = {
       "Estoque de propriedade do cliente é identificado por este cadastro. É ele que decide qual material de cliente uma formulação, uma ordem ou uma amostra pode consumir.",
       "Alterar razão social ou endereço não reescreve documento já emitido: a proposta enviada guarda a cópia congelada do cliente daquela data.",
       "Observações são notas internas: nunca saem em documento para o cliente. Na lista, a busca casa código, razão social, nome fantasia e CNPJ; os filtros são UF e situação, e Exportar leva o recorte. Novo cliente abre em tela própria, que usa esta mesma ajuda.",
+      "Criar e editar o cadastro são de Comercial e Administrador. Os demais perfis abrem o cliente em consulta — pela linha, por Ver ou pelo link de outra tela — e escolhem clientes já cadastrados nos documentos; cliente novo se pede ao Comercial ou ao Administrador.",
     ],
   },
 

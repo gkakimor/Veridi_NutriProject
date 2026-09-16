@@ -86,6 +86,10 @@ import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { TableEmptyRow } from "../../components/TableEmptyRow";
 import { CustomerStatusNotice, pedidoAindaAvanca } from "../customers/CustomerStatusNotice";
+import {
+  SELETOR_DE_CLIENTE_SEM_CADASTRO,
+  usePodeEditarCliente,
+} from "../customers/customer-permissions";
 
 /**
  * Ícone de ajuda de uma coluna do Plano, lido do registro central.
@@ -364,6 +368,8 @@ export function CustomerOrderPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const isNew = !id;
+  /* Escolher Cliente existente é de quem monta o Pedido; cadastrar um novo, não. */
+  const podeCadastrarCliente = usePodeEditarCliente();
 
   const [customerOrder, setCustomerOrder] = useState<CustomerOrderDTO | null>(null);
   const [loading, setLoading] = useState(!isNew);
@@ -1595,7 +1601,8 @@ options={customerOptions.map((customer) => ({
                       ? { hint: CUSTOMER_STATUS_LABELS[customer.status].toLowerCase() }
                       : {}),
                   }))}
-                  canCreate
+                  canCreate={podeCadastrarCliente}
+                  {...(podeCadastrarCliente ? {} : SELETOR_DE_CLIENTE_SEM_CADASTRO)}
                   createLabel="Novo cliente"
                   /* Sair para cadastrar NÃO é descartar: o rascunho vai junto
                      e volta aplicado. */

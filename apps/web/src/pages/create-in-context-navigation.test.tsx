@@ -72,7 +72,7 @@ vi.mock("../lib/supplier-items-api", () => ({
   setSupplierItemPreferred: vi.fn(),
   createSupplierItemOffer: vi.fn(),
 }));
-vi.mock("../app/AuthProvider", () => ({ useAuth: vi.fn() }));
+vi.mock("../app/AuthProvider", () => ({ useAuth: vi.fn(), useOptionalAuth: () => null }));
 
 import { listCustomers } from "../lib/customers-api";
 import { getProduct, listProducts } from "../lib/products-api";
