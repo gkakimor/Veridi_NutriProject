@@ -516,7 +516,7 @@ function errosDaLinha(row: ComponentRow): Partial<Record<CampoDoComponente, stri
   // só o rótulo da recusa muda, porque o campo se chama outra coisa aqui.
   return {
     ...erros,
-    ...errosDosAjustes(ajustesDaLinha(row), nome, "Reserva de matéria-prima %"),
+    ...errosDosAjustes(ajustesDaLinha(row), nome, "Reserva %"),
   };
 }
 
@@ -1290,10 +1290,25 @@ export function FormulationVersionPage() {
     return base;
   }
 
+  /**
+   * As unidades compatíveis com o Item da linha.
+   *
+   * A dimensão vem do catálogo quando o Item está na página carregada e, senão,
+   * da UNIDADE DE ESTOQUE que a própria linha guarda. A versão anterior caía em
+   * "todas as unidades" quando o Item não estava na página — e o catálogo abre
+   * com 50 de 1.211 —, então uma linha de pote gravada meses atrás oferecia `kg`
+   * e `mL`. O servidor recusaria (`IncompatibleComponentUnitError`), mas só
+   * depois de a pessoa escolher e salvar: oferecer o que não é aceito é mandar
+   * errar.
+   */
   function unitOptionsForRow(row: ComponentRow): UnitOfMeasureDTO[] {
     const selected = activeItems.find((item) => item.id === row.itemId);
-    if (!selected) return units;
-    return unidadesDaDimensao(units, selected.unitDimension);
+    const dimensao =
+      selected?.unitDimension ??
+      units.find((unit) => unit.code === row.stockUnitCode)?.dimension ??
+      null;
+    if (dimensao === null) return units;
+    return unidadesDaDimensao(units, dimensao);
   }
 
   /**
@@ -1872,7 +1887,7 @@ export function FormulationVersionPage() {
   }
   if (reservaDeReferencia !== null) {
     premissasDeReferencia.push({
-      rotulo: "Reserva de matéria-prima",
+      rotulo: "Reserva",
       valor: `${formatPercentPtBr(reservaDeReferencia, OPCOES_PERCENTUAL_TECNICO)} em todas as matérias-primas`,
       dica: "formulacao.overage",
     });
@@ -1964,6 +1979,13 @@ export function FormulationVersionPage() {
         : "FIXED_BASIS"
       : "PER_FINISHED_UNIT";
     const baseEditavelNaLinha = baseMultiplicaMaterial || row.basis !== baseDaSecao;
+    /*
+      Uma unidade compatível só: o Item decide, e não há o que perguntar. Vale
+      apenas com Item escolhido — linha em branco ainda não tem cadastro que
+      responda, e ali o seletor continua sendo a pergunta certa.
+    */
+    const unidadesDaLinha = unitOptionsForRow(row);
+    const unidadeUnica = row.itemId !== "" && unidadesDaLinha.length === 1 && row.unitCode !== "";
     const erroDe = (campo: CampoDoComponente) => fieldErrors[chaveDeErro(row.key, campo)];
     const marcaDeErro = (campo: CampoDoComponente) =>
       erroDe(campo)
@@ -2091,11 +2113,17 @@ export function FormulationVersionPage() {
 
         <td
           className="col-quantidade is-numeric"
-          data-label={daComposicao ? "Alvo por dose" : "Quantidade por embalagem"}
+          data-label={daComposicao ? "Alvo por dose" : "Quantidade"}
         >
           {isDraft ? (
             <>
-              <div className="quantidade-unidade">
+              <div
+                className={
+                  unidadeUnica
+                    ? "quantidade-unidade quantidade-unidade--fixa"
+                    : "quantidade-unidade"
+                }
+              >
                 <DecimalField
                   id={idDoCampo(row.key, "quantity")}
                   scale={CASAS_QUANTIDADE}
@@ -2107,22 +2135,38 @@ export function FormulationVersionPage() {
                   }
                   {...marcaDeErro("quantity")}
                 />
-                <select
-                  id={idDoCampo(row.key, "unitCode")}
-                  aria-label={`Unidade de ${nomeDoItem}`}
-                  value={row.unitCode}
-                  onChange={(event) =>
-                    handleComponentFieldChange(row.key, "unitCode", event.target.value)
-                  }
-                  {...marcaDeErro("unitCode")}
-                >
-                  <option value="">—</option>
-                  {unitOptionsForRow(row).map((unit) => (
-                    <option key={unit.code} value={unit.code}>
-                      {unit.code}
-                    </option>
-                  ))}
-                </select>
+                {/*
+                  ESCOLHER ENTRE UMA OPÇÃO NÃO É ESCOLHA.
+                  A unidade da linha só vira campo quando o cadastro oferece
+                  mais de uma unidade compatível com o Item. Embalagem é o caso
+                  claro: a dimensão do pote é contagem, e `un` é a única unidade
+                  cadastrada nela — o seletor gastava a largura da coluna para
+                  repetir o que o cadastro já diz, e o número, que é o que se
+                  digita ali, ficava espremido ao lado dele. A unidade continua
+                  viajando no payload; ela passa a ser lida do Item em vez de
+                  redigitada. Matéria-prima em massa segue com o seletor: mg, g
+                  e kg são três escolhas reais.
+                */}
+                {unidadeUnica ? (
+                  <span className="quantidade-unidade__unidade">{row.unitCode}</span>
+                ) : (
+                  <select
+                    id={idDoCampo(row.key, "unitCode")}
+                    aria-label={`Unidade de ${nomeDoItem}`}
+                    value={row.unitCode}
+                    onChange={(event) =>
+                      handleComponentFieldChange(row.key, "unitCode", event.target.value)
+                    }
+                    {...marcaDeErro("unitCode")}
+                  >
+                    <option value="">—</option>
+                    {unidadesDaLinha.map((unit) => (
+                      <option key={unit.code} value={unit.code}>
+                        {unit.code}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
               {mensagemDeErro("quantity")}
               {mensagemDeErro("unitCode")}
@@ -2233,13 +2277,13 @@ export function FormulationVersionPage() {
           continua igual depois de digitar aqui.
         */}
         {daComposicao && (
-          <td className="col-reserva is-numeric" data-label="Reserva de matéria-prima (%)">
+          <td className="col-reserva is-numeric" data-label="Reserva %">
             {isDraft ? (
               <>
                 <PercentField
                   id={idDoCampo(row.key, "overagePercent")}
                   scale={CASAS_PERCENTUAL_TECNICO}
-                  aria-label={`Reserva de matéria-prima de ${nomeDoItem}`}
+                  aria-label={`Reserva % de ${nomeDoItem}`}
                   placeholder="—"
                   value={row.overagePercent}
                   onChangeValue={(valor) =>
@@ -2346,7 +2390,7 @@ export function FormulationVersionPage() {
                   </th>
                 )}
                 <th className="col-quantidade is-numeric">
-                  {daComposicao ? "Alvo por dose · unidade" : "Quantidade · unidade"}
+                  {daComposicao ? "Alvo por dose · unidade" : "Quantidade"}
                 </th>
                 {daComposicao && <th className="col-dose is-numeric">Física por dose</th>}
                 {daComposicao && mostrarPorCapsula && (
@@ -2358,7 +2402,7 @@ export function FormulationVersionPage() {
                 </th>
                 {daComposicao && (
                   <th className="col-reserva is-numeric">
-                    Reserva de matéria-prima (%) <Dica id="formulacao.overage" />
+                    Reserva % <Dica id="formulacao.overage" />
                   </th>
                 )}
                 <th className="col-fisico is-numeric">

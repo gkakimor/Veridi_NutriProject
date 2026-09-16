@@ -392,12 +392,12 @@ describe("Bancada — separação e dados do Item", () => {
     const antes = linha("MP-000030").textContent ?? "";
     expect(antes).toContain("0,571429");
 
-    fireEvent.change(screen.getByRole("textbox", { name: /Reserva de matéria-prima de MP-000030/ }), {
+    fireEvent.change(screen.getByRole("textbox", { name: /Reserva % de MP-000030/ }), {
       target: { value: "10" },
     });
 
     await waitFor(() =>
-      expect(screen.getByRole("textbox", { name: /Reserva de matéria-prima de MP-000030/ })).toHaveValue(
+      expect(screen.getByRole("textbox", { name: /Reserva % de MP-000030/ })).toHaveValue(
         "10",
       ),
     );
@@ -464,7 +464,7 @@ describe("Bancada — separação e dados do Item", () => {
     expect(premissas.textContent).toContain("Lote mínimo");
     expect(premissas.textContent).toContain("Caixa de embarque");
     // A reserva de referência sai das LINHAS, e só quando todas concordam.
-    expect(premissas.textContent).toContain("Reserva de matéria-prima");
+    expect(premissas.textContent).toContain("Reserva");
     expect(premissas.textContent).toContain("10%");
   });
 
@@ -473,7 +473,9 @@ describe("Bancada — separação e dados do Item", () => {
     const embalagens = secao(/^Embalagem$/);
     expect(within(embalagens).queryByText("Física por dose")).toBeNull();
     expect(within(embalagens).queryByText("Pureza")).toBeNull();
-    expect(within(embalagens).getByText(/Quantidade · unidade/)).toBeTruthy();
+    // A unidade saiu do cabeçalho junto com o seletor: `un` é a única unidade
+    // da dimensão de contagem, e ela vem do Item.
+    expect(within(embalagens).getByRole("columnheader", { name: "Quantidade" })).toBeTruthy();
   });
 });
 
@@ -541,7 +543,7 @@ describe("Bancada — pó", () => {
     // Coluna inútil com valor zero é pior que coluna ausente: no pó não existe
     // "por cápsula", e a tabela não finge que existe.
     expect(cabecalhos.some((texto) => texto.startsWith("Por cápsula"))).toBe(false);
-    expect(cabecalhos.some((texto) => texto.startsWith("Reserva de matéria-prima"))).toBe(true);
+    expect(cabecalhos.some((texto) => texto.startsWith("Reserva %"))).toBe(true);
     expect(screen.queryByLabelText(/Cápsulas por embalagem/, CAMPO_DO_FORMULARIO)).toBeNull();
     expect(screen.getByLabelText(/^Dose$/, CAMPO_DO_FORMULARIO)).toBeTruthy();
   });

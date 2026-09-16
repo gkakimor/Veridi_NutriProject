@@ -208,7 +208,7 @@ describe("Formulação — guarda de alterações não salvas", () => {
     // A reserva é coluna da linha desde a homologação da bancada: não há
     // painel para abrir nem "Aplicar ajustes" para confirmar, e mesmo assim a
     // alteração é pendência como qualquer outra.
-    fireEvent.change(screen.getByRole("textbox", { name: /Reserva de matéria-prima de MP-000003/ }), {
+    fireEvent.change(screen.getByRole("textbox", { name: /Reserva % de MP-000003/ }), {
       target: { value: "5" },
     });
 

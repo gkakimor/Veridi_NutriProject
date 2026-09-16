@@ -74,7 +74,10 @@ estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0
   Base sai da linha quando não decide material) e passou a ter LARGURA DECLARADA pelo PO em `table-layout: fixed`,
   proporcional à área útil de 1.492px: composição 367/211/152/211/110/96/100/96/104/45 na cápsula — no pó os 96px de
   "Por cápsula" vão para o Ingrediente, que fica em 463 — e embalagem 879/216/204/134/59. A "Apresentação" virou
-  **Apresentação comercial** com as opções coerentes com a Forma, e as frases fixas viraram ⓘ. **Falta a avaliação
+  **Apresentação comercial** com as opções coerentes com a Forma, e as frases fixas viraram ⓘ. A coluna da reserva
+  ficou em **Reserva %**, com o significado no ⓘ, e o seletor de unidade da Embalagem saiu: a dimensão de contagem tem
+  só `un` cadastrada, então a unidade vem do Item e o campo numérico ocupa a coluna inteira — o seletor por linha volta
+  apenas quando o cadastro oferece mais de uma unidade compatível. **Falta a avaliação
   visual do PO** — é dela que depende o fechamento;
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 
