@@ -99,6 +99,25 @@ export function podeEntrarEmAmostra(type: ItemType): boolean {
 }
 
 /**
+ * O que sai do estoque por CONSUMO INTERNO — a movimentação de Uso e consumo
+ * (INTERNAL-CONSUMPTION-01, Fatia 2).
+ *
+ * Lista de PERMISSÃO com um tipo só, pelo mesmo motivo das outras: tipo novo
+ * começa de fora. Matéria-prima e embalagem saem por produção, produto acabado
+ * sai por expedição — cada uma dessas saídas tem contexto próprio (OP, Pedido)
+ * que o consumo interno não tem. Deixá-las entrar aqui criaria uma segunda
+ * porta para baixar material de receita sem OP nenhuma.
+ *
+ * Ampliar é decisão do PO, não consequência de um tipo novo aparecer.
+ */
+export const ITEM_TYPES_DO_CONSUMO_INTERNO: readonly ItemType[] = ["INTERNAL_CONSUMABLE"];
+
+/** O Item pode sair do estoque por consumo interno? */
+export function podeSairPorConsumoInterno(type: ItemType): boolean {
+  return ITEM_TYPES_DO_CONSUMO_INTERNO.some((aceito) => aceito === type);
+}
+
+/**
  * Os quatro controles de rastreabilidade e qualidade de um Item.
  *
  * Um tipo só para o default canônico e para a comparação "mudou?" do gate de

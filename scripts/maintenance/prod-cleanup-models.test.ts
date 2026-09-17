@@ -142,8 +142,18 @@ describe("classificação dos models do prod-cleanup", () => {
   });
 
   it("schema novo inesperado: model acrescentado ao schema.prisma reprova até ser classificado", () => {
-    const schemaNovo = `${SCHEMA}\nmodel InternalConsumption {\n  id String @id\n\n  @@map("internal_consumptions")\n}\n`;
-    expect(conferirClassificacao(modelsDe(schemaNovo))).toEqual({ ...SEM_DEFEITO, semClassificacao: ["InternalConsumption"] });
+    /*
+     * O model hipotético precisa de um nome que NUNCA vire real: quando
+     * "InternalConsumption" passou a existir de verdade
+     * (INTERNAL-CONSUMPTION-01), este caso parou de provar coisa alguma — o
+     * nome já estava classificado, e a guarda de "model novo reprova"
+     * acusava um defeito que era do próprio teste.
+     */
+    const schemaNovo = `${SCHEMA}\nmodel ModelQueNuncaExistiu {\n  id String @id\n\n  @@map("models_que_nunca_existiram")\n}\n`;
+    expect(conferirClassificacao(modelsDe(schemaNovo))).toEqual({
+      ...SEM_DEFEITO,
+      semClassificacao: ["ModelQueNuncaExistiu"],
+    });
     // Removido do schema e esquecido na lista também reprova.
     const semContagem = SCHEMA.replace(/^model StockCountFinding \{[\s\S]*?^\}/m, "");
     expect(conferirClassificacao(modelsDe(semContagem))).toEqual({ ...SEM_DEFEITO, semModel: ["StockCountFinding"] });
@@ -176,9 +186,10 @@ describe("o banco não tem nada fora da classificação", () => {
   });
 
   it("acusa tabela sem model, model sem tabela, relação fora do public, trigger e rule", () => {
-    expect(conferirTabelas({ tabelas: [...tabelasDoBanco, "internal_consumptions"], tabelaDoModel })).toEqual({
+    // Nome de tabela que nenhum model tem — e que nenhum vai ter.
+    expect(conferirTabelas({ tabelas: [...tabelasDoBanco, "tabelas_que_nunca_existiram"], tabelaDoModel })).toEqual({
       ...SEM_SOBRA,
-      tabelaSemModel: ["internal_consumptions"],
+      tabelaSemModel: ["tabelas_que_nunca_existiram"],
     });
     // Banco atrás do client: contar pela tabela que não existe seria adivinhação.
     expect(

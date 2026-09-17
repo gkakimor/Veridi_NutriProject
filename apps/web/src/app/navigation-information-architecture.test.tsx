@@ -111,6 +111,7 @@ describe("Arquitetura do menu — rotas e ids de sempre", () => {
       "stock-movements": "/estoque/movimentacoes",
       "customer-materials": "/estoque/materiais-de-clientes",
       "stock-count": "/estoque/inventario",
+      "internal-consumption": "/estoque/uso-e-consumo",
       "quality-documents": "/qualidade/documentos",
       "lot-release": "/estoque/lotes?status=AWAITING_RELEASE",
       "controlled-documents": "/administracao/documentos",

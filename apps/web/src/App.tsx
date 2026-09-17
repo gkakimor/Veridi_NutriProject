@@ -75,6 +75,7 @@ import { SampleDetailPage } from "./pages/samples/SampleDetailPage";
 import { InventoryOverviewPage } from "./pages/inventory/InventoryOverviewPage";
 import { InventoryItemDetailPage } from "./pages/inventory/InventoryItemDetailPage";
 import { InventoryMovementsPage } from "./pages/inventory/InventoryMovementsPage";
+import { InternalConsumptionPage } from "./pages/inventory/InternalConsumptionPage";
 import { StockCountPage } from "./pages/inventory/StockCountPage";
 import { StockCountsHomePage } from "./pages/inventory/StockCountsHomePage";
 import { NewStockCountPage } from "./pages/inventory/NewStockCountPage";
@@ -254,6 +255,7 @@ const router = createBrowserRouter(
         <Route path="/compras/recebimentos/:id" element={<ReceiptDetailPage />} />
         <Route path="/estoque" element={<InventoryOverviewPage />} />
         <Route path="/estoque/movimentacoes" element={<InventoryMovementsPage />} />
+        <Route path="/estoque/uso-e-consumo" element={<InternalConsumptionPage />} />
         {/* Inventário Físico em sessão (INVENTORY-PHYSICAL-COUNT-01, Fatia 2A): a lista é a entrada, e a
             Contagem rápida mora sob ela, sem item de menu próprio (DU-2). */}
         <Route path="/estoque/inventario" element={<StockCountsHomePage />} />

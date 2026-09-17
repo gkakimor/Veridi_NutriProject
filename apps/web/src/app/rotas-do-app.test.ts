@@ -75,6 +75,8 @@ const ROTAS_ANTES_DA_MIGRACAO = [
   "/estoque/lotes/escanear",
   "/estoque/materiais-de-clientes",
   "/estoque/movimentacoes",
+  // INTERNAL-CONSUMPTION-01 (Fatia 2): a saída de uso e consumo.
+  "/estoque/uso-e-consumo",
   // MANAGEMENT-DASHBOARD-V1-01: Gestão → Painel Gerencial, rota nova declarada aqui de propósito.
   "/gestao/painel-gerencial",
   "/gestao/politicas-precificacao",

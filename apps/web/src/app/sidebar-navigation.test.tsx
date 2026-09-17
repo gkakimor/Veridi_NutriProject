@@ -38,7 +38,15 @@ const SECOES: [id: string, titulo: string, telas: string[]][] = [
   [
     "inventory",
     "Estoque",
-    ["Posição de Estoque", "Lotes", "Lotes de Produto Acabado", "Movimentações", "Materiais de Clientes", "Inventário Físico"],
+    [
+      "Posição de Estoque",
+      "Lotes",
+      "Lotes de Produto Acabado",
+      "Movimentações",
+      "Materiais de Clientes",
+      "Inventário Físico",
+      "Uso e consumo",
+    ],
   ],
   ["quality", "Qualidade", ["Documentos / CoA", "Liberação de lotes", "Documentos controlados"]],
   [

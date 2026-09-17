@@ -50,6 +50,8 @@ function movimento(sobre: Partial<InventoryMovementDTO>): InventoryMovementDTO {
     projectSampleCode: null,
     stockCountId: null,
     stockCountCode: null,
+    internalConsumptionId: null,
+    internalConsumptionCode: null,
     reason: "Avaria",
     createdBy: "Carla Qualidade",
     createdAt: "2026-09-15T18:00:00.000Z",

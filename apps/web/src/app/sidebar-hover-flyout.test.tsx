@@ -276,6 +276,7 @@ describe("Menu recolhido — catálogo da seção pelo mouse", () => {
       "Movimentações",
       "Materiais de Clientes",
       "Inventário Físico",
+      "Uso e consumo",
     ]);
   });
 

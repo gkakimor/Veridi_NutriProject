@@ -85,12 +85,15 @@ async function resolveSourceCodes(
   const prisma = getPrisma();
   const opIds = new Set<string>();
   const sampleIds = new Set<string>();
+  const consumoInternoIds = new Set<string>();
   for (const movement of movements) {
     if (!movement.sourceId) continue;
     if (movement.sourceType === "PRODUCTION_CONSUMPTION" || movement.sourceType === "FINISHED_GOOD_PRODUCTION") {
       opIds.add(movement.sourceId);
     } else if (movement.sourceType === "PROJECT_SAMPLE") {
       sampleIds.add(movement.sourceId);
+    } else if (movement.sourceType === "INTERNAL_CONSUMPTION") {
+      consumoInternoIds.add(movement.sourceId);
     }
   }
   const codes = new Map<string, string>();
@@ -108,6 +111,14 @@ async function resolveSourceCodes(
       select: { id: true, code: true },
     })) {
       codes.set(sample.id, sample.code);
+    }
+  }
+  if (consumoInternoIds.size > 0) {
+    for (const consumo of await prisma.internalConsumption.findMany({
+      where: { id: { in: [...consumoInternoIds] } },
+      select: { id: true, code: true },
+    })) {
+      codes.set(consumo.id, consumo.code);
     }
   }
   return codes;
@@ -145,6 +156,9 @@ function toMovementDTO(
     productionOrderCode: fromProduction ? sourceCode : null,
     projectSampleId: movement.sourceType === "PROJECT_SAMPLE" && sourceCode ? movement.sourceId : null,
     projectSampleCode: movement.sourceType === "PROJECT_SAMPLE" ? sourceCode : null,
+    internalConsumptionId:
+      movement.sourceType === "INTERNAL_CONSUMPTION" && sourceCode ? movement.sourceId : null,
+    internalConsumptionCode: movement.sourceType === "INTERNAL_CONSUMPTION" ? sourceCode : null,
     stockCountId: movement.stockCountPosition?.stockCount.id ?? null,
     stockCountCode: movement.stockCountPosition?.stockCount.code ?? null,
     reason: movement.reason,

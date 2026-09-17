@@ -7331,3 +7331,70 @@ conflito material protege, e é por isso que a ferramenta nunca decide sozinha.
 **Duplicado verdadeiro não vira inativo.** Confirmado como o mesmo cadastro, escolhe-se o canônico, movem-se as
 referências, remove-se o absorvido e a remoção fica registrada na planilha. Inativar mantém o nome ocupado e o lixo
 histórico — a mesma decisão D2 da §110, agora valendo para os nove cadastros.
+
+## §115 — Consumo interno: usar o material é uma saída, não um acerto de saldo
+
+INTERNAL-CONSUMPTION-01 (2026-09-17), decisão do PO no handoff. Fatia 2 de Uso e consumo — a Fatia 1 é o tipo de Item
+(§113) e a Fatia 3 será o relatório gerencial.
+
+> **Movimentação própria.** `InventoryMovementType.INTERNAL_CONSUMPTION`, com origem `INTERNAL_CONSUMPTION` e o
+> documento `CI-000001` (`internal_consumption_code_seq`). NUNCA `ADJUSTMENT_OUT`: ajuste existe para CORRIGIR um saldo
+> errado, e usá-lo aqui apagaria a diferença entre "o estoque estava errado" e "a empresa usou o material". Com um tipo
+> só, nenhum relatório separaria erro de inventário de despesa operacional.
+
+**Escopo.** Somente Item `INTERNAL_CONSUMABLE` (`ITEM_TYPES_DO_CONSUMO_INTERNO`, lista de PERMISSÃO no shared).
+Matéria-prima e embalagem saem por produção; produto acabado, por expedição. Cada uma dessas saídas tem contexto
+próprio — OP, Pedido — que o consumo interno não tem, e abri-las aqui criaria uma segunda porta para baixar material de
+receita sem OP nenhuma. Ampliar é decisão do PO, não consequência de um tipo novo aparecer.
+
+**O que o registro guarda.** Código `CI-`, Item, quantidade, unidade do item, data, usuário (da sessão, nunca digitado),
+destino/uso e observação — os dois últimos texto livre opcional. Centro de Custo NÃO foi criado: é decisão futura, e
+inventar o cadastro aqui anteciparia estrutura contábil que a Veridi ainda não tem.
+
+**Estoque.** A baixa é do MESMO Inventory Ledger, num movimento 1:1 com o registro (`inventoryMovementId @unique`) e na
+mesma transação — registro sem movimento seria despesa sem baixa. O saldo continua saindo da soma dos movimentos, nunca
+do registro. A guarda é `Available` (`On Hand − Reserved`, nunca negativo), não On Hand cru. Uso e consumo nasce sem
+controle de lote, mas o caminho com lote existe: quando o item controlar lote, o lote é obrigatório e valem as mesmas
+regras de qualidade, validade e CoA do resto do estoque (`isLotAvailableForUse`). Lote de material de cliente é
+recusado — gastar estoque de terceiro como despesa própria seria contabilizar o que não é seu.
+
+**Item inativo SAI.** §107: inativar interrompe compromisso novo, não prende material no depósito. O detergente
+descontinuado continua sendo usado até acabar.
+
+**Data.** Dia civil escolhido pela pessoa, convertido para INSTANTE com o fuso da operação: hoje é agora; dia passado é
+o fim daquele dia comercial. A meia-noite UTC do dia seria 21h do dia ANTERIOR em São Paulo, e a hierarquia de custo —
+que pergunta `hojeComercial(occurredAt)` — somaria as compras do dia errado. Dia futuro é recusado: consumo é registro
+do que já aconteceu.
+
+**Custo.** A MESMA hierarquia do consumo de produção, reutilizada sem cópia (`getConsumedLotCostReference`):
+
+1. custo real do lote efetivamente consumido (`REAL`);
+2. média ponderada por quantidade dos últimos 30 dias (`ESTIMATED_30D`);
+3. idem, 90 dias (`ESTIMATED_90D`);
+4. último custo real conhecido (`LAST_REAL_COST`);
+5. `NO_COST`.
+
+**Ausência de custo NUNCA vira R$ 0,00.** `NO_COST` grava `unitCost` e `totalCost` nulos, e a tela escreve "Custo não
+disponível". Zero é custo real zero; confundir os dois inventa despesa que não houve ou apaga despesa que houve.
+
+**Valor histórico congelado.** O custo unitário, o total, a fonte e a explicação ficam no próprio registro. Uma compra
+posterior, mais cara ou mais barata, não reescreve a despesa que já aconteceu.
+
+**Permissões.** Registram: `ADMIN`, `PURCHASING`, `PRODUCTION`, `QUALITY` (`INTERNAL_CONSUMPTION_WRITE_ROLES`).
+`COMMERCIAL` não registra; `VIEWER` lê o histórico. A lista é MAIS LARGA que a de ajuste e perda
+(`STOCK_WRITE_ROLES`: ADMIN, PRODUCTION, QUALITY) por decisão explícita do PO — Compras compra o material de uso e
+consumo e é quem o distribui, e recusar-lhe a baixa deixaria quem retira a luva do armário sem como registrar a
+retirada. A ampliação vale só para esta operação: corrigir saldo continua sendo outra autoridade.
+
+**Correção/estorno não existe nesta fatia, e não foi inventado.** O sistema não tem estorno de movimento físico
+confirmado em lugar nenhum — recebimento, consumo de produção, amostra e expedição também não desfazem. Erro de
+quantidade se resolve pelo Inventário Físico, que conta o que existe e gera o acerto rastreável. Pendência registrada
+no `BACKLOG.md`.
+
+**Tela.** Estoque › Uso e consumo (`/estoque/uso-e-consumo`): item, lote quando houver, quantidade, data, destino/uso,
+observação e o disponível — lido do MESMO cálculo que a gravação confere, para a tela não prometer o que o confirmar
+recusa. Confirmado, mostra quantidade, custo unitário, custo total e origem do custo; sem custo, a frase. Abaixo, o
+histórico operacional com quem, quando, o quê, quanto, destino e custo.
+
+**Migration.** `20260925093035_internal_consumption` — enum `CostSource` (espelho do tipo do shared), os dois valores de
+enum do ledger, a tabela `internal_consumptions` e a sequence `internal_consumption_code_seq`.

@@ -257,6 +257,18 @@ export const navGroups: NavGroup[] = [
         implemented: true,
         aliases: ["contagem", "inventário"],
       },
+      /*
+       * Uso e consumo é SAÍDA, não cadastro: o material sai do depósito para a
+       * própria empresa. Mora em Estoque pela mesma razão que Movimentações —
+       * é uma operação do ledger, e o cadastro do tipo continua em Itens.
+       */
+      {
+        id: "internal-consumption",
+        label: "Uso e consumo",
+        path: "/estoque/uso-e-consumo",
+        implemented: true,
+        aliases: ["consumo interno", "papelaria", "limpeza", "higiene"],
+      },
     ],
   },
   {

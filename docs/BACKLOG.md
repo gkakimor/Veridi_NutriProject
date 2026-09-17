@@ -950,6 +950,46 @@ qual linha falta. Era assim com "+ Adicionar recurso"; com "+ Adicionar recursos
 branco para preencher) fica mais fácil cair nisso. A pergunta: recusar o salvar apontando a linha (como a bancada da
 Formulação faz com a quantidade), ou avisar quais linhas ficaram de fora.
 
+### INTERNAL-CONSUMPTION-REVERSAL-01 — desfazer um consumo interno registrado — sem posição
+
+Registrado em 2026-09-17 por INTERNAL-CONSUMPTION-01 (Fatia 2), **sem implementação e por decisão consciente**. O
+consumo interno só CRIA: não há `DELETE`, não há estorno e o registro confirmado não é editado. Isso não é uma falta
+desta capacidade — é o padrão do sistema inteiro: nenhum movimento físico confirmado desfaz hoje (recebimento,
+consumo de produção, amostra e expedição também não). Inventar um estorno só aqui criaria um conceito que o resto do
+estoque não tem, e que o relatório da Fatia 3 teria de interpretar sozinho.
+
+O caminho que existe hoje para um consumo lançado errado é o Inventário Físico: conta o que realmente há e gera o
+ajuste rastreável pela diferença. A pergunta ao PO, quando houver posição: um consumo interno errado merece estorno
+próprio (movimento de entrada ligado ao `CI-` original, com motivo), ou a correção por inventário basta? Se a
+resposta for estorno, ela provavelmente vale para as outras saídas também, e aí é uma decisão de estoque, não de uso
+e consumo.
+
+### INTERNAL-CONSUMPTION-COST-CENTER-01 — Centro de Custo do consumo interno — sem posição
+
+Registrado em 2026-09-17 por INTERNAL-CONSUMPTION-01, **explicitamente fora da fatia** por decisão do PO. Hoje o
+destino/uso é texto livre e opcional ("Escritório", "Limpeza", "Expedição"). Texto livre agrupa mal: "Escritorio",
+"escritório" e "ADM" viram três destinos no relatório. A Fatia 3 (relatório gerencial de uso e consumo) é onde a
+falta vai aparecer, e é o momento natural de decidir entre um cadastro de Centro de Custo e uma lista fechada de
+destinos. Migrar depois é possível: o texto gravado vira o ponto de partida do mapeamento.
+
+### INTERNAL-CONSUMPTION-REPORT-01 — relatório gerencial de uso e consumo (Fatia 3) — sem posição
+
+Anunciado pelo PO no handoff de INTERNAL-CONSUMPTION-01 como a próxima fatia, **sem handoff próprio ainda**. A
+Fatia 2 entregou o histórico OPERACIONAL (quem, quando, o quê, quanto, destino, custo) na própria tela de Uso e
+consumo — o suficiente para rastrear, não para gerir. O relatório é outra pergunta: consumo por período, por item e
+por destino, com valor, e provavelmente comparação entre períodos. Depende de
+INTERNAL-CONSUMPTION-COST-CENTER-01 para agrupar destino de forma confiável.
+
+### FILTER-CSS-640-GUARD-01 — as duas guardas de 640px leem só o último bloco do CSS — LOW, sem posição
+
+Visto em 2026-09-17 por INTERNAL-CONSUMPTION-01, **fora do escopo da rodada e sem mudança**. `filtros-390px.test.tsx`
+("os controles com largura mínima em pixel ocupam a linha inteira") e `billings/faturamento-filtros.test.tsx`
+("o CSS empilha os controles de filtro em tela estreita") falham na `main` desde `0c796a90`
+(CUSTOMER-CNPJ-LOOKUP-01), que acrescentou um `@media (max-width: 640px)` ao fim de `styles/components.css` para a
+tabela da consulta de CNPJ. As duas guardas procuram `.toolbar__search` no ÚLTIMO bloco de 640px do arquivo, e agora
+o último é o da tabela nova. A regra de tela estreita continua no CSS; quem está errado é o recorte da guarda, que
+deveria varrer todos os blocos de 640px em vez de assumir que só existe um.
+
 ---
 
 ## Backlog reservado para go-live
