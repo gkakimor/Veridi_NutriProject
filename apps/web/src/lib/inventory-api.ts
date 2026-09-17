@@ -7,8 +7,6 @@ import type {
   InventoryMovementDTO,
   InventoryMovementType,
   ItemType,
-  StockCountInput,
-  StockCountResultDTO,
 } from "@veridi/shared";
 import { API_URL, apiFetch } from "./api";
 import { parseJsonOrThrow } from "./api-errors";
@@ -73,14 +71,8 @@ export async function createInventoryAdjustment(
   return (await parseJsonOrThrow(response)) as InventoryMovementDTO;
 }
 
-export async function createStockCount(input: StockCountInput): Promise<StockCountResultDTO> {
-  const response = await apiFetch(`${API_URL}/stock-counts`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  return (await parseJsonOrThrow(response)) as StockCountResultDTO;
-}
+// A Contagem rápida (`POST /stock-counts`) mora em `stock-counts-api.ts` desde a Fatia 2B do
+// Inventário Físico: a tela precisa do corpo da recusa, que `parseJsonOrThrow` descarta.
 
 /** Somente leitura — nunca reserva/baixa estoque, só calcula sob demanda. */
 export async function getAllocationSuggestion(

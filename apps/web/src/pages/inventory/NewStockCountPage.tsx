@@ -3,8 +3,10 @@ import { Link, useNavigate } from "react-router-dom";
 import type {
   ItemDTO,
   ItemType,
+  LotStatus,
   PreviewStockCountInput,
   StockCountBalanceFilter,
+  StockCountExpiryFilter,
   StockCountHeldPositionDTO,
   StockCountMode,
   StockCountOwnerFilter,
@@ -12,7 +14,17 @@ import type {
   StockCountPreviewExcludedPositionDTO,
   StockCountScopeInput,
 } from "@veridi/shared";
-import { ITEM_TYPE_LABELS, ITEM_TYPES, STOCK_COUNT_MODE_LABELS } from "@veridi/shared";
+import {
+  Decimal,
+  ITEM_TYPE_LABELS,
+  ITEM_TYPES,
+  LOT_STATUSES,
+  LOT_STATUS_LABELS,
+  STOCK_COUNT_EXPIRY_FILTERS,
+  STOCK_COUNT_EXPIRY_FILTER_LABELS,
+  STOCK_COUNT_MODE_LABELS,
+} from "@veridi/shared";
+import { IntegerField } from "../../components/NumericField";
 import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import { EntityLink } from "../../components/EntityLink";
 import { FormSection } from "../../components/FormSection";
@@ -25,7 +37,7 @@ import { helpTopics } from "../../help/help-content";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { formatDate } from "../../lib/dates";
 import { clienteFilterSource } from "../../lib/filter-sources";
-import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
+import { formatIntegerPtBr, parsePtBrNumber } from "../../lib/numeric-ptbr";
 import { formatQuantity } from "../../lib/quantity";
 import { isStockCountApiError, previewStockCount, startStockCount } from "../../lib/stock-counts-api";
 import { LinhaDeMarcacao, SeletorDeItem, useCatalogoDeItens, usePosicoesDoItem } from "./inventario-seletores";
@@ -142,6 +154,11 @@ export function NewStockCountPage() {
   const [itemDosLotes, setItemDosLotes] = useState<ItemDTO | null>(null);
   const [retiradas, setRetiradas] = useState<string[]>([]);
   const [limite, setLimite] = useState(LINHAS_POR_VEZ);
+  // Filtros de lote (Fatia 2B): local, situação e validade.
+  const [local, setLocal] = useState("");
+  const [situacoes, setSituacoes] = useState<LotStatus[]>([]);
+  const [validade, setValidade] = useState<StockCountExpiryFilter>("ANY");
+  const [dias, setDias] = useState("30");
 
   const catalogo = useCatalogoDeItens();
   const lotesDoItem = usePosicoesDoItem(selecao === "lotes" && itemDosLotes?.controlsLot ? itemDosLotes.id : null, modo);
@@ -160,17 +177,30 @@ export function NewStockCountPage() {
     };
   }, [dono]);
 
+  // Leitura pela foundation pt-BR, como todo campo numérico; inteiro de 1 a 3.650.
+  const leituraDosDias = parsePtBrNumber(dias, { scale: 0 });
+  const diasDaValidade = leituraDosDias.tipo === "valido" ? new Decimal(leituraDosDias.valor).toNumber() : null;
+  const diasValidos =
+    diasDaValidade !== null && Number.isInteger(diasDaValidade) && diasDaValidade >= 1 && diasDaValidade <= 3650;
+
   const escopo = useMemo<StockCountScopeInput>(() => {
     const montado: StockCountScopeInput = { balance: saldo, owner: dono };
     if (dono === "CUSTOMER" && clienteId) montado.customerId = clienteId;
     if (selecao === "filtro" && tipos.length > 0) montado.itemTypes = tipos;
     if (selecao === "itens") montado.itemIds = itensEscolhidos.map((item) => item.id);
     if (selecao === "lotes") montado.lotIds = lotesEscolhidos.map((lote) => lote.lotId);
+    if (local.trim()) montado.locationContains = local.trim();
+    if (situacoes.length > 0) montado.lotStatuses = situacoes;
+    if (validade !== "ANY") montado.expiry = validade;
+    if (validade === "EXPIRING" && diasDaValidade !== null) montado.expiringWithinDays = diasDaValidade;
     return montado;
-  }, [saldo, dono, clienteId, selecao, tipos, itensEscolhidos, lotesEscolhidos]);
+  }, [saldo, dono, clienteId, selecao, tipos, itensEscolhidos, lotesEscolhidos, local, situacoes, validade, diasDaValidade]);
 
+  const filtroDeLote = local.trim() !== "" || situacoes.length > 0 || validade !== "ANY";
   const selecaoIncompleta =
-    (selecao === "itens" && itensEscolhidos.length === 0) || (selecao === "lotes" && lotesEscolhidos.length === 0);
+    (selecao === "itens" && itensEscolhidos.length === 0) ||
+    (selecao === "lotes" && lotesEscolhidos.length === 0) ||
+    (validade === "EXPIRING" && !diasValidos);
 
   const pedido = useMemo<PreviewStockCountInput>(
     () => ({ mode: modo, scope: escopo, ...(retiradas.length > 0 ? { excludedPositionKeys: retiradas } : {}) }),
@@ -231,6 +261,12 @@ export function NewStockCountPage() {
 
   function alternarTipo(tipo: ItemType) {
     setTipos((atuais) => (atuais.includes(tipo) ? atuais.filter((atual) => atual !== tipo) : [...atuais, tipo]));
+  }
+
+  function alternarSituacao(situacao: LotStatus) {
+    setSituacoes((atuais) =>
+      atuais.includes(situacao) ? atuais.filter((atual) => atual !== situacao) : [...atuais, situacao],
+    );
   }
 
   function escolherItem(item: ItemDTO | null) {
@@ -510,14 +546,83 @@ export function NewStockCountPage() {
           </fieldset>
         </div>
         {selecao !== "filtro" && (
-          <p className="field__hint">Itens e lotes escolhidos também respeitam os filtros de saldo e de propriedade.</p>
+          <p className="field__hint">
+            Itens e lotes escolhidos também respeitam os filtros de saldo, de propriedade e de lote.
+          </p>
+        )}
+      </FormSection>
+
+      <FormSection title="Filtros de lote">
+        <p className="field__hint">
+          Local, situação e validade são do lote: com qualquer um deles, item sem controle de lote fica fora.
+        </p>
+        <div className="field-grid-2">
+          <div className="field">
+            <label htmlFor="novo-inventario-local">Local contém</label>
+            <input
+              id="novo-inventario-local"
+              type="text"
+              maxLength={100}
+              value={local}
+              placeholder="Ex.: A-03, Câmara fria"
+              onChange={(evento) => setLocal(evento.target.value)}
+            />
+          </div>
+          <fieldset className="field">
+            <legend>Situação do lote</legend>
+            <div className="selection-group">
+              {LOT_STATUSES.map((situacao) => (
+                <LinhaDeMarcacao
+                  key={situacao}
+                  tipo="checkbox"
+                  marcado={situacoes.includes(situacao)}
+                  aoMudar={() => alternarSituacao(situacao)}
+                >
+                  {LOT_STATUS_LABELS[situacao]}
+                </LinhaDeMarcacao>
+              ))}
+              <span className="field__hint">Nenhuma marcada: todas as situações.</span>
+            </div>
+          </fieldset>
+          <fieldset className="field">
+            <legend>Validade</legend>
+            <div className="selection-group">
+              {STOCK_COUNT_EXPIRY_FILTERS.map((opcao) => (
+                <Opcao
+                  key={opcao}
+                  nome="novo-inventario-validade"
+                  valor={opcao}
+                  atual={validade}
+                  rotulo={STOCK_COUNT_EXPIRY_FILTER_LABELS[opcao]}
+                  aoEscolher={setValidade}
+                />
+              ))}
+            </div>
+            {validade === "EXPIRING" && (
+              <div className="field">
+                <label htmlFor="novo-inventario-dias">Dias até vencer</label>
+                <IntegerField id="novo-inventario-dias" value={dias} onChangeValue={setDias} />
+                {!diasValidos && <span className="field__error">Informe de 1 a 3.650 dias.</span>}
+                {diasValidos && (
+                  <span className="field__hint">Lotes não vencidos que vencem em até {formatIntegerPtBr(diasDaValidade ?? 0)} dias, contando hoje.</span>
+                )}
+              </div>
+            )}
+          </fieldset>
+        </div>
+        {filtroDeLote && selecao === "itens" && (
+          <p className="field__hint">Item sem controle de lote escolhido acima não entra enquanto houver filtro de lote.</p>
         )}
       </FormSection>
 
       <FormSection title="Prévia">
         <div aria-live="polite" aria-busy={atualizando || undefined}>
           {selecaoIncompleta ? (
-            <p className="field__hint">A prévia aparece quando a seleção tiver ao menos um item ou lote.</p>
+            <p className="field__hint">
+              {validade === "EXPIRING" && !diasValidos
+                ? "A prévia aparece quando os dias até vencer estiverem preenchidos."
+                : "A prévia aparece quando a seleção tiver ao menos um item ou lote."}
+            </p>
           ) : atualizando && !dados && !previa?.erro ? (
             <p className="field__hint">Montando a prévia…</p>
           ) : null}

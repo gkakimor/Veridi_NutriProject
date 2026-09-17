@@ -20,6 +20,7 @@ import {
   PositionAlreadyInCountError,
   PositionHeldByOpenCountError,
   StockCountActionNotAllowedError,
+  StockCountChangedError,
   StockCountCloseBlockedError,
   StockCountConcurrentWriteError,
   StockCountCustomerNotFoundError,
@@ -40,6 +41,7 @@ import {
 import {
   addStockCountPositionSchema,
   cancelStockCountSchema,
+  completeStockCountSchema,
   createStockCountFindingSchema,
   decideStockCountSchema,
   listStockCountsQuerySchema,
@@ -60,6 +62,7 @@ import {
   getStockCountDetail,
   getStockCountFinding,
   getStockCountPosition,
+  getStockCountPositionMovements,
   listStockCounts,
   previewStockCount,
   registerStockCountEntry,
@@ -137,6 +140,7 @@ export function mapStockCountError(error: unknown): Resposta | null {
   if (error instanceof StockCountCloseBlockedError) {
     return { status: 409, body: corpo("stock_count_close_blocked", { issues: error.issues }) };
   }
+  if (error instanceof StockCountChangedError) return { status: 409, body: corpo("stock_count_changed") };
   if (error instanceof SystemQuantityChangedError) {
     return {
       status: 409,
@@ -194,6 +198,20 @@ export const stockCountRoutes: FastifyPluginAsync = async (app) => {
     const detalhe = await getStockCountDetail(id, parsed.data.view);
     if (!detalhe) return reply.status(404).send({ error: "not_found" });
     return reply.send(detalhe);
+  });
+
+  /*
+   * Movimentos da posição depois da referência (Fatia 2B): a leitura de
+   * revisão, que numa contagem cega só lista depois da revelação.
+   */
+  app.get("/stock-counts/:id/positions/:positionId/movements", async (request, reply) => {
+    const { id, positionId } = request.params as { id: string; positionId: string };
+    const movimentos = await getStockCountPositionMovements(id, positionId);
+    if (!movimentos) {
+      const corpo: StockCountErrorBody = { error: "position_not_found", message: "Posição não encontrada neste inventário." };
+      return reply.status(404).send(corpo);
+    }
+    return reply.send(movimentos);
   });
 
   app.post(
@@ -317,7 +335,9 @@ export const stockCountRoutes: FastifyPluginAsync = async (app) => {
     comErrosDeDominio(async (request, reply) => {
       const actor = requireRole(request, ...STOCK_COUNT_WRITE_ROLES);
       const { id } = request.params as { id: string };
-      await completeStockCount(id, actor);
+      const parsed = completeStockCountSchema.safeParse(request.body ?? {});
+      if (!parsed.success) return erroDeValidacao(reply, parsed.error);
+      await completeStockCount(id, actor, parsed.data.expectedAdjustments);
       return reply.send(await detalheDeRevisao(id));
     }),
   );

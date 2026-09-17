@@ -186,6 +186,19 @@ export class StockCountCloseBlockedError extends Error {
   }
 }
 
+/**
+ * Os ajustes que o encerramento aplicaria não são os que a tela mostrou:
+ * alguém decidiu ou recontou depois que o diálogo abriu. Nada foi gravado.
+ */
+export class StockCountChangedError extends Error {
+  constructor() {
+    super(
+      "O inventário mudou desde que você abriu o encerramento: os ajustes a gerar já não são os mostrados. Confira de novo antes de encerrar.",
+    );
+    this.name = "StockCountChangedError";
+  }
+}
+
 /** Contagem rápida: o saldo mudou entre o que a tela mostrou e o confirmar. */
 export class SystemQuantityChangedError extends Error {
   constructor(

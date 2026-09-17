@@ -94,6 +94,77 @@ describe("lista de inventários", () => {
     expect(ultimaConsulta()).not.toHaveProperty("status");
   });
 
+  it("contagem rápida em uma linha: INV-, data, item, lote, dono, contado, sistema, diferença, ajuste e autor (Fatia 2B)", async () => {
+    const rapida = (codigo: string, sobre: Partial<NonNullable<ReturnType<typeof resumo>["quickResult"]>>) =>
+      resumo({
+        id: codigo,
+        code: codigo,
+        kind: "QUICK",
+        mode: "ASSISTED",
+        status: "COMPLETED",
+        description: null,
+        quickResult: {
+          positionId: `pos-${codigo}`,
+          itemId: "item-1",
+          itemCode: "MP-000431",
+          itemName: "Vitamina C",
+          unitCode: "kg",
+          lotId: "lote-1",
+          lotCode: "LT-000118",
+          ownerType: "CUSTOMER",
+          ownerCustomerCode: "CLI-000003",
+          ownerCustomerName: "Nutrifarm",
+          countedQuantity: "12",
+          systemQuantity: "12.5",
+          difference: "-0.5",
+          adjustmentMovementId: "mov-1",
+          adjustmentType: "ADJUSTMENT_OUT",
+          adjustmentQuantity: "0.5",
+          reason: "Quebra",
+          countedByName: "Bruno Produção",
+          ...sobre,
+        },
+      });
+    vi.mocked(listStockCounts).mockResolvedValue({
+      stockCounts: [
+        rapida("INV-000120", {}),
+        rapida("INV-000121", {
+          lotId: null,
+          lotCode: null,
+          ownerType: "VERIDI",
+          ownerCustomerCode: null,
+          ownerCustomerName: null,
+          countedQuantity: "3",
+          systemQuantity: "3",
+          difference: "0",
+          adjustmentMovementId: null,
+          adjustmentType: null,
+          adjustmentQuantity: null,
+          countedByName: "Carla Qualidade",
+        }),
+      ],
+      page: 1,
+      pageSize: 20,
+      total: 2,
+    });
+    abrir();
+    fireEvent.click(await screen.findByRole("tab", { name: "Contagens rápidas" }));
+    const cabecalho = await screen.findByRole("columnheader", { name: "Ajuste" });
+    const titulos = within(cabecalho.closest("tr") as HTMLElement)
+      .getAllByRole("columnheader")
+      .map((coluna) => coluna.textContent);
+    expect(titulos).toEqual(["Código", "Data", "Item", "Lote", "Proprietário", "Contado", "Sistema", "Diferença", "Ajuste", "Autor", ""]);
+
+    const comAjuste = screen.getByText("INV-000120").closest("tr") as HTMLElement;
+    for (const texto of ["MP-000431", "LT-000118", "CLI-000003", "12 kg", "12,5 kg", "-0,5", "Saída 0,5 kg", "Bruno Produção"]) {
+      expect(within(comAjuste).getByText(texto)).toBeInTheDocument();
+    }
+    const confere = screen.getByText("INV-000121").closest("tr") as HTMLElement;
+    expect(within(confere).getByText("Veridi")).toBeInTheDocument();
+    expect(within(confere).getByText("Nenhum — confere")).toBeInTheDocument();
+    expect(within(confere).getByText("Carla Qualidade")).toBeInTheDocument();
+  });
+
   it.each(USER_ROLES.map((role) => ({ role, opera: OPERAM.includes(role) })))(
     "$role — ações de escrita: $opera",
     async ({ role, opera }) => {

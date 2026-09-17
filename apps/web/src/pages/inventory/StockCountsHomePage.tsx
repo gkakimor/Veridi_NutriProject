@@ -31,10 +31,13 @@ import {
 } from "../../lib/list-period";
 import { useListQuery } from "../../lib/list-query";
 import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
+import { formatQuantityWithUnit } from "../../lib/quantity";
 import type { ListStockCountsParams } from "../../lib/stock-counts-api";
 import { listStockCounts } from "../../lib/stock-counts-api";
 import {
+  diferencaComSinal,
   divergenciasDoInventario,
+  donoDaPosicao,
   progressoDoInventario,
   rotaDaContagem,
   rotaDoInventario,
@@ -195,7 +198,40 @@ export function StockCountsHomePage() {
     vazio = "Nenhum inventário com esta situação.";
   }
 
-  const colunas = aba === "rapidas" ? 5 : 9;
+  const colunas = aba === "rapidas" ? 11 : 9;
+
+  /** A Contagem rápida em uma linha: o que foi contado, contra o quê, e o ajuste que nasceu. */
+  function colunasDaRapida(linha: StockCountSummaryDTO) {
+    const rapida = linha.quickResult;
+    return (
+      <>
+        <td className="col-tight">{formatDateTime(linha.createdAt)}</td>
+        <td className="col-flex">
+          {rapida ? (
+            <span className="inv-celula-empilhada">
+              <span className="is-code inv-codigo-inteiro">{rapida.itemCode}</span>
+              <small>{rapida.itemName}</small>
+            </span>
+          ) : (
+            <span className="muted">—</span>
+          )}
+        </td>
+        <td className="col-tight is-code">{rapida?.lotCode ?? "—"}</td>
+        <td className="col-label">{rapida ? donoDaPosicao(rapida) : "—"}</td>
+        <td className="is-numeric col-tight">{formatQuantityWithUnit(rapida?.countedQuantity, rapida?.unitCode)}</td>
+        <td className="is-numeric col-tight">{formatQuantityWithUnit(rapida?.systemQuantity, rapida?.unitCode)}</td>
+        <td className="is-numeric col-tight">{diferencaComSinal(rapida?.difference)}</td>
+        <td className="col-label">
+          {!rapida
+            ? "—"
+            : rapida.adjustmentType
+              ? `${rapida.adjustmentType === "ADJUSTMENT_IN" ? "Entrada" : "Saída"} ${formatQuantityWithUnit(rapida.adjustmentQuantity, rapida.unitCode)}`
+              : "Nenhum — confere"}
+        </td>
+        <td className="col-flex">{rapida?.countedByName ?? linha.createdByName}</td>
+      </>
+    );
+  }
 
   return (
     <>
@@ -303,9 +339,15 @@ export function StockCountsHomePage() {
             {aba === "rapidas" ? (
               <tr>
                 <th className="col-tight">Código</th>
-                <th className="col-tight">Registrada em</th>
-                <th className="col-flex">Registrada por</th>
-                <th className="col-label">Situação</th>
+                <th className="col-tight">Data</th>
+                <th className="col-flex">Item</th>
+                <th className="col-tight">Lote</th>
+                <th className="col-label">Proprietário</th>
+                <th className="is-numeric col-tight">Contado</th>
+                <th className="is-numeric col-tight">Sistema</th>
+                <th className="is-numeric col-tight">Diferença</th>
+                <th className="col-label">Ajuste</th>
+                <th className="col-flex">Autor</th>
                 <th aria-label="Ações" />
               </tr>
             ) : (
@@ -337,19 +379,16 @@ export function StockCountsHomePage() {
                 >
                   <td className="is-code col-tight">{linha.code}</td>
                   {aba === "rapidas" ? (
-                    <>
-                      <td className="col-tight">{formatDateTime(linha.createdAt)}</td>
-                      <td className="col-flex">{linha.createdByName}</td>
-                    </>
+                    colunasDaRapida(linha)
                   ) : (
                     <>
                       <td className="col-flex">{linha.description ?? <span className="muted">—</span>}</td>
                       <td className="col-label">{STOCK_COUNT_MODE_LABELS[linha.mode]}</td>
+                      <td className="col-label">
+                        <span className={statusBadgeClass(linha.status)}>{STOCK_COUNT_STATUS_LABELS[linha.status]}</span>
+                      </td>
                     </>
                   )}
-                  <td className="col-label">
-                    <span className={statusBadgeClass(linha.status)}>{STOCK_COUNT_STATUS_LABELS[linha.status]}</span>
-                  </td>
                   {aba === "inventarios" && (
                     <>
                       <td className="is-numeric col-tight">{progressoDoInventario(linha)}</td>

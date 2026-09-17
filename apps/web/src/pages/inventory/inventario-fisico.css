@@ -345,3 +345,277 @@
 .inv-cartao__numero .inv-estado {
   display: inline;
 }
+
+/*
+ * Revisão, decisão e encerramento — Fatia 2B.
+ *
+ * Os diálogos da revisão listam posições e movimentos: mais largos que a
+ * confirmação simples e rolando por dentro, nunca a página por trás. Abaixo de
+ * 640px ocupam a tela inteira, sem rolagem lateral.
+ */
+.confirm-dialog:has(.inv-dialogo-largo) {
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.inv-dialogo-largo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 639px) {
+  .confirm-dialog:has(.inv-dialogo-largo) {
+    inset: 0;
+    top: 0;
+    left: 0;
+    transform: none;
+    width: 100vw;
+    height: 100dvh;
+    max-height: none;
+    border-radius: 0;
+    padding: var(--sp-4);
+  }
+
+  .inv-dialogo-largo .confirm-dialog__actions {
+    position: sticky;
+    bottom: calc(-1 * var(--sp-4));
+    flex-wrap: wrap;
+    padding: var(--sp-3) 0;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+  }
+
+  .inv-dialogo-largo .confirm-dialog__actions .btn {
+    flex: 1 1 auto;
+    min-height: 44px;
+  }
+}
+
+.inv-lista-de-posicoes,
+.inv-lista-de-decisao,
+.inv-recusas,
+.inv-movimentos,
+.inv-registros,
+.inv-cartoes-da-revisao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inv-lista-de-posicoes {
+  max-height: 12rem;
+  overflow-y: auto;
+  font-size: var(--fs-sm);
+}
+
+.inv-decisao,
+.inv-recusa {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+}
+
+.inv-decisao--marcada,
+.inv-recusa {
+  border-left: 3px solid var(--warn-fg);
+}
+
+.inv-decisao__posicao,
+.inv-recusa__posicao {
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+}
+
+.inv-decisao__numeros,
+.inv-recusa__motivo {
+  color: var(--ink-2);
+}
+
+.inv-decisao__movimentacao {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border-radius: var(--radius-sm);
+  background: var(--warn-bg);
+}
+
+.inv-decisao__movimentacao p {
+  margin: 0;
+}
+
+.inv-escolha-da-decisao {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.inv-escolha-da-decisao .selection-row {
+  flex: 1 1 10rem;
+}
+
+.inv-recusa__numeros {
+  display: grid;
+  grid-template-columns: repeat(3, max-content minmax(0, 1fr));
+  gap: var(--sp-1) var(--sp-2);
+  margin: 0;
+}
+
+.inv-recusa__numeros dt {
+  color: var(--ink-2);
+}
+
+.inv-recusa__numeros dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.inv-recusa__acoes {
+  justify-content: flex-start;
+}
+
+.inv-consequencia {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  font-size: var(--fs-base);
+}
+
+.inv-consequencia__unidades {
+  margin: var(--sp-1) 0 0;
+  padding-left: var(--sp-5);
+  font-variant-numeric: tabular-nums;
+}
+
+.inv-movimentos__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: var(--fs-sm);
+}
+
+.inv-movimentos__item--alerta {
+  border-left: 3px solid var(--warn-fg);
+}
+
+.inv-movimentos__detalhe {
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+.inv-texto-alerta {
+  color: var(--warn-fg);
+  font-weight: var(--fw-medium);
+}
+
+/* Barra das ações em lote: sempre à vista enquanto se escolhe posições. */
+.inv-barra-de-lote {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.inv-barra-de-lote__todas {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+
+.inv-barra-de-lote__contagem {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.inv-barra-de-lote__acoes {
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.inv-barra-de-lote__dica {
+  flex-basis: 100%;
+}
+
+.inv-caixa {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--v-green-700);
+}
+
+.inv-linha-de-detalhes td {
+  background: var(--canvas);
+}
+
+.inv-detalhes-da-posicao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  white-space: normal;
+}
+
+.inv-detalhes-da-posicao h4 {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-sm);
+}
+
+.inv-registros {
+  font-size: var(--fs-sm);
+}
+
+.inv-cartao__topo {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.inv-cartao--selecionado {
+  border-color: var(--v-green-700);
+  background: var(--selected-bg);
+}
+
+@media (max-width: 639px) {
+  .inv-barra-de-lote__acoes {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .inv-barra-de-lote__acoes .btn {
+    flex: 1 1 auto;
+    min-height: 44px;
+  }
+
+  .inv-cartoes-da-revisao .inv-caixa {
+    width: 24px;
+    height: 24px;
+  }
+
+  .inv-recusa__numeros {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+}

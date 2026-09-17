@@ -1,7 +1,13 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import type { StockCountDetailDTO, StockCountPositionDTO } from "@veridi/shared";
+import type {
+  StockCountCloseIssueDTO,
+  StockCountDecision,
+  StockCountDetailDTO,
+  StockCountPositionDTO,
+} from "@veridi/shared";
 import {
+  STOCK_COUNT_DECISION_LABELS,
   STOCK_COUNT_FINDING_KIND_LABELS,
   STOCK_COUNT_MODE_LABELS,
   STOCK_COUNT_POSITION_SITUATION_LABELS,
@@ -27,6 +33,8 @@ import {
   RetirarPosicaoDialog,
 } from "./inventario-dialogos";
 import { LinhaDoTempoDoInventario } from "./LinhaDoTempoDoInventario";
+import { RevisaoDoInventario } from "./RevisaoDoInventario";
+import { DecidirPosicoesDialog, EncerrarInventarioDialog, PedirRecontagemDialog } from "./revisao-dialogos";
 import {
   ROTA_DOS_INVENTARIOS,
   aguardaContagem,
@@ -35,6 +43,8 @@ import {
   divergenciasDoInventario,
   donoDaPosicao,
   estaAberto,
+  podeDecidir,
+  podePedirRecontagem,
   progressoDoInventario,
   rotaDaContagem,
   situacaoBadgeClass,
@@ -72,19 +82,26 @@ type Dialogo =
   | { tipo: "retirar"; posicao: StockCountPositionDTO }
   | { tipo: "ocorrencia" }
   | { tipo: "cancelar" }
-  | { tipo: "concluir" };
+  | { tipo: "concluir" }
+  | { tipo: "recontar"; posicoes: StockCountPositionDTO[] }
+  | { tipo: "decidir"; posicoes: StockCountPositionDTO[]; decisao: StockCountDecision }
+  | { tipo: "encerrar" };
+
+function quantasPosicoes(quantidade: number): string {
+  return quantidade === 1 ? "1 posição" : `${formatIntegerPtBr(quantidade)} posições`;
+}
 
 /**
- * Estoque → Inventário Físico → um inventário (INVENTORY-PHYSICAL-COUNT-01, Fatia 2A).
+ * Estoque → Inventário Físico → um inventário (INVENTORY-PHYSICAL-COUNT-01, Fatias 2A e 2B).
  *
  * Lê a leitura de REVISÃO, que o servidor mantém cega até a primeira contagem
  * terminar: numa contagem cega em contagem, esta tela não recebe saldo, esperado
  * nem diferença — não há o que esconder aqui. Concluída a primeira contagem, a
  * revisão revela, e o detalhe mostra o que o servidor passou a mostrar.
  *
- * Ações só para quem opera, e só as que o estado permite. Revisão das
- * divergências, recontagem pedida, decisão e encerramento não estão nesta
- * entrega: em revisão, a tela mostra o que há e diz que a revisão aguarda.
+ * Ações só para quem opera, e só as que o estado permite. Em revisão (2B):
+ * pedir recontagem, decidir Ajustar ou Não ajustar e encerrar — com a
+ * consequência lida da revisão e as recusas do servidor por posição.
  */
 export function StockCountDetailPage() {
   const { id = "" } = useParams();
@@ -100,6 +117,8 @@ export function StockCountDetailPage() {
   const [recorte, setRecorte] = useState<Recorte>("todas");
   const [busca, setBusca] = useState("");
   const [limite, setLimite] = useState(LINHAS_POR_VEZ);
+  const [versao, setVersao] = useState(0);
+  const [recusa, setRecusa] = useState<StockCountCloseIssueDTO[] | null>(null);
 
   useTituloDaTela(inventario?.code);
 
@@ -178,6 +197,39 @@ export function StockCountDetailPage() {
     );
   }
 
+  const emRevisao = inventario.status === "IN_REVIEW";
+  const revisaoLiberada = inventario.firstRoundClosedAt !== null && !inventario.balancesHidden;
+
+  /** Uma ação da revisão gravou: a revisão devolvida pelo servidor passa a ser a tela. */
+  function aposAcaoDaRevisao(detalhe: StockCountDetailDTO, mensagem: string) {
+    setDialogo(null);
+    setInventario(detalhe);
+    setVersao((atual) => atual + 1);
+    setAviso(mensagem);
+  }
+
+  /** Ação oferecida por uma recusa do encerramento, sobre a posição como está agora. */
+  function agirSobreRecusa(positionId: string, acao: "recontar" | "decidir") {
+    if (!inventario) return;
+    const posicao = inventario.positions.find((candidata) => candidata.id === positionId);
+    if (!posicao) return;
+    const numero = formatIntegerPtBr(posicao.sequence);
+    const situacao = STOCK_COUNT_POSITION_SITUATION_LABELS[posicao.situation].toLocaleLowerCase("pt-BR");
+    if (acao === "recontar") {
+      if (podePedirRecontagem(posicao)) setDialogo({ tipo: "recontar", posicoes: [posicao] });
+      else {
+        setDialogo(null);
+        setAviso(`A posição ${numero} não pode ser recontada agora: está ${situacao}.`);
+      }
+      return;
+    }
+    if (podeDecidir(posicao)) setDialogo({ tipo: "decidir", posicoes: [posicao], decisao: posicao.decision ?? "ADJUST" });
+    else {
+      setDialogo(null);
+      setAviso(`A posição ${numero} não tem diferença a decidir agora: está ${situacao}.`);
+    }
+  }
+
   return (
     <>
       <div className="doc-header">
@@ -219,6 +271,11 @@ export function StockCountDetailPage() {
                 Concluir primeira contagem
               </button>
             )}
+            {emRevisao && (
+              <button type="button" className="btn btn--accent" onClick={() => setDialogo({ tipo: "encerrar" })}>
+                Encerrar inventário
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -240,8 +297,8 @@ export function StockCountDetailPage() {
         <div className="callout" role="note">
           <p>
             <strong>Primeira contagem concluída</strong> em {formatDateTime(inventario.firstRoundClosedAt)} por{" "}
-            {inventario.firstRoundClosedByName ?? "—"}. O inventário aguarda a revisão das divergências e o encerramento,
-            que ainda não estão disponíveis nesta tela. Nenhum ajuste de estoque foi feito.
+            {inventario.firstRoundClosedByName ?? "—"}. Revise as divergências: peça recontagem ou decida Ajustar ou Não
+            ajustar, com motivo, e encerre. Nenhum ajuste de estoque é feito antes do encerramento.
           </p>
         </div>
       )}
@@ -258,7 +315,14 @@ export function StockCountDetailPage() {
         <div className="callout" role="note">
           <p>
             <strong>Encerrado</strong> em {formatDateTime(inventario.completedAt)} por {inventario.completedByName ?? "—"}.
-            Somente leitura.
+            Somente leitura.{" "}
+            {(() => {
+              const ajustes = inventario.positions.filter((posicao) => posicao.adjustmentMovementId !== null).length;
+              return ajustes === 0
+                ? "Nenhum ajuste de estoque foi gerado."
+                : `${ajustes === 1 ? "1 ajuste de estoque gerado" : `${formatIntegerPtBr(ajustes)} ajustes de estoque gerados`}, em Movimentações com o código ${inventario.code}.`;
+            })()}
+            {inventario.completedByCounter ? " Quem encerrou também registrou contagem neste inventário." : ""}
           </p>
         </div>
       )}
@@ -295,6 +359,19 @@ export function StockCountDetailPage() {
         </FormSection>
       )}
 
+      {revisaoLiberada ? (
+        <FormSection title={emRevisao ? "Revisão" : "Posições"}>
+          <RevisaoDoInventario
+            inventario={inventario}
+            podeAgir={podeOperar && emRevisao}
+            versao={versao}
+            recusa={emRevisao ? recusa : null}
+            aoPedirRecontagem={(posicoes) => setDialogo({ tipo: "recontar", posicoes })}
+            aoDecidir={(posicoes, decisao) => setDialogo({ tipo: "decidir", posicoes, decisao })}
+            aoLimparRecusa={() => setRecusa(null)}
+          />
+        </FormSection>
+      ) : (
       <FormSection title="Posições">
         <div className="toolbar inv-barra-da-contagem">
           <div className="toolbar__search">
@@ -428,6 +505,7 @@ export function StockCountDetailPage() {
           </div>
         )}
       </FormSection>
+      )}
 
       <FormSection title="Ocorrências">
         <div className="table-container">
@@ -527,6 +605,62 @@ export function StockCountDetailPage() {
             setInventario(detalhe);
           }}
           aoIrParaPendentes={() => navigate(rotaDaContagem(inventario.id))}
+        />
+      )}
+      {dialogo?.tipo === "recontar" && (
+        <PedirRecontagemDialog
+          inventario={inventario}
+          posicoes={dialogo.posicoes}
+          aoFechar={() => setDialogo(null)}
+          aoPedir={(detalhe) =>
+            aposAcaoDaRevisao(
+              detalhe,
+              `Recontagem pedida para ${quantasPosicoes(dialogo.posicoes.length)}. Quem conta usa "Contar pendentes".`,
+            )
+          }
+        />
+      )}
+      {dialogo?.tipo === "decidir" && (
+        <DecidirPosicoesDialog
+          inventario={inventario}
+          posicoes={dialogo.posicoes}
+          decisaoInicial={dialogo.decisao}
+          aoFechar={() => setDialogo(null)}
+          aoDecidir={(detalhe) => {
+            const decididas = detalhe.positions.filter((posicao) =>
+              dialogo.posicoes.some((escolhida) => escolhida.id === posicao.id),
+            );
+            const decisao = decididas[0]?.decision;
+            aposAcaoDaRevisao(
+              detalhe,
+              `Decisão registrada em ${quantasPosicoes(dialogo.posicoes.length)}${decisao ? `: ${STOCK_COUNT_DECISION_LABELS[decisao]}` : ""}.`,
+            );
+          }}
+        />
+      )}
+      {dialogo?.tipo === "encerrar" && (
+        <EncerrarInventarioDialog
+          inventarioId={inventario.id}
+          codigo={inventario.code}
+          aoFechar={() => setDialogo(null)}
+          aoEncerrar={(detalhe) => {
+            const ajustes = detalhe.positions.filter((posicao) => posicao.adjustmentMovementId !== null).length;
+            setRecusa(null);
+            aposAcaoDaRevisao(
+              detalhe,
+              `${detalhe.code} encerrado: ${ajustes === 1 ? "1 ajuste de estoque gerado" : `${formatIntegerPtBr(ajustes)} ajustes de estoque gerados`}.`,
+            );
+          }}
+          aoRecusar={(issues) => {
+            setRecusa(issues);
+            setAviso(null);
+          }}
+          aoAtualizar={(detalhe) => {
+            setInventario(detalhe);
+            setVersao((atual) => atual + 1);
+          }}
+          aoRecontar={(positionId) => agirSobreRecusa(positionId, "recontar")}
+          aoDecidir={(positionId) => agirSobreRecusa(positionId, "decidir")}
         />
       )}
     </>

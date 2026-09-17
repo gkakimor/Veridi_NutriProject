@@ -39,6 +39,7 @@ export function resumo(overrides: Partial<StockCountSummaryDTO> = {}): StockCoun
     removedCount: 0,
     countedCount: 0,
     divergentCount: null,
+    quickResult: null,
     ...overrides,
   };
 }

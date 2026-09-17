@@ -127,7 +127,7 @@ describe("detalhe do inventário — leitura e ações", () => {
     expect(screen.queryByRole("button", { name: /Retirar a posição/ })).toBeNull();
   });
 
-  it("em revisão: aguarda a revisão, sem adicionar, retirar nem concluir — e mostra o que o servidor revelou", async () => {
+  it("em revisão: revisa e encerra, sem adicionar, retirar nem concluir — e mostra o que o servidor revelou", async () => {
     vi.mocked(getStockCount).mockResolvedValue(
       revisao({
         status: "IN_REVIEW",
@@ -145,14 +145,16 @@ describe("detalhe do inventário — leitura e ações", () => {
     );
     abrir();
     await carregado();
-    expect(screen.getByText(/aguarda a revisão das divergências e o encerramento/)).toBeInTheDocument();
+    expect(screen.getByText(/Revise as divergências/)).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Saldo de referência" })).toBeInTheDocument();
-    expect(screen.getByText("12,5 kg")).toBeInTheDocument();
+    // Saldo de referência e esperado da posição, os dois revelados.
+    expect(screen.getAllByText("12,5 kg")).toHaveLength(2);
     expect(screen.getByText("Divergente")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Adicionar posição" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Concluir primeira contagem" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Retirar a posição/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Cancelar inventário" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Encerrar inventário" })).toBeInTheDocument();
   });
 });
 
@@ -302,7 +304,7 @@ describe("detalhe do inventário — ocorrência, cancelar e concluir", () => {
     dialogo = await screen.findByRole("alertdialog");
     fireEvent.click(within(dialogo).getByRole("button", { name: "Concluir primeira contagem" }));
 
-    expect(await screen.findByText(/aguarda a revisão das divergências e o encerramento/)).toBeInTheDocument();
+    expect(await screen.findByText(/Revise as divergências/)).toBeInTheDocument();
     expect(screen.getByText("Em revisão", { selector: ".badge" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Saldo de referência" })).toBeInTheDocument();
     expect(screen.getByText("Confere")).toBeInTheDocument();

@@ -5,16 +5,13 @@ import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { ListStatusRow } from "../../components/ListStatusRow";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { InventoryMovementDTO, InventoryMovementType } from "@veridi/shared";
-import {
-  INVENTORY_MOVEMENT_DIRECTION,
-  INVENTORY_MOVEMENT_SOURCE_LABELS,
-  INVENTORY_MOVEMENT_TYPE_LABELS,
-} from "@veridi/shared";
+import { INVENTORY_MOVEMENT_DIRECTION, INVENTORY_MOVEMENT_TYPE_LABELS } from "@veridi/shared";
 import { useInitialFilters } from "../../lib/filter-params";
 import { listInventoryMovements } from "../../lib/inventory-api";
 import { useFilteredPage, useListQuery } from "../../lib/list-query";
 import { EntityLink } from "../../components/EntityLink";
 import { ContextHelp, InfoHint } from "../../components/help";
+import { OrigemDoMovimento } from "./OrigemDoMovimento";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 import { formatDateTime } from "../../lib/dates";
@@ -179,27 +176,10 @@ export function InventoryMovementsPage() {
                 <td className="col-tight is-numeric">{formatQuantity(movement.quantity)}</td>
                 {/* Todo movimento tem um documento que o causou; o extrato só
                     conhecia recebimento e expedição, e as saídas de produção
-                    — as maiores do ledger — apareciam sem origem nenhuma. */}
+                    — as maiores do ledger — apareciam sem origem nenhuma. O
+                    ajuste de inventário aponta o INV- (Fatia 2B). */}
                 <td className="col-tight is-code">
-                  {movement.receiptId ? (
-                    <EntityLink kind="receipt" id={movement.receiptId} code={movement.receiptCode} />
-                  ) : movement.shipmentId ? (
-                    <EntityLink kind="shipment" id={movement.shipmentId} code={movement.shipmentCode} />
-                  ) : movement.productionOrderId ? (
-                    <EntityLink
-                      kind="productionOrder"
-                      id={movement.productionOrderId}
-                      code={movement.productionOrderCode}
-                    />
-                  ) : movement.projectSampleId ? (
-                    <EntityLink
-                      kind="sample"
-                      id={movement.projectSampleId}
-                      code={movement.projectSampleCode}
-                    />
-                  ) : (
-                    INVENTORY_MOVEMENT_SOURCE_LABELS[movement.sourceType]
-                  )}
+                  <OrigemDoMovimento movimento={movement} />
                 </td>
                 <td className="col-flex">{movement.createdBy ?? "—"}</td>
                 <td className="col-flex">{movement.reason ?? "—"}</td>

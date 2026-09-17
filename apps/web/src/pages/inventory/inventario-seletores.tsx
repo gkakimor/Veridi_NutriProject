@@ -132,9 +132,10 @@ export interface PosicoesDoItem {
 
 /**
  * As posições de um item — o item sem lote é uma; o item com lote, uma por
- * lote, com ou sem saldo — lidas pela prévia no modo da contagem.
+ * lote, com ou sem saldo — lidas pela prévia no modo da contagem. `recarga`
+ * lê de novo sem trocar de item (a Contagem rápida, quando o saldo mudou).
  */
-export function usePosicoesDoItem(itemId: string | null, modo: StockCountMode): PosicoesDoItem {
+export function usePosicoesDoItem(itemId: string | null, modo: StockCountMode, recarga = 0): PosicoesDoItem {
   const [estado, setEstado] = useState<PosicoesDoItem & { chave: string }>({
     chave: "",
     carregando: false,
@@ -142,7 +143,7 @@ export function usePosicoesDoItem(itemId: string | null, modo: StockCountMode): 
     posicoes: [],
     retidas: [],
   });
-  const chave = itemId ? `${itemId}:${modo}` : "";
+  const chave = itemId ? `${itemId}:${modo}:${recarga}` : "";
 
   useEffect(() => {
     if (!itemId) return;

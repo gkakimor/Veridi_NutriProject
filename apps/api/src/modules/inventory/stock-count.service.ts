@@ -12,6 +12,9 @@ import type {
 import {
   STOCK_COUNT_CODE_PREFIX,
   STOCK_COUNT_MAX_POSITIONS,
+  STOCK_COUNT_POSITION_MOVEMENTS_LIMIT,
+  diaCivilDeslocado,
+  hojeComercial,
   intervaloDeDiasComerciais,
 } from "@veridi/shared";
 import type {
@@ -19,19 +22,23 @@ import type {
   StockCountCloseIssueDTO,
   StockCountDetailDTO,
   StockCountEntryDTO,
+  StockCountExpectedAdjustment,
   StockCountFindingDTO,
   StockCountHeldPositionDTO,
   StockCountListResponse,
   StockCountMode,
   StockCountPositionDTO,
+  StockCountPositionMovementsDTO,
   StockCountPositionSituation,
   StockCountPreviewDTO,
   StockCountPreviewPositionDTO,
+  StockCountQuickResultDTO,
   StockCountResultDTO,
   StockCountSummaryDTO,
   StockCountView,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { diaDaColunaDeData } from "../../lib/business-day.js";
 import {
   getOnHand,
   getOnHandByLots,
@@ -45,7 +52,7 @@ import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { statusDoWhere } from "../../lib/status-list-schema.js";
 import { CountBelowReservedError, MissingCountReasonError } from "./inventory.errors.js";
 import type { StockCountInput } from "./inventory.schemas.js";
-import { getMovementById, lockStockScope, resolveItemAndLot } from "./inventory.service.js";
+import { getMovementById, getMovementsByIds, lockStockScope, resolveItemAndLot } from "./inventory.service.js";
 import {
   ClientRequestReusedError,
   FractionalCountQuantityError,
@@ -53,6 +60,7 @@ import {
   PositionAlreadyInCountError,
   PositionHeldByOpenCountError,
   StockCountActionNotAllowedError,
+  StockCountChangedError,
   StockCountCloseBlockedError,
   StockCountConcurrentWriteError,
   StockCountCustomerNotFoundError,
@@ -293,6 +301,33 @@ function ordemDePercurso(a: Candidata, b: Candidata): number {
   return COLACAO.compare(a.lote?.code ?? "", b.lote?.code ?? "");
 }
 
+/** Algum filtro que só um lote tem: local, situação ou validade (Fatia 2B). */
+function temFiltroDeLote(scope: PreviewStockCountQuery["scope"]): boolean {
+  return (
+    scope.locationContains !== undefined ||
+    (scope.lotStatuses !== undefined && scope.lotStatuses.length > 0) ||
+    (scope.expiry !== undefined && scope.expiry !== "ANY")
+  );
+}
+
+/** A validade do lote pedida pelo escopo, na régua de `isLotExpired` (o dia da validade vale inteiro). */
+function cabeNaValidade(lote: Pick<Lot, "expiryDate">, scope: PreviewStockCountQuery["scope"], agora: Date): boolean {
+  switch (scope.expiry) {
+    case "EXPIRED":
+      return isLotExpired(lote, agora);
+    case "NOT_EXPIRED":
+      return !isLotExpired(lote, agora);
+    case "EXPIRING":
+      return (
+        lote.expiryDate !== null &&
+        !isLotExpired(lote, agora) &&
+        diaDaColunaDeData(lote.expiryDate) <= diaCivilDeslocado(hojeComercial(agora), scope.expiringWithinDays ?? 0)
+      );
+    default:
+      return true;
+  }
+}
+
 /**
  * O conjunto de posições que os filtros selecionam, hoje.
  *
@@ -300,10 +335,12 @@ function ordemDePercurso(a: Candidata, b: Candidata): number {
  * uma posição "item inteiro" por cima dos lotes. "Somente com saldo" exclui
  * saldo zero; "com ou sem saldo" inclui o lote zerado (P5). Item inativo entra
  * só com saldo. Posição que já está em outro inventário aberto fica de fora e
- * volta listada com o código que a segura.
+ * volta listada com o código que a segura. Filtro de local, situação ou
+ * validade seleciona lotes: a posição de item sem lote não tem nenhum dos três.
  */
 async function avaliarEscopo(prisma: PrismaOuTx, pedido: PreviewStockCountQuery) {
   const { scope } = pedido;
+  const agora = new Date();
   if (scope.customerId) {
     const cliente = await prisma.customer.findUnique({ where: { id: scope.customerId }, select: { id: true } });
     if (!cliente) throw new StockCountCustomerNotFoundError();
@@ -320,7 +357,8 @@ async function avaliarEscopo(prisma: PrismaOuTx, pedido: PreviewStockCountQuery)
 
   // Material de cliente exige lote, e filtro por lote seleciona lotes: nos dois
   // casos não existe posição de item sem lote.
-  const itensSemLote = scope.owner === "CUSTOMER" || scope.lotIds ? [] : itens.filter((item) => !item.controlsLot);
+  const itensSemLote =
+    scope.owner === "CUSTOMER" || scope.lotIds || temFiltroDeLote(scope) ? [] : itens.filter((item) => !item.controlsLot);
   const itensComLote = itens.filter((item) => item.controlsLot);
 
   const donoDoLote: Prisma.LotWhereInput =
@@ -332,14 +370,20 @@ async function avaliarEscopo(prisma: PrismaOuTx, pedido: PreviewStockCountQuery)
   const lotes: LoteComDono[] =
     itensComLote.length === 0
       ? []
-      : await prisma.lot.findMany({
-          where: {
-            itemId: { in: itensComLote.map((item) => item.id) },
-            ...(scope.lotIds ? { id: { in: scope.lotIds } } : {}),
-            ...donoDoLote,
-          },
-          include: DONO_DO_LOTE,
-        });
+      : (
+          await prisma.lot.findMany({
+            where: {
+              itemId: { in: itensComLote.map((item) => item.id) },
+              ...(scope.lotIds ? { id: { in: scope.lotIds } } : {}),
+              ...donoDoLote,
+              ...(scope.locationContains
+                ? { location: { contains: scope.locationContains, mode: "insensitive" as const } }
+                : {}),
+              ...(scope.lotStatuses && scope.lotStatuses.length > 0 ? { status: { in: scope.lotStatuses } } : {}),
+            },
+            include: DONO_DO_LOTE,
+          })
+        ).filter((lote) => cabeNaValidade(lote, scope, agora));
 
   const saldoPorLote = await getOnHandByLots(
     prisma,
@@ -900,8 +944,16 @@ function problema(
  * Expedição), a unidade tem de ser a do retrato e o saldo que fica
  * (`saldo agora + diferença congelada`) não pode ser negativo nem, num ajuste de
  * saída, menor que o reservado. Um movimento por posição ajustada, com FK 1:1.
+ *
+ * `esperados` (Fatia 2B) são os ajustes que o diálogo de encerramento mostrou.
+ * Com a sessão travada, decisão e recontagem esperam; se o conjunto que seria
+ * aplicado não é o mostrado, recusa antes de qualquer escrita.
  */
-export async function completeStockCount(stockCountId: string, actor: StockCountActor): Promise<void> {
+export async function completeStockCount(
+  stockCountId: string,
+  actor: StockCountActor,
+  esperados?: readonly StockCountExpectedAdjustment[],
+): Promise<void> {
   await getPrisma().$transaction(async (tx) => {
     const sessao = await travarSessao(tx, stockCountId, "UPDATE");
     exigirStatus(sessao, ["IN_REVIEW"], "encerrar");
@@ -938,6 +990,14 @@ export async function completeStockCount(stockCountId: string, actor: StockCount
       if (posicao.decision === "ADJUST") ajustes.push({ posicao, diferenca });
     }
     if (problemas.length > 0) throw new StockCountCloseBlockedError(problemas);
+
+    if (esperados) {
+      const vistos = new Set(esperados.map((esperado) => `${esperado.positionId}:${esperado.entryId}`));
+      const aplicaveis = ajustes.map(({ posicao }) => `${posicao.id}:${posicao.validEntryId}`);
+      if (vistos.size !== aplicaveis.length || aplicaveis.some((chave) => !vistos.has(chave))) {
+        throw new StockCountChangedError();
+      }
+    }
 
     if (ajustes.length > 0) {
       const itemIds = [...new Set(ajustes.map((ajuste) => ajuste.posicao.itemId))].sort();
@@ -1267,7 +1327,50 @@ interface Contadores {
 
 const SEM_CONTADORES: Contadores = { positionCount: 0, removedCount: 0, countedCount: 0, divergentCount: 0 };
 
-function resumoDaSessao(sessao: StockCount, contadores: Contadores, escondido: boolean): StockCountSummaryDTO {
+type PosicaoRapida = StockCountPosition & {
+  validEntry: StockCountEntry | null;
+  adjustmentMovement: { type: string; quantity: Prisma.Decimal } | null;
+};
+
+const LEITURA_DA_RAPIDA = {
+  validEntry: true,
+  adjustmentMovement: { select: { type: true, quantity: true } },
+} as const;
+
+/** O resultado da Contagem rápida, do registro gravado e do ajuste ligado à posição (Fatia 2B). */
+function resultadoRapido(posicao: PosicaoRapida | undefined): StockCountQuickResultDTO | null {
+  const valido = posicao?.validEntry;
+  if (!posicao || !valido) return null;
+  const movimento = posicao.adjustmentMovement;
+  return {
+    positionId: posicao.id,
+    itemId: posicao.itemId,
+    itemCode: posicao.itemCode,
+    itemName: posicao.itemName,
+    unitCode: posicao.unitCode,
+    lotId: posicao.lotId,
+    lotCode: posicao.lotCode,
+    ownerType: posicao.ownerType,
+    ownerCustomerCode: posicao.ownerCustomerCode,
+    ownerCustomerName: posicao.ownerCustomerName,
+    countedQuantity: valido.countedQuantity.toString(),
+    systemQuantity: valido.expectedQuantity.toString(),
+    difference: valido.countedQuantity.minus(valido.expectedQuantity).toString(),
+    adjustmentMovementId: posicao.adjustmentMovementId,
+    adjustmentType:
+      movimento?.type === "ADJUSTMENT_IN" || movimento?.type === "ADJUSTMENT_OUT" ? movimento.type : null,
+    adjustmentQuantity: movimento ? movimento.quantity.toString() : null,
+    reason: posicao.decisionReason,
+    countedByName: valido.countedByName,
+  };
+}
+
+function resumoDaSessao(
+  sessao: StockCount,
+  contadores: Contadores,
+  escondido: boolean,
+  quickResult: StockCountQuickResultDTO | null = null,
+): StockCountSummaryDTO {
   return {
     id: sessao.id,
     code: sessao.code,
@@ -1289,6 +1392,7 @@ function resumoDaSessao(sessao: StockCount, contadores: Contadores, escondido: b
     removedCount: contadores.removedCount,
     countedCount: contadores.countedCount,
     divergentCount: escondido ? null : contadores.divergentCount,
+    quickResult: sessao.kind === "QUICK" ? quickResult : null,
   };
 }
 
@@ -1350,9 +1454,24 @@ export async function listStockCounts(query: ListStockCountsQuery): Promise<Stoc
     prisma,
     sessoes.map((sessao) => sessao.id),
   );
+  // A Contagem rápida mostra o que contou: uma consulta para as da página, só com a posição única.
+  const rapidas = sessoes.filter((sessao) => sessao.kind === "QUICK").map((sessao) => sessao.id);
+  const posicoesRapidas: PosicaoRapida[] =
+    rapidas.length === 0
+      ? []
+      : await prisma.stockCountPosition.findMany({
+          where: { stockCountId: { in: rapidas }, sequence: 1 },
+          include: LEITURA_DA_RAPIDA,
+        });
+  const rapidaPorSessao = new Map(posicoesRapidas.map((posicao) => [posicao.stockCountId, posicao]));
   return {
     stockCounts: sessoes.map((sessao) =>
-      resumoDaSessao(sessao, contadores.get(sessao.id) ?? SEM_CONTADORES, saldosEscondidos(sessao, "review")),
+      resumoDaSessao(
+        sessao,
+        contadores.get(sessao.id) ?? SEM_CONTADORES,
+        saldosEscondidos(sessao, "review"),
+        resultadoRapido(rapidaPorSessao.get(sessao.id)),
+      ),
     ),
     ...pageMeta(query, total),
   };
@@ -1479,7 +1598,13 @@ export async function getStockCountDetail(id: string, view: StockCountView): Pro
   const sessao = await prisma.stockCount.findUnique({
     where: { id },
     include: {
-      positions: { orderBy: { sequence: "asc" }, include: { entries: { orderBy: ORDEM_DOS_REGISTROS } } },
+      positions: {
+        orderBy: { sequence: "asc" },
+        include: {
+          entries: { orderBy: ORDEM_DOS_REGISTROS },
+          adjustmentMovement: LEITURA_DA_RAPIDA.adjustmentMovement,
+        },
+      },
       findings: {
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         include: { item: { select: { code: true, name: true } } },
@@ -1506,8 +1631,11 @@ export async function getStockCountDetail(id: string, view: StockCountView): Pro
   }
 
   const encerrador = sessao.completedByUserId;
+  const [primeira] = sessao.positions;
+  const quickResult =
+    sessao.kind === "QUICK" && primeira ? resultadoRapido({ ...primeira, validEntry: registroValido(primeira) }) : null;
   return {
-    ...resumoDaSessao(sessao, contadores, escondido),
+    ...resumoDaSessao(sessao, contadores, escondido, quickResult),
     view,
     balancesHidden: escondido,
     scopeFilters: sessao.scopeFilters ?? null,
@@ -1544,6 +1672,70 @@ export async function getStockCountPosition(
         )
       ).has(posicao.id);
   return posicaoDTO(posicao, escondido, view, marcada);
+}
+
+/**
+ * Movimentos da posição depois da referência (Fatia 2B) — a lista que explica
+ * "com movimentação durante o inventário". Mesma janela e mesmo recorte da
+ * marca: lançados (`createdAt`) depois da referência, até o fim da sessão, sem
+ * ajuste de inventário. Cada um diz se veio depois da contagem que vale e se é
+ * lançamento retroativo — depois da contagem, com ocorrência anterior a ela.
+ *
+ * Contagem cega antes da revelação não lista nada: é a leitura de revisão.
+ */
+export async function getStockCountPositionMovements(
+  stockCountId: string,
+  positionId: string,
+): Promise<StockCountPositionMovementsDTO | null> {
+  const prisma = getPrisma();
+  const posicao = await prisma.stockCountPosition.findFirst({
+    where: { id: positionId, stockCountId },
+    include: {
+      validEntry: { select: { countedAt: true } },
+      stockCount: { select: { mode: true, firstRoundClosedAt: true, completedAt: true, cancelledAt: true } },
+    },
+  });
+  if (!posicao) return null;
+
+  const countedAt = posicao.validEntry?.countedAt ?? null;
+  const base = {
+    positionId: posicao.id,
+    referenceAt: posicao.referenceAt.toISOString(),
+    countedAt: iso(countedAt),
+  };
+  if (saldosEscondidos(posicao.stockCount, "review")) {
+    return { ...base, balancesHidden: true, movements: [], total: 0 };
+  }
+
+  const fim = posicao.stockCount.completedAt ?? posicao.stockCount.cancelledAt;
+  const where: Prisma.InventoryMovementWhereInput = {
+    ...(posicao.lotId ? { lotId: posicao.lotId } : { itemId: posicao.itemId, lotId: null }),
+    createdAt: fim ? { gt: posicao.referenceAt, lte: fim } : { gt: posicao.referenceAt },
+    stockCountPosition: { is: null },
+  };
+  const [linhas, total] = await Promise.all([
+    prisma.inventoryMovement.findMany({
+      where,
+      select: { id: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: STOCK_COUNT_POSITION_MOVEMENTS_LIMIT,
+    }),
+    prisma.inventoryMovement.count({ where }),
+  ]);
+  const movimentos = await getMovementsByIds(linhas.map((linha) => linha.id));
+  return {
+    ...base,
+    balancesHidden: false,
+    movements: movimentos.map((movimento) => {
+      const depois = countedAt !== null && new Date(movimento.createdAt).getTime() > countedAt.getTime();
+      return {
+        ...movimento,
+        afterCount: depois,
+        retroactive: countedAt !== null && depois && new Date(movimento.occurredAt).getTime() < countedAt.getTime(),
+      };
+    }),
+    total,
+  };
 }
 
 export async function getStockCountFinding(id: string): Promise<StockCountFindingDTO | null> {

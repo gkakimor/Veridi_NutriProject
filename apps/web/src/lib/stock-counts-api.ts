@@ -1,21 +1,27 @@
 import type {
   AddStockCountPositionInput,
   CancelStockCountInput,
+  CompleteStockCountInput,
   CreateStockCountFindingInput,
+  DecideStockCountInput,
   PreviewStockCountInput,
   RegisterStockCountEntryInput,
   RegisterStockCountEntryResultDTO,
   RemoveStockCountPositionInput,
+  RequestStockCountRecountInput,
   StartStockCountInput,
   StockCountDetailDTO,
   StockCountErrorBody,
   StockCountErrorCode,
   StockCountFindingDTO,
+  StockCountInput,
   StockCountKind,
   StockCountListResponse,
   StockCountMode,
   StockCountPositionDTO,
+  StockCountPositionMovementsDTO,
   StockCountPreviewDTO,
+  StockCountResultDTO,
   StockCountStatus,
   StockCountView,
 } from "@veridi/shared";
@@ -23,9 +29,11 @@ import { API_URL, apiFetch } from "./api";
 import { parseJsonOrThrow } from "./api-errors";
 
 /**
- * Inventário Físico em sessão — as chamadas das telas (INVENTORY-PHYSICAL-COUNT-01, Fatia 2A).
+ * Inventário Físico em sessão — as chamadas das telas (INVENTORY-PHYSICAL-COUNT-01, Fatias 2A e 2B).
  *
- * A Contagem rápida continua em `inventory-api.ts` (`POST /stock-counts`).
+ * A Contagem rápida também mora aqui desde a 2B (`createQuickStockCount`): a
+ * tela precisa do corpo da recusa — o saldo que mudou, o `INV-` que retém a
+ * posição —, que `parseJsonOrThrow` descarta.
  */
 
 /** Todo código que a API do inventário devolve no corpo de uma recusa. */
@@ -49,6 +57,7 @@ const CODIGOS_DO_INVENTARIO: ReadonlySet<string> = new Set<StockCountErrorCode>(
   "recount_not_allowed",
   "decision_not_allowed",
   "stock_count_close_blocked",
+  "stock_count_changed",
   "system_quantity_changed",
   "invalid_finding",
   "concurrent_write",
@@ -221,6 +230,47 @@ export async function closeStockCountFirstRound(stockCountId: string): Promise<S
 
 export async function cancelStockCount(stockCountId: string, input: CancelStockCountInput): Promise<StockCountDetailDTO> {
   return lerDoInventario<StockCountDetailDTO>(await enviar(`${API_URL}/stock-counts/${stockCountId}/cancel`, input));
+}
+
+/** Pede recontagem das posições — por id, uma a uma, nunca por um filtro no servidor. */
+export async function requestStockCountRecount(
+  stockCountId: string,
+  input: RequestStockCountRecountInput,
+): Promise<StockCountDetailDTO> {
+  return lerDoInventario<StockCountDetailDTO>(await enviar(`${API_URL}/stock-counts/${stockCountId}/recounts`, input));
+}
+
+export async function decideStockCountPositions(
+  stockCountId: string,
+  input: DecideStockCountInput,
+): Promise<StockCountDetailDTO> {
+  return lerDoInventario<StockCountDetailDTO>(await enviar(`${API_URL}/stock-counts/${stockCountId}/decisions`, input));
+}
+
+/**
+ * Encerra com os ajustes que o diálogo mostrou. Recusa do servidor chega como
+ * `StockCountApiError`: `stock_count_close_blocked` com as posições,
+ * `stock_count_changed` quando os ajustes já não são os mostrados.
+ */
+export async function completeStockCount(
+  stockCountId: string,
+  input: CompleteStockCountInput,
+): Promise<StockCountDetailDTO> {
+  return lerDoInventario<StockCountDetailDTO>(await enviar(`${API_URL}/stock-counts/${stockCountId}/complete`, input));
+}
+
+/** Movimentos da posição depois da referência — leitura de revisão. */
+export async function getStockCountPositionMovements(
+  stockCountId: string,
+  positionId: string,
+): Promise<StockCountPositionMovementsDTO> {
+  const response = await apiFetch(`${API_URL}/stock-counts/${stockCountId}/positions/${positionId}/movements`);
+  return lerDoInventario<StockCountPositionMovementsDTO>(response);
+}
+
+/** Contagem rápida (`POST /stock-counts`), com o corpo inteiro da recusa. */
+export async function createQuickStockCount(input: StockCountInput): Promise<StockCountResultDTO> {
+  return lerDoInventario<StockCountResultDTO>(await enviar(`${API_URL}/stock-counts`, input));
 }
 
 export async function createStockCountFinding(

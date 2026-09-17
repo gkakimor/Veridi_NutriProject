@@ -496,6 +496,7 @@ const movementsExport = defineCsvExport({
     { header: "Unidade", value: (row: InventoryMovementDTO) => csvText(row.unitCode) },
     { header: "Recebimento", value: (row: InventoryMovementDTO) => csvCode(row.receiptCode) },
     { header: "Expedição", value: (row: InventoryMovementDTO) => csvCode(row.shipmentCode) },
+    { header: "Inventário", value: (row: InventoryMovementDTO) => csvCode(row.stockCountCode) },
     { header: "Motivo", value: (row: InventoryMovementDTO) => csvText(row.reason) },
     { header: "Usuário", value: (row: InventoryMovementDTO) => csvText(row.createdBy) },
   ],
