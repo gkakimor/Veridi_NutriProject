@@ -1,5 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
+import { ACQUISITION_COST_ROLES } from "@veridi/shared";
+import { exigirPerfil } from "../../lib/current-user.js";
 import { ItemNotFoundError } from "../inventory/inventory.errors.js";
 import { ProductionOrderNotFoundError } from "../production-orders/production-orders.errors.js";
 import { setAcquisitionCost } from "./acquisition-cost.service.js";
@@ -59,6 +61,12 @@ function mapDomainError(
  */
 export const costsRoutes: FastifyPluginAsync = async (app) => {
   app.put("/receipt-lines/:id/acquisition-cost", async (request, reply) => {
+    // Antes do corpo e do `id` servir para qualquer leitura: sem permissão,
+    // linha existente e inexistente recebem a mesma resposta
+    // (ACQUISITION-COST-PERMISSION-01).
+    const actor = exigirPerfil(request, reply, ACQUISITION_COST_ROLES);
+    if (!actor) return reply;
+
     const { id } = request.params as { id: string };
     const parsed = setAcquisitionCostSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -68,7 +76,7 @@ export const costsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      return reply.send(await setAcquisitionCost(id, parsed.data));
+      return reply.send(await setAcquisitionCost(id, parsed.data, actor));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);

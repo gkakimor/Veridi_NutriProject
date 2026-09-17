@@ -13,6 +13,7 @@
 
 import type { IndustrialMaterialCostSource } from "./industrial-cost-calculation.js";
 import type { InventoryOwnerType } from "./ownership.js";
+import type { UserRole } from "./users.js";
 
 /**
  * Qualidade/origem de uma referência unitária de custo.
@@ -213,6 +214,16 @@ export interface ProductionOrderMaterialCostDTO {
   /** Códigos dos itens consumidos sem referência de custo. */
   missingCostItems: string[];
 }
+
+/**
+ * Quem INFORMA o custo efetivo de aquisição — depois do recebimento
+ * (`PUT /receipt-lines/:id/acquisition-cost`) e já na criação
+ * (`POST /purchase-orders/:id/receipts` com `actualUnitCost`). Duas portas, uma
+ * lista: receber o material continua aberto, mas o custo real que alimenta as
+ * fontes REAL, 30D e 90D é de Compras e Administrador
+ * (ACQUISITION-COST-PERMISSION-01).
+ */
+export const ACQUISITION_COST_ROLES: readonly UserRole[] = ["PURCHASING", "ADMIN"];
 
 export interface SetAcquisitionCostInput {
   /** `>= 0`; string vazia limpa o custo (volta a desconhecido). */
