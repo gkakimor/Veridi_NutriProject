@@ -141,7 +141,9 @@ export const suppliersRoutes: FastifyPluginAsync = async (app) => {
 
     const { id } = request.params as { id: string };
     try {
-      return reply.send(await deactivateSupplier(id));
+      // O ator vai junto: inativar limpa o preferencial das relações dele, e a
+      // relação registra quem fez a última gravação.
+      return reply.send(await deactivateSupplier(id, actor));
     } catch (error) {
       if (error instanceof SupplierNotFoundError) {
         return reply.status(404).send({ error: "not_found" });

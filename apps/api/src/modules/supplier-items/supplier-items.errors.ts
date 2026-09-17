@@ -36,14 +36,46 @@ export class SupplierItemInvalidItemTypeError extends Error {
   }
 }
 
+/**
+ * O ato que a recusa estava barrando — SUPPLIER-ITEM-INACTIVE-GATE-01,
+ * `PRODUCT_RULES.md` §112 (decisão D8 do PO).
+ *
+ * Inativo não começa compromisso novo: criar, reativar, homologar, preferencial
+ * e oferta. Bloquear, voltar para pendente e inativar a relação continuam — são
+ * o contrário de compromisso novo — e por isso nunca passam por aqui.
+ */
+export type AtoQueExigeParteAtiva =
+  | "criar"
+  | "reativar"
+  | "homologar"
+  | "preferencial"
+  | "oferta";
+
+const ATO_POR_EXTENSO: Record<AtoQueExigeParteAtiva, string> = {
+  criar: "criar a relação",
+  reativar: "reativar a relação",
+  homologar: "homologar a relação",
+  preferencial: "definir o fornecedor preferencial",
+  oferta: "registrar uma oferta",
+};
+
+/**
+ * Item ou fornecedor inativo no ato. A frase nomeia o ato barrado: quem tentou
+ * homologar não é mandado "criar a relação", que já existe.
+ */
 export class InactiveSupplierItemPartyError extends Error {
-  constructor(what: "item" | "supplier") {
+  readonly parte: "item" | "supplier";
+  readonly ato: AtoQueExigeParteAtiva;
+
+  constructor(what: "item" | "supplier", ato: AtoQueExigeParteAtiva = "criar") {
     super(
       what === "item"
-        ? "Item inativo — reative o item antes de criar a relação."
-        : "Fornecedor inativo — reative o fornecedor antes de criar a relação.",
+        ? `Item inativo — reative o item antes de ${ATO_POR_EXTENSO[ato]}.`
+        : `Fornecedor inativo — reative o fornecedor antes de ${ATO_POR_EXTENSO[ato]}.`,
     );
     this.name = "InactiveSupplierItemPartyError";
+    this.parte = what;
+    this.ato = ato;
   }
 }
 

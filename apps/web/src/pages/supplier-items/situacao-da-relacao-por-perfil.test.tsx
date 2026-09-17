@@ -237,6 +237,7 @@ function relacao(overrides: Partial<SupplierItemDetailDTO> = {}): SupplierItemDe
     itemExternalCode: null,
     itemType: "RAW_MATERIAL",
     itemFamily: null,
+    itemActive: true,
     supplierId: "for-1",
     supplierCode: "FOR-000001",
     supplierName: "Fornecedor Teste",

@@ -199,9 +199,19 @@ export interface SupplierItemDTO {
   itemUnitCode: string;
   itemType: string;
   itemFamily: string | null;
+  /**
+   * Situação do CADASTRO do item — não da relação (`active`).
+   *
+   * Três coisas distintas e visíveis juntas: o item, o fornecedor e a relação
+   * entre eles. Com uma das partes inativa, a relação continua à vista e no
+   * histórico, mas nenhum compromisso novo começa nela
+   * (SUPPLIER-ITEM-INACTIVE-GATE-01, `PRODUCT_RULES.md` §112).
+   */
+  itemActive: boolean;
   supplierId: string;
   supplierCode: string;
   supplierName: string;
+  /** Situação do CADASTRO do fornecedor — o par de `itemActive`. */
   supplierActive: boolean;
   supplierItemCode: string | null;
   qualificationStatus: SupplierItemQualificationStatus;

@@ -33,6 +33,7 @@ import {
   convertUomDecimal,
 } from "../items/uom.js";
 import type { UnitOfMeasureDecimalLike } from "../items/uom.js";
+import type { AtoQueExigeParteAtiva } from "./supplier-items.errors.js";
 import {
   IncompatibleOfferUomError,
   InactiveSupplierItemPartyError,
@@ -241,6 +242,7 @@ export function toSupplierItemDTO(
     itemUnitCode: supplierItem.item.unitCode,
     itemType: supplierItem.item.type,
     itemFamily: supplierItem.item.family,
+    itemActive: supplierItem.item.active,
     supplierId: supplierItem.supplierId,
     supplierCode: supplierItem.supplier.code,
     supplierName: supplierItem.supplier.legalName,
@@ -498,6 +500,30 @@ function exigirMotivoDoBloqueio(
   }
 }
 
+/**
+ * Compromisso novo exige as duas partes ativas — SUPPLIER-ITEM-INACTIVE-GATE-01,
+ * `PRODUCT_RULES.md` §112 (decisão D8 do PO).
+ *
+ * Inativar tira de escolha NOVA: criar a relação, reativá-la, homologar, marcar
+ * o preferencial e registrar oferta. O que já existe fica: a relação continua na
+ * lista e no detalhe, com as ofertas e o histórico de homologação intactos, e
+ * bloquear, voltar para pendente e inativar a relação seguem liberados — são o
+ * contrário de começar algo.
+ *
+ * A decisão é do backend, no momento da ação: a tela pode ter aberto antes da
+ * inativação. O item vem primeiro na recusa porque é a parte que a pessoa
+ * escolheu primeiro; com os dois inativos, reativar o item é o começo do
+ * caminho de volta.
+ */
+function exigirPartesAtivas(
+  ato: AtoQueExigeParteAtiva,
+  item: { active: boolean },
+  supplier: { active: boolean },
+): void {
+  if (!item.active) throw new InactiveSupplierItemPartyError("item", ato);
+  if (!supplier.active) throw new InactiveSupplierItemPartyError("supplier", ato);
+}
+
 export async function createSupplierItem(
   input: CreateSupplierItemInput,
   actor: User,
@@ -517,8 +543,7 @@ export async function createSupplierItem(
   if (item.type !== "RAW_MATERIAL" && item.type !== "PACKAGING") {
     throw new SupplierItemInvalidItemTypeError();
   }
-  if (!item.active) throw new InactiveSupplierItemPartyError("item");
-  if (!supplier.active) throw new InactiveSupplierItemPartyError("supplier");
+  exigirPartesAtivas("criar", item, supplier);
 
   const existing = await prisma.supplierItem.findUnique({
     where: { supplierId_itemId: { supplierId: input.supplierId, itemId: input.itemId } },
@@ -620,6 +645,17 @@ export async function updateSupplierItem(
   const prisma = getPrisma();
   const current = await requireSupplierItem(id);
 
+  /*
+   * Reativar a relação é compromisso novo; inativar e editar os dados
+   * comerciais não são. Conferido só na transição real: o formulário que
+   * reenvia `active: true` de uma relação já ativa não tem o que reativar, e
+   * recusar ali impediria corrigir o código no fornecedor de uma relação
+   * herdada de item ou fornecedor que hoje está inativo.
+   */
+  if (input.active === true && !current.active) {
+    exigirPartesAtivas("reativar", current.item, current.supplier);
+  }
+
   // Relação inativa nunca continua preferencial.
   const losesPreferred = input.active === false && current.preferred;
 
@@ -657,6 +693,18 @@ export async function changeQualification(
   const current = await requireSupplierItem(id);
 
   if (current.qualificationStatus === input.status) return (await getSupplierItemById(id))!;
+
+  /*
+   * Homologar é compromisso novo: é a decisão que libera comprar deste
+   * fornecedor. Bloquear e voltar para pendente seguem com item ou fornecedor
+   * inativo — tirar autorização nunca depende de reativar cadastro.
+   *
+   * Depois da igualdade acima: pedir de novo a situação que já vale não homologa
+   * nada, e não é hora de mandar reativar cadastro.
+   */
+  if (input.status === "APPROVED") {
+    exigirPartesAtivas("homologar", current.item, current.supplier);
+  }
 
   const losesPreferred = input.status !== "APPROVED" && current.preferred;
 
@@ -701,6 +749,14 @@ export async function setPreferred(
   const prisma = getPrisma();
   const current = await requireSupplierItem(id);
 
+  /*
+   * Preferencial é compromisso novo: é dizer de quem se compra este item. A
+   * parte inativa recusa com a frase que diz o que reativar — "não é elegível"
+   * mandaria procurar homologação que está em ordem. Remover o preferencial
+   * segue liberado, com qualquer parte inativa.
+   */
+  if (preferred) exigirPartesAtivas("preferencial", current.item, current.supplier);
+
   if (preferred && (!current.active || current.qualificationStatus !== "APPROVED")) {
     throw new SupplierItemNotEligibleForPreferredError();
   }
@@ -735,6 +791,13 @@ export async function createOffer(
 ): Promise<SupplierItemDetailDTO> {
   const prisma = getPrisma();
   const supplierItem = await requireSupplierItem(supplierItemId);
+
+  /*
+   * Oferta nova é condição comercial nova: preço e MOQ que o fornecedor passa a
+   * praticar. As ofertas já registradas continuam à vista e imutáveis — o
+   * histórico de preço não depende de o cadastro estar ativo.
+   */
+  exigirPartesAtivas("oferta", supplierItem.item, supplierItem.supplier);
 
   const units = await prisma.unitOfMeasure.findMany();
   const prepared = prepareOffer(input, supplierItem.item.unitCode, units);

@@ -93,6 +93,7 @@ function purchaseOrder(overrides: Partial<PurchaseOrderDTO> = {}): PurchaseOrder
     supplierCode: "FOR-000001",
     supplierName: "Fornecedor Teste",
     supplierCnpj: null,
+    supplierActive: true,
     orderDate: "2026-08-18T00:00:00.000Z",
     expectedDeliveryDate: null,
     status: "ORDERED",

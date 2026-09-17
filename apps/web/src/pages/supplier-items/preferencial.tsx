@@ -17,11 +17,27 @@ export interface PreferencialDoItem {
   supplierName: string;
 }
 
-/** A mesma condição da API e do CHECK do banco: relação ativa e homologada. */
+/**
+ * A mesma condição da API: relação ativa e homologada (o CHECK do banco) e as
+ * duas partes ativas — item e fornecedor inativos não começam compromisso novo
+ * (SUPPLIER-ITEM-INACTIVE-GATE-01, `PRODUCT_RULES.md` §112).
+ *
+ * Só governa MARCAR. Remover o preferencial segue oferecido com qualquer parte
+ * inativa: é justamente o que resolve o item apontando para quem ninguém pode
+ * escolher.
+ */
 export function podeSerPreferencial(
-  relacao: Pick<SupplierItemDTO, "active" | "qualificationStatus">,
+  relacao: Pick<
+    SupplierItemDTO,
+    "active" | "qualificationStatus" | "itemActive" | "supplierActive"
+  >,
 ): boolean {
-  return relacao.active && relacao.qualificationStatus === "APPROVED";
+  return (
+    relacao.active &&
+    relacao.qualificationStatus === "APPROVED" &&
+    relacao.itemActive &&
+    relacao.supplierActive
+  );
 }
 
 export function preferencialEntre(relacoes: readonly SupplierItemDTO[]): PreferencialDoItem | null {

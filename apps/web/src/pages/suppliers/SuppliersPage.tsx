@@ -312,11 +312,18 @@ export function SuppliersPage() {
       <ConfirmDialog
         open={confirmDeactivate !== null}
         title="Inativar fornecedor?"
+        /* O texto anterior prometia o contrário do que o sistema faz: dizia que
+           o fornecedor deixaria de aparecer para "recebimentos", e receber uma OC
+           já confirmada continua liberado — o compromisso foi assumido antes
+           (SUPPLIER-ITEM-INACTIVE-GATE-01, decisão D4 do PO). */
         message={
           <>
             "{confirmDeactivate?.legalName}" deixará de aparecer para novas
-            compras e recebimentos. O registro não será excluído — o
-            histórico será preservado e ele pode ser reativado a qualquer
+            compras: não entra em relação, homologação, preferencial nem oferta
+            nova. Ordens de compra já confirmadas seguem podendo ser recebidas.
+            Onde ele era o fornecedor preferencial, o item fica sem preferencial,
+            e reativar não devolve a escolha. Nada é excluído — relações, ofertas
+            e histórico ficam preservados, e ele pode ser reativado a qualquer
             momento.
           </>
         }

@@ -7177,3 +7177,47 @@ inteiro, e o botão não dispara duas consultas ao serviço público.
 **Quem consulta.** A mesma lista que cria e edita o cadastro do Cliente
 (`CUSTOMER_EDIT_ROLES`, §98): Comercial e Administrador. Os demais perfis não
 recebem o botão, e a rota devolve 403 antes de qualquer chamada externa.
+## §112 — Item × Fornecedor: cadastro inativo não começa compromisso novo
+
+SUPPLIER-ITEM-INACTIVE-GATE-01 (2026-09-17), Fatia 3 de
+[MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01](discovery/MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01.md), decisões D4 e D8
+do PO.
+
+> **Item ou Fornecedor inativo tira a relação de compromisso NOVO, nunca do que já existe.** Nada é apagado nem
+> cancelado, e reativar o cadastro destrava o mesmo passo, sem refazer nada.
+
+**Recusado com item OU fornecedor inativo** — 400 `inactive_reference`, com a frase nomeando a parte a reativar e o ato
+barrado ("reative o item antes de homologar a relação"):
+
+| Ato | Porta |
+|---|---|
+| Criar a relação | `POST /supplier-items` |
+| Reativar a relação | `PATCH /supplier-items/:id` com `active: true` sobre relação inativa |
+| Homologar | `POST /supplier-items/:id/qualification` com `APPROVED` |
+| Marcar preferencial | `POST /supplier-items/:id/preferred` com `preferred: true` |
+| Registrar oferta | `POST /supplier-items/:id/offers` e `initialOffer` da criação |
+
+**Segue liberado.** Consultar a relação, as ofertas e o histórico de homologação; bloquear; voltar para pendente; inativar
+a relação; remover o preferencial; e editar os dados comerciais da relação (código no fornecedor, observações) — nada
+disso começa compromisso. Pedir de novo a homologação que já vale não recusa: não há ato.
+
+**Inativar o Fornecedor limpa o preferencial das relações dele (D8).** Na mesma transação da inativação, e só o
+preferencial: relações, ofertas e histórico ficam inteiros, e reativar o fornecedor NÃO devolve a escolha — preferencial é
+decisão de Compras. Inativar o Item não mexe em preferencial: a relação dele continua como está.
+
+**Compromisso já assumido continua (D4).** OC confirmada antes da inativação é recebida normalmente — item, fornecedor ou
+os dois inativos. A inativação não cancela documento aberto; quem quiser encerrar a OC usa o cancelamento, que é ato
+próprio.
+
+**Revalidado no servidor, no momento da ação.** A tela pode ter aberto antes da inativação, e a recusa da parte inativa
+vem antes da elegibilidade do preferencial: quem tenta marcar ouve "reative o fornecedor", não "não é elegível" sobre uma
+homologação que está em ordem.
+
+**Tela.** A situação vem do servidor, nunca da ausência numa lista: `itemActive` e `supplierActive` na relação,
+`supplierActive` na OC e `itemActive` na linha dela — o que também corrige a marca falsa da OC, que dizia "inativo" de
+cadastro ativo fora da primeira página do catálogo. A relação de cadastro inativo continua listada, marcada "Item
+inativo" / "Fornecedor inativo", e o detalhe explica o que volta com a reativação em vez de desabilitar botão em silêncio.
+O recebimento mostra as duas marcas e não impede a entrada. O diálogo de inativar o Fornecedor diz o que muda: sai de
+compra nova, OC confirmada segue recebível, o preferencial cai e nada é excluído.
+
+**Sem migration.** Nenhuma coluna nova: `active` já existe em Item, Fornecedor e na relação.
