@@ -25,6 +25,11 @@ enum ItemType {
   RAW_MATERIAL
   PACKAGING
   FINISHED_PRODUCT
+
+  /// Uso e consumo (UC-000001): material comprado e estocado que NAO entra em
+  /// receita. Luva, detergente, filme, papel — some do CMV industrial, da
+  /// Formulacao, do Modelo, do Produto e da sugestao de compra da producao.
+  INTERNAL_CONSUMABLE
 }
 
 enum UomDimension {
@@ -2122,7 +2127,7 @@ model Item {
   type ItemType
 
   /// Codigo interno gerado pelo backend (sequence dedicada por tipo,
-  /// MP-000001 / ME-000001 / PA-000001). Imutavel apos a criacao.
+  /// MP-000001 / ME-000001 / PA-000001 / UC-000001). Imutavel apos a criacao.
   code String @unique
 
   name           String

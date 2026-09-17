@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import type { Item, UnitOfMeasure } from "@prisma/client";
+import { ITEM_TYPE_LABELS, podeSerComponente } from "@veridi/shared";
 import type { FormulationComponentIssueDTO } from "@veridi/shared";
 import { isUomCompatible } from "../modules/items/uom.js";
 
@@ -38,6 +39,12 @@ export function problemasDosComponentes(
         code: "ITEM_IS_FINISHED_PRODUCT",
         description: `${item.code} passou a ser produto acabado e não pode ser componente.`,
       });
+    } else if (!podeSerComponente(item.type)) {
+      issues.push({
+        ...base,
+        code: "ITEM_TYPE_NOT_COMPONENT",
+        description: `${item.code} passou a ser ${ITEM_TYPE_LABELS[item.type].toLocaleLowerCase("pt-BR")} e não pode ser componente.`,
+      });
     } else if (!item.active) {
       issues.push({
         ...base,
@@ -66,6 +73,7 @@ export function problemasDosComponentes(
 export const MOTIVO_CURTO_DO_PROBLEMA: Record<FormulationComponentIssueDTO["code"], string> = {
   ITEM_INACTIVE: "inativo",
   ITEM_IS_FINISHED_PRODUCT: "produto acabado",
+  ITEM_TYPE_NOT_COMPONENT: "tipo que não entra em receita",
   UOM_INCOMPATIBLE: "unidade incompatível",
   INVALID_QUANTITY: "quantidade inválida",
 };

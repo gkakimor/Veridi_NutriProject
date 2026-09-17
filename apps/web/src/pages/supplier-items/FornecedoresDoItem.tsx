@@ -4,6 +4,7 @@ import type { ItemDTO, SupplierDTO, SupplierItemDTO } from "@veridi/shared";
 import {
   SUPPLIER_ITEM_QUALIFICATION_LABELS,
   SUPPLIER_OFFER_AMBIGUITY_MESSAGE,
+  podeSerComprado,
 } from "@veridi/shared";
 import { FormSection } from "../../components/FormSection";
 import { ListStatusRow } from "../../components/ListStatusRow";
@@ -34,9 +35,9 @@ import {
  */
 const LIMITE = 100;
 
-/** Só matéria-prima e embalagem se compram: a API recusa relação de outro tipo. */
+/** Só o que se compra tem fornecedor: a API recusa relação de outro tipo. */
 function temFornecedor(item: Pick<ItemDTO, "type">): boolean {
-  return item.type === "RAW_MATERIAL" || item.type === "PACKAGING";
+  return podeSerComprado(item.type);
 }
 
 /** Preferencial primeiro, depois as relações ativas; as inativas no fim, à vista. */

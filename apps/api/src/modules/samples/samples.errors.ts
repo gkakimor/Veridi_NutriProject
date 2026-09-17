@@ -36,6 +36,18 @@ export class SampleItemNotFoundError extends Error {
   }
 }
 
+/**
+ * Tipo que não sai do estoque como amostra — hoje uso e consumo
+ * (`ITEM_TYPES_DA_AMOSTRA`). Erro próprio, e não "item não encontrado": o item
+ * existe, e quem lê precisa saber que o motivo é o tipo.
+ */
+export class InvalidSampleItemTypeError extends Error {
+  constructor(itemCode: string) {
+    super(`Item não pode ser consumido em amostra pelo tipo dele: ${itemCode}`);
+    this.name = "InvalidSampleItemTypeError";
+  }
+}
+
 /** Item loteado sem lote informado destruiria a rastreabilidade. */
 export class MissingSampleLotError extends Error {
   constructor(itemCode: string) {

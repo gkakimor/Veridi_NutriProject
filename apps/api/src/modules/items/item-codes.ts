@@ -7,6 +7,7 @@ const ITEM_CODE_SEQUENCE: Record<ItemType, string> = {
   RAW_MATERIAL: "item_code_raw_material_seq",
   PACKAGING: "item_code_packaging_seq",
   FINISHED_PRODUCT: "item_code_finished_product_seq",
+  INTERNAL_CONSUMABLE: "item_code_internal_consumable_seq",
 };
 
 export async function nextItemCode(

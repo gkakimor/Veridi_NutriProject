@@ -17,6 +17,7 @@ import type {
   SupplierItemDTO,
 } from "@veridi/shared";
 import {
+  ITEM_TYPES_COMPRAVEIS,
   PURCHASE_ORDER_STATUS_LABELS,
   SUPPLIER_ITEM_QUALIFICATION_LABELS,
   calcularTotaisOrdemCompra,
@@ -360,13 +361,13 @@ export function PurchaseOrderPage() {
     listSuppliers({ active: true, pageSize: 50 })
       .then((result) => setActiveSuppliers(result.suppliers))
       .catch(() => setActiveSuppliers([]));
-    Promise.all([
-      listItems({ type: "RAW_MATERIAL", active: true, pageSize: PRIMEIRA_PAGINA }),
-      listItems({ type: "PACKAGING", active: true, pageSize: PRIMEIRA_PAGINA }),
-    ])
-      .then(([raw, packaging]) =>
-        setActiveItems([...raw.items, ...packaging.items].map(itemOption)),
-      )
+    // Uma consulta por tipo comprável: o filtro do servidor é de um tipo por vez.
+    Promise.all(
+      ITEM_TYPES_COMPRAVEIS.map((type) =>
+        listItems({ type, active: true, pageSize: PRIMEIRA_PAGINA }),
+      ),
+    )
+      .then((paginas) => setActiveItems(paginas.flatMap((p) => p.items).map(itemOption)))
       .catch(() => setActiveItems([]));
   }, []);
 
@@ -390,17 +391,18 @@ export function PurchaseOrderPage() {
 
   /**
    * Busca no servidor, com os MESMOS filtros de negócio da carga inicial:
-   * só matéria-prima e embalagem, só ativos, e fora o que outra linha já
-   * pede — as duas primeiras no servidor, a terceira aqui, exatamente como
-   * `optionsForRow` já faz com a primeira página. Comprar continua sendo
-   * possível só para quem já era comprável.
+   * só tipo comprável, só ativos, e fora o que outra linha já pede — as duas
+   * primeiras no servidor, a terceira aqui, exatamente como `optionsForRow`
+   * já faz com a primeira página. Comprar continua sendo possível só para
+   * quem já era comprável.
    */
   async function buscarItens(row: LineRow, termo: string): Promise<EntityOption[]> {
-    const [raw, packaging] = await Promise.all([
-      listItems({ type: "RAW_MATERIAL", active: true, search: termo, pageSize: PRIMEIRA_PAGINA }),
-      listItems({ type: "PACKAGING", active: true, search: termo, pageSize: PRIMEIRA_PAGINA }),
-    ]);
-    const encontrados = [...raw.items, ...packaging.items].map(itemOption);
+    const paginas = await Promise.all(
+      ITEM_TYPES_COMPRAVEIS.map((type) =>
+        listItems({ type, active: true, search: termo, pageSize: PRIMEIRA_PAGINA }),
+      ),
+    );
+    const encontrados = paginas.flatMap((pagina) => pagina.items).map(itemOption);
     // O achado entra no catálogo da tela: `handleLineItemChange` lê código,
     // nome e unidade de `activeItems`. Sem a mesclagem, escolher um item de
     // fora da primeira página deixaria a linha sem unidade.

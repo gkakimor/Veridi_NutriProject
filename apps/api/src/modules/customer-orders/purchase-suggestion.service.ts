@@ -9,7 +9,11 @@ import type {
   PurchaseSuggestionRowDTO,
   PurchaseSupplierCandidateDTO,
 } from "@veridi/shared";
-import { DEFAULT_OFFER_CURRENCY, PURCHASE_ORDER_CODE_PREFIX } from "@veridi/shared";
+import {
+  DEFAULT_OFFER_CURRENCY,
+  ITEM_TYPES_DA_SUGESTAO_DE_COMPRA,
+  PURCHASE_ORDER_CODE_PREFIX,
+} from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { marcadorDeHojeComercial } from "../../lib/business-day.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
@@ -504,7 +508,14 @@ async function assertSupplierActiveInTx(tx: Prisma.TransactionClient, id: string
 async function assertLineItemValidInTx(tx: Prisma.TransactionClient, id: string): Promise<Item> {
   const item = await tx.item.findUnique({ where: { id } });
   if (!item) throw new LineItemNotFoundError(id);
-  if (item.type !== "RAW_MATERIAL" && item.type !== "PACKAGING") {
+  /*
+   * Recorte mais estreito que o da OC avulsa, de propósito
+   * (`ITEM_TYPES_DA_SUGESTAO_DE_COMPRA`): a falta que gera a sugestão vem da
+   * necessidade da receita, e uso e consumo não está em receita nenhuma —
+   * aqui não haveria quantidade a sugerir. Comprar uso e consumo continua
+   * possível pelo Pedido de Compra avulso.
+   */
+  if (!ITEM_TYPES_DA_SUGESTAO_DE_COMPRA.some((aceito) => aceito === item.type)) {
     throw new InvalidLineItemTypeError(id);
   }
   if (!item.active) throw new InactiveLineItemError(id);

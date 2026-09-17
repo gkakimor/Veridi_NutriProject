@@ -133,6 +133,10 @@ interface FormState {
  * consumo. Na criação, trocar de tipo devolve ao vazio os campos dos outros
  * tipos — dado que a tela escondeu não pode seguir no envio. Um tipo novo
  * ganha aqui os seus campos e, no formulário, a sua seção.
+ *
+ * Tipo SEM campo próprio fica de fora deste mapa e ainda assim pode ter
+ * seção: uso e consumo é o caso — não há campo dele para limpar, e a seção
+ * existe para dizer o alcance do tipo (INTERNAL-CONSUMABLE-ITEM-TYPE-01).
  */
 const CAMPOS_PROPRIOS_DO_TIPO: Partial<Record<ItemType, Partial<FormState>>> = {
   RAW_MATERIAL: { sourceName: "", declaredNutrient: "", family: "", defaultPurityPercent: "" },
@@ -621,6 +625,25 @@ const simOuNao = (valor: boolean) => (valor ? "Sim" : "Não");
 const SUBTITULO_DOS_DADOS_DA_EMBALAGEM =
   "Subtipo da embalagem e se ela é consumida no processo de produção.";
 
+const SUBTITULO_DOS_DADOS_DE_USO_E_CONSUMO =
+  "Onde este material entra e onde ele não entra (INTERNAL-CONSUMABLE-ITEM-TYPE-01).";
+
+/**
+ * O alcance do tipo Uso e consumo, dito na tela.
+ *
+ * A seção própria dele não tem campo nenhum: a diferença entre uso e consumo e
+ * os outros tipos não está no cadastro, está no que o sistema FAZ com o item.
+ * Sem esta seção a pessoa escolheria o tipo pelo nome e descobriria só na
+ * Formulação que o item não aparece lá. Uma lista só, usada na criação, na
+ * edição e na consulta — três cópias divergiriam.
+ */
+const USO_E_CONSUMO_ENTRA =
+  "Compra e fornecedores, recebimento, estoque, inventário e custo de aquisição.";
+
+const USO_E_CONSUMO_NAO_ENTRA =
+  "Formulação, Modelo de Formulação, Produto acabado, CMV industrial, Amostra, " +
+  "sugestão de compra da produção e material fornecido pelo cliente.";
+
 /**
  * O Item foi criado e o arquivo do Rótulo não subiu — ITEM-FORM-BY-TYPE-01.
  *
@@ -736,6 +759,18 @@ function ItemConsultaFields({ item }: { item: ItemDTO }) {
               rotulo="Consumido na produção"
               valor={simOuNao(item.consumedInProduction)}
             />
+          </dl>
+        </FormSection>
+      )}
+
+      {item.type === "INTERNAL_CONSUMABLE" && (
+        <FormSection
+          title="Dados de uso e consumo"
+          subtitle={SUBTITULO_DOS_DADOS_DE_USO_E_CONSUMO}
+        >
+          <dl className="definition-list">
+            <ValorConsultado rotulo="Entra em" valor={USO_E_CONSUMO_ENTRA} />
+            <ValorConsultado rotulo="Não entra em" valor={USO_E_CONSUMO_NAO_ENTRA} />
           </dl>
         </FormSection>
       )}
@@ -1049,6 +1084,27 @@ export function ItemFormFields({
               Só {QUEM_MARCA_CONSUMO_NA_PRODUCAO} alteram "Consumido na produção".
             </p>
           )}
+        </FormSection>
+      )}
+
+      {/*
+        Uso e consumo não tem campo próprio — por isso não entra em
+        `CAMPOS_PROPRIOS_DO_TIPO`. A seção existe mesmo assim porque a escolha
+        do tipo é irreversível na prática (o código já nasce UC) e a diferença
+        dele está no ALCANCE, não no cadastro: sem isto a pessoa descobriria na
+        Formulação que o item não aparece lá.
+      */}
+      {form.type === "INTERNAL_CONSUMABLE" && (
+        <FormSection
+          title="Dados de uso e consumo"
+          subtitle={SUBTITULO_DOS_DADOS_DE_USO_E_CONSUMO}
+        >
+          <dl className="definition-list">
+            <dt>Entra em</dt>
+            <dd>{USO_E_CONSUMO_ENTRA}</dd>
+            <dt>Não entra em</dt>
+            <dd>{USO_E_CONSUMO_NAO_ENTRA}</dd>
+          </dl>
         </FormSection>
       )}
 

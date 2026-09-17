@@ -158,6 +158,10 @@ export const SECAO_DO_TIPO_DE_ITEM: Record<ItemType, SecaoDaFormula> = {
   // Produto acabado não é componente válido; fica visível na composição, onde
   // o bloqueio de ativação explica por que a versão não ativa.
   FINISHED_PRODUCT: "COMPOSICAO",
+  // Uso e consumo também não é componente válido, e pela mesma razão fica
+  // visível na composição em vez de sumir da tela: uma linha gravada antes da
+  // reclassificação do Item precisa ser vista para poder ser removida.
+  INTERNAL_CONSUMABLE: "COMPOSICAO",
 };
 
 /** A seção de um Item pelo tipo; sem tipo conhecido, composição. */
@@ -310,7 +314,18 @@ export interface FormulationComponentIssueDTO {
   itemId: string;
   itemCode: string;
   itemName: string;
-  code: "ITEM_INACTIVE" | "ITEM_IS_FINISHED_PRODUCT" | "UOM_INCOMPATIBLE" | "INVALID_QUANTITY";
+  /**
+   * `ITEM_IS_FINISHED_PRODUCT` é o caso mais antigo e continua com nome
+   * próprio: é o que mais acontece e o que a tela explica em uma palavra.
+   * `ITEM_TYPE_NOT_COMPONENT` cobre qualquer outro tipo fora de
+   * `ITEM_TYPES_DE_COMPONENTE` — hoje uso e consumo.
+   */
+  code:
+    | "ITEM_INACTIVE"
+    | "ITEM_IS_FINISHED_PRODUCT"
+    | "ITEM_TYPE_NOT_COMPONENT"
+    | "UOM_INCOMPATIBLE"
+    | "INVALID_QUANTITY";
   description: string;
 }
 
