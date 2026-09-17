@@ -731,6 +731,32 @@ Physical inventory workflow:
 
 The user must understand that the result creates an adjustment, not a silent overwrite.
 
+### Count sessions — the counting screen (INVENTORY-PHYSICAL-COUNT-01, slice 2A)
+
+The counting screen is the one place where a phone-sized layout is part of the
+feature (DU-1), not later hardening:
+
+- **Blind is the server's job, and the screen's second barrier.** The counter
+  reads `view=counting`; a blind screen shows no balance, expected quantity,
+  difference, "Confere"/"Divergente", calculation hint or numeric placeholder,
+  even if a response carried one. No live difference before the server answers.
+- **Count and move on.** Enter records and focuses the next pending position;
+  leaving the field records; Esc discards the row's edit; an empty field records
+  nothing and `0` is typed like any count. `COUNT` units use `IntegerField`.
+- **Below ~640px, one position at a time.** A sequential card (number, code,
+  name, lot, owner, expiry, location, unit), a 48px field with 16px text and the
+  right `inputMode`, "Gravar e ir para a próxima", and a sticky bottom bar with
+  Anterior · progress · Próxima; touch targets 44–48px; never a squeezed table
+  or horizontal scroll.
+- **Nothing typed is lost.** Every count is queued locally (per user and
+  session, never with a balance) before it is sent; a lost connection shows
+  "Não enviado" plus a resend/discard notice, and resending reuses the same
+  request id. The unsaved-changes guard holds while the queue is not empty.
+- **Conflicts are decisions.** Another counter's entry is shown inline with who,
+  how much and when, with "Manter a registrada" and "Usar a minha contagem";
+  a session that changed state shows a reload banner, and refused counts stay
+  visible until discarded.
+
 ---
 
 # 12. Production Order UX

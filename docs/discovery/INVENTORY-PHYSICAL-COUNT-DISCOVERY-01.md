@@ -7,7 +7,12 @@ Redesenho do Inventário Físico em sessões de inventário em lote.
 `DECIDIDO` — 2026-09-15. O PO fechou D1–D8 e P1–P7 no handoff INVENTORY-PHYSICAL-COUNT-01: ver "Addendum PO —
 decisões fechadas". `READY_TO_IMPLEMENT = YES`.
 
-**FATIA 1 IMPLEMENTADA** em 2026-09-15 (domínio e API, sem tela nova) — ver "Implementação". Fatias 2 e 3 pendentes.
+**FATIA 1 IMPLEMENTADA** em 2026-09-15 (domínio e API, sem tela nova) — ver "Implementação".
+
+**FATIA 2A IMPLEMENTADA** em 2026-09-16 (telas até Em revisão: lista, novo inventário com prévia, detalhe, contagem no
+desktop e em 390px, fila local, conflito, posições, ocorrências, cancelamento e conclusão da primeira contagem), sobre o
+discovery das telas INVENTORY-PHYSICAL-COUNT-UI-DISCOVERY-01, persistido em "Addendum — discovery das telas". Fatia 2B
+(revisão, decisão e encerramento pela tela) e Fatia 3 (FO-01 de sessão e CSV) pendentes.
 
 Leitura original, mantida como histórico: `EM_ANALISE` — 2026-09-15. Análise lida sobre `origin/main` = `c63c124`.
 
@@ -1286,6 +1291,55 @@ Precisões do handoff sobre a Fatia 1:
 - Contagem cega: o backend é a autoridade; na primeira rodada a API não devolve saldo esperado nem diferença.
 - Contrato HTTP da tela atual preservado; se precisar mudar, compatível até a Fatia 2.
 
+## Addendum — discovery das telas (INVENTORY-PHYSICAL-COUNT-UI-DISCOVERY-01)
+
+Fonte: discovery READ ONLY das telas da Fatia 2, 2026-09-16, sobre `origin/main` `fc5041b` (domínio intocado desde o
+merge `ab3641d`). Relatado só no chat; persistido aqui pela Fatia 2A (handoff INVENTORY-PHYSICAL-COUNT-01 — FATIA 2A —
+CONTAR). **`READY_FOR_IMPLEMENTATION = YES`.**
+
+### Achados que o repositório não registrava
+
+- `parseJsonOrThrow` descarta o corpo dos 409 do inventário (`position`, `issues`, `held`, `added`/`removed`,
+  `pendingCount`, `status`): a tela só recebia a frase. Precisa de erro tipado próprio.
+- **Vazamento na contagem cega:** `POST /stock-counts/:id/positions` respondia a leitura `review`; em `IN_REVIEW` ela já
+  revela, e devolvia o `referenceQuantity` da posição recém-adicionada a quem ainda vai contá-la. Nenhum teste cobria.
+- `hasConcurrentMovement` marca qualquer movimento depois da referência, inclusive depois da contagem; não há lista de
+  movimentos da posição, nem pré-checagem do encerramento (saldo e reservado só aparecem na recusa 409).
+- `GET /stock-counts` filtrava um status só (sem "Em aberto"), sem busca, período ou modo; o resumo não traz escopo nem o
+  item da Contagem rápida; `InventoryMovementDTO` não traz o código `INV-` (Movimentações mostra só "Inventário físico").
+- Retirar posição é definitivo na sessão (readicionar é 409 `position_already_in_count`); posição adicionada em revisão
+  não pode ser retirada e trava o encerramento até ser contada.
+- Menu: qualquer item com caminho sob `/estoque/inventario/` liga `needsExactMatch` no Inventário Físico e apaga o
+  destaque do detalhe; a Contagem rápida com item próprio moraria fora desse prefixo.
+- `clientRequestId` exige UUID, e `crypto.randomUUID` só existe em contexto seguro: tablet em `http://<IP da LAN>`
+  quebraria o envio.
+- A fila local de contagem tem de ser por usuário: o reenvio grava como autor quem está logado.
+
+### Decisões do PO sobre as telas
+
+| # | Decisão |
+|---|---|
+| DU-1 | 390px entra na 2A para a TELA DE CONTAGEM: desktop e tablet usam tabela; abaixo de ~640px, cartão sequencial |
+| DU-2 | Contagem rápida não ganha item próprio no menu: é ação da lista de inventários |
+| DU-3 | Modo padrão: contagem cega |
+| DU-4 | Nenhuma diferença ao vivo antes do servidor |
+| DU-5 | Sem atalho especial "0 / não encontrado": 0 é digitado normalmente |
+| DU-6 | API aditiva da 2A aprovada, sem migration |
+
+Papéis: escrita ADMIN, PRODUCTION e QUALITY; leitura de qualquer sessão; autoridade no shared
+(`STOCK_COUNT_WRITE_ROLES`) e um helper único na Web; menu visível para todos, ações de escrita só para quem opera.
+Cegueira: quem conta lê `view=counting`, quem revisa lê `review`; a tela não depende de esconder coluna quando a API
+pode não enviar o valor.
+
+### Corte 2A × 2B
+
+- **2A — contar:** lista, novo inventário com prévia, iniciar, detalhe, contagem (desktop e 390), fila e idempotência,
+  conflitos 409, adicionar e retirar posição, ocorrências, cancelar e concluir a primeira contagem até `IN_REVIEW`.
+- **2B — revisar e encerrar:** ações de revisão, recontagem em lote, decisão Ajustar/Não ajustar, encerramento,
+  movimentos da posição, resumo enriquecido da Contagem rápida (item e resultado `INV-`), Contagem rápida reformulada
+  (`expectedSystemQuantity` decimal, retenção antecipada), retenção leve, filtros extras do montador e `INV-` em
+  Movimentações.
+
 ## Modelo de dados proposto
 
 **Conceitual. Sem migration.** Nomes seguem as convenções do schema (`@@map` em snake_case, `Decimal(24,12)` para
@@ -1477,6 +1531,37 @@ pendentes.
   `positions/:positionId/entries`, `close-first-round`, `recounts`, `decisions`, `complete`, `cancel` e `findings`.
   `POST /stock-counts` segue sendo a Contagem rápida, com o contrato só acrescido.
 
+### FATIA 2A IMPLEMENTADA — 2026-09-16
+
+INVENTORY-PHYSICAL-COUNT-01, telas até Em revisão, sobre o addendum das telas (DU-1 a DU-6). **Sem migration.** Fatia 2B
+(revisão, decisão e encerramento pela tela) e Fatia 3 pendentes.
+
+- **API, só acréscimos e uma correção:** `STOCK_COUNT_WRITE_ROLES`, rótulos e `StockCountErrorBody` no shared, com as
+  rotas do inventário e a Contagem rápida lendo a mesma lista; `POST positions` (e a retirada) respondem a leitura
+  `counting` — o vazamento do saldo da posição adicionada em revisão cega está fechado e tem regressão; `GET
+  /stock-counts` com status múltiplo, busca por `INV-` e descrição, modo e período do dia de início (invertido é 400);
+  a prévia devolve `excludedPositions` para a tela oferecer "Recolocar".
+- **Lista** (`/estoque/inventario`): abas Inventários e Contagens rápidas, abre em Em aberto, divergência escondida é
+  "—"; Novo inventário e Contagem rápida (movida para `/estoque/inventario/contagem-rapida`) só para quem opera.
+- **Novo inventário:** modo (cega por padrão), tipo, saldo, propriedade e cliente, ou itens/lotes escolhidos; prévia do
+  servidor com pausa de 300 ms e só a última resposta valendo; retidas com link do `INV-` que as segura; retirar e
+  recolocar pelas chaves; iniciar com `expectedPositionKeys` e, no 409 de escopo, o delta (entrou/saiu) e nova confirmação
+  sobre a prévia nova.
+- **Detalhe:** resumo, escopo, posições, ocorrências e linha do tempo derivada só dos carimbos (recontagem e decisão: a
+  última); ações por estado — contar, adicionar posição (lote escolhido pela prévia no modo do inventário, sem saldo na
+  cega), retirar (motivo, definitiva), ocorrência (tipos reais, sem cadastro nem movimento), cancelar (motivo e o que
+  acontece) e concluir a primeira contagem (quantidade que falta pelo servidor). Em revisão mostra o que o servidor
+  revelou e diz que a revisão aguarda.
+- **Contagem** (`/estoque/inventario/:id/contagem`): sempre `view=counting`; na cega nada revela saldo, esperado,
+  diferença ou "confere", nem se a resposta trouxesse; Enter grava e vai à próxima pendente, sair do campo grava, Esc
+  descarta; vazio não grava, 0 grava; COUNT só inteiro; busca por item, código, lote e `LOT:<código>`; abaixo de 640px,
+  cartão sequencial com campo de 48px e barra Anterior/Próxima.
+- **Fila local** por usuário e inventário, gravada antes do envio, sem saldo: sobrevive à queda e à recarga e reenvia
+  com o MESMO `clientRequestId` (UUID v4 com fallback por `getRandomValues`); conflito mostra quem, quanto e quando e pede
+  "Manter a registrada" ou "Usar a minha contagem" (trava e envio novos); estado que mudou pede recarga e a contagem
+  recusada fica à vista para descartar.
+- `StockCountApiError` só nas chamadas do inventário; `EntityLink` ganha `stockCount`; ajuda `estoque.inventarioFisico`.
+
 ## Histórico de decisões
 
 - 2026-09-15 — Discovery executado sobre `c63c124`; status `EM_ANALISE`; D1–D8 e P1–P7 abertas.
@@ -1485,3 +1570,8 @@ pendentes.
   e sem coluna Diferença na cega); a FO-01 de sessão entra na Fatia 3.
 - 2026-09-15 — FATIA 1 IMPLEMENTADA (INVENTORY-PHYSICAL-COUNT-01). Desenho alterado num ponto: a FK 1:1 do ajuste mora
   na posição, não em `InventoryMovement` (motivo em "Implementação"). Status segue `DECIDIDO` até as Fatias 2 e 3.
+- 2026-09-16 — Discovery das telas INVENTORY-PHYSICAL-COUNT-UI-DISCOVERY-01 (sobre `fc5041b`, só no chat) e decisões
+  DU-1 a DU-6 do PO; a Fatia 2 divide-se em 2A (contar) e 2B (revisar e encerrar). Persistido como addendum na 2A.
+- 2026-09-16 — FATIA 2A IMPLEMENTADA (INVENTORY-PHYSICAL-COUNT-01), sem migration. Nada do desenho mudou: a leitura de
+  `POST positions` passou a ser a de quem conta, que é o que a regra de cegueira já pedia. Status segue `DECIDIDO` até a
+  2B e a Fatia 3.

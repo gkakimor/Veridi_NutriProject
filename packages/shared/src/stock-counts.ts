@@ -12,9 +12,22 @@
 import type { ItemType } from "./items.js";
 import type { LotStatus } from "./lots.js";
 import type { InventoryOwnerType } from "./ownership.js";
+import type { UserRole } from "./users.js";
 
 /** Prefixo canônico do documento de inventário — `INV-000001`. */
 export const STOCK_COUNT_CODE_PREFIX = "INV";
+
+/**
+ * Quem OPERA o Inventário Físico — decisão D4 do PO: inicia, conta, adiciona e
+ * retira posição, registra ocorrência, conclui a primeira contagem, revisa,
+ * encerra e cancela. Contar e aprovar podem ser a mesma pessoa; cada passo
+ * grava autor e a leitura sinaliza.
+ *
+ * Consultar é de qualquer sessão autenticada, como o resto do estoque. A API
+ * recusa os outros perfis com 403; a tela usa a MESMA lista só para não
+ * oferecer a ação que seria recusada (INVENTORY-PHYSICAL-COUNT-01, Fatia 2A).
+ */
+export const STOCK_COUNT_WRITE_ROLES: readonly UserRole[] = ["ADMIN", "PRODUCTION", "QUALITY"];
 
 /** Máximo inicial de posições por sessão (decisão P1 do PO). */
 export const STOCK_COUNT_MAX_POSITIONS = 3000;
@@ -43,6 +56,36 @@ export const STOCK_COUNT_FINDING_KINDS: readonly StockCountFindingKind[] = [
 ];
 
 /**
+ * "Em aberto" — o inventário que ainda pede trabalho: em contagem ou em
+ * revisão. É o recorte padrão da lista, e o conjunto em que uma posição fica
+ * retida para os outros inventários.
+ */
+export const STOCK_COUNT_OPEN_STATUSES: readonly StockCountStatus[] = ["IN_PROGRESS", "IN_REVIEW"];
+
+export const STOCK_COUNT_STATUS_LABELS: Record<StockCountStatus, string> = {
+  IN_PROGRESS: "Em contagem",
+  IN_REVIEW: "Em revisão",
+  COMPLETED: "Encerrado",
+  CANCELLED: "Cancelado",
+};
+
+export const STOCK_COUNT_MODE_LABELS: Record<StockCountMode, string> = {
+  BLIND: "Contagem cega",
+  ASSISTED: "Contagem com saldo",
+};
+
+export const STOCK_COUNT_KIND_LABELS: Record<StockCountKind, string> = {
+  SESSION: "Inventário",
+  QUICK: "Contagem rápida",
+};
+
+export const STOCK_COUNT_FINDING_KIND_LABELS: Record<StockCountFindingKind, string> = {
+  UNREGISTERED_LOT: "Lote sem cadastro",
+  UNREGISTERED_ITEM: "Item sem cadastro",
+  OTHER: "Outra",
+};
+
+/**
  * Situação da posição — derivada, nunca gravada.
  *
  * Enquanto a contagem cega esconde o saldo, `MATCHES`, `DIVERGENT` e
@@ -57,6 +100,20 @@ export type StockCountPositionSituation =
   | "RECOUNT_REQUESTED"
   | "DECIDED"
   | "REMOVED";
+
+/**
+ * Rótulos da situação. `MATCHES` e `DIVERGENT` só chegam quando a leitura
+ * revela a diferença — a tela nunca os deduz sozinha.
+ */
+export const STOCK_COUNT_POSITION_SITUATION_LABELS: Record<StockCountPositionSituation, string> = {
+  PENDING: "Pendente",
+  COUNTED: "Contada",
+  MATCHES: "Confere",
+  DIVERGENT: "Divergente",
+  RECOUNT_REQUESTED: "Recontagem pedida",
+  DECIDED: "Decidida",
+  REMOVED: "Retirada",
+};
 
 /**
  * Leitura da sessão. `review` revela saldo, esperado e diferença quando o
@@ -131,11 +188,23 @@ export interface StockCountHeldPositionDTO {
   stockCountCode: string;
 }
 
+/**
+ * Posição do escopo que a pessoa retirou na prévia (`excludedPositionKeys`).
+ * Sem número: está fora do percurso até ser recolocada.
+ */
+export type StockCountPreviewExcludedPositionDTO = Omit<StockCountPreviewPositionDTO, "sequence">;
+
 export interface StockCountPreviewDTO {
   positions: StockCountPreviewPositionDTO[];
   itemCount: number;
   heldByOpenCounts: StockCountHeldPositionDTO[];
   excludedCount: number;
+  /**
+   * As retiradas que continuam no escopo, para a tela listar e oferecer
+   * "Recolocar". Chave retirada que o filtro já não seleciona não aparece —
+   * `excludedCount` é o tamanho desta lista.
+   */
+  excludedPositions: StockCountPreviewExcludedPositionDTO[];
   maxPositions: number;
 }
 
@@ -348,4 +417,66 @@ export interface StockCountCloseIssueDTO {
   balance: string | null;
   adjustment: string | null;
   reserved: string | null;
+}
+
+/** Códigos de recusa do Inventário Físico — o `error` do corpo. */
+export type StockCountErrorCode =
+  | "forbidden"
+  | "not_found"
+  | "position_not_found"
+  | "invalid_stock_count_status"
+  | "empty_scope"
+  | "scope_too_large"
+  | "scope_changed"
+  | "customer_not_found"
+  | "position_in_open_count"
+  | "position_already_in_count"
+  | "action_not_allowed"
+  | "entry_not_allowed"
+  | "client_request_reused"
+  | "fractional_count_quantity"
+  | "first_round_incomplete"
+  | "nothing_to_review"
+  | "recount_not_allowed"
+  | "decision_not_allowed"
+  | "stock_count_close_blocked"
+  | "system_quantity_changed"
+  | "invalid_finding"
+  | "concurrent_write"
+  | "stock_count_entry_conflict"
+  | "item_not_found"
+  | "lot_not_found"
+  | "lot_item_mismatch"
+  | "missing_lot"
+  | "unexpected_lot"
+  | "missing_count_reason"
+  | "count_below_reserved";
+
+/**
+ * Corpo de uma recusa do Inventário Físico. A frase está em `message`; os
+ * campos abaixo existem só no código que os traz, e é deles que a tela precisa
+ * para agir — o delta do escopo, a posição atual no conflito, quantas faltam.
+ */
+export interface StockCountErrorBody {
+  error: StockCountErrorCode;
+  message: string;
+  /** `invalid_stock_count_status`: o estado em que o inventário está agora. */
+  status?: StockCountStatus;
+  /** `scope_too_large`. */
+  positionCount?: number;
+  maxPositions?: number;
+  /** `scope_changed`: chaves que entraram e que saíram desde a prévia. */
+  added?: string[];
+  removed?: string[];
+  /** `position_in_open_count`: onde cada posição está retida. */
+  held?: StockCountHeldPositionDTO[];
+  /** `first_round_incomplete`: posições sem contagem nem retirada, contadas pelo servidor. */
+  pendingCount?: number;
+  /** `stock_count_close_blocked`. */
+  issues?: StockCountCloseIssueDTO[];
+  /** `stock_count_entry_conflict`: a posição como está agora, na leitura de quem conta. */
+  position?: StockCountPositionDTO;
+  /** `system_quantity_changed` (Contagem rápida). */
+  shownQuantity?: string;
+  currentQuantity?: string;
 }

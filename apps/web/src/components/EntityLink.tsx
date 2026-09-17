@@ -40,7 +40,8 @@ export type EntityKind =
   | "formulation"
   | "costCalculation"
   | "pricingVersion"
-  | "industrialResource";
+  | "industrialResource"
+  | "stockCount";
 
 /**
  * Cadastro simples mora numa lista com modal, não em página própria: o link
@@ -87,6 +88,9 @@ export function entityHref(kind: EntityKind, id: string): string {
       return `/gestao/precificacao/${id}`;
     case "industrialResource":
       return `/gestao/recursos-industriais/${id}`;
+    // O inventário INV- tem página própria (INVENTORY-PHYSICAL-COUNT-01, Fatia 2A).
+    case "stockCount":
+      return `/estoque/inventario/${id}`;
   }
 }
 
@@ -109,6 +113,7 @@ const KIND_LABEL: Record<EntityKind, string> = {
   costCalculation: "cálculo de custo",
   pricingVersion: "precificação",
   industrialResource: "recurso industrial",
+  stockCount: "inventário",
 };
 
 interface EntityLinkProps {

@@ -569,6 +569,77 @@ export const suprimentosTopics = {
       "O saldo do sistema nunca é editado. O que muda o saldo é o ajuste gerado, e ele fica no histórico com data e motivo.",
       "A folha de contagem (FO-01) existe para o operador levar ao depósito e voltar com os números; a versão cega omite o saldo do sistema justamente para não induzir a contagem.",
       "Contagem é sempre do saldo físico. Ela não muda a situação de qualidade do lote nem o seu proprietário.",
+      "Para contar muitas posições de uma vez, com revisão antes do ajuste, use Novo inventário na lista do Inventário Físico.",
+    ],
+  },
+
+  "estoque.inventarioFisico": {
+    module: "estoque",
+    title: "Inventário em lote: contar, revisar e só então ajustar",
+    summary:
+      "O inventário reúne muitas posições num documento INV-: primeiro todos contam; ao concluir a primeira contagem, o inventário passa para revisão, onde as diferenças aparecem. Nada no estoque muda enquanto se conta — o ajuste só nasce no encerramento, pela diferença de cada contagem.",
+    concepts: [
+      {
+        term: "Posição",
+        text: "O que se conta: um item sem controle de lote, ou um lote de um item. Uma posição fica em no máximo um inventário aberto.",
+      },
+      {
+        term: "Contagem cega",
+        text: "Quem conta não vê saldo, esperado nem diferença até a primeira contagem terminar. É o modo padrão.",
+      },
+      {
+        term: "Contagem com saldo",
+        text: "O saldo do sistema aparece para quem conta.",
+      },
+      {
+        term: "Prévia",
+        text: "A lista exata das posições que o escopo escolhido vai contar, antes de iniciar. Posição que já está em outro inventário aberto aparece à parte, com o código dele.",
+      },
+      {
+        term: "Pendente",
+        text: "Posição ainda sem contagem nesta rodada. Zero é contagem: digite 0 quando não encontrar nada no local.",
+      },
+      {
+        term: "Não enviado",
+        text: "Contagem digitada que ainda não chegou ao sistema, porque a conexão caiu. Ela fica guardada neste navegador até ser reenviada ou descartada.",
+      },
+      {
+        term: "Ocorrência",
+        text: "Material encontrado que não cabe numa posição — lote ou item sem cadastro. Fica registrada com autor e data, sem criar cadastro nem mexer no estoque.",
+      },
+    ],
+    flow: [
+      {
+        label: "Novo inventário",
+        detail: "Escolha o modo e o escopo; confira a prévia e retire o que não será contado.",
+      },
+      {
+        label: "Iniciar",
+        detail:
+          "As posições e o saldo de referência ficam registrados. Se o escopo mudou desde a prévia, o sistema mostra o que entrou e o que saiu e pede nova confirmação.",
+        tone: "accent",
+      },
+      {
+        label: "Contar",
+        detail:
+          "Digite a quantidade e tecle Enter para ir à próxima pendente. No celular, uma posição por vez, com o botão Gravar e ir para a próxima.",
+      },
+      {
+        label: "Concluir a primeira contagem",
+        detail:
+          "Toda posição contada ou retirada com motivo. O inventário vai para revisão e, na contagem cega, as diferenças passam a aparecer no detalhe.",
+      },
+      {
+        label: "Revisão e encerramento",
+        detail: "Decidir as divergências e encerrar é o que gera os ajustes de estoque. Esta etapa chega numa próxima entrega.",
+        tone: "warn",
+      },
+    ],
+    notes: [
+      "Duas pessoas podem contar o mesmo inventário. Se outra registrou a posição antes de você, a tela mostra quem, quanto e quando, e você escolhe manter o registro dela ou usar o seu — nada é sobrescrito sozinho.",
+      "Retirar uma posição é definitivo neste inventário; os registros que ela já tinha continuam no histórico.",
+      "Cancelar não apaga nada, não cria movimentação e libera as posições para outro inventário. Inventário cancelado não reabre.",
+      "Recebimento, produção e expedição continuam funcionando durante o inventário.",
     ],
   },
 

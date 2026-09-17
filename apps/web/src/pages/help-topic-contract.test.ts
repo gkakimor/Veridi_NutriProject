@@ -128,6 +128,11 @@ const PARES: [arquivo: string, topico: string][] = [
   ["pages/inventory/InventoryOverviewPage.tsx", "estoque.posicao"],
   ["pages/inventory/InventoryMovementsPage.tsx", "estoque.movimentacoes"],
   ["pages/inventory/StockCountPage.tsx", "estoque.inventario"],
+  // Inventário em sessão (Fatia 2A): lista, novo, detalhe e contagem explicam o mesmo processo.
+  ["pages/inventory/StockCountsHomePage.tsx", "estoque.inventarioFisico"],
+  ["pages/inventory/NewStockCountPage.tsx", "estoque.inventarioFisico"],
+  ["pages/inventory/StockCountDetailPage.tsx", "estoque.inventarioFisico"],
+  ["pages/inventory/StockCountCountingPage.tsx", "estoque.inventarioFisico"],
   ["pages/lots/LotsPage.tsx", "estoque.lotes"],
   ["pages/lots/LotDetailPage.tsx", "estoque.lotes"],
   ["pages/lots/LotScanPage.tsx", "estoque.escanear"],

@@ -1265,6 +1265,37 @@ Advanced cycle-count scheduling remains future scope.
   registered item or lot becomes a finding — never a new item, lot or movement.
 - A count in a unit of `COUNT` dimension must be a whole number.
 
+## Durable rules confirmed at implementation — count screens (INVENTORY-PHYSICAL-COUNT-01, slice 2A)
+
+- Who operates a count (start, count, add/remove position, finding, cancel,
+  close the first round, review, complete) is `STOCK_COUNT_WRITE_ROLES`
+  (ADMIN, PRODUCTION, QUALITY) in `@veridi/shared`; the API and the quick
+  count enforce it, and the screens use the same list only to hide what would
+  be refused. Every session reads the lists and the documents.
+- The counter always reads `view=counting`. Every position-level write
+  response (register an entry, add or remove a position) is the counting read,
+  so a blind count never hands the counter a reference balance — not even for a
+  position added during review. The detail screen reads `review`, which the
+  server reveals only after the first round closes.
+- A blind screen never shows balance, expected quantity, difference, "matches"
+  or "divergent", nor a numeric placeholder, even if a response carried them;
+  there is no live difference before the server answers (DU-4). An empty field
+  records nothing; `0` is a count (DU-5).
+- The screen starts a session with the positions it showed
+  (`expectedPositionKeys`). A changed scope is refused with what entered and
+  what left, and starting again requires the new preview.
+- Every count is queued in the browser before it is sent, per user and per
+  session, with only position, round, last entry seen, quantity, request id and
+  note — never a balance. A lost connection keeps it as "not sent"; resending
+  uses the SAME `clientRequestId`. Another user's queue is never read.
+- A conflict with another counter is never resolved by overwriting: the screen
+  shows who, how much and when, and the counter keeps the registered entry or
+  sends theirs as a new entry over it. A count refused because the session
+  changed stays visible until reloaded or discarded.
+- Removing a position is final within the session. Findings never create an
+  item, a lot or a movement, and never block completion. The timeline shows only
+  what the server stamped; recount request and decision keep only the latest.
+
 ---
 
 # 17. FEFO

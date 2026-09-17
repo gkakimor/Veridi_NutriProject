@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
+import { STOCK_COUNT_WRITE_ROLES } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { requireRole } from "../../lib/current-user.js";
 import { ForbiddenError } from "../auth/auth.errors.js";
@@ -188,7 +189,8 @@ export const inventoryRoutes: FastifyPluginAsync = async (app) => {
    */
   app.post("/stock-counts", async (request, reply) => {
     try {
-      const actor = requireRole(request, ...STOCK_WRITE_ROLES);
+      // A Contagem rápida grava INV- QUICK: mesma autoridade do Inventário Físico.
+      const actor = requireRole(request, ...STOCK_COUNT_WRITE_ROLES);
       const parsed = stockCountSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply

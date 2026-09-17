@@ -48,8 +48,10 @@ estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0
   (E2E-BASELINE-REDESIGN-WAVE-04-DISCOVERY-01), golden path (WAVE-05-GOLDEN-PATH-DISCOVERY-01) e permissões da Produção
   (PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01); o do Painel Gerencial (FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01) está
   `IMPLEMENTADO`;
-- **Inventário Físico:** discovery `DECIDIDO` (D1–D8 e P1–P7 fechadas pelo PO em 2026-09-15); Fatia 1 (domínio e API)
-  entregue em 2026-09-15 (INVENTORY-PHYSICAL-COUNT-01); Fatia 2 (telas) e Fatia 3 (FO-01 de sessão e CSV) abertas;
+- **Inventário Físico:** discovery `DECIDIDO` (D1–D8 e P1–P7 fechadas pelo PO em 2026-09-15; DU-1 a DU-6 das telas em
+  2026-09-16); Fatia 1 (domínio e API) entregue em 2026-09-15 e Fatia 2A (telas até Em revisão) em 2026-09-16, na `main`
+  e fora de PROD (INVENTORY-PHYSICAL-COUNT-01); Fatia 2B (revisão, decisão e encerramento pela tela) e Fatia 3 (FO-01 de
+  sessão e CSV) abertas;
 - **Painel Gerencial:** entregue em 2026-09-15 — BILLED-VALUE-CANONICAL-01 (valor faturado = `Billing.totalAmount` em
   Painel, R-14 e R-15) e MANAGEMENT-DASHBOARD-V1-01 (Gestão → Painel Gerencial, D1–D5); G2, G5 e o G4 residual seguem sem
   posição;
@@ -5266,6 +5268,50 @@ typecheck de shared, API e web. Suíte web completa (3.796 testes) duas vezes: 5
 suíte web completa de outra sessão. Nenhum dos quatro arquivos toca código desta rodada, e os quatro passam sozinhos
 (20/20 em 9,3 s).
 
+## Inventário Físico pela tela, até a revisão (INVENTORY-PHYSICAL-COUNT-01, Fatia 2A, 2026-09-16)
+
+Sobre o discovery das telas INVENTORY-PHYSICAL-COUNT-UI-DISCOVERY-01, agora addendum do
+[discovery](discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md), com DU-1 a DU-6 do PO. Regras em §16 ("count
+screens"). **Sem migration**; na `main` e fora de PROD (`release/prod` segue `5b7c1a3`).
+
+**API (só acréscimos e uma correção).** `STOCK_COUNT_WRITE_ROLES`, rótulos e o contrato dos corpos de recusa
+(`StockCountErrorBody`) no shared; rotas do inventário e Contagem rápida leem a mesma lista. **Vazamento fechado:** `POST
+/stock-counts/:id/positions` respondia a leitura de revisão e, numa contagem cega em revisão, devolvia o saldo de
+referência da posição recém-adicionada a quem ainda vai contá-la — agora ela e a retirada respondem a leitura de quem
+conta. `GET /stock-counts` ganhou status múltiplo ("Em aberto"), busca por `INV-` e descrição, modo e período do dia de
+início (invertido é 400; entrou na matriz de `periodo-invertido.test.ts`). A prévia devolve `excludedPositions`.
+
+**Telas.** Estoque → Inventário Físico virou a lista (abas Inventários e Contagens rápidas, abre em Em aberto,
+divergência escondida é "—"); Novo inventário e Contagem rápida — que mudou para `/estoque/inventario/contagem-rapida`,
+sem item de menu (DU-2) — só para ADMIN, PRODUCTION e QUALITY (`usePodeOperarInventario`). **Novo inventário:** cega por
+padrão (DU-3), tipo, saldo, propriedade e cliente, ou itens/lotes escolhidos; prévia do servidor com pausa de 300 ms e só
+a última resposta valendo, retidas com o `INV-` que as segura, retirar e recolocar; iniciar manda as posições vistas e, no
+409 de escopo, mostra o que entrou e saiu e só inicia de novo sobre a prévia nova. **Detalhe:** resumo, escopo,
+posições, ocorrências e linha do tempo só com carimbos reais; contar, adicionar posição (lote pela prévia no modo do
+inventário, sem saldo na cega), retirar (definitiva), ocorrência, cancelar e concluir a primeira contagem (quantidade
+que falta pelo servidor); em revisão mostra o que o servidor revelou e diz que a revisão aguarda a 2B. **Contagem:**
+sempre `view=counting`; na cega nada revela saldo, esperado, diferença ou "confere" nem se a resposta trouxesse (DU-4);
+Enter grava e vai à próxima pendente, sair do campo grava, Esc descarta, vazio não grava e 0 grava (DU-5), COUNT só
+inteiro; abaixo de 640px, cartão sequencial com campo de 48px e 16px e barra Anterior/Próxima (DU-1). **Fila local** por
+usuário e inventário, sem saldo, gravada antes do envio: sobrevive à queda e à recarga e reenvia com o MESMO
+`clientRequestId` (UUID v4 por `getRandomValues` fora de contexto seguro); conflito mostra quem, quanto e quando e pede
+"Manter a registrada" ou "Usar a minha contagem"; estado que mudou pede recarga. Erro tipado `StockCountApiError` só nas
+chamadas do inventário; `EntityLink` `stockCount`; ajuda `estoque.inventarioFisico`.
+
+**Validação.** API: `stock-count-telas-2a.test.ts` (15 casos: escopo que mudou, teto de 3.000, adição em revisão cega sem
+saldo, conflito cego com autor e hora, recusas de registro, envio reaproveitado, retiradas da prévia, lista aditiva,
+papéis do shared contra a API) e 6 casos novos na matriz de período; mutação da leitura de revisão na adição derrubada;
+depois do rebase sobre `879e2fa` (com a guarda de paginação já conhecendo `/stock-counts`), módulo de estoque + guarda +
+período com 13 arquivos e 1.080 testes. Web: 72 casos novos em 8 arquivos (lista, novo, detalhe, contagem, fila, id de envio, erro
+tipado, menu) e os testes da Contagem rápida ajustados à rota nova; 11 mutações derrubadas (review no lugar de counting,
+gate de papel removido, saldo e "Divergente" na cega, prévia com saldo, fila sem usuário, conflito sobrescrevendo,
+reenvio com id novo, sem gerador próprio, vazio gravando, lista sem Em aberto). Suíte web completa depois do rebase, com
+a máquina ociosa: 297 arquivos e 3.872 testes verdes; em três passadas anteriores com carga externa (smoke e outras
+sessões) caíram só esperas — timeouts de 5 s e `findBy`/`waitFor` estourados, até 12 casos, `dates-formatador.test.ts`
+entre eles nas três —, todos verdes isolados. Typecheck de shared, API e web. Smoke Playwright em banco isolado (`veridi_wt_inv2a`, massa própria,
+API e Vite do worktree), 1440 e 390 com três perfis: 42/42 conferências, console e API limpos. Sem
+`validate:migrations:fresh` (schema intocado), E2E, golden path nem Railway.
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a
@@ -5274,7 +5320,7 @@ homologação com a Veridi. **Publicado em PROD no mesmo dia** (HOMOLOGATION-REL
 (FORMULATION-TEMPLATE-TECHNICAL-SHEET-PDF-01) e espera a próxima decisão de publicação do PO.
 
 **A ordem vive na fila viva do [`BACKLOG.md`](BACKLOG.md)**, reconciliada em 2026-09-15: WAVE 4; Inventário Físico em
-fatias (a próxima é a Fatia 2, telas); decisões de permissões da Produção; WAVE 5; estabilização final. Os parágrafos
+fatias (a próxima é a Fatia 2B, revisão e encerramento pela tela); decisões de permissões da Produção; WAVE 5; estabilização final. Os parágrafos
 abaixo registram como cada assunto chegou até aqui.
 
 **BILLED-VALUE-CANONICAL-01 fechado em 2026-09-15** (§30), o primeiro da fila: com a decisão D1 do PO,
@@ -5285,7 +5331,8 @@ emitido legado sem total congelado vale a soma das linhas arredondadas, como o p
 lê o faturado por essas funções.
 
 **INVENTORY-PHYSICAL-COUNT-01 — Fatia 1 entregue em 2026-09-15** (§16, seção própria acima): sessões de inventário no
-domínio e na API, e a Contagem rápida gravando `INV-` QUICK. Próxima do assunto: Fatia 2 (telas).
+domínio e na API, e a Contagem rápida gravando `INV-` QUICK. **Fatia 2A entregue em 2026-09-16** (seção própria acima):
+as telas contam até Em revisão. Próxima do assunto: Fatia 2B (revisão, decisão e encerramento pela tela).
 
 **PRICING-TEMPLATE-FLEX-01 fechado em 2026-09-11** (§84). Os três achados fecharam:
 PRICING-MODEL-DIFF-01 e PRICING-ACTIVATE-CONFIRM-01 em COST-PRICING-CLARITY-WAVE-01, e

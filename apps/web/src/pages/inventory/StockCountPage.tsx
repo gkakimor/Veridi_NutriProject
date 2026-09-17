@@ -14,8 +14,10 @@ import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
 import { DecimalField } from "../../components/NumericField";
 import { formatQuantity, formatQuantityWithUnit } from "../../lib/quantity";
 import { ContextHelp, InfoHint } from "../../components/help";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
+import { QUEM_OPERA_INVENTARIO, usePodeOperarInventario } from "./stock-count-permissions";
 
 /** ⓘ de um campo, lido do registro central — o texto nunca mora no JSX. */
 function DicaDoCampo({ id }: { id: HelpHintId }) {
@@ -46,11 +48,17 @@ function opcaoDoItem(item: ItemDTO): EntityOption {
 }
 
 /**
- * Estoque → Inventário Físico. Nunca altera o saldo diretamente — ao
- * confirmar, cria (no máximo) um InventoryMovement de ajuste pela diferença.
+ * Estoque → Inventário Físico → Contagem rápida. Nunca altera o saldo
+ * diretamente — ao confirmar, grava o documento INV- QUICK e cria (no máximo)
+ * um ajuste pela diferença.
+ *
+ * Desde a Fatia 2A do Inventário Físico mora em
+ * `/estoque/inventario/contagem-rapida`, como ação da lista de inventários
+ * (DU-2), e só quem opera inventário vê o formulário.
  */
 export function StockCountPage() {
   const navigate = useNavigate();
+  const podeOperar = usePodeOperarInventario();
 
   const [items, setItems] = useState<ItemDTO[]>([]);
   const [itemId, setItemId] = useState("");
@@ -228,9 +236,12 @@ export function StockCountPage() {
     <>
       <div className="page__header">
         <div>
-          <h1 className="page__title">Inventário Físico</h1>
+          <PageBreadcrumbs
+            items={[{ label: "Inventário Físico", href: "/estoque/inventario" }, { label: "Contagem rápida" }]}
+          />
+          <h1 className="page__title">Contagem rápida</h1>
           <p className="page__subtitle">
-            Contagem física vira ajuste rastreável — nunca sobrescreve o saldo diretamente.
+            Uma posição, contada e confirmada na hora: a diferença vira ajuste rastreável — nunca sobrescreve o saldo.
           </p>
         </div>
         {/* FO-01: o operador leva o papel para o estoque e volta para
@@ -260,6 +271,13 @@ export function StockCountPage() {
           saldo", e o que acontece é um lançamento novo pela diferença. */}
       <ContextHelp topic={helpTopics["estoque.inventario"]} />
 
+      {!podeOperar && (
+        <p className="callout" role="status">
+          Seu perfil consulta o estoque, mas não registra contagem. Quem conta: {QUEM_OPERA_INVENTARIO}.
+        </p>
+      )}
+
+      {podeOperar && (
       <FormSection title="Contagem">
         <div className="field-grid-2">
           <div className="field">
@@ -360,6 +378,7 @@ export function StockCountPage() {
           </button>
         </div>
       </FormSection>
+      )}
 
       {result && (
         <FormSection title="Resultado">
