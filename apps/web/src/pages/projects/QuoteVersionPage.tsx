@@ -18,11 +18,26 @@ import { getProject, getQuoteVersion } from "../../lib/projects-api";
 import { rotaDoOrcamento } from "../../lib/rota-do-orcamento";
 import { rotuloDaOrigem } from "../../lib/use-contextual-create";
 import { CustomerStatusNotice, orcamentoAindaAvanca } from "../customers/CustomerStatusNotice";
+import { ProductInactiveNotice } from "../products/ProductInactiveNotice";
 import { QuoteWorkspace } from "./QuoteWorkspace";
 import { formatQuoteDate, quoteBadgeClass } from "./quote-display";
 
 /** Leitura que falhou sem ser 404: rede, 500. A versão existe; a resposta é que não veio. */
 const AVISO_DE_LEITURA = "Não foi possível carregar o orçamento agora.";
+
+/**
+ * O próximo passo desta versão que a guarda de produto inativo recusa (§108):
+ * rascunho envia, enviada registra o aceite, aceita aprova o projeto e gera o
+ * pedido.
+ */
+function passoDoOrcamento(
+  quote: Pick<QuoteVersionDTO, "status">,
+  project: Pick<ProjectDTO, "status">,
+): string {
+  if (quote.status === "DRAFT") return "enviar a proposta";
+  if (quote.status === "SENT") return "registrar o aceite";
+  return project.status === "APPROVED" ? "gerar o pedido" : "aprovar o projeto nem gerar o pedido";
+}
 
 /**
  * A página própria de uma versão de orçamento — QUOTE-WORKSPACE-NAVIGATION-01.
@@ -227,6 +242,12 @@ function QuoteVersionDocument({ id }: { id: string }) {
             customerId={project.customerId}
             status={project.customerStatus}
           />
+        )}
+
+        {/* Produto inativado depois que a linha entrou (§108): o documento
+            abre e edita; o aviso diz qual passo a guarda vai recusar. */}
+        {orcamentoAindaAvanca(quote, project.status) && (
+          <ProductInactiveNotice linhas={quote.lines} passo={passoDoOrcamento(quote, project)} />
         )}
 
         <ContextHelp topic={helpTopics["comercial.orcamento"]} />

@@ -1,6 +1,7 @@
 import type { User } from "@prisma/client";
 import type { ProjectProductDTO } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { assertProductsActive } from "../../lib/product-active-gate.js";
 import {
   ProjectLockedError,
   ProjectNotFoundError,
@@ -124,6 +125,8 @@ export async function addProjectProduct(
 
     const product = await tx.product.findUnique({ where: { id: input.productId } });
     if (!product) throw new ProjectProductNotFoundError(input.productId);
+    // Vincular é escolha nova: produto inativo não entra em negociação (§108).
+    assertProductsActive([product], "Reative o produto para vinculá-lo ao projeto.");
 
     // Produto de private label pertence a um cliente. Vincular a projeto de
     // outro cliente misturaria propriedade — recusa explícita, nunca vínculo

@@ -41,6 +41,7 @@ import {
   situacaoCadastral,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { assertFinishedItemActive, assertProductsActive } from "../../lib/product-active-gate.js";
 import { assertProductOperational } from "../../lib/product-lifecycle.js";
 import {
   assertProductBelongsToCustomer,
@@ -59,7 +60,6 @@ import {
   CustomerOrderNotFoundError,
   DuplicateLineProductError,
   EmptyOrderError,
-  InactiveLineProductError,
   InvalidTransitionError,
   LineProductNotFoundError,
   MissingFinishedItemError,
@@ -205,6 +205,10 @@ function toLineDTO(
      * dado e corrigido aqui: quem confirmar o Pedido recebe a recusa.
      */
     productCustomerMismatch: !productBelongsToCustomer(line.product, orderCustomerId),
+    // Situação de agora, do cadastro (§108): marca a linha em qualquer status; a
+    // recusa é da confirmação, e o PA é o que o produto aponta hoje.
+    productActive: line.product.active,
+    finishedItemActive: line.product.finishedProductItem ? line.product.finishedProductItem.active : null,
   };
 }
 
@@ -567,17 +571,24 @@ async function assertLineProductValid(id: string): Promise<ProductWithFinishedIt
     include: { finishedProductItem: true },
   });
   if (!product) throw new LineProductNotFoundError(id);
-  if (!product.active) throw new InactiveLineProductError(id);
+  // Vale para a linha nova e para as que ficam num PATCH de linhas: a saída é a
+  // mesma nas duas — reativar, ou tirar a linha.
+  assertProductsActive([product], "Reative o produto ou retire a linha do pedido.");
   // Produto técnico de projeto não vende: só o aprovado é operacional.
   assertProductOperational(product, id);
   if (
     !product.finishedProductItemId ||
     !product.finishedProductItem ||
-    product.finishedProductItem.type !== "FINISHED_PRODUCT" ||
-    !product.finishedProductItem.active
+    product.finishedProductItem.type !== "FINISHED_PRODUCT"
   ) {
     throw new MissingFinishedItemError(id);
   }
+  // O PA existe: inativo é recusa própria, não "sem produto acabado" (§108).
+  assertFinishedItemActive(
+    product.code,
+    product.finishedProductItem,
+    "Reative o item ou retire a linha do pedido.",
+  );
   return product;
 }
 
@@ -873,16 +884,23 @@ export async function confirmCustomerOrder(id: string): Promise<CustomerOrderDTO
         include: { finishedProductItem: true },
       });
       if (!product) throw new LineProductNotFoundError(line.productId);
-      if (!product.active) throw new InactiveLineProductError(line.productId);
+      assertProductsActive(
+        [product],
+        "Reative o produto ou retire a linha para confirmar o pedido.",
+      );
       assertProductOperational(product, line.productId);
       if (
         !product.finishedProductItemId ||
         !product.finishedProductItem ||
-        product.finishedProductItem.type !== "FINISHED_PRODUCT" ||
-        !product.finishedProductItem.active
+        product.finishedProductItem.type !== "FINISHED_PRODUCT"
       ) {
         throw new MissingFinishedItemError(line.productId);
       }
+      assertFinishedItemActive(
+        product.code,
+        product.finishedProductItem,
+        "Reative o item para confirmar o pedido.",
+      );
       /*
        * Defesa final. A inclusao ja recusa produto de outro cliente, e esta
        * checagem continua existindo para o que a inclusao nao alcanca: linha

@@ -4,6 +4,7 @@ import type { CustomerOrderDTO, QuotePaymentScheduleDTO } from "@veridi/shared";
 import { CUSTOMER_ORDER_CODE_PREFIX, calcularTotaisOrcamento } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
+import { assertFinishedItemActive, assertProductsActive } from "../../lib/product-active-gate.js";
 import { assertProductOperational } from "../../lib/product-lifecycle.js";
 import { assertProductBelongsToCustomer } from "../../lib/product-customer-ownership.js";
 import { getCustomerOrderById } from "../customer-orders/customer-orders.service.js";
@@ -150,6 +151,13 @@ export async function createOrderFromAcceptedQuote(
   );
   if (linhas.length === 0) throw new QuoteWithoutOrderableLinesError();
 
+  // Pedido novo com produto inativo é compromisso novo (§108). O Pedido já
+  // gerado voltou acima, intacto, mesmo que o produto tenha sido inativado.
+  assertProductsActive(
+    linhas.map((line) => line.product),
+    "Reative o produto para gerar o pedido.",
+  );
+
   for (const line of linhas) {
     assertProductOperational(line.product, line.product.code);
     /*
@@ -160,6 +168,13 @@ export async function createOrderFromAcceptedQuote(
      * A proveniência comercial não muda — a geração simplesmente falha.
      */
     await assertProductBelongsToCustomer(prisma, line.product, quote.project.customer);
+    // PA existente e inativo tem recusa própria — nunca "sem produto acabado"
+    // nem "unidade diferente" (§108, sem cascata Produto × PA).
+    assertFinishedItemActive(
+      line.product.code,
+      line.product.finishedProductItem,
+      "Reative o item para gerar o pedido.",
+    );
     const unidadeDoProduto = line.product.finishedProductItem?.unitCode;
     if (!unidadeDoProduto) {
       throw new QuoteOrderUomMismatchError(line.product.code, line.uomCode ?? "—", "—");

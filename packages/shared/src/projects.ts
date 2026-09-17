@@ -241,6 +241,12 @@ export interface QuoteLineDTO {
   productId: string;
   productCode: string;
   productName: string;
+  /**
+   * Situação ATUAL do Produto, lida a cada leitura — nunca congelada no envio
+   * (§108). Inativo não impede abrir nem editar o rascunho; recusa enviar e
+   * aceitar, e a tela marca a linha em vez de deduzir pela ausência numa lista.
+   */
+  productActive: boolean;
   sortOrder: number;
   /** Decimal como string — nunca float. */
   quotedQuantity: string | null;

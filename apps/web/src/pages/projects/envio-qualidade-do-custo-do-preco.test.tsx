@@ -101,6 +101,7 @@ function linhaDaFaixa(pricing: QuotePricingProvenanceDTO): QuoteLineDTO {
     productId: "prod-1",
     productCode: "PROD-000001",
     productName: "Pré-Treino",
+    productActive: true,
     sortOrder: 1,
     quotedQuantity: "1000.000000000000",
     uomCode: "un",

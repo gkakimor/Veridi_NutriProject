@@ -110,6 +110,7 @@ function line(overrides: Partial<QuoteLineDTO> = {}): QuoteLineDTO {
     productId: "prod-a",
     productCode: "PROD-000003",
     productName: "Whey Protein DEMO",
+    productActive: true,
     sortOrder: 1,
     quotedQuantity: "1000",
     uomCode: "un",

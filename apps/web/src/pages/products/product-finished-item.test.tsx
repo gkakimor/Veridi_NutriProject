@@ -247,6 +247,37 @@ describe("Produto — item de produto acabado", () => {
       screen.getByText(/controla lote · controla validade · exige liberação da Qualidade · exige CoA/),
     ).toBeInTheDocument();
   });
+
+  /*
+   * PRODUCT-INACTIVE-COMMERCIAL-GATE-01, §108: Produto e PA mudam de situação
+   * separadamente. Quem abre o Produto ativo com o PA inativo precisa saber, ali,
+   * por que o Pedido e a liberação da OP vão recusar.
+   */
+  it("PA inativo: o cadastro avisa e marca o item; PA ativo não avisa", async () => {
+    const paInativo = {
+      ...PRODUTO_SALVO,
+      finishedProductItem: { ...PRODUTO_SALVO.finishedProductItem!, active: false },
+    } as ProductDTO;
+    const { unmount } = renderModal({ mode: "edit", product: paInativo });
+
+    expect(await screen.findByText("PA-000008")).toBeInTheDocument();
+    const painel = screen.getByText("Item de produto acabado inativo").closest(".pendency-panel");
+    expect(painel).toHaveAttribute("role", "status");
+    expect(painel).toHaveTextContent(
+      "PA-000008 está inativo. O produto continua ativo, mas não entra em pedido nem libera ordem de produção até o item ser reativado no cadastro de Itens.",
+    );
+    expect(screen.getByText("Inativo", { selector: ".badge.badge--inactive" })).toBeInTheDocument();
+    unmount();
+
+    const paAtivo = {
+      ...PRODUTO_SALVO,
+      finishedProductItem: { ...PRODUTO_SALVO.finishedProductItem!, active: true },
+    } as ProductDTO;
+    renderModal({ mode: "edit", product: paAtivo });
+    expect(await screen.findByText("PA-000008")).toBeInTheDocument();
+    expect(screen.queryByText("Item de produto acabado inativo")).toBeNull();
+    expect(screen.queryByText("Inativo", { selector: ".badge.badge--inactive" })).toBeNull();
+  });
 });
 
 describe("Produto — cadastrar cliente no contexto", () => {

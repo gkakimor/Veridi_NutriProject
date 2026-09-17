@@ -83,6 +83,7 @@ import { ModalDialog } from "../../components/ModalDialog";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { TableEmptyRow } from "../../components/TableEmptyRow";
+import { ProductInactiveNotice } from "../products/ProductInactiveNotice";
 
 interface FormulationVersionOption {
   id: string;
@@ -566,10 +567,15 @@ export function ProductionOrderPage() {
     name: product.name,
   }));
   if (selectedProduct && !activeProducts.some((product) => product.id === selectedProduct.id)) {
+    // O produto da própria ordem fica fora da lista de ativos quando foi
+    // inativado depois (§108): a opção diz isso, pela leitura da ordem.
+    const inativoNaOrdem =
+      productionOrder?.productId === selectedProduct.id && productionOrder.productActive === false;
     productOptions.unshift({
       id: selectedProduct.id,
       code: selectedProduct.code,
       name: selectedProduct.name,
+      ...(inativoNaOrdem ? { hint: "Inativo" } : {}),
     });
   }
   const hasNoActiveFormulation =
@@ -1031,6 +1037,16 @@ export function ProductionOrderPage() {
       <div className="doc-body">
         {error && <p className="form-alert" role="alert">{error}</p>}
 
+        {/* Produto ou item de produto acabado inativado depois que a ordem
+            nasceu (§108): planejar e liberar são recusados; liberada e em
+            execução seguem, só com a marca no produto. */}
+        {productionOrder && (productionOrder.status === "DRAFT" || productionOrder.status === "PLANNED") && (
+          <ProductInactiveNotice
+            linhas={[productionOrder]}
+            passo={productionOrder.status === "DRAFT" ? "planejar a ordem" : "liberar a ordem"}
+          />
+        )}
+
         {/* O ciclo inteiro atravessa esta tela — reserva, separação, consumo e
             apontamento são seções diferentes. A explicação de como eles se
             encadeiam fica no topo, e não repetida em cada uma. */}
@@ -1165,6 +1181,19 @@ export function ProductionOrderPage() {
               ) : (
                 <p className="field-readonly-value">
                   {productionOrder?.productCode} — {productionOrder?.productName}
+                  {/* Marca real, da leitura da ordem (§108). */}
+                  {productionOrder?.productActive === false && (
+                    <>
+                      {" "}
+                      <span className="badge badge--inactive">Inativo</span>
+                    </>
+                  )}
+                  {productionOrder?.finishedItemActive === false && (
+                    <>
+                      {" "}
+                      <span className="badge badge--inactive">Item de produto acabado inativo</span>
+                    </>
+                  )}
                 </p>
               )}
               {fieldErrors["productId"] && <p className="field__error">{fieldErrors["productId"]}</p>}

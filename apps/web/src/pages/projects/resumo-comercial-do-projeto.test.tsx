@@ -85,6 +85,7 @@ function linha(productId: string) {
     productId,
     productCode: `PROD-${productId}`,
     productName: `Produto ${productId}`,
+    productActive: true,
     sortOrder: 1,
     quotedQuantity: "1000",
     uomCode: "un",

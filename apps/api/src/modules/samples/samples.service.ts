@@ -7,6 +7,7 @@ import type {
 } from "@veridi/shared";
 import { SAMPLE_CODE_PREFIX, SAMPLE_QR_PREFIX, normalizeLotLookupCode } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { assertProductsActive } from "../../lib/product-active-gate.js";
 import {
   getOnHand,
   getReservedByLots,
@@ -226,17 +227,26 @@ export async function createSample(
    * quem cria escolhe: a associação errada contamina rastreabilidade e
    * decisão técnica, e ninguém consegue reconstruir isso depois.
    */
-  const links = await prisma.projectProduct.findMany({ where: { projectId } });
-  let projectProductId: string | null = null;
+  const links = await prisma.projectProduct.findMany({
+    where: { projectId },
+    include: { product: { select: { code: true, active: true } } },
+  });
+  let chosen: (typeof links)[number] | null = null;
   if (input.projectProductId) {
-    const chosen = links.find((link) => link.id === input.projectProductId);
+    chosen = links.find((link) => link.id === input.projectProductId) ?? null;
     if (!chosen) throw new SampleProductNotInProjectError();
-    projectProductId = chosen.id;
   } else if (links.length === 1) {
-    projectProductId = links[0]!.id;
+    chosen = links[0]!;
   } else if (links.length > 1) {
     throw new SampleProductRequiredError();
   }
+  // Amostra nova de produto inativo é trabalho novo sobre ele (§108) — também
+  // no vínculo automático do projeto de um produto só. A amostra que já existe
+  // segue: consumo, produção e decisão não passam por aqui.
+  if (chosen) {
+    assertProductsActive([chosen.product], "Reative o produto para criar a amostra.");
+  }
+  const projectProductId = chosen ? chosen.id : null;
 
   const code = await nextSequenceCode(prisma, CODE_SEQUENCE, SAMPLE_CODE_PREFIX);
 

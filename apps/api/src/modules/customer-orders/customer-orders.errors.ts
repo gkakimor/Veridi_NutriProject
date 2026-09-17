@@ -26,12 +26,11 @@ export class LineProductNotFoundError extends Error {
   }
 }
 
-export class InactiveLineProductError extends Error {
-  constructor(id: string) {
-    super(`Produto inativo não pode ser usado em uma nova linha: ${id}`);
-    this.name = "InactiveLineProductError";
-  }
-}
+/*
+ * Produto inativo e item de produto acabado inativo moram em
+ * `lib/product-active-gate.ts` desde PRODUCT-INACTIVE-COMMERCIAL-GATE-01 (§108):
+ * a mesma recusa vale no Projeto, no Orçamento, no Pedido e na OP.
+ */
 
 export class MissingFinishedItemError extends Error {
   constructor(id: string) {

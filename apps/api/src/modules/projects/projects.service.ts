@@ -9,6 +9,7 @@ import type {
 } from "@veridi/shared";
 import { PROJECT_CODE_PREFIX, situacaoCadastral } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { assertProductsActive } from "../../lib/product-active-gate.js";
 import {
   assertPreparable,
   createProjectProduct,
@@ -624,7 +625,9 @@ export async function approveProject(
     const project = await tx.project.findUnique({
       where: { id },
       include: {
-        quoteVersions: { include: { lines: true } },
+        quoteVersions: {
+          include: { lines: { include: { product: { select: { code: true, active: true } } } } },
+        },
         customer: true,
         products: true,
       },
@@ -640,6 +643,16 @@ export async function approveProject(
 
     const accepted = project.quoteVersions.find((quote) => quote.status === "ACCEPTED");
     if (!accepted) throw new MissingAcceptedQuoteError();
+
+    /*
+     * Aprovar promove o que o cliente aceitou — produto inativado depois do
+     * aceite não vira escopo aprovado (§108). A transação desfaz tudo: o
+     * projeto fica como estava, com a proposta aceita intacta.
+     */
+    assertProductsActive(
+      accepted.lines.map((line) => line.product),
+      "Reative o produto para aprovar o projeto.",
+    );
 
     /*
      * O que a aprovação promove é o que o cliente ACEITOU.

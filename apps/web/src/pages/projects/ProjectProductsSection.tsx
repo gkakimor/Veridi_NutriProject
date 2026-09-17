@@ -36,11 +36,14 @@ const LIFECYCLE_LABELS: Record<string, string> = {
 const PAGINA_DO_SELETOR = 20;
 
 function opcaoDeProduto(product: ProductDTO): EntityOption {
+  const ciclo = LIFECYCLE_LABELS[product.lifecycle] ?? product.lifecycle;
   return {
     id: product.id,
     code: product.code,
     name: product.name,
-    hint: LIFECYCLE_LABELS[product.lifecycle] ?? product.lifecycle,
+    // A lista só oferece ativos (§108); o escolhido relido pelo id pode ter sido
+    // inativado no meio, e aparece marcado em vez de parecer vinculável.
+    hint: product.active === false ? `${ciclo} · Inativo` : ciclo,
   };
 }
 
@@ -84,9 +87,10 @@ export function ProjectProductsSection({
    */
   useEffect(() => {
     if (mode !== "link") return;
-    // Só produtos do mesmo cliente: vincular produto de outro cliente
-    // misturaria propriedade, e o backend recusa.
-    listProducts({ customerId, pageSize: PAGINA_DO_SELETOR })
+    // Só produtos ATIVOS do mesmo cliente: vincular produto de outro cliente
+    // misturaria propriedade, e produto inativo não entra em negociação nova
+    // (§108) — o backend recusa os dois.
+    listProducts({ customerId, active: true, pageSize: PAGINA_DO_SELETOR })
       .then((result) => {
         // A página substitui o catálogo; o escolhido que estava fora dela
         // volta pelo id, logo abaixo.
@@ -96,10 +100,11 @@ export function ProjectProductsSection({
       .catch(() => setCatalog([]));
   }, [mode, customerId]);
 
-  /** Busca no servidor com o MESMO filtro da primeira página: o cliente do projeto. */
+  /** Busca no servidor com o MESMO filtro da primeira página: ativos do cliente do projeto. */
   async function buscarProdutos(termo: string): Promise<EntityOption[]> {
     const { products: achados } = await listProducts({
       customerId,
+      active: true,
       search: termo,
       pageSize: PAGINA_DO_SELETOR,
     });
@@ -179,6 +184,13 @@ export function ProjectProductsSection({
                       code={link.productCode}
                       name={link.productName}
                     />
+                    {/* Situação ATUAL do cadastro, da leitura do projeto (§108). */}
+                    {link.productActive === false && (
+                      <>
+                        {" "}
+                        <span className="badge badge--inactive">Inativo</span>
+                      </>
+                    )}
                   </td>
                   <td>{LIFECYCLE_LABELS[link.productLifecycle] ?? link.productLifecycle}</td>
                   <td>

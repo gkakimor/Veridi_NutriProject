@@ -187,6 +187,10 @@ const ERROR_MESSAGES: Record<string, string> = {
   invalid_transition: "Esta ação não é válida para o estado atual do documento.",
   shipment_not_verified: "Confira os lotes da expedição antes de confirmar.",
   no_consumption: "Nenhum consumo registrado — confirme antes de concluir.",
+  // §108: o backend nomeia o produto e o item; estes só cobrem resposta sem mensagem.
+  inactive_product: "Produto inativo não inicia compromisso novo — reative o produto para continuar.",
+  inactive_finished_item:
+    "O item de produto acabado está inativo — reative o item para continuar.",
 };
 
 /** Mensagem por status quando a resposta não traz nada aproveitável. */

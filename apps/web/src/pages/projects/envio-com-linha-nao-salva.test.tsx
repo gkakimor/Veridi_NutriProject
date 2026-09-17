@@ -87,6 +87,7 @@ function linha(overrides: Partial<QuoteLineDTO> = {}): QuoteLineDTO {
     productId: "prod-1",
     productCode: "PROD-000001",
     productName: "Pré-Treino",
+    productActive: true,
     sortOrder: 1,
     // Como a API devolve: quantidade com doze casas, preço com quatro.
     quotedQuantity: "1000.000000000000",

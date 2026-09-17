@@ -465,6 +465,111 @@ describe("Production Orders — RELEASE (PLANNED → RELEASED)", () => {
   });
 });
 
+/**
+ * PRODUCT-INACTIVE-COMMERCIAL-GATE-01, §108: o planejamento validou Produto e
+ * PA, mas eles podem ser inativados antes da liberação — e liberar reserva
+ * material e numera o documento. A liberação relê os dois; a ordem já liberada
+ * não passa por aqui e segue.
+ */
+describe("Production Orders — RELEASE com Produto ou PA inativado depois do planejamento", () => {
+  async function planejadaComEstoque(app: App) {
+    const rawMaterial = await createItem("RAW_MATERIAL", { controlsLot: false });
+    await receiveStockNoLot(app, rawMaterial.id, "50");
+    const { product, finishedItem } = await createProductWithActiveFormulation(app, [
+      { itemId: rawMaterial.id, quantity: "10", unitCode: "kg" },
+    ]);
+    const planned = await createPlannedOrder(app, product.id, "1");
+    expect(planned.status).toBe("PLANNED");
+    return { product, finishedItem, planned };
+  }
+
+  const liberar = (app: App, id: string) =>
+    app.inject({ method: "POST", url: `/production-orders/${id}/release` });
+
+  async function situacao(app: App, url: string) {
+    const response = await app.inject({ method: "POST", url });
+    expect(response.statusCode, response.body).toBe(200);
+  }
+
+  it("produto inativado: recusa, a OP segue PLANEJADA sem reserva, e reativado libera", async () => {
+    const app = buildTestApp();
+    await app.ready();
+    const { product, planned } = await planejadaComEstoque(app);
+
+    await situacao(app, `/products/${product.id}/deactivate`);
+    const recusada = await liberar(app, planned.id);
+    expect(recusada.statusCode, recusada.body).toBe(400);
+    expect(recusada.json().error).toBe("inactive_product");
+    expect(recusada.json().message).toContain(product.code);
+    expect(recusada.json().message).toContain("Reative o produto para liberar a ordem.");
+
+    const intacta = (await app.inject({ method: "GET", url: `/production-orders/${planned.id}` })).json();
+    expect(intacta.status).toBe("PLANNED");
+    expect(intacta.reservation).toBeNull();
+    expect(intacta.officialNumber).toBeNull();
+    expect(intacta.productActive).toBe(false);
+
+    await situacao(app, `/products/${product.id}/activate`);
+    const liberada = await liberar(app, planned.id);
+    expect(liberada.statusCode, liberada.body).toBe(200);
+    expect(liberada.json().status).toBe("RELEASED");
+
+    await app.close();
+  });
+
+  it("PA inativado: recusa própria, nunca 'sem produto acabado', e reativado libera", async () => {
+    const app = buildTestApp();
+    await app.ready();
+    const { product, finishedItem, planned } = await planejadaComEstoque(app);
+
+    await situacao(app, `/items/${finishedItem.id}/deactivate`);
+    const recusada = await liberar(app, planned.id);
+    expect(recusada.statusCode, recusada.body).toBe(400);
+    expect(recusada.json().error).toBe("inactive_finished_item");
+    expect(recusada.json().message).toContain(finishedItem.code);
+    expect(recusada.json().message).toContain(product.code);
+    expect(recusada.json().message).not.toMatch(/válido/i);
+
+    const intacta = (await app.inject({ method: "GET", url: `/production-orders/${planned.id}` })).json();
+    expect(intacta.status).toBe("PLANNED");
+    expect(intacta.reservation).toBeNull();
+    expect(intacta.productActive).toBe(true);
+    expect(intacta.finishedItemActive).toBe(false);
+
+    await situacao(app, `/items/${finishedItem.id}/activate`);
+    expect((await liberar(app, planned.id)).json().status).toBe("RELEASED");
+
+    await app.close();
+  });
+
+  it("OP já liberada continua: inativar Produto e PA não desfaz a reserva nem trava a separação", async () => {
+    const app = buildTestApp();
+    await app.ready();
+    const { product, finishedItem, planned } = await planejadaComEstoque(app);
+    const liberada = await liberar(app, planned.id);
+    expect(liberada.statusCode, liberada.body).toBe(200);
+
+    await situacao(app, `/products/${product.id}/deactivate`);
+    await situacao(app, `/items/${finishedItem.id}/deactivate`);
+
+    const lida = (await app.inject({ method: "GET", url: `/production-orders/${planned.id}` })).json();
+    expect(lida.status).toBe("RELEASED");
+    expect(lida.reservation.status).toBe("ACTIVE");
+    expect([lida.productActive, lida.finishedItemActive]).toEqual([false, false]);
+
+    const lineId = lida.requirements[0].reservationLines[0].id as string;
+    const separada = await app.inject({
+      method: "POST",
+      url: `/production-orders/${planned.id}/picking/${lineId}/confirm`,
+      payload: {},
+    });
+    expect(separada.statusCode, separada.body).toBe(200);
+    expect(separada.json().requirements[0].reservationLines[0].pickingStatus).toBe("CONFIRMED");
+
+    await app.close();
+  });
+});
+
 describe("Production Orders — RELEASE concorrente", () => {
   it("duas OPs disputando o mesmo estoque: só uma libera, Reserved nunca dobra", async () => {
     const app = buildTestApp();
