@@ -65,6 +65,7 @@ Node é fixado em 22 pelo `.node-version`.
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` | referência ao banco do projeto — não copiar a URL na mão |
 | `VERIDI_WEB_DIST` | `apps/web/dist` | relativo à raiz do monorepo (não ao diretório do processo) |
 | `VERIDI_UPLOAD_DIR` | `/data/uploads` | dentro do volume persistente — ver seção 6 |
+| `VERIDI_STORAGE_PROVIDER` e `VERIDI_R2_*` | ausentes (hoje) | arquivo do Item Rótulo no R2 — ver seção 6.1; sem elas, `LOCAL_FS` |
 | `TZ` | `UTC` | container e banco no mesmo relógio; a formatação é no cliente |
 
 **Não copiar `API_HOST` do `.env.example`.** Ele vale `127.0.0.1`, que é
@@ -142,6 +143,45 @@ container substituído), download do mesmo anexo (`200`, 39 bytes, conteúdo
 Cloudflare R2 continua sendo a saída quando o volume apertar ou quando o
 Railway deixar de ser a casa — o armazenamento está isolado em três funções
 (`storeFile`, `readFile`, `deleteStoredFile`), então a troca é local.
+
+### 6.1 Arquivo do Item Rótulo — Cloudflare R2 (LABEL-ATTACHMENTS-01)
+
+O arquivo versionado do Item Rótulo (§103) passa por `lib/storage/`: `LOCAL_FS`
+grava no mesmo `VERIDI_UPLOAD_DIR` (em `items/<itemId>/labels/`), `R2` grava no
+bucket privado. **Sem as variáveis abaixo o serviço continua em `LOCAL_FS`** —
+é o estado de hoje; os anexos genéricos seguem no volume de qualquer jeito.
+
+Para ligar o R2, cadastrar no serviço (Variables do Railway, nunca no Git):
+
+| Variável | Valor | Observação |
+|---|---|---|
+| `VERIDI_STORAGE_PROVIDER` | `R2` | sem ela (ou `LOCAL_FS`), o arquivo novo vai para o volume |
+| `VERIDI_R2_ENDPOINT` | `https://<ACCOUNT_ID>.r2.cloudflarestorage.com` | só a conta — **sem** o nome do bucket no caminho (o painel da Cloudflare mostra com ele) |
+| `VERIDI_R2_BUCKET` | nome do bucket (homologação: `veridi-homologacao`) | minúsculas, dígitos e hífen |
+| `VERIDI_R2_REGION` | `auto` | opcional; vazio vale `auto` |
+| `VERIDI_R2_ACCESS_KEY_ID` | Access Key ID do token S3 do bucket | segredo |
+| `VERIDI_R2_SECRET_ACCESS_KEY` | Secret Access Key do mesmo token | segredo |
+
+Regras que a API aplica na subida: com `VERIDI_STORAGE_PROVIDER=R2`, as quatro
+obrigatórias (endpoint, bucket, chave e segredo) precisam existir; qualquer uma
+delas preenchida sem as outras também derruba a subida. A mensagem cita só o
+nome da variável. Endereço sem `https://`, com bucket no caminho ou com usuário e
+senha é recusado.
+
+Cada versão guarda o provedor em que nasceu: ligar o R2 não move nem esconde o
+que já foi gravado no volume, e desligar não esconde o que nasceu no R2 — desde
+que as variáveis do R2 continuem no serviço para a leitura.
+
+Antes de ligar, provar o bucket com a MESMA credencial, fora do Git:
+
+```bash
+railway run pnpm storage:r2:smoke
+```
+
+O smoke grava um objeto pequeno em `_smoke/`, confere cabeçalho, bytes e a
+recusa de sobrescrita e apaga o objeto no fim. Imprime só bucket, chave de
+smoke e tamanhos. O bucket continua privado: sem acesso público, sem `r2.dev`,
+e o navegador só fala com a API.
 
 ## 7. Aberto — resolver antes de uso real
 

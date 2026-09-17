@@ -31,7 +31,7 @@ import { ItemNotFoundError } from "./items.errors.js";
  *
  * Versões imutáveis (V1, V2...), vigente derivada (maior número não anulado),
  * anulação com motivo que preserva os bytes, e restauração que cria versão NOVA
- * apontando para o mesmo objeto. Regras em `docs/PRODUCT_RULES.md` §102.
+ * apontando para o mesmo objeto. Regras em `docs/PRODUCT_RULES.md` §103.
  *
  * Envio em duas fases, nesta ordem, para nunca haver registro sem objeto:
  * 1. o objeto é gravado no storage (chave nova, nunca sobrescreve);

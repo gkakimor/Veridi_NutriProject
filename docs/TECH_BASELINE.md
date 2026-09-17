@@ -276,6 +276,19 @@ MVP supports file metadata/storage association for lot documents.
 
 Keep abstraction simple.
 
+Object storage (LABEL-ATTACHMENTS-01) goes through one interface,
+`apps/api/src/lib/storage/` (`StorageAdapter`: put, streaming get, head, and
+delete only as technical compensation). Two providers: `LOCAL_FS` (under
+`VERIDI_UPLOAD_DIR`, development, tests and the Railway volume) and `R2`
+(Cloudflare R2 through `@aws-sdk/client-s3`, private bucket, path-style,
+`If-None-Match: *` and SHA-256 checksum on write). Each stored row records the
+provider it was written to and is always read back from it. Credentials live
+only in environment variables; the browser never talks to the bucket. Automated
+tests never reach the real bucket: a fake client and a local S3 emulator prove
+the adapter, and `pnpm storage:r2:smoke` is the manual proof against R2. The
+legacy `Attachment` flow still uses `lib/file-storage.ts` and has not moved
+(ATTACHMENTS-R2-MIGRATION-01).
+
 Do not implement OCR, PDF extraction or XML parsing yet.
 
 ---
