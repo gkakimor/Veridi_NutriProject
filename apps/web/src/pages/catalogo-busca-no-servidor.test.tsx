@@ -117,7 +117,8 @@ function responder(params: Consulta) {
 const listItems = vi.fn();
 const getItem = vi.fn();
 const getInventoryItem = vi.fn();
-const createStockCount = vi.fn();
+const previewStockCount = vi.fn();
+const createQuickStockCount = vi.fn();
 const getFormulationVersion = vi.fn();
 const updateFormulationVersion = vi.fn();
 const getSample = vi.fn();
@@ -130,7 +131,13 @@ vi.mock("../lib/items-api", () => ({
 
 vi.mock("../lib/inventory-api", () => ({
   getInventoryItem: (id: string) => getInventoryItem(id),
-  createStockCount: (input: unknown) => createStockCount(input),
+}));
+
+// A Contagem rápida lê as posições do item pela prévia do inventário (Fatia 2B).
+vi.mock("../lib/stock-counts-api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/stock-counts-api")>()),
+  previewStockCount: (input: unknown) => previewStockCount(input),
+  createQuickStockCount: (input: unknown) => createQuickStockCount(input),
 }));
 
 vi.mock("../lib/formulations-api", () => ({
@@ -178,7 +185,15 @@ beforeEach(() => {
       : Promise.reject(new Error("item inexistente"));
   });
   getInventoryItem.mockResolvedValue({ controlsLot: false, onHand: "10", lots: [] });
-  createStockCount.mockResolvedValue({});
+  previewStockCount.mockResolvedValue({
+    positions: [],
+    itemCount: 0,
+    heldByOpenCounts: [],
+    excludedCount: 0,
+    excludedPositions: [],
+    maxPositions: 3000,
+  });
+  createQuickStockCount.mockResolvedValue({});
 });
 
 const buscasPor = (termo: string) => chamadas.filter((chamada) => chamada.search === termo);
@@ -218,8 +233,10 @@ describe("Contagem Física — busca de item no servidor", () => {
     fireEvent.change(campo, { target: { value: "Beta-Alanina" } });
     fireEvent.mouseDown(await screen.findByRole("option", { name: /MP-002500/ }));
 
-    // A tela consulta o saldo pelo ID do item escolhido, não pelo texto.
-    await waitFor(() => expect(getInventoryItem).toHaveBeenCalledWith("it-beta"));
+    // A tela consulta as posições (e o saldo) pelo ID do item escolhido, não pelo texto.
+    await waitFor(() =>
+      expect(previewStockCount).toHaveBeenCalledWith({ mode: "ASSISTED", scope: { balance: "ANY", itemIds: ["it-beta"] } }),
+    );
     // E o campo continua rotulado, mesmo o item não estando na primeira página.
     await waitFor(() =>
       expect((campo as HTMLInputElement).value).toBe("MP-002500 · Beta-Alanina"),

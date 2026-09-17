@@ -9,6 +9,7 @@
  * A Contagem rápida grava o mesmo documento, com `kind = QUICK`.
  */
 
+import type { InventoryMovementDTO } from "./inventory.js";
 import type { ItemType } from "./items.js";
 import type { LotStatus } from "./lots.js";
 import type { InventoryOwnerType } from "./ownership.js";
@@ -125,6 +126,22 @@ export type StockCountView = "review" | "counting";
 export type StockCountBalanceFilter = "WITH_BALANCE" | "ANY";
 export type StockCountOwnerFilter = "ALL" | "VERIDI" | "CUSTOMER";
 
+/**
+ * Validade do lote no escopo (Fatia 2B). `EXPIRING` é "vence em até N dias",
+ * sem os já vencidos, e pede `expiringWithinDays`. A régua é a de
+ * `isLotExpired`: o lote vale o dia da validade inteiro, no fuso comercial.
+ */
+export type StockCountExpiryFilter = "ANY" | "EXPIRED" | "NOT_EXPIRED" | "EXPIRING";
+
+export const STOCK_COUNT_EXPIRY_FILTERS: readonly StockCountExpiryFilter[] = ["ANY", "EXPIRED", "NOT_EXPIRED", "EXPIRING"];
+
+export const STOCK_COUNT_EXPIRY_FILTER_LABELS: Record<StockCountExpiryFilter, string> = {
+  ANY: "Qualquer validade",
+  EXPIRED: "Somente vencidos",
+  NOT_EXPIRED: "Somente não vencidos",
+  EXPIRING: "Vence em até N dias",
+};
+
 export interface StockCountScopeInput {
   /** Vazio ou ausente: todos os tipos. */
   itemTypes?: ItemType[];
@@ -137,6 +154,18 @@ export interface StockCountScopeInput {
   itemIds?: string[];
   /** Presente: só estes lotes, e nenhuma posição de item sem lote. */
   lotIds?: string[];
+  /*
+   * Filtros de LOTE (Fatia 2B). Qualquer um deles presente deixa de fora a
+   * posição de item sem lote: ela não tem local, situação nem validade.
+   */
+  /** Local do lote contém o texto, sem diferenciar maiúsculas. */
+  locationContains?: string;
+  /** Situação do lote — OU dentro do grupo. Vazio ou ausente: todas. */
+  lotStatuses?: LotStatus[];
+  /** Ausente ou `ANY`: qualquer validade. */
+  expiry?: StockCountExpiryFilter;
+  /** Só com `expiry = EXPIRING`: de 1 a 3650 dias. */
+  expiringWithinDays?: number;
 }
 
 export interface PreviewStockCountInput {
@@ -320,6 +349,36 @@ export interface StockCountSummaryDTO {
   countedCount: number;
   /** `null` enquanto a contagem cega esconde a diferença. */
   divergentCount: number | null;
+  /** Contagem rápida: a posição única e o resultado. `null` em inventário. */
+  quickResult: StockCountQuickResultDTO | null;
+}
+
+/**
+ * O que a Contagem rápida gravou, para a aba "Contagens rápidas" (Fatia 2B).
+ * Números do registro — contado e sistema no instante do confirmar — e o
+ * ajuste que nasceu dele, quando houve.
+ */
+export interface StockCountQuickResultDTO {
+  positionId: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  unitCode: string;
+  lotId: string | null;
+  lotCode: string | null;
+  ownerType: InventoryOwnerType;
+  ownerCustomerCode: string | null;
+  ownerCustomerName: string | null;
+  countedQuantity: string;
+  systemQuantity: string;
+  /** contado − sistema. */
+  difference: string;
+  adjustmentMovementId: string | null;
+  adjustmentType: "ADJUSTMENT_IN" | "ADJUSTMENT_OUT" | null;
+  /** Magnitude do ajuste; `null` quando conferiu. */
+  adjustmentQuantity: string | null;
+  reason: string | null;
+  countedByName: string;
 }
 
 export interface StockCountListResponse {
@@ -384,6 +443,52 @@ export interface DecideStockCountInput {
   decisions: StockCountDecisionInput[];
 }
 
+export const STOCK_COUNT_DECISION_LABELS: Record<StockCountDecision, string> = {
+  ADJUST: "Ajustar",
+  NO_ADJUSTMENT: "Não ajustar",
+};
+
+/** Um ajuste que a tela mostrou no diálogo de encerramento: a posição e o registro que vale. */
+export interface StockCountExpectedAdjustment {
+  positionId: string;
+  entryId: string;
+}
+
+export interface CompleteStockCountInput {
+  /**
+   * Os ajustes que a tela mostrou (Fatia 2B). Informado e diferente do
+   * conjunto que o servidor aplicaria, o encerramento é recusado com
+   * `stock_count_changed` e nada é gravado: o que se confirma é o que se viu.
+   */
+  expectedAdjustments?: StockCountExpectedAdjustment[];
+}
+
+/**
+ * Movimento do ledger da posição depois da referência — a leitura que explica
+ * a marca "com movimentação" (Fatia 2B). Os números do ajuste nunca saem daqui:
+ * vêm das somas gravadas no registro.
+ */
+export interface StockCountPositionMovementDTO extends InventoryMovementDTO {
+  /** Lançado depois do registro de contagem que vale. */
+  afterCount: boolean;
+  /** Lançado depois da contagem com data de ocorrência anterior a ela — o caso que pede recontagem ou confirmação. */
+  retroactive: boolean;
+}
+
+export interface StockCountPositionMovementsDTO {
+  positionId: string;
+  referenceAt: string;
+  /** Instante do registro que vale; `null` sem contagem. */
+  countedAt: string | null;
+  /** Contagem cega antes da revelação: nenhum movimento é listado. */
+  balancesHidden: boolean;
+  /** Em ordem de lançamento, até `STOCK_COUNT_POSITION_MOVEMENTS_LIMIT`. */
+  movements: StockCountPositionMovementDTO[];
+  total: number;
+}
+
+export const STOCK_COUNT_POSITION_MOVEMENTS_LIMIT = 200;
+
 export interface CancelStockCountInput {
   reason: string;
 }
@@ -419,6 +524,16 @@ export interface StockCountCloseIssueDTO {
   reserved: string | null;
 }
 
+export const STOCK_COUNT_CLOSE_ISSUE_LABELS: Record<StockCountCloseIssue, string> = {
+  PENDING_COUNT: "Posição sem contagem",
+  PENDING_RECOUNT: "Recontagem pedida e ainda não contada",
+  UNDECIDED: "Divergência sem decisão",
+  CONCURRENT_MOVEMENT_UNCONFIRMED: "Movimentação durante o inventário sem recontagem nem confirmação",
+  UNIT_CHANGED: "A unidade do item mudou desde o início do inventário",
+  NEGATIVE_BALANCE: "O ajuste deixaria o saldo negativo",
+  BELOW_RESERVED: "O ajuste deixaria o saldo abaixo do reservado",
+};
+
 /** Códigos de recusa do Inventário Físico — o `error` do corpo. */
 export type StockCountErrorCode =
   | "forbidden"
@@ -440,6 +555,7 @@ export type StockCountErrorCode =
   | "recount_not_allowed"
   | "decision_not_allowed"
   | "stock_count_close_blocked"
+  | "stock_count_changed"
   | "system_quantity_changed"
   | "invalid_finding"
   | "concurrent_write"

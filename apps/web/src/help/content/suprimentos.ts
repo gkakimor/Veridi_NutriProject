@@ -525,7 +525,7 @@ export const suprimentosTopics = {
       },
       {
         term: "Diferença",
-        text: "Contado menos sistema. Diferente de zero, o motivo passa a ser obrigatório e um ajuste é criado; igual a zero, nada é gravado.",
+        text: "Contado menos sistema. Diferente de zero, o motivo passa a ser obrigatório e um ajuste é criado; igual a zero, nenhum ajuste é criado — a contagem fica registrada no documento INV-.",
       },
       {
         term: "Ajuste gerado",
@@ -571,6 +571,8 @@ export const suprimentosTopics = {
       "A folha de contagem (FO-01) existe para o operador levar ao depósito e voltar com os números; a versão cega omite o saldo do sistema justamente para não induzir a contagem.",
       "Contagem é sempre do saldo físico. Ela não muda a situação de qualidade do lote nem o seu proprietário.",
       "Para contar muitas posições de uma vez, com revisão antes do ajuste, use Novo inventário na lista do Inventário Físico.",
+      "Posição que está sendo contada num inventário aberto não é contada aqui: a tela mostra o INV- dela, sem saldo, para a contagem ser registrada lá.",
+      "Se o saldo mudar entre abrir a posição e confirmar, nada é ajustado: atualize o saldo, confira e confirme de novo.",
     ],
   },
 
@@ -608,6 +610,14 @@ export const suprimentosTopics = {
         term: "Ocorrência",
         text: "Material encontrado que não cabe numa posição — lote ou item sem cadastro. Fica registrada com autor e data, sem criar cadastro nem mexer no estoque.",
       },
+      {
+        term: "Com movimentação",
+        text: "Houve lançamento na posição depois do início do inventário. Para decidir, confira os movimentos e confirme que não invalidam a contagem — ou peça recontagem.",
+      },
+      {
+        term: "Ajustar ou Não ajustar",
+        text: "A decisão sobre cada diferença, sempre com motivo. Ajustar gera, no encerramento, um ajuste de estoque pela diferença; Não ajustar só registra a diferença.",
+      },
     ],
     flow: [
       {
@@ -631,9 +641,15 @@ export const suprimentosTopics = {
           "Toda posição contada ou retirada com motivo. O inventário vai para revisão e, na contagem cega, as diferenças passam a aparecer no detalhe.",
       },
       {
-        label: "Revisão e encerramento",
-        detail: "Decidir as divergências e encerrar é o que gera os ajustes de estoque. Esta etapa chega numa próxima entrega.",
-        tone: "warn",
+        label: "Revisar",
+        detail:
+          "Marque as posições e peça recontagem, ou decida Ajustar ou Não ajustar com motivo. A recontagem volta para Contar pendentes, e na contagem cega quem reconta não vê a contagem anterior.",
+      },
+      {
+        label: "Encerrar",
+        detail:
+          "O diálogo mostra quantos ajustes de entrada e de saída serão gerados, por unidade. Se alguma posição impedir, nada é gravado e a tela diz qual e o que fazer.",
+        tone: "accent",
       },
     ],
     notes: [

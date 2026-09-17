@@ -98,6 +98,36 @@ describe("novo inventário — prévia", () => {
     expect(screen.getByText("ME-000009")).toBeInTheDocument();
   });
 
+  it("filtros de lote: local contém, situação e validade vão ao servidor; dias inválidos seguram a prévia (Fatia 2B)", async () => {
+    abrir();
+    await screen.findAllByText("MP-000431");
+
+    fireEvent.change(screen.getByLabelText("Local contém"), { target: { value: " A-03 " } });
+    await waitFor(() => expect(chamadasDaPrevia().at(-1)).toMatchObject({ scope: { locationContains: "A-03" } }));
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Bloqueado" }));
+    await waitFor(() => expect(chamadasDaPrevia().at(-1)).toMatchObject({ scope: { lotStatuses: ["BLOCKED"] } }));
+
+    fireEvent.click(screen.getByRole("radio", { name: "Vence em até N dias" }));
+    await waitFor(() =>
+      expect(chamadasDaPrevia().at(-1)).toMatchObject({
+        scope: { locationContains: "A-03", lotStatuses: ["BLOCKED"], expiry: "EXPIRING", expiringWithinDays: 30 },
+      }),
+    );
+    expect(screen.getByText(/com qualquer um deles, item sem controle de lote fica fora/)).toBeInTheDocument();
+
+    const pedidosAntes = chamadasDaPrevia().length;
+    fireEvent.change(screen.getByLabelText("Dias até vencer"), { target: { value: "" } });
+    expect(await screen.findByText("Informe de 1 a 3.650 dias.")).toBeInTheDocument();
+    expect(screen.getByText("A prévia aparece quando os dias até vencer estiverem preenchidos.")).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(chamadasDaPrevia()).toHaveLength(pedidosAntes);
+
+    fireEvent.click(screen.getByRole("radio", { name: "Somente vencidos" }));
+    await waitFor(() => expect(chamadasDaPrevia().at(-1)?.scope).toMatchObject({ expiry: "EXPIRED" }));
+    expect(chamadasDaPrevia().at(-1)?.scope).not.toHaveProperty("expiringWithinDays");
+  });
+
   it("posição em outro inventário aberto aparece com o código e o link dele", async () => {
     vi.mocked(previewStockCount).mockResolvedValue(
       previa({

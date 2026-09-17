@@ -148,6 +148,44 @@ describe("contagem — leitura cega", () => {
     expect(document.querySelector(".calc-hint, [data-calc-hint]")).toBeNull();
   });
 
+  it("recontagem pedida numa contagem cega em revisão: só ela abre campo, sem a contagem anterior nem saldo (Fatia 2B)", async () => {
+    // Servidor vazando de propósito: a rodada anterior e o saldo não podem aparecer nem assim.
+    const anterior = registro({ id: "e-velho", round: 1, countedQuantity: "4321.5", expectedQuantity: SALDO_SENTINELA });
+    vi.mocked(getStockCount).mockResolvedValue(
+      detalhe({
+        status: "IN_REVIEW",
+        mode: "BLIND",
+        balancesHidden: true,
+        positions: [
+          posicao({
+            situation: "RECOUNT_REQUESTED",
+            currentRound: 2,
+            lastEntryId: null,
+            validEntryId: "e-velho",
+            entries: [anterior],
+            referenceQuantity: SALDO_SENTINELA,
+            recountRequestedRound: 2,
+          }),
+          posicaoContada({ id: "p-2", sequence: 2, positionKey: "item-1:lote-2", situation: "COUNTED" }),
+        ],
+      }),
+    );
+    abrir();
+    const recontar = await screen.findByLabelText(/^Contagem da posição 1 —/);
+    expect(recontar).toHaveValue("");
+    expect(screen.queryByLabelText(/^Contagem da posição 2 —/)).toBeNull();
+    expect(document.body.textContent ?? "").not.toContain(SALDO_SENTINELA_NA_TELA);
+
+    fireEvent.change(recontar, { target: { value: "7" } });
+    fireEvent.keyDown(recontar, { key: "Enter" });
+    await waitFor(() => expect(envios()).toHaveLength(1));
+    expect(envios()[0]).toEqual([
+      "inv-1",
+      "p-1",
+      expect.objectContaining({ round: 2, expectedLastEntryId: null, countedQuantity: "7" }),
+    ]);
+  });
+
   it("contagem com saldo mostra o saldo de referência a quem conta", async () => {
     vi.mocked(getStockCount).mockResolvedValue(
       detalhe({ mode: "ASSISTED", balancesHidden: false, positions: [posicao({ referenceQuantity: "12.5" })] }),

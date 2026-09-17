@@ -28,15 +28,18 @@ vi.mock("../../lib/items-api", () => ({
   listItems: vi.fn(),
   getItem: vi.fn(),
 }));
-vi.mock("../../lib/inventory-api", () => ({
-  getInventoryItem: vi.fn(),
-  createStockCount: vi.fn(),
+// Desde a Fatia 2B a Contagem rápida lê as posições pela prévia (retenção antes do saldo).
+vi.mock("../../lib/stock-counts-api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/stock-counts-api")>()),
+  previewStockCount: vi.fn(),
+  createQuickStockCount: vi.fn(),
 }));
 
 import { listItems } from "../../lib/items-api";
-import { createStockCount, getInventoryItem } from "../../lib/inventory-api";
+import { createQuickStockCount, previewStockCount } from "../../lib/stock-counts-api";
 import { StockCountPage } from "./StockCountPage";
 import { UnsavedChangesProvider } from "../../app/UnsavedChangesProvider";
+import { linhaDaPrevia, previa } from "./testing/inventario-fixtures";
 
 const ITEM = {
   id: "item-1",
@@ -106,12 +109,24 @@ function avisaAoFechar(): boolean {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(listItems).mockResolvedValue({ items: [ITEM], total: 1 } as never);
-  vi.mocked(getInventoryItem).mockResolvedValue({
-    itemId: ITEM.id,
-    controlsLot: false,
-    onHand: "10.000000",
-    lots: [],
-  } as never);
+  vi.mocked(previewStockCount).mockResolvedValue(
+    previa({
+      positions: [
+        linhaDaPrevia({
+          positionKey: ITEM.id,
+          itemId: ITEM.id,
+          itemCode: ITEM.code,
+          itemName: ITEM.name,
+          lotId: null,
+          lotCode: null,
+          lotStatus: null,
+          expiryDate: null,
+          location: null,
+          balance: "10.000000",
+        }),
+      ],
+    }),
+  );
 });
 
 describe("Inventário Físico — guarda de alterações não salvas", () => {
@@ -187,7 +202,7 @@ describe("Inventário Físico — guarda de alterações não salvas", () => {
 
   it("confirmar a contagem encerra a pendência sem sair da tela", async () => {
     const user = userEvent.setup();
-    vi.mocked(createStockCount).mockResolvedValue({
+    vi.mocked(createQuickStockCount).mockResolvedValue({
       countedQuantity: "8",
       systemQuantity: "10.000000",
       difference: "-2",
@@ -200,7 +215,7 @@ describe("Inventário Físico — guarda de alterações não salvas", () => {
     fireEvent.change(motivo(), { target: { value: "Quebra na separação" } });
     await user.click(screen.getByRole("button", { name: /Confirmar contagem/ }));
 
-    await waitFor(() => expect(createStockCount).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(createQuickStockCount).toHaveBeenCalledTimes(1));
 
     // A contagem virou documento e ajuste: não há mais o que descartar.
     await user.click(menuEstoque());

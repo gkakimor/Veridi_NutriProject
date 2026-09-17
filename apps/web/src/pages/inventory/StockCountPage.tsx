@@ -1,34 +1,35 @@
 import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import type { ItemDTO, StockCountHeldPositionDTO, StockCountResultDTO } from "@veridi/shared";
+import { Decimal, textoDecimal } from "@veridi/shared";
 import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import { assinaturaDoDocumento, decimalComparavel, textoComparavel } from "../../lib/dirty-fields";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
-import { Link, useNavigate } from "react-router-dom";
-import type { ItemDTO, StockCountResultDTO } from "@veridi/shared";
+import { EntityLink } from "../../components/EntityLink";
 import { listItems } from "../../lib/items-api";
-import { getInventoryItem, createStockCount } from "../../lib/inventory-api";
+import { apiErrorMessage } from "../../lib/api-errors";
+import { createQuickStockCount, isStockCountApiError } from "../../lib/stock-counts-api";
 import { FormSection } from "../../components/FormSection";
 import { mensagemNumeroVazio } from "../../lib/decimal-field";
+import { formatDate } from "../../lib/dates";
 import { numericInvalidMessage, parsePtBrNumber } from "../../lib/numeric-ptbr";
 import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
 import { DecimalField } from "../../components/NumericField";
-import { formatQuantity, formatQuantityWithUnit } from "../../lib/quantity";
+import { formatQuantityWithUnit } from "../../lib/quantity";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
+import { LinhaDeMarcacao, usePosicoesDoItem } from "./inventario-seletores";
+import { diferencaComSinal, donoDaPosicao, situacaoDoLote } from "./stock-count-display";
 import { QUEM_OPERA_INVENTARIO, usePodeOperarInventario } from "./stock-count-permissions";
+import "./inventario-fisico.css";
 
 /** ⓘ de um campo, lido do registro central — o texto nunca mora no JSX. */
 function DicaDoCampo({ id }: { id: HelpHintId }) {
   const dica = helpHints[id];
   return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
-}
-
-interface LotOption {
-  lotId: string;
-  lotCode: string;
-  onHand: string;
 }
 
 /**
@@ -47,6 +48,23 @@ function opcaoDoItem(item: ItemDTO): EntityOption {
   return { id: item.id, code: item.code, name: item.name };
 }
 
+/** "LT-000118 está no INV-000014" — a posição retida, sem saldo nenhum. */
+function AvisoDeRetencao({ retida, rotulo }: { retida: StockCountHeldPositionDTO; rotulo: string }) {
+  return (
+    <p className="callout" role="note">
+      <strong>{rotulo} está em contagem no </strong>
+      <EntityLink kind="stockCount" id={retida.stockCountId} code={retida.stockCountCode} />
+      <strong>.</strong> Registre a contagem lá: uma posição em inventário aberto não é contada por fora, e o saldo não é
+      mostrado aqui.
+    </p>
+  );
+}
+
+type Recusa =
+  | { tipo: "saldo-mudou"; mensagem: string }
+  | { tipo: "retida"; mensagem: string; retida: StockCountHeldPositionDTO | null }
+  | { tipo: "outra"; mensagem: string };
+
 /**
  * Estoque → Inventário Físico → Contagem rápida. Nunca altera o saldo
  * diretamente — ao confirmar, grava o documento INV- QUICK e cria (no máximo)
@@ -55,6 +73,12 @@ function opcaoDoItem(item: ItemDTO): EntityOption {
  * Desde a Fatia 2A do Inventário Físico mora em
  * `/estoque/inventario/contagem-rapida`, como ação da lista de inventários
  * (DU-2), e só quem opera inventário vê o formulário.
+ *
+ * Fatia 2B: as posições do item saem da PRÉVIA do inventário no modo com saldo,
+ * que já separa a posição retida num inventário aberto — e a devolve sem saldo.
+ * A tela sabe da retenção antes de mostrar qualquer saldo. O confirmar leva o
+ * saldo que a tela mostrou (`expectedSystemQuantity`): se mudou, o servidor
+ * recusa e nada é ajustado. A diferença é conta de `Decimal`, nunca `Number`.
  */
 export function StockCountPage() {
   const navigate = useNavigate();
@@ -74,17 +98,16 @@ export function StockCountPage() {
    */
   const selectedItem = items.find((item) => item.id === itemId) ?? null;
 
-  const [lots, setLots] = useState<LotOption[]>([]);
   const [lotId, setLotId] = useState("");
-
-  const [systemQuantity, setSystemQuantity] = useState<string | null>(null);
+  const [recarga, setRecarga] = useState(0);
   const [countedQuantity, setCountedQuantity] = useState("");
   const [reason, setReason] = useState("");
 
-  const [loadingScope, setLoadingScope] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [recusa, setRecusa] = useState<Recusa | null>(null);
   const [result, setResult] = useState<StockCountResultDTO | null>(null);
+
+  const posicoes = usePosicoesDoItem(podeOperar && itemId ? itemId : null, "ASSISTED", recarga);
 
   useEffect(() => {
     listItems({ active: true, pageSize: PRIMEIRA_PAGINA })
@@ -115,32 +138,18 @@ export function StockCountPage() {
 
   useEffect(() => {
     setLotId("");
-    setSystemQuantity(null);
     setResult(null);
+    setRecusa(null);
   }, [itemId]);
 
-  useEffect(() => {
-    if (!itemId) return;
-    setLoadingScope(true);
-    getInventoryItem(itemId)
-      .then((detail) => {
-        if (detail.controlsLot) {
-          setLots(detail.lots.map((lot) => ({ lotId: lot.lotId, lotCode: lot.lotCode, onHand: lot.onHand })));
-          setSystemQuantity(null);
-        } else {
-          setLots([]);
-          setSystemQuantity(detail.onHand);
-        }
-      })
-      .catch(() => setError("Falha ao carregar saldo do sistema"))
-      .finally(() => setLoadingScope(false));
-  }, [itemId]);
-
-  useEffect(() => {
-    if (!selectedItem?.controlsLot) return;
-    const lot = lots.find((candidate) => candidate.lotId === lotId);
-    setSystemQuantity(lot ? lot.onHand : null);
-  }, [lotId, lots, selectedItem]);
+  const controlaLote = selectedItem?.controlsLot ?? false;
+  const unidade = selectedItem?.unitCode ?? null;
+  // Item sem lote: a posição é o item. Retida num inventário aberto, a prévia não a lista e não traz saldo.
+  const retidaDoItem = !controlaLote ? (posicoes.retidas.find((retida) => retida.positionKey === itemId) ?? null) : null;
+  const posicao = controlaLote
+    ? (posicoes.posicoes.find((candidata) => candidata.lotId === lotId) ?? null)
+    : (posicoes.posicoes.find((candidata) => candidata.lotId === null) ?? null);
+  const systemQuantity = posicao?.balance ?? null;
 
   /*
    * A contagem passa pelo parser antes de virar conta.
@@ -158,11 +167,12 @@ export function StockCountPage() {
       ? numericInvalidMessage("Contagem física", leituraDaContagem.motivo, OPCOES_QUANTIDADE)
       : null;
   const contagemIlegivel = erroDaContagem !== null;
+  // Decimal do shared: a diferença é a mesma conta que o servidor faz.
   const difference =
     systemQuantity !== null && contagem !== null
-      ? (Number(contagem) - Number(systemQuantity)).toString()
+      ? textoDecimal(new Decimal(contagem).minus(new Decimal(systemQuantity)))
       : null;
-  const hasDifference = difference !== null && Number(difference) !== 0;
+  const hasDifference = difference !== null && !new Decimal(difference).isZero();
 
   /**
    * A contagem como ela está na tela, em forma comparável.
@@ -188,19 +198,21 @@ export function StockCountPage() {
   });
 
   async function handleConfirm() {
-    if (!itemId || systemQuantity === null) return;
+    if (!itemId || !posicao || systemQuantity === null) return;
     if (contagem === null) {
-      setError(erroDaContagem ?? mensagemNumeroVazio("Contagem física"));
+      setRecusa({ tipo: "outra", mensagem: erroDaContagem ?? mensagemNumeroVazio("Contagem física") });
       return;
     }
     setSaving(true);
-    setError(null);
+    setRecusa(null);
     try {
-      const response = await createStockCount({
+      const response = await createQuickStockCount({
         itemId,
-        ...(selectedItem?.controlsLot ? { lotId } : {}),
+        ...(controlaLote ? { lotId } : {}),
         countedQuantity: contagem,
         ...(hasDifference ? { reason: reason.trim() } : {}),
+        // O saldo que a tela mostrou: se mudou até aqui, o servidor recusa em vez de ajustar outra diferença.
+        expectedSystemQuantity: systemQuantity,
       });
       /*
        * Confirmou: a contagem virou documento e, havendo divergência, ajuste
@@ -210,7 +222,14 @@ export function StockCountPage() {
       setResult(response);
       baseline.current = assinaturaAtual;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao confirmar contagem");
+      if (isStockCountApiError(err, "system_quantity_changed")) {
+        setRecusa({ tipo: "saldo-mudou", mensagem: err.message });
+      } else if (isStockCountApiError(err, "position_in_open_count")) {
+        setRecusa({ tipo: "retida", mensagem: err.message, retida: err.body.held?.[0] ?? null });
+        setRecarga((atual) => atual + 1);
+      } else {
+        setRecusa({ tipo: "outra", mensagem: apiErrorMessage(err, "Falha ao confirmar contagem") });
+      }
     } finally {
       setSaving(false);
     }
@@ -221,16 +240,23 @@ export function StockCountPage() {
     setCountedQuantity("");
     setReason("");
     setResult(null);
+    setRecusa(null);
     // Nova contagem começa do zero: o ponto de partida é a tela limpa.
     baseline.current = null;
   }
 
   const canConfirm =
     itemId &&
+    posicao !== null &&
     systemQuantity !== null &&
     contagem !== null &&
-    (!selectedItem?.controlsLot || lotId) &&
+    recusa?.tipo !== "saldo-mudou" &&
     (!hasDifference || reason.trim().length >= 3);
+
+  const lotesLivres = controlaLote ? posicoes.posicoes : [];
+  const lotesRetidos = controlaLote ? posicoes.retidas : [];
+  const semPosicao =
+    Boolean(itemId) && !posicoes.carregando && !posicoes.erro && posicoes.posicoes.length === 0 && posicoes.retidas.length === 0;
 
   return (
     <>
@@ -294,78 +320,145 @@ export function StockCountPage() {
             />
           </div>
 
-          {selectedItem?.controlsLot && (
-            <div className="field">
-              <label htmlFor="count-lot">
+          {controlaLote && (
+            <fieldset className="field field--full">
+              <legend>
                 Lote <span className="req">*</span>
-              </label>
-              <select id="count-lot" value={lotId} onChange={(event) => setLotId(event.target.value)}>
-                <option value="">Selecione…</option>
-                {lots.map((lot) => (
-                  <option key={lot.lotId} value={lot.lotId}>
-                    {lot.lotCode}
-                  </option>
-                ))}
-              </select>
-            </div>
+              </legend>
+              {posicoes.carregando && <span className="field__hint">Carregando lotes…</span>}
+              {!posicoes.carregando && !posicoes.erro && (
+                <div className="selection-group" role="group" aria-label="Lotes do item">
+                  {lotesLivres.map((lote) => (
+                    <LinhaDeMarcacao
+                      key={lote.positionKey}
+                      tipo="radio"
+                      nome="count-lot"
+                      valor={lote.lotId ?? ""}
+                      marcado={lotId === lote.lotId}
+                      aoMudar={() => {
+                        setLotId(lote.lotId ?? "");
+                        setRecusa(null);
+                      }}
+                    >
+                      {lote.lotCode} · {donoDaPosicao(lote)} · {situacaoDoLote(lote.lotStatus, lote.isExpired)} · validade{" "}
+                      {formatDate(lote.expiryDate)}
+                      {lote.location ? ` · ${lote.location}` : ""} · saldo {formatQuantityWithUnit(lote.balance, lote.unitCode)}
+                    </LinhaDeMarcacao>
+                  ))}
+                  {lotesRetidos.map((retida) => (
+                    <span key={retida.positionKey} className="field__hint">
+                      {retida.lotCode} está em contagem no{" "}
+                      <EntityLink kind="stockCount" id={retida.stockCountId} code={retida.stockCountCode} /> — registre lá.
+                    </span>
+                  ))}
+                </div>
+              )}
+            </fieldset>
           )}
 
-          <div className="field">
-            <label>
-              Saldo sistema
-              <DicaDoCampo id="estoque.saldoSistema" />
-            </label>
-            <div className="field-readonly-value">
-              {loadingScope
-                ? "Carregando…"
-                : systemQuantity !== null
-                  ? formatQuantityWithUnit(systemQuantity, selectedItem?.unitCode ?? null)
-                  : "—"}
+          {posicoes.erro && <p className="form-alert field--full">{posicoes.erro}</p>}
+          {retidaDoItem && (
+            <div className="field--full">
+              <AvisoDeRetencao retida={retidaDoItem} rotulo={`${retidaDoItem.itemCode}`} />
             </div>
-          </div>
+          )}
+          {semPosicao && (
+            <p className="field__hint field--full">Nenhuma posição deste item para contar.</p>
+          )}
 
-          <div className="field">
-            <label htmlFor="count-quantity">
-              Contagem física <span className="req">*</span>
-            </label>
-            <DecimalField
-              id="count-quantity"
-              scale={CASAS_QUANTIDADE}
-              placeholder="0"
-              value={countedQuantity}
-              onChangeValue={setCountedQuantity}
-              disabled={systemQuantity === null}
-              aria-invalid={contagemIlegivel || undefined}
-            />
-            {erroDaContagem && <p className="field__error">{erroDaContagem}</p>}
-          </div>
+          {!retidaDoItem && (
+            <>
+              <div className="field">
+                <label>
+                  Saldo sistema
+                  <DicaDoCampo id="estoque.saldoSistema" />
+                </label>
+                <div className="field-readonly-value">
+                  {itemId && posicoes.carregando
+                    ? "Carregando…"
+                    : systemQuantity !== null
+                      ? formatQuantityWithUnit(systemQuantity, unidade)
+                      : "—"}
+                </div>
+              </div>
 
-          <div className="field">
-            <label>
-              Diferença
-              <DicaDoCampo id="estoque.diferenca" />
-            </label>
-            <div className="field-readonly-value">
-              {formatQuantityWithUnit(difference, selectedItem?.unitCode ?? null)}
-            </div>
-          </div>
+              <div className="field">
+                <label htmlFor="count-quantity">
+                  Contagem física <span className="req">*</span>
+                </label>
+                <DecimalField
+                  id="count-quantity"
+                  scale={CASAS_QUANTIDADE}
+                  placeholder="0"
+                  value={countedQuantity}
+                  onChangeValue={setCountedQuantity}
+                  disabled={systemQuantity === null}
+                  aria-invalid={contagemIlegivel || undefined}
+                />
+                {erroDaContagem && <p className="field__error">{erroDaContagem}</p>}
+              </div>
 
-          {hasDifference && (
-            <div className="field field--full">
-              <label htmlFor="count-reason">
-                Motivo <span className="req">*</span>
-              </label>
-              <textarea
-                id="count-reason"
-                rows={3}
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-              />
-            </div>
+              <div className="field">
+                <label>
+                  Diferença
+                  <DicaDoCampo id="estoque.diferenca" />
+                </label>
+                <div className="field-readonly-value">
+                  {difference === null ? "—" : `${diferencaComSinal(difference)}${unidade ? ` ${unidade}` : ""}`}
+                </div>
+              </div>
+
+              {hasDifference && (
+                <div className="field field--full">
+                  <label htmlFor="count-reason">
+                    Motivo <span className="req">*</span>
+                  </label>
+                  <textarea
+                    id="count-reason"
+                    rows={3}
+                    value={reason}
+                    onChange={(event) => setReason(event.target.value)}
+                  />
+                </div>
+              )}
+            </>
           )}
         </div>
 
-        {error && <p className="form-alert" role="alert">{error}</p>}
+        {recusa?.tipo === "saldo-mudou" && (
+          <div className="form-alert" role="alert">
+            <p>{recusa.mensagem} Nada foi ajustado.</p>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              onClick={() => {
+                setRecusa(null);
+                setRecarga((atual) => atual + 1);
+              }}
+            >
+              Atualizar o saldo
+            </button>
+          </div>
+        )}
+        {recusa?.tipo === "retida" && (
+          <div className="form-alert" role="alert">
+            <p>
+              {recusa.mensagem}
+              {recusa.retida && (
+                <>
+                  {" "}
+                  <EntityLink kind="stockCount" id={recusa.retida.stockCountId} code={recusa.retida.stockCountCode} />
+                </>
+              )}{" "}
+              Nada foi ajustado.
+            </p>
+          </div>
+        )}
+        {recusa?.tipo === "outra" && (
+          <p className="form-alert" role="alert">
+            {recusa.mensagem}
+          </p>
+        )}
 
         <div className="line-actions">
           <button
@@ -383,16 +476,23 @@ export function StockCountPage() {
       {result && (
         <FormSection title="Resultado">
           <dl className="definition-list">
+            <dt>Documento</dt>
+            <dd>
+              <EntityLink kind="stockCount" id={result.stockCountId} code={result.stockCountCode} />
+            </dd>
             <dt>Saldo sistema</dt>
-            <dd>{formatQuantity(result.systemQuantity)}</dd>
+            <dd>{formatQuantityWithUnit(result.systemQuantity, unidade)}</dd>
             <dt>Contagem física</dt>
-            <dd>{formatQuantity(result.countedQuantity)}</dd>
+            <dd>{formatQuantityWithUnit(result.countedQuantity, unidade)}</dd>
             <dt>Diferença</dt>
-            <dd>{formatQuantity(result.difference)}</dd>
+            <dd>
+              {diferencaComSinal(result.difference)}
+              {unidade ? ` ${unidade}` : ""}
+            </dd>
             <dt>Ajuste gerado</dt>
             <dd>
               {result.movementCreated
-                ? `${result.movementCreated.type === "ADJUSTMENT_IN" ? "Ajuste de entrada" : "Ajuste de saída"} — ${formatQuantity(result.movementCreated.quantity)}`
+                ? `${result.movementCreated.type === "ADJUSTMENT_IN" ? "Ajuste de entrada" : "Ajuste de saída"} — ${formatQuantityWithUnit(result.movementCreated.quantity, unidade)}`
                 : "Nenhum — contagem confere com o sistema"}
             </dd>
           </dl>

@@ -11,8 +11,11 @@ decisões fechadas". `READY_TO_IMPLEMENT = YES`.
 
 **FATIA 2A IMPLEMENTADA** em 2026-09-16 (telas até Em revisão: lista, novo inventário com prévia, detalhe, contagem no
 desktop e em 390px, fila local, conflito, posições, ocorrências, cancelamento e conclusão da primeira contagem), sobre o
-discovery das telas INVENTORY-PHYSICAL-COUNT-UI-DISCOVERY-01, persistido em "Addendum — discovery das telas". Fatia 2B
-(revisão, decisão e encerramento pela tela) e Fatia 3 (FO-01 de sessão e CSV) pendentes.
+discovery das telas INVENTORY-PHYSICAL-COUNT-UI-DISCOVERY-01, persistido em "Addendum — discovery das telas".
+
+**FATIA 2B IMPLEMENTADA** em 2026-09-16 (revisão, recontagem, decisão com confirmação de movimentação, encerramento com
+a consequência por unidade e recusa por posição, Contagem rápida reformulada, `INV-` em Movimentações e filtros de lote),
+sem migration — o ciclo operacional pela tela está completo. Fatia 3 (FO-01 de sessão e CSV) pendente.
 
 Leitura original, mantida como histórico: `EM_ANALISE` — 2026-09-15. Análise lida sobre `origin/main` = `c63c124`.
 
@@ -1562,6 +1565,33 @@ INVENTORY-PHYSICAL-COUNT-01, telas até Em revisão, sobre o addendum das telas 
   recusada fica à vista para descartar.
 - `StockCountApiError` só nas chamadas do inventário; `EntityLink` ganha `stockCount`; ajuda `estoque.inventarioFisico`.
 
+### FATIA 2B IMPLEMENTADA — 2026-09-16
+
+INVENTORY-PHYSICAL-COUNT-01, revisar, decidir e encerrar pela tela. **Sem migration.** Decisões do PO no handoff: movimentos
+da posição só em leitura; aba Contagens rápidas com o resultado; **sem endpoint de pré-checagem** — a tela tenta encerrar e
+mostra as recusas; Contagem rápida detecta retenção antes de expor saldo; `INV-` com link em Movimentações; filtros extras
+começando por local, e situação/validade; só a última decisão e a última recontagem persistidas.
+
+- **API, só acréscimos:** `GET /stock-counts/:id/positions/:positionId/movements` (janela e recorte da marca, cego até a
+  revelação, `afterCount` e `retroactive` por movimento); `expectedAdjustments` no `complete` com recusa
+  `stock_count_changed` quando o conjunto a aplicar não é o mostrado — **acréscimo ao desenho** de "Encerramento": o
+  diálogo precisa explicar a consequência real, e sem conferir o que foi mostrado outro revisor podia mudar decisões entre
+  abrir e confirmar; `quickResult` no resumo; `stockCountId`/`stockCountCode` no movimento pela FK 1:1 (R-03 e CSV
+  também); `locationContains`, `lotStatuses` e `expiry`/`expiringWithinDays` no escopo, que tiram a posição de item sem
+  lote. "Pré-checagem do encerramento" da UX recomendada ficou fora por decisão do PO.
+- **Revisão:** recortes (divergentes, com movimentação, recontagem pedida, decididas, conferem, sem contagem, retiradas,
+  recusadas), seleção pelo id, histórico por posição com registros e movimentos, cartões abaixo de 640px.
+- **Recontagem:** rota existente; a tela de contagem da 2A já contava a rodada seguinte sem a anterior nem saldo na cega.
+- **Decisão:** Ajustar/Não ajustar, motivo com a regra da API, confirmação de movimentação marcada à mão por posição na
+  primeira rodada, depois dos movimentos à vista; nunca inferida.
+- **Encerramento:** consequência lida da revisão fresca, com somas por unidade em `Decimal` do shared; recusa por posição
+  com saldo, ajuste, reservado e motivo, e recontar / redecidir / contar / voltar à revisão.
+- **Contagem rápida:** posições pela prévia em modo com saldo (a retida volta sem saldo e com o `INV-`),
+  `expectedSystemQuantity`, `Decimal`, `INV-` no resultado.
+- **Achado, não corrigido:** INVENTORY-CONFIRMATION-AFTER-DECISION-01 — a confirmação de movimentação continua valendo para
+  movimentos lançados depois da decisão, e a recontagem dispensa a confirmação para os lançados depois dela; a proposta
+  (confirmação vale até o instante da decisão) toca quantidade e espera o PO.
+
 ## Histórico de decisões
 
 - 2026-09-15 — Discovery executado sobre `c63c124`; status `EM_ANALISE`; D1–D8 e P1–P7 abertas.
@@ -1575,3 +1605,7 @@ INVENTORY-PHYSICAL-COUNT-01, telas até Em revisão, sobre o addendum das telas 
 - 2026-09-16 — FATIA 2A IMPLEMENTADA (INVENTORY-PHYSICAL-COUNT-01), sem migration. Nada do desenho mudou: a leitura de
   `POST positions` passou a ser a de quem conta, que é o que a regra de cegueira já pedia. Status segue `DECIDIDO` até a
   2B e a Fatia 3.
+- 2026-09-16 — FATIA 2B IMPLEMENTADA (INVENTORY-PHYSICAL-COUNT-01), sem migration. Decisões do PO: sem pré-checagem do
+  encerramento, só a última decisão/recontagem persistida. Desenho acrescido num ponto: o encerramento confere os ajustes
+  que a tela mostrou (`expectedAdjustments`, recusa `stock_count_changed`). Achado INVENTORY-CONFIRMATION-AFTER-DECISION-01
+  para o PO. Status segue `DECIDIDO` até a Fatia 3.

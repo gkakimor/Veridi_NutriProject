@@ -1,6 +1,8 @@
 import { z } from "zod";
 import {
+  LOT_STATUSES,
   STOCK_COUNT_DECISIONS,
+  STOCK_COUNT_EXPIRY_FILTERS,
   STOCK_COUNT_FINDING_KINDS,
   STOCK_COUNT_KINDS,
   STOCK_COUNT_MAX_POSITIONS,
@@ -37,10 +39,19 @@ export const stockCountScopeSchema = z
     customerId: idSchema.optional(),
     itemIds: z.array(idSchema).min(1).max(TETO_DE_LISTA).optional(),
     lotIds: z.array(idSchema).min(1).max(TETO_DE_LISTA).optional(),
+    // Filtros de lote (Fatia 2B): local, situação e validade.
+    locationContains: z.string().trim().min(1).max(100).optional(),
+    lotStatuses: z.array(enumDe(LOT_STATUSES)).max(LOT_STATUSES.length).optional(),
+    expiry: enumDe(STOCK_COUNT_EXPIRY_FILTERS).optional(),
+    expiringWithinDays: z.number().int().min(1).max(3650).optional(),
   })
   .refine((scope) => !scope.customerId || scope.owner === "CUSTOMER", {
     message: "Cliente específico só com propriedade de cliente",
     path: ["customerId"],
+  })
+  .refine((scope) => (scope.expiry === "EXPIRING") === (scope.expiringWithinDays !== undefined), {
+    message: "\"Vence em até\" pede o número de dias, e o número de dias só vale com ele",
+    path: ["expiringWithinDays"],
   });
 
 export const previewStockCountSchema = z.object({
@@ -125,6 +136,20 @@ export const cancelStockCountSchema = z.object({
   reason: motivoSchema,
 });
 
+/*
+ * Encerramento (Fatia 2B). `expectedAdjustments` é o conjunto de ajustes que o
+ * diálogo mostrou; ausente, o encerramento segue o contrato da Fatia 1.
+ */
+export const completeStockCountSchema = z.object({
+  expectedAdjustments: z
+    .array(z.object({ positionId: idSchema, entryId: idSchema }))
+    .max(STOCK_COUNT_MAX_POSITIONS)
+    .refine((ajustes) => semRepeticao(ajustes.map((ajuste) => ajuste.positionId)), {
+      message: "Posição repetida na lista",
+    })
+    .optional(),
+});
+
 export const createStockCountFindingSchema = z
   .object({
     kind: enumDe(STOCK_COUNT_FINDING_KINDS),
@@ -150,4 +175,5 @@ export type ListStockCountsQuery = z.infer<typeof listStockCountsQuerySchema>;
 export type RegisterStockCountEntryBody = z.infer<typeof registerStockCountEntrySchema>;
 export type AddStockCountPositionBody = z.infer<typeof addStockCountPositionSchema>;
 export type DecideStockCountBody = z.infer<typeof decideStockCountSchema>;
+export type CompleteStockCountBody = z.infer<typeof completeStockCountSchema>;
 export type CreateStockCountFindingBody = z.infer<typeof createStockCountFindingSchema>;

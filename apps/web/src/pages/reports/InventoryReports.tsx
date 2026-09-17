@@ -277,6 +277,7 @@ const MOVEMENT_DOCUMENT_PATHS: Record<string, string> = {
   PRODUCTION_ORDER: "/producao/ordens",
   SHIPMENT: "/comercial/expedicoes",
   PROJECT_SAMPLE: "/comercial/amostras",
+  STOCK_COUNT: "/estoque/inventario",
 };
 
 /** R-03 — Movimentações. */

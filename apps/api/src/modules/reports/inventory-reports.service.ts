@@ -304,6 +304,7 @@ export async function getMovementsReport(
         productionConsumption: { include: { productionOrder: true } },
         productionOutput: { include: { productionOrder: true } },
         shipmentLine: { include: { shipment: true } },
+        stockCountPosition: { select: { stockCount: { select: { id: true, code: true } } } },
       },
       orderBy: { occurredAt: "desc" },
       ...pageArgs(pagination),
@@ -349,6 +350,11 @@ export async function getMovementsReport(
       documentCode = movement.shipmentLine.shipment.code;
       documentKind = "SHIPMENT";
       documentId = movement.shipmentLine.shipmentId;
+    } else if (movement.stockCountPosition) {
+      // Ajuste de inventário: o INV- pela FK 1:1 da posição (INVENTORY-PHYSICAL-COUNT-01, Fatia 2B).
+      documentCode = movement.stockCountPosition.stockCount.code;
+      documentKind = "STOCK_COUNT";
+      documentId = movement.stockCountPosition.stockCount.id;
     } else if (movement.sourceType === "PROJECT_SAMPLE" && movement.sourceId) {
       const sample = samplesById.get(movement.sourceId);
       if (sample) {

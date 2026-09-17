@@ -58,6 +58,7 @@ type MovementWithRelations = InventoryMovement & {
   lot: Lot | null;
   receiptLine: ReceiptLineChain | null;
   shipmentLine: ShipmentLineChain | null;
+  stockCountPosition: { stockCount: { id: string; code: string } } | null;
 };
 
 const movementInclude = {
@@ -65,6 +66,8 @@ const movementInclude = {
   lot: true,
   receiptLine: { include: { receipt: { include: { purchaseOrder: true } } } },
   shipmentLine: { include: { shipment: true } },
+  // O ajuste de inventário aponta o documento pela FK 1:1 da posição, não pelo `sourceId`.
+  stockCountPosition: { select: { stockCount: { select: { id: true, code: true } } } },
 } as const;
 
 /**
@@ -141,6 +144,8 @@ function toMovementDTO(
     productionOrderCode: fromProduction ? sourceCode : null,
     projectSampleId: movement.sourceType === "PROJECT_SAMPLE" && sourceCode ? movement.sourceId : null,
     projectSampleCode: movement.sourceType === "PROJECT_SAMPLE" ? sourceCode : null,
+    stockCountId: movement.stockCountPosition?.stockCount.id ?? null,
+    stockCountCode: movement.stockCountPosition?.stockCount.code ?? null,
     reason: movement.reason,
     createdBy: movement.createdBy,
     createdAt: movement.createdAt.toISOString(),
@@ -154,6 +159,21 @@ export async function getMovementById(id: string): Promise<InventoryMovementDTO 
   });
   if (!movement) return null;
   return toMovementDTO(movement, await resolveSourceCodes([movement]));
+}
+
+/** Movimentos na ordem dos ids recebidos, com a origem resolvida em lote. */
+export async function getMovementsByIds(ids: readonly string[]): Promise<InventoryMovementDTO[]> {
+  if (ids.length === 0) return [];
+  const movements = await getPrisma().inventoryMovement.findMany({
+    where: { id: { in: [...ids] } },
+    include: movementInclude,
+  });
+  const sourceCodes = await resolveSourceCodes(movements);
+  const porId = new Map(movements.map((movement) => [movement.id, toMovementDTO(movement, sourceCodes)]));
+  return ids.flatMap((id) => {
+    const dto = porId.get(id);
+    return dto ? [dto] : [];
+  });
 }
 
 /** Resumo de disponibilidade para um lote de itens — usado por listagem e detalhe. */

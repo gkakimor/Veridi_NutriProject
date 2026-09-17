@@ -110,6 +110,13 @@ export interface InventoryMovementDTO {
   /** Consumo de amostra — o teste Tn que originou o movimento. */
   projectSampleId: string | null;
   projectSampleCode: string | null;
+  /**
+   * Ajuste de Inventário Físico ou de Contagem rápida — o documento `INV-` da
+   * posição ligada ao movimento. `null` no ajuste `STOCK_COUNT` anterior às
+   * sessões, que não tem documento.
+   */
+  stockCountId: string | null;
+  stockCountCode: string | null;
   reason: string | null;
   createdBy: string | null;
   createdAt: string;
