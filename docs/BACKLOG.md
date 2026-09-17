@@ -29,7 +29,7 @@ zero BLOCKER. O MVP foi entregue; o que está aqui é evolução do produto.
 | 2b | P1 | ~~**FORMULATION-TEMPLATE-TECHNICAL-SHEET-PDF-01**~~ — Ficha Técnica do Modelo de Formulação em PDF real | **FECHADO em 2026-09-16, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · mesmo documento da ficha do Produto sobre read model neutro (moldura por fonte, corpo técnico compartilhado), adaptador do Modelo com os derivados do motor de `@veridi/shared` · "Matriz de biblioteca — não é documento de Produto", Rascunho/Ativo/Arquivado, legado sem forma · ação no cabeçalho e no histórico · **sem migration** · ficha do Produto com texto idêntico | Publicação quando o PO decidir (detalhe em [`PROJECT_STATE.md`](PROJECT_STATE.md)) | — |
 | 3 | P1 | ~~**BILLED-VALUE-CANONICAL-01**~~ — "Valor faturado" do Painel, R-15 e R-14 igual ao valor do documento | **FECHADO em 2026-09-15** · D1 decidida pelo PO: `Billing.totalAmount` · sem migration | — (entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
 | 4 | P1 | **E2E-BASELINE-REDESIGN-WAVE-04** — grupo C das E2E com massa própria | Discovery `EM_ANALISE`; P1 e a espera da 4E resolvidas pelo estado posterior | PO fecha P2–P8 ([abaixo](#wave-4--decisões-ainda-reais)); 4A pode começar | — |
-| 5 | P1 | **INVENTORY-PHYSICAL-COUNT-01** — Inventário Físico em sessões de inventário | Discovery `DECIDIDO` · **Fatia 1 (domínio e API) entregue em 2026-09-15** | Fatia 2 — telas (home, novo inventário com preview, grade, revisão, encerramento, Contagem rápida renomeada); depois Fatia 3 — FO-01 de sessão e CSV ([discovery](discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md)) | — |
+| 5 | P1 | **INVENTORY-PHYSICAL-COUNT-01** — Inventário Físico em sessões de inventário | Discovery `DECIDIDO` · **Fatia 1 (domínio e API) entregue em 2026-09-15** · **Fatia 2A (telas até Em revisão: lista, novo com prévia, detalhe, contagem no desktop e em 390px, fila local, conflito, posições, ocorrências, cancelar, concluir a primeira contagem) entregue em 2026-09-16, na `main` e fora de PROD** · sem migration | Fatia 2B — revisão, decisão e encerramento pela tela ([lista](#inventário-físico--status)); depois Fatia 3 — FO-01 de sessão e CSV ([discovery](discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md)) | — |
 | 6 | P1 | ~~Decisões de **FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01** → MANAGEMENT-DASHBOARD-V1-01~~ (Painel Gerencial) | **FECHADO em 2026-09-15** · D2–D5 decididas pelo PO · versão 1 entregue · sem migration | — (entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
 | 7 | P1 | Decisões de **PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01** → PRODUCTION-PERMISSION-HARDENING-01 | Discovery `EM_ANALISE` · P1 e P6 bloqueiam | PO fecha P1 e P6 (e confirma P2–P5, P7, P8); implementar | — |
 | 8 | P1 | Decisões de **WAVE-05-GOLDEN-PATH-DISCOVERY-01** → E2E-BASELINE-REDESIGN-WAVE-05 (golden path) | Discovery `EM_ANALISE` · Q3 bloqueia | PO fecha Q3 e as demais; passos 1–2 do plano não dependem de decisão | WAVE 4 entregue |
@@ -99,9 +99,24 @@ Absorve E2E-CORPUS-MASS-01: o que sobrava dele (grupo C e a suíte de `PROD-0002
 (opção F de concorrência, recontagem opcional, sem tolerância, ADMIN/PRODUCTION/QUALITY contam e aprovam), documento em
 [`discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md`](discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md).
 **Fatia 1 entregue em 2026-09-15** (INVENTORY-PHYSICAL-COUNT-01): domínio, schema e API das sessões, e a Contagem rápida
-gravando `INV-` QUICK. Abertos: Fatia 2 (telas, e no montador os filtros de qualidade/validade, última contagem,
-movimentação e local) e Fatia 3 (FO-01 de sessão e CSV controlado). Regularização de material sem lote (P7),
-inventário cíclico, scanner dedicado e localizações seguem FUTURO.
+gravando `INV-` QUICK. **Fatia 2A entregue em 2026-09-16**, sobre o discovery das telas
+(INVENTORY-PHYSICAL-COUNT-UI-DISCOVERY-01, addendum do documento, DU-1 a DU-6): as telas contam até Em revisão.
+
+**Fatia 2B — aberta, preservada da 2A** (nada disso foi construído):
+
+- ações de revisão pela tela: recontagem pedida, inclusive em lote ("todas as divergências"), e a contagem da rodada
+  seguinte;
+- decisão Ajustar/Não ajustar com motivo, confirmação de movimentação durante o inventário e encerramento com os ajustes;
+- movimentos da posição depois da referência, e pré-checagem do encerramento (saldo e reservado hoje só chegam na recusa
+  409); `hasConcurrentMovement` marca também movimento posterior à contagem;
+- adicionar posição em revisão pela tela (a API aceita e responde sem saldo a quem conta; a 2A só oferece em contagem);
+- Contagem rápida reformulada: `expectedSystemQuantity` em decimal, retenção antecipada da posição, resultado com o
+  `INV-`; aba Contagens rápidas rica (item, diferença, ajuste); retenção leve;
+- filtros extras do montador (qualidade/validade, última contagem, movimentação, local) e `INV-` em Movimentações
+  (`InventoryMovementDTO` não traz o código).
+
+Depois: Fatia 3 (FO-01 de sessão e CSV controlado). Regularização de material sem lote (P7), inventário cíclico, scanner
+dedicado e localizações seguem FUTURO.
 
 ### Painel Gerencial — status
 
