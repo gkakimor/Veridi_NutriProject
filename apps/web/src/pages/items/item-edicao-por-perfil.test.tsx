@@ -25,7 +25,7 @@ vi.mock("../../lib/items-api", async (original) => ({
   createItemCostReference: vi.fn(),
 }));
 vi.mock("../../lib/units-api", () => ({ listUnits: vi.fn() }));
-vi.mock("../../components/SupplierItemsSection", () => ({ SupplierItemsSection: () => null }));
+vi.mock("../supplier-items/FornecedoresDoItem", () => ({ FornecedoresDoItemSection: () => null }));
 
 /** O perfil da sessão, trocado por caso — a lista e o formulário leem a mesma sessão. */
 const sessao = vi.hoisted(() => ({ role: "ADMIN" }));

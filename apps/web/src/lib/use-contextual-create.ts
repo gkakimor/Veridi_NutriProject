@@ -53,6 +53,13 @@ export function useContextualCreateOrigin<Rascunho extends Record<string, unknow
    * navegação, e selecionar em silêncio esconderia o bug.
    */
   onCreated: (result: ContextualCreateResult, record: ContextualCreateRecord) => void;
+  /**
+   * `false` desliga a retomada. Formulário aberto num contexto que não sai para
+   * criar — a relação Item × Fornecedor aberta de dentro do cadastro do Item —
+   * não pode consumir o rascunho pendente de outro formulário da mesma rota.
+   * Padrão: ligado.
+   */
+  enabled?: boolean;
 }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -74,7 +81,7 @@ export function useContextualCreateOrigin<Rascunho extends Record<string, unknow
   const tokenNaUrl = searchParams.get(PARAM_RETOMAR);
 
   useEffect(() => {
-    if (jaRetomou.current || saindo.current) return;
+    if (callbacks.current.enabled === false || jaRetomou.current || saindo.current) return;
 
     /*
      * Dois caminhos chegam aqui. O normal é o `?retomar=` que a tela de

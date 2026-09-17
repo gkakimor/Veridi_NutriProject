@@ -5351,6 +5351,43 @@ depois; web 5: todo perfil decide, pedido com os campos, seletor para todos, det
 pendente só de quem decide), com restauração conferida pelo hash do diff. Typecheck de shared, API e web sobre o merge.
 Sem suíte completa, smoke, E2E nem Railway.
 
+## Fornecedores administráveis no cadastro do Item (ITEM-SUPPLIER-UX-01, 2026-09-16)
+
+**Fecha ITEM-SUPPLIER-UX-01** (Fatia 1 do [ITEM-SUPPLIER-UX-DISCOVERY-01](discovery/ITEM-SUPPLIER-UX-DISCOVERY-01.md),
+agora `IMPLEMENTADO`). O handoff reapresentou as decisões cujo texto se perdera: **D1** seção do Item administrável
+(implementada), **D2** tela geral mantida, **D3** já implementada, **D4** Fornecedor → Itens em capability separada
+(SUPPLIER-ITEMS-UX-01), **D5** lead time fora. Regra durável no §102. Na `main`, fora de PROD (`release/prod` segue
+`5b7c1a3`). **Sem migration e sem API nova.**
+
+**Web.** `pages/supplier-items/FornecedoresDoItem.tsx` substitui a seção só leitura no `ItemFormModal` (também em
+consulta): todas as relações do item por `useListQuery` (`GET /supplier-items?itemId=`), preferencial primeiro e
+inativas no fim, com código, código no fornecedor, homologação, oferta de hoje com validade e as marcas separadas
+Preferencial, Relação inativa e Fornecedor inativo. Compras e Administrador (`usePodeManterRelacao`, lista
+`SUPPLIER_ITEM_EDIT_ROLES`) veem "Adicionar fornecedor" e "Definir como preferencial" na linha elegível; a linha abre o
+`SupplierItemDetailModal` por cima do Item, onde a Qualidade homologa e bloqueia; os demais consultam. Produto acabado
+e item inativo não recebem a ação, com o porquê. `SupplierItemFormModal` ganhou `itemFixo` (sem seletor de Item, sem
+"+ Novo fornecedor", unidade do Item na linha de base, retomada desligada por `enabled` no `useContextualCreateOrigin`)
+e a duplicidade: fornecedor que o item já tem, pela lista ou pelo 409 `already_exists` (`AlreadyExistsApiError`), leva a
+"Abrir relação existente". `preferencial.tsx` concentra a elegibilidade e o `ConfirmarPreferencialDialog` ("X
+substituirá Y…"), usado na linha, no detalhe aberto do Item (`preferencialDoItem`, que acompanha o que o detalhe grava)
+e no Administrador que cria já preferencial; a troca é a rota atômica. Tela geral sem mudança (D2);
+`SupplierItemsSection` ficou só com o lado do Fornecedor. Ajuda "Como funciona" do Item e de Item × Fornecedor.
+
+**Achados corrigidos no caminho.** `FullWorkspaceModal`: Escape com confirmação aberta fechava também o modal de baixo
+— cancelar a troca de preferencial fechava o Item; agora cancela só a confirmação. Em 390px a coluna de ações fixa
+cobria o nome do fornecedor; a linha empilha abaixo de 640px, como a do Pedido (`table--fornecedores-do-item`).
+
+**Validação.** Web: `fornecedores-do-item.test.tsx` (33 casos: zero, um e vários fornecedores; marcas; carregando e
+falha; matriz dos seis perfis na seção e no detalhe; Qualidade homologando pelo detalhe; produto acabado, embalagem e
+item inativo; Compras criando `PENDING` com o Item fixo; sem "+ Novo fornecedor" e sem retomar rascunho alheio; cancelar
+sem descarte; Administrador criando já preferencial com confirmação; duplicidade pela lista e pelo 409; troca com uma
+chamada e um preferencial só; recusa da API; confirmação no detalhe; regra de 390px), `modal-stacking.test.tsx` (Escape
+na confirmação) e `erro-de-dominio-na-tela.test.ts` (409 tipado); conjunto focado de 63 arquivos e 949 testes (Item,
+Fornecedor, Item × Fornecedor, OC, guardas de fonte e de ajuda, telas com Escape e com criação no contexto). Mutação por
+script, 27 de 27 derrubadas, com restauração conferida pelo hash do diff. Typecheck de shared, API e web. Conferência
+visual local em 1440 e 390 (Vite do worktree contra a API do dev, sessão de 30 min revogada, POST do preferencial
+respondido pelo script e demais escritas bloqueadas): 48 de 48, console limpo. Sem suíte completa, E2E nem Railway.
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a

@@ -57,7 +57,7 @@ export const cadastrosTopics = {
       },
       {
         term: "Fornecedores",
-        text: "Na edição, a lista de quem fornece o item, com homologação, preferencial, preço e pedido mínimo — só leitura. Cadastrar relação, homologar e registrar preço acontecem em Compras › Item × Fornecedor.",
+        text: "Na edição, quem fornece o item: homologação, preferencial e a oferta de hoje, com relação inativa e fornecedor inativo marcados à parte. Compras e Administrador adicionam fornecedor com o item já escolhido e definem o preferencial na linha; Qualidade e Administrador homologam e bloqueiam no detalhe da relação, que abre por cima do item. Compras › Item × Fornecedor continua mostrando as relações de todos os itens.",
       },
     ],
     flows: [
@@ -135,6 +135,7 @@ export const cadastrosTopics = {
       "Inativar não exclui e não interrompe o que já está em curso: recebimento contra ordem de compra existente, consumo de produção e saldo em estoque continuam funcionando. O que o item deixa de aceitar é vínculo novo — nova relação com fornecedor, nova linha de ordem de compra, novo produto acabado e novo componente de formulação.",
       "Referência manual de custo é estimativa: entra na seleção automática só depois de compra real e oferta válida. Existindo compra real nos últimos 30 dias, é a compra que vale — a referência fica registrada e a tela do item diz que ela não está sendo usada. Várias ofertas válidas sem preferencial também não deixam a referência entrar sozinha: a fonte fica em “Ofertas disponíveis · seleção necessária” até alguém definir o preferencial. Material do cliente nunca ganha custo Veridi, mesmo com referência no item.",
       "Na lista, a busca casa código, nome ou código de barras; os filtros são por tipo e por situação. Marcar linhas permite exportar só o que foi marcado; Exportar CSV sem marcação leva o recorte filtrado.",
+      "Na seção Fornecedores, a relação criada por Compras nasce Pendente, e um fornecedor que o item já tem não vira segunda relação: a tela abre a que existe. Trocar o preferencial pede confirmação dizendo quem deixa de ser, e só relação ativa e homologada pode ser preferencial. Produto acabado não tem fornecedor.",
       "Criar e editar o item são de Compras, Qualidade, Produção e Administrador; Comercial e Consulta abrem o item em consulta. Os quatro controles de rastreabilidade só mudam por Qualidade ou Administrador — quem cria sem ser deles recebe o padrão do tipo —, Consumido na produção só por Produção ou Administrador, e o custo de referência, inclusive o inicial, só por Comercial ou Administrador. Inativar é de Compras, Qualidade e Administrador; reativar, de Qualidade e Administrador.",
     ],
   },

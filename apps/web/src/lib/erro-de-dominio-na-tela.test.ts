@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { apiErrorMessage, parseJsonOrThrow } from "./api-errors";
+import { describe, expect, it, vi } from "vitest";
+import { AlreadyExistsApiError, apiErrorMessage, parseJsonOrThrow } from "./api-errors";
 
 /**
  * Recusa de regra de negócio chega à tela com as palavras do domínio.
@@ -50,5 +50,37 @@ describe("erro de domínio 400 com `message`", () => {
     expect(texto).not.toMatch(/Erro interno do servidor/i);
     expect(texto).not.toMatch(/Falha na requisição/i);
     expect(texto).not.toBe("Falha ao aplicar o Plano de Atendimento");
+  });
+});
+
+/*
+ * O cadastro do Item leva à relação Item × Fornecedor que já existe
+ * (ITEM-SUPPLIER-UX-01): precisa distinguir a recusa de duplicidade sem comparar
+ * texto, e quem só mostra a mensagem continua lendo a mesma frase.
+ */
+describe("409 `already_exists`", () => {
+  const DUPLICADA = "Este fornecedor já está cadastrado para o item.";
+
+  it("vira AlreadyExistsApiError com a mensagem da API", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const erro = await parseJsonOrThrow(
+      resposta(409, { error: "already_exists", message: DUPLICADA }),
+    ).catch((e: unknown) => e);
+
+    expect(erro).toBeInstanceOf(AlreadyExistsApiError);
+    expect(apiErrorMessage(erro, "Falha ao criar a relação")).toBe(DUPLICADA);
+  });
+
+  it("outro 409 continua erro comum", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const erro = await parseJsonOrThrow(
+      resposta(409, {
+        error: "not_eligible_preferred",
+        message: "Só um fornecedor homologado e ativo pode ser o preferencial do item.",
+      }),
+    ).catch((e: unknown) => e);
+
+    expect(erro).toBeInstanceOf(Error);
+    expect(erro).not.toBeInstanceOf(AlreadyExistsApiError);
   });
 });

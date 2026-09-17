@@ -22,8 +22,8 @@ vi.mock("../../lib/items-api", () => ({
   updateItem: vi.fn(),
 }));
 vi.mock("../../lib/units-api", () => ({ listUnits: vi.fn() }));
-vi.mock("../../components/SupplierItemsSection", () => ({
-  SupplierItemsSection: () => null,
+vi.mock("../supplier-items/FornecedoresDoItem", () => ({
+  FornecedoresDoItemSection: () => null,
 }));
 vi.mock("../../components/ItemCostReferenceSection", () => ({
   ItemCostReferenceSection: () => null,

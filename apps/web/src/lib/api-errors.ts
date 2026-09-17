@@ -138,6 +138,21 @@ export class NotFoundApiError extends Error {
   }
 }
 
+/**
+ * 409 `already_exists`: o registro que se tentou criar já existe — hoje, a
+ * relação Item × Fornecedor do mesmo par.
+ *
+ * Mesma mensagem de antes, então quem só mostra `err.message` não muda. Quem
+ * pode levar ao registro existente (o cadastro do Item, ITEM-SUPPLIER-UX-01)
+ * distingue a recusa sem comparar texto.
+ */
+export class AlreadyExistsApiError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AlreadyExistsApiError";
+  }
+}
+
 /** Falha do servidor: chegou lá, mas ele não conseguiu responder. */
 export class ApiServerError extends Error {
   status: number;
@@ -249,6 +264,7 @@ export async function parseJsonOrThrow(response: Response): Promise<unknown> {
     // a mensagem tratada, o console mostra o código real.
     if (code) console.warn(`API ${response.status} ${code}`);
     if (response.status === 404) throw new NotFoundApiError(message);
+    if (response.status === 409 && code === "already_exists") throw new AlreadyExistsApiError(message);
     throw new Error(message);
   }
 
