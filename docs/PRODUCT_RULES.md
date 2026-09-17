@@ -7398,3 +7398,51 @@ histórico operacional com quem, quando, o quê, quanto, destino e custo.
 
 **Migration.** `20260925093035_internal_consumption` — enum `CostSource` (espelho do tipo do shared), os dois valores de
 enum do ledger, a tabela `internal_consumptions` e a sequence `internal_consumption_code_seq`.
+
+## §116 — Componente inativo não inicia compromisso novo de Produção
+
+PRODUCTION-INACTIVE-COMPONENT-GATE-01 (2026-09-17), handoff do PO. Aplica à Produção a mesma família de §107 (o inativo
+não some do físico), §108 (Produto inativo não inicia compromisso novo) e §112 (Item × Fornecedor) — o que muda aqui é
+ONDE a recusa mora, não o princípio.
+
+> **A formulação ativa não é reescrita por causa da inativação; a Produção é que não assume compromisso NOVO com ela.**
+> Reativar o item destrava o mesmo passo, sem refazer nada.
+
+**Onde a guarda está.** Nos dois atos em que a Ordem de Produção passa a depender da composição:
+
+| Ato | O que ele faz | Recusa |
+|---|---|---|
+| `POST /production-orders/:id/plan` | congela produto, PA, versão e cliente da ordem | 400 `inactive_component`, antes de regravar as necessidades |
+| `POST /production-orders/:id/release` | **reserva material**, cria as partes e numera o documento | 400 `inactive_component`, antes do lock dos itens e de qualquer gravação |
+
+A liberação é a autoridade: é ela que cria efeito físico, e por isso relê a situação do item em vez de herdar a do
+planejamento — a ordem pode ter sido planejada antes da inativação. O planejamento também recusa, pela mesma razão de
+§108: quem não vai poder liberar não deve chegar planejado. Os itens conferidos na liberação são os das necessidades
+CONGELADAS, que é o que a reserva vai tomar; a formulação atual não é consultada de novo.
+
+**Recusar não deixa efeito pela metade.** Nenhuma `MaterialReservation`, nenhuma linha de reserva, nenhuma
+`ProductionOrderPart`, nenhuma numeração oficial gasta, e o estoque do componente ativo continua todo disponível. A
+ordem fica exatamente onde estava — DRAFT continua DRAFT, PLANNED continua PLANNED.
+
+**A recusa nomeia todos de uma vez.** Código, nome (lidos do CADASTRO, não do congelado — a frase manda reativar, e quem
+procura precisa do nome de hoje) e a formulação com a versão: *"a formulação V2 do produto PROD-000009 usa 2 itens
+inativos: MP-000123 — ÁCIDO ASCÓRBICO; ME-000045 — POTE PET 500ML. Reative os itens no cadastro para liberar a ordem."*
+Receita com três componentes inativados não obriga a descobrir o segundo só depois de regularizar o primeiro.
+
+**Compromisso já assumido continua.** Ordem LIBERADA ou EM PRODUÇÃO não passa pela guarda: inativar o componente depois
+não cancela a ordem, não apaga nem libera a reserva, e não impede separação, consumo, apontamento nem conclusão. O
+histórico segue inteiro.
+
+**A Formulação não muda.** Inativar o componente não inativa a versão, não altera componente histórico e não reescreve a
+versão ACTIVE; consultar formulação, custos, CMV, relatórios e a própria ordem segue liberado. Barrar a ATIVAÇÃO de
+receita com item inativo é outra guarda, que continua onde estava (`lib/formulation-component-issues.ts`).
+
+**Rascunho continua editável.** Criar a ordem, trocar produto, versão ou quantidade não passam pela guarda: nada disso é
+compromisso, e travar a criação esconderia o problema de quem precisa vê-lo. Quem recusa é planejar.
+
+**Tela.** A situação vem do servidor — `itemActive` em cada `ProductionOrderRequirementDTO`, lido a cada leitura da
+ordem, nunca congelado na necessidade. Rascunho e planejada mostram um aviso que nomeia TODOS os componentes inativos e
+diz qual passo será recusado; liberada e em execução mostram só a marca "Item inativo" na linha. Nada desabilita botão: a
+API é a autoridade, e a mensagem dela aparece inteira.
+
+**Sem migration.** Nenhuma coluna nova: `active` já existe no Item.

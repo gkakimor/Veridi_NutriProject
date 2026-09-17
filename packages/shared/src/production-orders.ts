@@ -102,6 +102,13 @@ export interface ProductionOrderRequirementDTO {
   itemCode: string;
   itemName: string;
   itemType: ItemType;
+  /**
+   * Situação ATUAL do item no cadastro, lida a cada leitura da ordem (§116) —
+   * nunca congelada na necessidade. Componente inativado depois da formulação
+   * ativa impede planejar e liberar; ordem liberada ou em execução segue, só
+   * com a marca.
+   */
+  itemActive: boolean;
   /** Decimal como string — quantidade/unidade originais da fórmula. */
   formulaQuantity: string;
   formulaUnitCode: string;

@@ -84,6 +84,7 @@ import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { TableEmptyRow } from "../../components/TableEmptyRow";
 import { ProductInactiveNotice } from "../products/ProductInactiveNotice";
+import { InactiveComponentNotice } from "./InactiveComponentNotice";
 
 interface FormulationVersionOption {
   id: string;
@@ -1047,6 +1048,16 @@ export function ProductionOrderPage() {
           />
         )}
 
+        {/* Componente da formulação inativado depois que a receita foi ativada
+            (§116): mesmo recorte de estado — planejar e liberar são recusados,
+            liberada e em execução seguem, só com a marca na linha. */}
+        {productionOrder && (productionOrder.status === "DRAFT" || productionOrder.status === "PLANNED") && (
+          <InactiveComponentNotice
+            requirements={productionOrder.requirements}
+            passo={productionOrder.status === "DRAFT" ? "planejar a ordem" : "liberar a ordem"}
+          />
+        )}
+
         {/* O ciclo inteiro atravessa esta tela — reserva, separação, consumo e
             apontamento são seções diferentes. A explicação de como eles se
             encadeiam fica no topo, e não repetida em cada uma. */}
@@ -1372,6 +1383,10 @@ export function ProductionOrderPage() {
                     <tr key={requirement.id}>
                       <td>
                         <EntityLink kind="item" id={requirement.itemId} code={requirement.itemCode} name={requirement.itemName} />
+                        {/* Situação lida agora, nunca a congelada (§116). */}
+                        {requirement.itemActive === false && (
+                          <> <span className="badge badge--inactive">Item inativo</span></>
+                        )}
                         {requirement.suggestedAllocations.length > 0 && (
                           <>
                             <br />

@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { Prisma } from "@prisma/client";
 import { FinishedItemInactiveError, ProductInactiveError } from "../../lib/product-active-gate.js";
+import { InactiveComponentError } from "../../lib/component-active-gate.js";
 import { ProductNotOperationalError } from "../../lib/product-lifecycle.js";
 import { requireRole } from "../../lib/current-user.js";
 import type { ZodError } from "zod";
@@ -128,6 +129,10 @@ function mapDomainError(
   }
   if (error instanceof FinishedItemInactiveError) {
     return { status: 400, body: { error: "inactive_finished_item", message: error.message } };
+  }
+  // Planejar ou liberar com componente da formulação inativado depois (§116).
+  if (error instanceof InactiveComponentError) {
+    return { status: 400, body: { error: "inactive_component", message: error.message } };
   }
   if (error instanceof MissingFinishedItemError) {
     return { status: 400, body: { error: "missing_finished_item", message: error.message } };
