@@ -6824,3 +6824,38 @@ relação preferencial, o diálogo diz que ela deixa de ser. Homologar e "Voltar
 mostra "Motivo / observação" em cada evento. O mesmo detalhe serve Compras › Item × Fornecedor e o cadastro do Item
 (§102), sem segundo diálogo; na nova relação, o Administrador que escolhe Bloqueado informa o "Motivo do bloqueio".
 Perfis sem autoridade não veem "Bloquear" e continuam lendo o histórico inteiro.
+
+## §105 — Custo efetivo de aquisição: Compras e Administrador informam, nas duas portas
+
+ACQUISITION-COST-PERMISSION-01, 2026-09-16, decisão do PO no handoff (autoridade) e na rodada (a porta da criação e a
+autoria).
+
+**Quem informa.** O custo efetivo de aquisição (`ReceiptLine.actualUnitCost`, §31) é informado por Compras e
+Administrador (`ACQUISITION_COST_ROLES`, `packages/shared/src/costs.ts`). Produção, Qualidade, Comercial e Consulta
+leem o custo onde já leem — documento do recebimento, lote, relatórios —, mas não o informam, não o corrigem nem o
+limpam. A referência manual de custo do Item continua de Comercial e Administrador (§53, §100): ela é estimativa, não
+custo real, e as duas listas respondem perguntas diferentes.
+
+**Duas portas, uma lista.**
+
+- `PUT /receipt-lines/:id/acquisition-cost` é o ato inteiro, limpar inclusive: quem não informa recebe 403 `forbidden`
+  antes de o corpo ser validado e antes de a linha ser lida — sem permissão, linha existente e inexistente recebem a
+  mesma resposta —, e nada é gravado.
+- `POST /purchase-orders/:id/receipts` continua aberto a toda sessão: receber não mudou. O pedido de outro perfil que
+  traz custo em alguma linha é recusado com 403 e a frase de a quem o custo cabe, antes da validação do corpo e da
+  busca da OC, e nada é gravado — nem recebimento, nem lote, nem movimento, nem saldo da OC. O custo nunca é descartado
+  em silêncio para o recebimento passar. Custo ausente, nulo ou em branco não informa nada e segue o caminho de
+  sempre.
+
+**Autoria da sessão.** `costUpdatedBy` guarda o nome do usuário da sessão nas duas portas; o PUT deixou de gravar
+"Ambiente local". Linhas antigas não mudam.
+
+**A conta não mudou.** A hierarquia `REAL → 30D → 90D → LAST_REAL → NO_COST` (§31) e a ordem das fontes (§53) são as
+mesmas: o custo que Compras informa continua sendo a fonte REAL do lote consumido e entra nas médias ponderadas do
+Item; o pedido recusado não entra em nenhuma.
+
+**A tela não finge.** No documento do recebimento, "Definir custo" e "Atualizar custo" só aparecem para quem informa;
+os demais leem o valor gravado ou "Sem custo informado". Em "Receber OC", o campo "Custo efetivo de aquisição" e
+"Usar preço da OC" só aparecem para quem informa; os demais recebem sem eles, leem em "Dados do recebimento" "O custo
+efetivo de aquisição é informado por Compras ou Administrador, no documento do recebimento.", e o envio não leva
+custo. Material do cliente continua sem custo de aquisição Veridi, para todos.

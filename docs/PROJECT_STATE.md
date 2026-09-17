@@ -5531,6 +5531,41 @@ movidas para a prévia; com os vizinhos (relatórios, listas, ajuda, UX operacio
 um `parseInt` meu, trocado pela leitura pt-BR), 29 arquivos e 565 testes depois do rebase. Typecheck de shared, API e
 web. Sem suíte completa, E2E, Playwright, mutação, conferência visual em navegador nem Railway.
 
+## Custo efetivo de aquisição só de Compras e Administrador (ACQUISITION-COST-PERMISSION-01, 2026-09-16)
+
+**Fecha ACQUISITION-COST-PERMISSION-01** (P1 registrado por MASTER-DATA-EDIT-PERMISSIONS-01, DE12). Decisão do PO no
+handoff: Compras e Administrador; na rodada, fechar também a porta da criação do recebimento e gravar o autor da sessão.
+Regra durável no §105. Na `main`, fora de PROD (`release/prod` segue `5b7c1a3`). Sem migration.
+
+**Autoridade encontrada.** O recebimento mora em Compras (menu, ajuda do módulo `compras`); relação Item × Fornecedor,
+oferta e preferencial já eram de Compras e Administrador (§100–§101); o Comercial decide a referência manual, que é
+estimativa (§53). Nada no domínio dava custo real ao Comercial.
+
+**API.** `ACQUISITION_COST_ROLES` (PURCHASING, ADMIN) em `packages/shared/src/costs.ts`. `PUT
+/receipt-lines/:id/acquisition-cost` com `exigirPerfil` antes do corpo e da linha; `setAcquisitionCost` recebe o ator e
+grava `costUpdatedBy` com o nome da sessão (antes, "Ambiente local"). Em `POST /purchase-orders/:id/receipts`,
+`costs/acquisition-cost-permissions.ts` lê o corpo cru (`recebimentoInformaCusto`) e, para outro perfil com custo em
+alguma linha, responde 403 com "Seu perfil não informa o custo efetivo de aquisição — só Compras ou Administrador.
+Confirme o recebimento sem o custo." antes da validação e da OC; sem custo (ausente, nulo, em branco) segue igual. O
+recebimento de material do cliente não tem campo de custo e não mudou.
+
+**Web.** `pages/receiving/acquisition-cost-permissions.ts` (`usePodeInformarCustoDeAquisicao` sobre `useOptionalAuth`;
+fora do provider, como antes). Documento do recebimento: "Definir custo" e "Atualizar custo" só para quem informa; valor
+e "Sem custo informado" para todos. "Receber OC": campo de custo, dica e "Usar preço da OC" só para quem informa; os
+demais leem a frase de quem informa em "Dados do recebimento", e o envio não leva `actualUnitCost`.
+
+**Validação.** API: `acquisition-cost-permissions.test.ts` (31 casos: matriz dos seis perfis; PUT de Compras e ADMIN com
+valor, nota e autor; os outros quatro com 403 e a linha idêntica no banco, limpar inclusive, e a consulta aberta; 403
+antes do corpo inválido, sem corpo e da linha inexistente, e 400/404 para quem informa; recebimento com custo 201 com
+autor para Compras e ADMIN e 403 sem recebimento, lote, movimento nem saldo de OC alterado para os outros; receber sem
+custo, ausente ou em branco, aberto a eles; 403 antes do corpo inválido e da OC inexistente; REAL do lote e média de 30
+dias depois de Compras, média de 90 dias depois do ADMIN, as três intactas depois das recusas nas duas portas) e os
+vizinhos de custos, recebimento e Item × Fornecedor: 11 arquivos e 157 testes. Web: `custo-de-aquisicao-por-perfil.test.tsx`
+(13 casos: matriz; ação de custo no documento só para Compras e ADMIN, consulta igual para os demais; campo e "Usar preço
+da OC" em "Receber OC" com o custo no envio para Compras e ADMIN, sem campo, com a frase e sem custo no envio para os
+demais) e os vizinhos de recebimento, endurecimento e ajuda: 13 arquivos e 207 testes. Typecheck de shared, API e web. Sem
+suíte completa, E2E, Playwright, mutação nem Railway.
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a
