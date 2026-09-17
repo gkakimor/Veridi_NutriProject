@@ -11,11 +11,15 @@ import type {
 } from "@veridi/shared";
 import {
   DEFAULT_OFFER_CURRENCY,
+  SUPPLIER_ITEM_QUALIFICATION_LABELS,
+  SUPPLIER_ITEM_QUALIFICATION_ROLES,
+  USER_ROLE_LABELS,
   hojeComercial,
   isValidCurrencyCode,
   normalizeCurrencyCode,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { ForbiddenError } from "../auth/auth.errors.js";
 import { diaDaColunaDeData, marcadorDeHojeComercial } from "../../lib/business-day.js";
 import { custoUnitario } from "../../lib/decimal-serialization.js";
 import { offerValidityWhere, selectItemCostSource } from "../../lib/cost-source-selection.js";
@@ -452,10 +456,33 @@ async function requireSupplierItem(id: string): Promise<SupplierItemWithRelation
   return supplierItem;
 }
 
+/**
+ * Situação inicial fora de `PENDING` só de quem decide a homologação
+ * (ITEM-SUPPLIER-QUALIFICATION-PERMISSION-01).
+ *
+ * Recusada, nunca rebaixada a pendente em silêncio: quem pediu "Homologado" e
+ * recebeu "Pendente" sairia achando que o fornecedor já serve. Conferida antes
+ * de qualquer leitura, como os controles do Item — sem a decisão, item e
+ * fornecedor inexistentes recebem a mesma resposta, e nada é gravado.
+ */
+function exigirQuemDecideASituacaoInicial(
+  status: CreateSupplierItemInput["qualificationStatus"],
+  actor: Pick<User, "role">,
+): void {
+  if (status === undefined || status === "PENDING") return;
+  if (SUPPLIER_ITEM_QUALIFICATION_ROLES.includes(actor.role)) return;
+  const donos = SUPPLIER_ITEM_QUALIFICATION_ROLES.map((role) => USER_ROLE_LABELS[role]).join(" ou ");
+  throw new ForbiddenError(
+    `Seu perfil não cria a relação na situação "${SUPPLIER_ITEM_QUALIFICATION_LABELS[status]}": homologar e bloquear são decisões de ${donos}. Crie a relação como Pendente; a homologação é feita depois, no detalhe da relação.`,
+  );
+}
+
 export async function createSupplierItem(
   input: CreateSupplierItemInput,
   actor: User,
 ): Promise<SupplierItemDetailDTO> {
+  exigirQuemDecideASituacaoInicial(input.qualificationStatus, actor);
+
   const prisma = getPrisma();
 
   const [item, supplier] = await Promise.all([

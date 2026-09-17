@@ -12,6 +12,7 @@ import {
   SUPPLIER_OFFER_ELIGIBILITY_HINTS,
   SUPPLIER_OFFER_ELIGIBILITY_LABELS,
   SUPPLIER_ITEM_EDIT_ROLES,
+  SUPPLIER_ITEM_QUALIFICATION_ROLES,
   hojeComercial,
 } from "@veridi/shared";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
@@ -92,9 +93,10 @@ export function SupplierItemDetailModal({
   const [validUntil, setValidUntil] = useState("");
   const [offerNotes, setOfferNotes] = useState("");
 
-  // A mesma lista que a API aplica à relação comercial (MASTER-DATA-EDIT-PERMISSIONS-01).
+  // As mesmas listas que a API aplica à relação comercial (MASTER-DATA-EDIT-PERMISSIONS-01)
+  // e à decisão de homologar e bloquear (ITEM-SUPPLIER-QUALIFICATION-PERMISSION-01).
   const canPurchase = perfilPermite(SUPPLIER_ITEM_EDIT_ROLES, user?.role);
-  const canQualify = user?.role === "QUALITY" || user?.role === "ADMIN";
+  const canQualify = perfilPermite(SUPPLIER_ITEM_QUALIFICATION_ROLES, user?.role);
 
   const load = useCallback(() => {
     getSupplierItem(supplierItemId)

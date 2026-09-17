@@ -64,7 +64,10 @@ export const createSupplierItemSchema = z.object({
   supplierId: z.string().trim().min(1, "Fornecedor é obrigatório"),
   supplierItemCode: optionalNullableText(60),
   commercialNotes: optionalNullableText(1000),
-  /** Homologação inicial. Ausente = `PENDING`, como sempre foi. */
+  /**
+   * Homologação inicial. Ausente = `PENDING`, como sempre foi. Outra situação
+   * só de `SUPPLIER_ITEM_QUALIFICATION_ROLES` — o serviço recusa com 403.
+   */
   qualificationStatus: z.enum(["PENDING", "APPROVED", "BLOCKED"]).optional(),
   qualificationNote: optionalNullableText(1000),
   /** Só é aceito com homologação APPROVED — a regra é a mesma da rota. */
