@@ -13,6 +13,7 @@ import { bloqueiosDaRevisao, loadReviewPackage } from "./review-package.js";
 import { ImportFindingLog, severityOf } from "./findings.js";
 import { applyOpeningRow, validateOpeningRows } from "./opening-stock.js";
 import type { TemplateRow } from "./opening-stock.js";
+import type { DecisaoDeDuplicata } from "./item-duplicates.js";
 import type { Overrides } from "./overrides.js";
 import { readOverrides } from "./overrides.js";
 import { WORKBOOKS_DO_ESCOPO, chaveDoItem, runPipeline } from "./pipeline.js";
@@ -787,5 +788,96 @@ integration("Ponte com a revisão humana — corpus real", () => {
     expect(bloqueiosDaRevisao(loadReviewPackage(caminho), WORKBOOKS_DO_ESCOPO)[0]).toContain(
       "ausente",
     );
+  });
+});
+
+/* ───────── Duplicata de Item absorvida (ITEM-DUPLICATE-SANITIZATION-01) ───────── */
+
+integration("Duplicata de Item absorvida — a carga segue a decisão canônica", () => {
+  const marca = Date.now().toString(36).toUpperCase();
+  const canonico = {
+    externalCode: `DUPC${marca}`,
+    name: `Material duplicado ${marca}`,
+    type: "RAW_MATERIAL",
+    unitCode: "kg",
+  };
+  const absorvido = { ...canonico, externalCode: `DUPA${marca}`, name: canonico.name.toUpperCase() };
+  const decisaoCom = (codigoDoCanonico: string): DecisaoDeDuplicata => ({
+    onda: "T",
+    grupo: `T-${marca}`,
+    nome: canonico.name,
+    absorvido: { codigo: "MP-999998", codigoPlanilha: absorvido.externalCode },
+    canonico: { codigo: codigoDoCanonico, codigoPlanilha: canonico.externalCode },
+  });
+  const pacote = (itens: (typeof canonico)[]) =>
+    loadReviewPackage(pacoteSintetico({ "03_MATERIAS_PRIMAS": itens.map((item) => linhaItem(item, "OK")) }));
+  const plano = (review: ReturnType<typeof pacote>, duplicatas: DecisaoDeDuplicata[]) =>
+    runPipeline({ prisma, write: false, overrides: emptyOverrides(), review, duplicatas });
+  const codigos = (resultado: Awaited<ReturnType<typeof plano>>) =>
+    resultado.findings.all().map((finding) => finding.code);
+  const codigoLivre = () => `MP-9${String(10_000 + Math.floor(Math.random() * 89_999))}`;
+
+  it("base nova: não cria a duplicata, e sem a decisão criaria", async () => {
+    const review = pacote([canonico, absorvido]);
+
+    const semDecisao = await plano(review, []);
+    expect(semDecisao.domains.items.created).toBe(2);
+
+    const comDecisao = await plano(review, [decisaoCom("MP-999999")]);
+    expect(comDecisao.domains.items).toMatchObject({ created: 1, skipped: 1 });
+    expect(comDecisao.review?.blocked).toBe(false);
+    expect(
+      comDecisao.findings
+        .all()
+        .filter((finding) => finding.code === "ITEM_DUPLICATE_ABSORBED")
+        .map((finding) => finding.reference),
+    ).toEqual([chaveDoItem(absorvido.externalCode)]);
+  });
+
+  it("base saneada: nada a criar; canônico com outro código reprova", async () => {
+    const existente = await prisma.item.create({
+      data: {
+        code: codigoLivre(),
+        type: "RAW_MATERIAL",
+        name: canonico.name,
+        unitCode: "kg",
+        externalCode: canonico.externalCode,
+      },
+    });
+    try {
+      const review = pacote([canonico, absorvido]);
+      const saneada = await plano(review, [decisaoCom(existente.code)]);
+      expect(saneada.domains.items).toMatchObject({ created: 0, updated: 1, skipped: 1 });
+      expect(saneada.review?.blocked).toBe(false);
+
+      const outroCodigo = await plano(review, [decisaoCom("MP-999999")]);
+      expect(outroCodigo.review?.blocked).toBe(true);
+      expect(codigos(outroCodigo)).toContain("ITEM_DUPLICATE_CANONICAL_UNRESOLVED");
+    } finally {
+      await prisma.item.delete({ where: { id: existente.id } });
+    }
+  });
+
+  it("base ainda com a duplicata, ou canônico fora da carga, reprova o plano", async () => {
+    const naBase = await prisma.item.create({
+      data: {
+        code: codigoLivre(),
+        type: "RAW_MATERIAL",
+        name: absorvido.name,
+        unitCode: "kg",
+        externalCode: absorvido.externalCode,
+      },
+    });
+    try {
+      const aindaNaBase = await plano(pacote([canonico, absorvido]), [decisaoCom("MP-999999")]);
+      expect(aindaNaBase.review?.blocked).toBe(true);
+      expect(codigos(aindaNaBase)).toContain("ITEM_DUPLICATE_ABSORBED_CONFLICT");
+    } finally {
+      await prisma.item.delete({ where: { id: naBase.id } });
+    }
+
+    const semCanonico = await plano(pacote([absorvido]), [decisaoCom("MP-999999")]);
+    expect(semCanonico.review?.blocked).toBe(true);
+    expect(codigos(semCanonico)).toContain("ITEM_DUPLICATE_CANONICAL_UNRESOLVED");
   });
 });
