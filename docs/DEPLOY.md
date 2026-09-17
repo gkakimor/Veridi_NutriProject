@@ -250,7 +250,7 @@ conferência.
 | Script | O que faz | Trava |
 |---|---|---|
 | `scripts/maintenance/prod-sessions-revoke.mjs` | marca `revokedAt` nas sessões vigentes; não apaga linha | sem `--confirmar` só lista o que faria |
-| `scripts/maintenance/prod-cleanup.mjs` | **apaga os dados de negócio** de produção, preservando usuários, sessões e unidades de medida | ver abaixo |
+| `scripts/maintenance/prod-cleanup.mjs` | **apaga os dados de negócio** de produção, preservando usuários, sessões, preferências de tela, unidades de medida e o calendário produtivo | ver abaixo |
 
 **`prod-cleanup.mjs` é destrutivo e não é rotina.** Foi usado uma vez, na
 limpeza de 2026-09-11, antes da carga inicial. Hoje a produção contém a carga
@@ -261,9 +261,24 @@ injeta e `--backup=<arquivo>` gerado por `prod-backup-json.mjs` com a mesma
 contagem de cada tabela. Só com decisão explícita do PO, registrada antes.
 
 Todo model do schema e toda sequence do banco precisam de classificação
-explícita no script — sem ela, ele aborta, até em dry-run. As sequences ficam
-em `scripts/maintenance/prod-cleanup-sequences.mjs`: `user_code_seq` é
+explícita no script — sem ela, ele aborta, até em dry-run. Os models ficam em
+`scripts/maintenance/prod-cleanup-models.mjs`, em exatamente uma de três
+listas: alvos, preservados (usuários, sessões, preferências de tela, unidades
+de medida e o calendário produtivo com jornadas e exceções — configuração do
+ambiente, não transação) e o contador anual da OP. Contagem física, perfil de
+produção, roteiro e agenda da OP, histórico de situação do Cliente e versão do
+arquivo de rótulo são alvos (PROD-CLEANUP-MODEL-CLASSIFICATION-01); a linha do
+rótulo sai, o objeto no storage fica. As sequences ficam em
+`scripts/maintenance/prod-cleanup-sequences.mjs`: `user_code_seq` é
 preservada; as de numeração de negócio só reiniciam com `--reset-sequences`.
-Toda sequence criada por migration entra em exatamente uma das duas listas, e a
-suíte de scripts (`prod-cleanup-sequences.test.ts`) protege essa paridade.
+Toda sequence criada por migration entra em exatamente uma das duas listas. A
+suíte de scripts protege as duas paridades (`prod-cleanup-models.test.ts`
+contra o `schema.prisma`, `prod-cleanup-sequences.test.ts` contra as
+migrations).
+
+A ordem de remoção sai das FKs reais. A contagem física tem um ciclo: a posição
+aponta para o registro que vale (NO ACTION) e o registro aponta para a posição
+(CASCADE). O CASCADE que fecha ciclo não ordena — a posição sai antes e leva os
+registros na mesma instrução —, o plano marca a tabela que sai pelo CASCADE e a
+execução conta o que ele levou. Ciclo só de RESTRICT/NO ACTION aborta.
 
