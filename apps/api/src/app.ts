@@ -33,6 +33,7 @@ import { unitsRoutes } from "./modules/units/units.routes.js";
 import { suppliersRoutes } from "./modules/suppliers/suppliers.routes.js";
 import { customersRoutes } from "./modules/customers/customers.routes.js";
 import { customerConsultationRoutes } from "./modules/customer-consultation/customer-consultation.routes.js";
+import { cnpjLookupRoutes } from "./modules/cnpj-lookup/cnpj-lookup.routes.js";
 import { productsRoutes } from "./modules/products/products.routes.js";
 import { purchaseOrdersRoutes } from "./modules/purchase-orders/purchase-orders.routes.js";
 import { receivingRoutes } from "./modules/receiving/receiving.routes.js";
@@ -117,6 +118,7 @@ export function buildApp() {
   app.register(suppliersRoutes);
   app.register(customersRoutes);
   app.register(customerConsultationRoutes);
+  app.register(cnpjLookupRoutes);
   app.register(productsRoutes);
   app.register(purchaseOrdersRoutes);
   app.register(receivingRoutes);

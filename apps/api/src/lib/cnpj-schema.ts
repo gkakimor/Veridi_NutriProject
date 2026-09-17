@@ -7,8 +7,11 @@ import { CNPJ_LENGTH, isValidCnpj, normalizeCnpj } from "@veridi/shared";
  *
  * Aceita as duas formas em circulação — o numérico de sempre e o
  * alfanumérico da IN RFB nº 2.229/2024, cujas 12 primeiras posições podem
- * conter letras. Não consulta a Receita: o que se afirma aqui é que o número
- * é internamente consistente, não que a empresa existe.
+ * conter letras. Não consulta fonte externa nenhuma: o que se afirma aqui é
+ * que o número é internamente consistente, não que a empresa existe. A
+ * consulta assistida do cadastro do Cliente (CUSTOMER-CNPJ-LOOKUP-01) é outra
+ * coisa, é opcional e só acontece quando alguém clica — e usa esta MESMA
+ * validação antes de sair da máquina.
  *
  * String vazia vira `null` (permite limpar um CNPJ existente em updates).
  */

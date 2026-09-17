@@ -23,16 +23,44 @@ export const CUSTOMER_CODE_PREFIX = "CLI";
  * listas coincidem, mas respondem perguntas diferentes — editar o cadastro e
  * mudar a situação cadastral — e podem divergir.
  */
+/**
+ * Tamanho máximo de cada campo de TEXTO do cadastro do Cliente.
+ *
+ * Mora no contrato compartilhado porque duas partes precisam da MESMA
+ * resposta: o Zod da API, que recusa o que passa do limite, e a consulta
+ * assistida de CNPJ (CUSTOMER-CNPJ-LOOKUP-01), que não oferece para aplicar
+ * um valor da fonte pública que o campo não caberia — aplicar algo que o
+ * servidor recusaria em seguida entrega ao operador um erro que ele não pediu
+ * e não sabe de onde veio.
+ *
+ * Um segundo lugar com os mesmos números divergiria na primeira alteração.
+ */
+export const CUSTOMER_FIELD_MAX_LENGTHS = {
+  legalName: 200,
+  tradeName: 200,
+  email: 200,
+  street: 200,
+  number: 20,
+  complement: 100,
+  district: 100,
+  city: 100,
+  notes: 1000,
+  businessLotSuffix: 20,
+} as const;
+
 export const CUSTOMER_EDIT_ROLES: readonly UserRole[] = ["COMMERCIAL", "ADMIN"];
 
 /**
  * Perfil tributário do Cliente — `PRODUCT_RULES.md` §83.
  *
- * Classificação INFORMADA pelo usuário. O sistema não consulta a Receita e não
- * deduz nada do CNPJ, do porte, do CNAE ou da razão social; não calcula
- * imposto e não bloqueia fluxo nenhum. O consumidor previsto é o Modelo de
- * Precificação, para SUGERIR modelos compatíveis — nunca para determinar
- * imposto.
+ * Classificação INFORMADA pelo usuário. O sistema não deduz nada do CNPJ, do
+ * porte, do CNAE ou da razão social; não calcula imposto e não bloqueia fluxo
+ * nenhum. O consumidor previsto é o Modelo de Precificação, para SUGERIR
+ * modelos compatíveis — nunca para determinar imposto.
+ *
+ * A consulta assistida de CNPJ (CUSTOMER-CNPJ-LOOKUP-01, §111) não muda isto:
+ * este campo não está entre os que ela oferece para aplicar, e porte, CNAE e
+ * natureza jurídica aparecem lá só como informação complementar.
  *
  * `NOT_INFORMED` é o estado explícito de "não definido": o campo nunca é
  * `null`, e retirar uma classificação é escolher "Não informado" de novo. MEI

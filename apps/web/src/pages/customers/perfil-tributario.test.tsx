@@ -135,13 +135,23 @@ describe("Perfil tributário — o campo", () => {
     expect([...select.options].map((opcao) => opcao.value)).toEqual([...CUSTOMER_TAX_PROFILES]);
   });
 
-  it("vem logo depois do CNPJ: o Tab sai do CNPJ e chega nele", async () => {
+  it("vem logo depois do bloco do CNPJ, no caminho do Tab", async () => {
     const user = userEvent.setup();
     renderNovo();
 
     screen.getByLabelText("CNPJ", { exact: false }).focus();
+    /*
+     * Entre o número e o perfil está a ação DO PRÓPRIO campo de CNPJ —
+     * "Consultar CNPJ" (CUSTOMER-CNPJ-LOOKUP-01). Ela pertence ao bloco do
+     * CNPJ, e é justamente ali que ela serve: digitou o número, Tab, Enter,
+     * consulta. O que este caso protege continua sendo o mesmo — o perfil
+     * tributário mora na Identificação, ao lado da identificação fiscal, e
+     * não lá embaixo na Precificação.
+     */
     await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Consultar CNPJ" }));
 
+    await user.tab();
     expect(document.activeElement).toBe(seletor());
   });
 

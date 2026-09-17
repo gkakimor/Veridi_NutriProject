@@ -5544,9 +5544,12 @@ Valores: Não informado · MEI · Simples Nacional · Lucro Presumido · Lucro R
   `CustomerTaxProfile`) é não-nulo com default `NOT_INFORMED`; `NULL` e
   `NOT_INFORMED` não convivem. Retirar uma classificação é escolher "Não
   informado" de novo — não existe "limpar", e `null` é recusado.
-- **O sistema não infere.** Nada de consulta à Receita nem dedução pelo número
-  do CNPJ, pelo porte, pelo CNAE ou pela razão social: quem escolhe é o
-  usuário.
+- **O sistema não infere.** Nada de dedução pelo número do CNPJ, pelo porte,
+  pelo CNAE ou pela razão social: quem escolhe é o usuário. Desde
+  CUSTOMER-CNPJ-LOOKUP-01 (§111) existe consulta assistida a uma fonte pública
+  no cadastro do Cliente — e ela também não muda isto: o perfil tributário não
+  está entre os campos que a consulta oferece, e porte, CNAE e natureza
+  jurídica aparecem lá apenas como informação, nunca como classificação.
 - **MEI é opção independente.** Não existe hierarquia nem conversão
   MEI → Simples Nacional.
 - **"Outro" basta.** Não há campo livre para descrever outro regime.
@@ -7094,3 +7097,83 @@ base saneada, e o plano reprova se a base ainda tem o duplicado ou se o canônic
 absorvido fica fora do template de abertura, com finding apontando o canônico.
 
 **Sem migration.** Nenhuma tela nova.
+
+## §111 — Consulta de CNPJ: assistência ao preenchimento, nunca atualização automática
+
+CUSTOMER-CNPJ-LOOKUP-01 (2026-09-17), sobre o handoff do PO. Reconcilia e
+substitui CUSTOMER-CNPJ-AUTOFILL-01, que aguardava a Veridi com o Serpro como
+provedor previsto.
+
+> **Consultar não é salvar.** A consulta externa mostra o que uma fonte pública
+> publicou; quem decide o que entra no cadastro é a pessoa, campo a campo, e
+> quem persiste é o "Salvar" de sempre.
+
+**O que é.** Assistência ao preenchimento do cadastro do Cliente. **O que não
+é:** validação jurídica, certificação cadastral, consulta fiscal oficial,
+atualização automática ou motor tributário. A tela diz isso com todas as
+letras: "Dados obtidos de fonte pública. Confira as informações antes de
+salvar."
+
+**O fluxo, inteiro.** Cliente → **Consultar CNPJ** → escolher a fonte →
+consultar → comparar Atual × Retornado → marcar o que aplicar → **Aplicar
+selecionados** → **Salvar**. Vale igual na criação (sem id) e na edição.
+
+**Quando o botão consulta.** Só com CNPJ preenchido e aprovado pelo validador
+canônico do sistema (`isValidCnpj`, o mesmo do cadastro e do servidor — não
+existe segundo algoritmo de CNPJ). Número ausente ou inconsistente responde na
+mensagem do próprio campo e **nada sai da máquina**.
+
+**Provedor.** A fonte é um conceito do produto, não detalhe de implementação:
+a Web escolhe um valor do registro conhecido (`CNPJ_LOOKUP_PROVIDERS`) e a API
+traduz para um adaptador. Hoje há um — **OpenCNPJ** (`GET
+https://api.opencnpj.org/{CNPJ}?datasets=receita`, público, sem token). O
+SERPRO é provedor futuro: entra na lista **quando o adaptador existir**, nunca
+antes — fonte desabilitada na tela ensina que o sistema está quebrado. Trocar
+ou somar adaptador não mexe no endpoint, no contrato normalizado, na tela de
+comparação nem na aplicação dos campos.
+
+**A chamada é do servidor.** Nunca do navegador. A API valida o CNPJ antes de
+sair, monta a URL sem entrada arbitrária, aplica timeout e teto de tamanho da
+resposta, e não confia nos tipos do payload externo. A Web recebe um contrato
+normalizado e dois erros tratados — "não encontrado" e "indisponível" —, nunca
+payload cru, stack ou detalhe do provedor. Não há proxy genérico.
+
+**Somente leitura.** A consulta não grava nada no domínio Veridi: nem cadastro,
+nem histórico, nem payload. Sem migration nesta versão.
+
+**Comparação.** Contra o **estado do formulário**, não contra o último valor
+salvo — quem editou um campo e ainda não salvou compara com o que está vendo.
+Normalizar é **só para comparar** (espaços, caixa, acento, máscara de CEP e
+telefone); o que a tela mostra e aplica é o valor da fonte no formato do
+próprio campo, sem reescrita silenciosa.
+
+**Seleção por linha.**
+
+| Retorno | O que a tela faz |
+|---|---|
+| Diferente e utilizável | Marcado por padrão; a pessoa pode desmarcar |
+| Equivalente ao que está na tela | "Sem alteração", sem caixa |
+| Vazio ou ausente | "Não informado pela fonte" — **nunca** apaga o que existe |
+| Informado, mas o campo não guardaria (CEP incompleto, UF desconhecida, telefone inválido, texto acima do limite) | Aparece com o valor e o motivo, sem caixa |
+
+**Campos que a consulta preenche.** Razão social, nome fantasia, CEP,
+logradouro, número, complemento, bairro, cidade, UF, telefone e e-mail.
+
+**Campos que ela NUNCA toca.** Perfil tributário (§83 — classificação
+informada pela Veridi, jamais deduzida de CNAE, porte ou natureza jurídica),
+forma e condição de pagamento (§99), notas internas, situação cadastral (§95),
+bloqueios e qualquer outro atributo comercial. Situação na fonte, data de
+abertura, CNAE, natureza jurídica e porte aparecem como informação
+complementar, e não viram campo do Cliente.
+
+**Cancelar não muda nada.** Fechar, cancelar ou sair com Escape deixa o
+formulário exatamente como estava.
+
+**Falha externa não impede cadastro.** CNPJ não encontrado, provedor fora do
+ar, timeout, limite de uso e resposta ilegível terminam na mesma conduta:
+"Você pode continuar o preenchimento manualmente." O cadastro manual segue
+inteiro, e o botão não dispara duas consultas ao serviço público.
+
+**Quem consulta.** A mesma lista que cria e edita o cadastro do Cliente
+(`CUSTOMER_EDIT_ROLES`, §98): Comercial e Administrador. Os demais perfis não
+recebem o botão, e a rota devolve 403 antes de qualquer chamada externa.

@@ -3,6 +3,7 @@ import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
 import {
   BR_STATE_CODES,
   CUSTOMER_COMMERCIAL_STATUSES,
+  CUSTOMER_FIELD_MAX_LENGTHS,
   CUSTOMER_STATUSES,
   CUSTOMER_STATUS_REASON_MAX_LENGTH,
   CUSTOMER_TAX_PROFILES,
@@ -91,21 +92,25 @@ const pagamentoPadraoFields = {
 };
 
 export const createCustomerSchema = z.object({
-  legalName: z.string().trim().min(1, "Razão social é obrigatória").max(200),
-  tradeName: optionalNullableText(200),
+  legalName: z
+    .string()
+    .trim()
+    .min(1, "Razão social é obrigatória")
+    .max(CUSTOMER_FIELD_MAX_LENGTHS.legalName),
+  tradeName: optionalNullableText(CUSTOMER_FIELD_MAX_LENGTHS.tradeName),
   cnpj: optionalCnpjSchema,
   email: optionalEmailSchema,
   phone: optionalBrPhoneSchema,
   taxProfile: optionalTaxProfileSchema,
-  street: optionalNullableText(200),
-  number: optionalNullableText(20),
-  complement: optionalNullableText(100),
-  district: optionalNullableText(100),
+  street: optionalNullableText(CUSTOMER_FIELD_MAX_LENGTHS.street),
+  number: optionalNullableText(CUSTOMER_FIELD_MAX_LENGTHS.number),
+  complement: optionalNullableText(CUSTOMER_FIELD_MAX_LENGTHS.complement),
+  district: optionalNullableText(CUSTOMER_FIELD_MAX_LENGTHS.district),
   zipCode: optionalZipCode,
-  city: optionalNullableText(100),
+  city: optionalNullableText(CUSTOMER_FIELD_MAX_LENGTHS.city),
   state: optionalStateSchema,
-  notes: optionalNullableText(1000),
-  businessLotSuffix: optionalNullableText(20),
+  notes: optionalNullableText(CUSTOMER_FIELD_MAX_LENGTHS.notes),
+  businessLotSuffix: optionalNullableText(CUSTOMER_FIELD_MAX_LENGTHS.businessLotSuffix),
   ...pagamentoPadraoFields,
 });
 
@@ -114,22 +119,22 @@ export const updateCustomerSchema = z.object({
     .string()
     .trim()
     .min(1, "Razão social é obrigatória")
-    .max(200)
+    .max(CUSTOMER_FIELD_MAX_LENGTHS.legalName)
     .optional(),
-  tradeName: optionalNullableText(200),
+  tradeName: optionalNullableText(CUSTOMER_FIELD_MAX_LENGTHS.tradeName),
   cnpj: optionalCnpjSchema,
   email: optionalEmailSchema,
   phone: optionalBrPhoneSchema,
   taxProfile: optionalTaxProfileSchema,
-  street: optionalNullableText(200),
-  number: optionalNullableText(20),
-  complement: optionalNullableText(100),
-  district: optionalNullableText(100),
+  street: optionalNullableText(CUSTOMER_FIELD_MAX_LENGTHS.street),
+  number: optionalNullableText(CUSTOMER_FIELD_MAX_LENGTHS.number),
+  complement: optionalNullableText(CUSTOMER_FIELD_MAX_LENGTHS.complement),
+  district: optionalNullableText(CUSTOMER_FIELD_MAX_LENGTHS.district),
   zipCode: optionalZipCode,
-  city: optionalNullableText(100),
+  city: optionalNullableText(CUSTOMER_FIELD_MAX_LENGTHS.city),
   state: optionalStateSchema,
-  notes: optionalNullableText(1000),
-  businessLotSuffix: optionalNullableText(20),
+  notes: optionalNullableText(CUSTOMER_FIELD_MAX_LENGTHS.notes),
+  businessLotSuffix: optionalNullableText(CUSTOMER_FIELD_MAX_LENGTHS.businessLotSuffix),
   ...pagamentoPadraoFields,
 });
 
