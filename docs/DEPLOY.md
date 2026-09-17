@@ -260,3 +260,10 @@ histórico. Sem `--apply` ele só faz dry-run. O `--apply` exige ambiente
 injeta e `--backup=<arquivo>` gerado por `prod-backup-json.mjs` com a mesma
 contagem de cada tabela. Só com decisão explícita do PO, registrada antes.
 
+Todo model do schema e toda sequence do banco precisam de classificação
+explícita no script — sem ela, ele aborta, até em dry-run. As sequences ficam
+em `scripts/maintenance/prod-cleanup-sequences.mjs`: `user_code_seq` é
+preservada; as de numeração de negócio só reiniciam com `--reset-sequences`.
+Toda sequence criada por migration entra em exatamente uma das duas listas, e a
+suíte de scripts (`prod-cleanup-sequences.test.ts`) protege essa paridade.
+
