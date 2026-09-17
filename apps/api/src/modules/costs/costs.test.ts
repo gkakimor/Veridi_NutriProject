@@ -574,7 +574,9 @@ describe("Custo estimado da formulação", () => {
       [
         { itemId: vitamina.id, quantity: "500", unitCode: "g" }, // 0,5 kg × 31,50 = 15,75
         { itemId: corante.id, quantity: "2000", unitCode: "mg" }, // 0,002 kg × 200 = 0,40
-        { itemId: pote.id, quantity: "10", unitCode: "un" }, // 10 × 1,25 = 12,50
+        // Embalagem conta por unidade acabada (base derivada, FORMULATION-COMPONENT-
+        // BASIS-AUTOMATION-01): 1 pote por unidade × base 10 = 10 × 1,25 = 12,50.
+        { itemId: pote.id, quantity: "1", unitCode: "un" },
       ],
       { basisQuantity: "10" },
     );

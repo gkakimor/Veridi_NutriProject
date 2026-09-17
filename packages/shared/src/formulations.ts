@@ -1,5 +1,6 @@
 /** Contratos do módulo de Formulações/Versionamento, consumidos por `apps/api` e `apps/web`. */
 
+import { formaDerivaDoses } from "./formulation-quantity.js";
 import type { ItemFamily, ItemType, PackagingSubtype } from "./items.js";
 import type { SupplyResponsibility } from "./ownership.js";
 import type { DosageForm, PresentationType, TargetAgeGroup } from "./products.js";
@@ -85,7 +86,10 @@ export const FORMULATION_CALCULATION_MODE_LABELS: Record<FormulationCalculationM
   PER_DOSE: "Por dose",
 };
 
-/** Base de cálculo do COMPONENTE — declarada linha a linha. */
+/**
+ * Base de cálculo do COMPONENTE — gravada linha a linha como SNAPSHOT técnico,
+ * mas DERIVADA pelo sistema (`baseDoComponente`), nunca escolhida na tela.
+ */
 export type FormulationComponentBasis = "FIXED_BASIS" | "PER_DOSE" | "PER_FINISHED_UNIT";
 
 /**
@@ -162,19 +166,45 @@ export function secaoDoItem(tipo: ItemType | null | undefined): SecaoDaFormula {
 }
 
 /**
- * A base que a seção SUGERE para uma linha nova — sugestão, nunca imposição.
+ * A receita da versão é POR DOSE? — a premissa que decide a base da composição.
  *
- * Embalagem conta por unidade acabada (uma tampa por pote), composição conta
- * por dose quando a receita é por dose. `FIXED_BASIS` continua existindo e
- * continua editável: o dado real tem matriz histórica escrita sobre a base, e
- * apagar essa capacidade reescreveria receita gravada.
+ * Duas coisas a fazem por dose: o modo de cálculo `PER_DOSE` e a forma que
+ * DERIVA doses (cápsula e pó), em que a dose é a unidade da receita mesmo com o
+ * modo "Base fixa". Formulação e Modelo guardam as duas premissas e respondem
+ * pela mesma pergunta — é esta função, na tela e no servidor.
  */
-export function baseSugeridaDaSecao(
-  secao: SecaoDaFormula,
-  receitaPorDose: boolean,
-): FormulationComponentBasis {
+export function receitaPorDose(versao: {
+  calculationMode: FormulationCalculationMode | null | undefined;
+  dosageForm: DosageForm | null | undefined;
+}): boolean {
+  return versao.calculationMode === "PER_DOSE" || formaDerivaDoses(versao.dosageForm);
+}
+
+/**
+ * A BASE DE CÁLCULO de uma linha — a regra ÚNICA
+ * (FORMULATION-COMPONENT-BASIS-AUTOMATION-01).
+ *
+ * Decisão de PO: base não é cadastro do Item nem escolha de quem formula. Ela é
+ * CONSEQUÊNCIA da seção e do modo da receita — embalagem conta por unidade
+ * acabada (uma tampa por pote); composição conta por dose quando a receita é
+ * por dose e sobre a base da fórmula quando não é.
+ *
+ * Toda gravação de rascunho — Formulação ou Modelo, linha nova, troca de modo,
+ * cópia ou aplicação de Modelo — grava o que esta função responde. A coluna
+ * `basis` continua no banco como snapshot técnico: versão ativa, inativa ou
+ * arquivada é lida pelo valor gravado e nunca reescrita.
+ */
+export function baseDaSecao(secao: SecaoDaFormula, porDose: boolean): FormulationComponentBasis {
   if (secao === "EMBALAGEM") return "PER_FINISHED_UNIT";
-  return receitaPorDose ? "PER_DOSE" : "FIXED_BASIS";
+  return porDose ? "PER_DOSE" : "FIXED_BASIS";
+}
+
+/** A base de um componente pelo tipo real do Item e pelas premissas da versão. */
+export function baseDoComponente(
+  tipoDoItem: ItemType | null | undefined,
+  versao: Parameters<typeof receitaPorDose>[0],
+): FormulationComponentBasis {
+  return baseDaSecao(secaoDoItem(tipoDoItem), receitaPorDose(versao));
 }
 
 export interface FormulationComponentDTO {
@@ -441,11 +471,15 @@ export interface FormulationVersionListResponse {
   versions: FormulationVersionDTO[];
 }
 
+/**
+ * Uma linha como a tela a envia. Sem `basis`: a base é derivada pelo servidor
+ * (`baseDoComponente`), e um `basis` a mais no corpo é descartado pela
+ * validação — nunca gravado.
+ */
 export interface FormulationComponentInput {
   itemId: string;
   quantity: string;
   unitCode: string;
-  basis?: FormulationComponentBasis;
   supplyResponsibility?: SupplyResponsibility;
   purityPercentApplied?: string | null;
   overagePercent?: string | null;

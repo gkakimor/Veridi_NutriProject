@@ -27,6 +27,7 @@ import {
   FORMULATION_TEMPLATE_CODE_PREFIX,
   PRESENTATION_TYPE_LABELS,
   SECAO_DA_FORMULA_LABELS,
+  baseDoComponente,
   capsulasPorEmbalagem,
   formaDerivaDoses,
   secaoDoItem,
@@ -573,12 +574,40 @@ export async function updateFormulationTemplateVersion(
     tocouNaApresentacao(input) || input.components
       ? await getPrisma().unitOfMeasure.findMany()
       : ([] as UnitOfMeasure[]);
-  const premissas = premissasDaGravacao(
-    current,
-    input,
-    input.components ?? current.components,
-    units,
-  );
+
+  /*
+   * A BASE DE CADA LINHA e do sistema, como na Formulacao (FORMULATION-COMPONENT-
+   * BASIS-AUTOMATION-01): tipo do Item + premissas com que o rascunho FICA. Ela
+   * vem antes das premissas porque decide se as doses sao exigidas. O tipo e
+   * lido a parte para a recusa de item continuar na ordem de sempre — item que
+   * nao existe cai em `validateComponents`, logo abaixo.
+   */
+  const premissasFinais = {
+    calculationMode: input.calculationMode ?? current.calculationMode,
+    dosageForm: input.dosageForm !== undefined ? input.dosageForm : current.dosageForm,
+  };
+  const tipoDoItem = input.components
+    ? new Map(
+        (
+          await getPrisma().item.findMany({
+            where: { id: { in: input.components.map((component) => component.itemId) } },
+            select: { id: true, type: true },
+          })
+        ).map((item) => [item.id, item.type]),
+      )
+    : null;
+  const basesFinais = input.components
+    ? input.components.map((component) => ({
+        itemId: component.itemId,
+        basis: baseDoComponente(tipoDoItem?.get(component.itemId), premissasFinais),
+      }))
+    : current.components.map((component) => ({
+        itemId: component.itemId,
+        basis: baseDoComponente(component.item.type, premissasFinais),
+      }));
+  const baseDaLinha = new Map(basesFinais.map((linha) => [linha.itemId, linha.basis]));
+
+  const premissas = premissasDaGravacao(current, input, basesFinais, units);
 
   if (input.components) {
     const anteriores = new Set(current.components.map((component) => component.itemId));
@@ -602,6 +631,19 @@ export async function updateFormulationTemplateVersion(
       },
     });
 
+    if (!input.components) {
+      // Sem linhas no corpo, as GRAVADAS acompanham o modo e a forma finais.
+      for (const component of current.components) {
+        const basis = baseDaLinha.get(component.itemId);
+        if (basis && basis !== component.basis) {
+          await tx.formulationTemplateComponent.update({
+            where: { id: component.id },
+            data: { basis },
+          });
+        }
+      }
+    }
+
     if (input.components) {
       await tx.formulationTemplateComponent.deleteMany({
         where: { formulationTemplateVersionId: id },
@@ -612,7 +654,7 @@ export async function updateFormulationTemplateVersion(
           itemId: component.itemId,
           quantity: new Prisma.Decimal(component.quantity),
           unitCode: component.unitCode,
-          ...(component.basis ? { basis: component.basis } : {}),
+          basis: baseDaLinha.get(component.itemId) ?? "FIXED_BASIS",
           ...(component.supplyResponsibility
             ? { supplyResponsibility: component.supplyResponsibility }
             : {}),
@@ -761,7 +803,8 @@ export async function createTemplateVersionFrom(
             itemId: component.itemId,
             quantity: component.quantity,
             unitCode: component.unitCode,
-            basis: component.basis,
+            // Base DERIVADA das premissas copiadas, nunca a gravada na origem.
+            basis: baseDoComponente(component.item.type, source),
             supplyResponsibility: component.supplyResponsibility,
             purityPercentApplied: component.purityPercentApplied,
             overagePercent: component.overagePercent,

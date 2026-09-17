@@ -156,8 +156,14 @@ async function criarProduto(app: App) {
 }
 
 /**
- * Rascunho no arranjo exato da auditoria: modo `FIXED_BASIS`, componentes
- * `PER_DOSE`, doses em branco.
+ * Rascunho da receita auditada: componentes `PER_DOSE`, doses em branco.
+ *
+ * A auditoria tinha modo `FIXED_BASIS` com linhas por dose. Desde
+ * FORMULATION-COMPONENT-BASIS-AUTOMATION-01 a API não grava mais esse arranjo —
+ * a base da linha sai do modo —, então a receita por dose chega aqui pelo modo
+ * `PER_DOSE`, e as barreiras cobram o que continua possível: linha por dose
+ * sem doses. O arranjo legado exato é reproduzido no banco em
+ * `cenarioLegadoInvalido`.
  */
 async function criarRascunhoAuditado(app: App, doses: number | null = null) {
   const product = await criarProduto(app);
@@ -177,13 +183,12 @@ async function criarRascunhoAuditado(app: App, doses: number | null = null) {
     url: `/formulation-versions/${version.id}`,
     payload: {
       basisQuantity: "1",
-      calculationMode: "FIXED_BASIS",
+      calculationMode: "PER_DOSE",
       dosesPerPackage: doses,
       components: RECEITA.map((linha, index) => ({
         itemId: itens[index]!.id,
         quantity: linha.mgPorDose,
         unitCode: "mg",
-        basis: "PER_DOSE",
         supplyResponsibility: "VERIDI",
         ...(linha.pureza ? { purityPercentApplied: linha.pureza } : {}),
       })),
@@ -402,9 +407,11 @@ describe("Custo industrial não se declara completo sobre formulação inválida
     await app.inject({ method: "POST", url: `/formulation-versions/${version.id}/activate` });
 
     const prisma = getPrisma();
+    // O arranjo EXATO da auditoria, gravado por fora da API como o legado foi:
+    // modo `FIXED_BASIS`, linhas `PER_DOSE`, doses em branco.
     await prisma.formulationVersion.update({
       where: { id: version.id },
-      data: { dosesPerPackage: null },
+      data: { dosesPerPackage: null, calculationMode: "FIXED_BASIS" },
     });
 
     const estrutura = (
@@ -493,7 +500,8 @@ describe("Template de formulação não vira caminho novo para fórmula inválid
       method: "PATCH",
       url: `/formulation-template-versions/${rascunho.id}`,
       payload: {
-        components: [{ itemId: item.id, quantity: "200", unitCode: "mg", basis: "PER_DOSE" }],
+        calculationMode: "PER_DOSE",
+        components: [{ itemId: item.id, quantity: "200", unitCode: "mg" }],
       },
     });
     // A premissa é cobrada já na edição: o componente por dose a exige.
@@ -504,12 +512,13 @@ describe("Template de formulação não vira caminho novo para fórmula inválid
       method: "PATCH",
       url: `/formulation-template-versions/${rascunho.id}`,
       payload: {
+        calculationMode: "PER_DOSE",
         dosesPerPackage: DOSES,
-        components: [{ itemId: item.id, quantity: "200", unitCode: "mg", basis: "PER_DOSE" }],
+        components: [{ itemId: item.id, quantity: "200", unitCode: "mg" }],
       },
     });
     expect(aceita.statusCode).toBe(200);
-    // Modo FIXED_BASIS não apaga mais as doses que o componente usa.
+    // A matriz por dose guarda as doses que as linhas usam.
     expect(aceita.json().dosesPerPackage).toBe(DOSES);
 
     const ativada = await app.inject({

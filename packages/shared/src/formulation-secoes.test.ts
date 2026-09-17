@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  FORMULATION_CALCULATION_MODES,
   SECAO_DA_FORMULA_LABELS,
   SECAO_DO_TIPO_DE_ITEM,
-  baseSugeridaDaSecao,
+  baseDaSecao,
+  baseDoComponente,
+  receitaPorDose,
   secaoDoItem,
 } from "./formulations.js";
+import { DOSAGE_FORMS } from "./products.js";
 import { ITEM_TYPES } from "./items.js";
 
 /**
@@ -41,12 +45,49 @@ describe("Seções da bancada", () => {
     expect(secaoDoItem(undefined)).toBe("COMPOSICAO");
   });
 
-  it("a base SUGERIDA sai da seção — e a base fixa continua existindo", () => {
+  it("a base sai da seção — e a base fixa continua existindo", () => {
     // Embalagem conta por unidade acabada: uma tampa por pote.
-    expect(baseSugeridaDaSecao("EMBALAGEM", true)).toBe("PER_FINISHED_UNIT");
-    expect(baseSugeridaDaSecao("EMBALAGEM", false)).toBe("PER_FINISHED_UNIT");
+    expect(baseDaSecao("EMBALAGEM", true)).toBe("PER_FINISHED_UNIT");
+    expect(baseDaSecao("EMBALAGEM", false)).toBe("PER_FINISHED_UNIT");
     // Composição segue a receita: por dose quando a receita é por dose.
-    expect(baseSugeridaDaSecao("COMPOSICAO", true)).toBe("PER_DOSE");
-    expect(baseSugeridaDaSecao("COMPOSICAO", false)).toBe("FIXED_BASIS");
+    expect(baseDaSecao("COMPOSICAO", true)).toBe("PER_DOSE");
+    expect(baseDaSecao("COMPOSICAO", false)).toBe("FIXED_BASIS");
+  });
+});
+
+/**
+ * FORMULATION-COMPONENT-BASIS-AUTOMATION-01 — a base DERIVADA.
+ *
+ * Quem formula não escolhe a base: ela sai da seção do Item e do modo da
+ * receita, e a tela e o servidor perguntam à mesma função. A matriz inteira é
+ * conferida — modo × forma × tipo —, porque uma combinação esquecida é
+ * exatamente onde duas regras parecidas voltariam a divergir.
+ */
+describe("Base derivada do componente", () => {
+  it("receita por dose: modo por dose, ou forma que deriva doses (cápsula e pó)", () => {
+    expect(receitaPorDose({ calculationMode: "PER_DOSE", dosageForm: null })).toBe(true);
+    expect(receitaPorDose({ calculationMode: "FIXED_BASIS", dosageForm: null })).toBe(false);
+    expect(receitaPorDose({ calculationMode: "FIXED_BASIS", dosageForm: "CAPSULE" })).toBe(true);
+    expect(receitaPorDose({ calculationMode: "FIXED_BASIS", dosageForm: "POWDER" })).toBe(true);
+    // Comprimido, líquido e "outro" continuam digitando doses: não fazem a receita por dose.
+    expect(receitaPorDose({ calculationMode: "FIXED_BASIS", dosageForm: "TABLET" })).toBe(false);
+    expect(receitaPorDose({ calculationMode: "FIXED_BASIS", dosageForm: "LIQUID" })).toBe(false);
+    expect(receitaPorDose({ calculationMode: "FIXED_BASIS", dosageForm: "OTHER" })).toBe(false);
+    expect(receitaPorDose({ calculationMode: undefined, dosageForm: undefined })).toBe(false);
+  });
+
+  it("toda combinação de modo, forma e tipo cai na regra — e embalagem nunca é por dose", () => {
+    for (const calculationMode of FORMULATION_CALCULATION_MODES) {
+      for (const dosageForm of [null, ...DOSAGE_FORMS]) {
+        const porDose =
+          calculationMode === "PER_DOSE" || dosageForm === "CAPSULE" || dosageForm === "POWDER";
+        const versao = { calculationMode, dosageForm };
+        const caso = `${calculationMode} × ${String(dosageForm)}`;
+        expect(baseDoComponente("PACKAGING", versao), caso).toBe("PER_FINISHED_UNIT");
+        expect(baseDoComponente("RAW_MATERIAL", versao), caso).toBe(
+          porDose ? "PER_DOSE" : "FIXED_BASIS",
+        );
+      }
+    }
   });
 });

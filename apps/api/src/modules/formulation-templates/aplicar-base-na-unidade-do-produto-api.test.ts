@@ -61,12 +61,13 @@ function marca(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-async function item(type: "RAW_MATERIAL" | "FINISHED_PRODUCT", unitCode: string) {
+async function item(type: "RAW_MATERIAL" | "PACKAGING" | "FINISHED_PRODUCT", unitCode: string) {
   const m = marca();
+  const prefixo = type === "FINISHED_PRODUCT" ? "PA" : type === "PACKAGING" ? "EM" : "MP";
   const criado = await getPrisma().item.create({
     data: {
       type,
-      code: `${type === "FINISHED_PRODUCT" ? "PA" : "MP"}-BASE-${m}`,
+      code: `${prefixo}-BASE-${m}`,
       name: `Base ${type} ${m}`,
       unitCode,
       controlsLot: true,
@@ -97,13 +98,18 @@ async function produto(app: App, unitCode: string): Promise<string> {
   return criado.id as string;
 }
 
-/** Modelo ativo com a base pedida e 100 g de um insumo por base. */
+/**
+ * Modelo ativo com a base pedida e 100 g de um insumo por base — ou, com
+ * `PER_FINISHED_UNIT`, uma EMBALAGEM por unidade acabada: desde
+ * FORMULATION-COMPONENT-BASIS-AUTOMATION-01 a base sai do tipo do Item, e linha
+ * por unidade acabada é embalagem.
+ */
 async function modeloAtivo(
   app: App,
   base: { quantidade: string; unidade: string },
   basis?: "PER_FINISHED_UNIT",
 ): Promise<string> {
-  const insumo = await item("RAW_MATERIAL", "g");
+  const insumo = basis ? await item("PACKAGING", "un") : await item("RAW_MATERIAL", "g");
   const template = (
     await app.inject({
       method: "POST",
@@ -121,7 +127,11 @@ async function modeloAtivo(
     method: "PATCH",
     url: `/formulation-template-versions/${versao}`,
     payload: {
-      components: [{ itemId: insumo.id, quantity: "100", unitCode: "g", ...(basis ? { basis } : {}) }],
+      components: [
+        basis
+          ? { itemId: insumo.id, quantity: "1", unitCode: "un" }
+          : { itemId: insumo.id, quantity: "100", unitCode: "g" },
+      ],
     },
   });
   expect(salvo.statusCode, salvo.body).toBe(200);

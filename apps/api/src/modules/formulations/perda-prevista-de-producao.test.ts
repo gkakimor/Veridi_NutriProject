@@ -422,7 +422,10 @@ describe("Escopo da perda prevista — a cápsula vazia e a embalagem comercial"
     const versao = await primeiraVersao(app, produto.id);
 
     const componentes = [
-      { itemId: materia.id, quantity: "1", unitCode: "kg", basis: "FIXED_BASIS" },
+      // Receita em cápsula é por dose: a base das duas matérias-primas é derivada
+      // (FORMULATION-COMPONENT-BASIS-AUTOMATION-01). A base fixa tem o caso dela
+      // na receita sem forma, acima.
+      { itemId: materia.id, quantity: "1", unitCode: "mg", basis: "PER_DOSE" },
       { itemId: ingrediente.id, quantity: "0.4", unitCode: "mg", basis: "PER_DOSE" },
       // 120 cápsulas por pote — a quantidade é naturalmente declarada por
       // unidade acabada, e é exatamente por isso que a base não bastava.
@@ -463,10 +466,11 @@ describe("Escopo da perda prevista — a cápsula vazia e a embalagem comercial"
     // 5.000 / 0,99 = 5.050,505050… — a bruta que o planejamento interno usa.
     expect(new Decimal(com.grossPlannedQuantity).toFixed(6)).toBe("5050.505051");
 
-    // Matéria-prima na base fixa: 1 kg por 5.000 → 1,010101… kg.
+    // Matéria-prima por dose, em estoque kg: 1 mg × 120 doses × 5.050,505050… =
+    // 606.060,6060… mg = 0,606061 kg.
     const linhaMateria = linhaDo(com, cenario.materia.code);
     expect(linhaMateria.expectedLossApplied, "matéria-prima deve carregar a perda").toBe(true);
-    expect(new Decimal(String(linhaMateria.requiredQuantity)).toFixed(6)).toBe("1.010101");
+    expect(new Decimal(String(linhaMateria.requiredQuantity)).toFixed(6)).toBe("0.606061");
 
     // Ingrediente por dose: 0,4 mg × 120 doses × bruta = 242.424,2424… mg.
     const linhaIngrediente = linhaDo(com, cenario.ingrediente.code);
@@ -597,10 +601,15 @@ describe("Escopo da perda prevista — a cápsula vazia e a embalagem comercial"
     await gravarOk(app, versao.id, {
       basisQuantity: "1000",
       dosageForm: "POWDER",
+      // Pó é receita por dose (base derivada): 5 g por dose, 200 doses no pote.
+      doseAmount: "5",
+      doseUomCode: "g",
+      packageContentAmount: "1000",
+      packageContentUomCode: "g",
       expectedLossPercent: "1",
       components: [
-        { itemId: po.id, quantity: "1", unitCode: "kg", basis: "FIXED_BASIS" },
-        { itemId: pote.id, quantity: "1", unitCode: "un", basis: "PER_FINISHED_UNIT" },
+        { itemId: po.id, quantity: "5", unitCode: "g" },
+        { itemId: pote.id, quantity: "1", unitCode: "un" },
       ],
     });
 

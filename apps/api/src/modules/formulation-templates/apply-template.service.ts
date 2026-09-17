@@ -6,7 +6,7 @@ import type {
   FormulationTemplateUpdateAvailableDTO,
   FormulationVersionDTO,
 } from "@veridi/shared";
-import { capsulasPorEmbalagem } from "@veridi/shared";
+import { baseDoComponente, capsulasPorEmbalagem } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { CASAS_QUANTIDADE } from "../../lib/decimal-schema.js";
 import { convertUomDecimal, isUomCompatible } from "../items/uom.js";
@@ -158,11 +158,20 @@ export async function applyTemplateToProduct(
     });
 
     const rascunhoVazio = existentes.find((version) => podeSerPreenchida(version));
+    /*
+     * A BASE de cada linha é DERIVADA na aplicação (FORMULATION-COMPONENT-BASIS-
+     * AUTOMATION-01): tipo do Item + modo e forma, que a Formulação recebe do
+     * próprio Modelo. Aplicar nunca reintroduz base escolhida à mão — nem a de
+     * um Modelo gravado antes da regra.
+     */
+    const basesDerivadas = template.components.map((component) =>
+      baseDoComponente(component.item.type, template),
+    );
     // A Formulação lê a base na unidade dela: a do rascunho que vai ser
     // preenchido, ou a do Item acabado na versão que nasce. Recusa aqui
     // desfaz a transação inteira — nada nasce pela metade.
     const basisQuantity = baseNaUnidadeDaFormulacao(
-      template,
+      { ...template, components: basesDerivadas.map((basis) => ({ basis })) },
       rascunhoVazio?.outputUnitCode ?? outputItem.unitCode,
       units,
     );
@@ -213,7 +222,7 @@ export async function applyTemplateToProduct(
       itemId: component.itemId,
       quantity: component.quantity,
       unitCode: component.unitCode,
-      basis: component.basis,
+      basis: basesDerivadas[index] ?? component.basis,
       // Fornecimento vem como SUGESTÃO: o usuário ajusta no produto sem
       // tocar no template.
       supplyResponsibility: component.supplyResponsibility,
@@ -384,6 +393,13 @@ export async function createTemplateFromFormulation(
    */
   const units = await prisma.unitOfMeasure.findMany();
   const dosesDaFormulacao = version.dosesPerPackage ? version.dosesPerPackage : null;
+  /*
+   * A BASE do Modelo novo é DERIVADA com as premissas que ele recebe — as da
+   * Formulação —, nunca copiada (FORMULATION-COMPONENT-BASIS-AUTOMATION-01).
+   */
+  const basesDerivadas = version.components.map((component) =>
+    baseDoComponente(component.item.type, version),
+  );
   const premissas = premissasDaGravacao(
     {
       calculationMode: version.calculationMode,
@@ -408,7 +424,7 @@ export async function createTemplateFromFormulation(
         : null,
       packageContentUomCode: version.packageContentUomCode,
     },
-    version.components,
+    basesDerivadas.map((basis) => ({ basis })),
     units,
   );
 
@@ -442,7 +458,7 @@ export async function createTemplateFromFormulation(
               itemId: component.itemId,
               quantity: component.quantity,
               unitCode: component.unitCode,
-              basis: component.basis,
+              basis: basesDerivadas[index] ?? component.basis,
               supplyResponsibility: component.supplyResponsibility,
               purityPercentApplied: component.purityPercentApplied,
               overagePercent: component.overagePercent,
