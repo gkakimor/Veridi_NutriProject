@@ -49,6 +49,31 @@ export const SUPPLIER_ITEM_QUALIFICATION_LABELS: Record<
   BLOCKED: "Bloqueado",
 };
 
+/**
+ * Bloquear a relação exige motivo — SUPPLIER-QUALITY-REJECTION-REASON-01.
+ *
+ * O motivo é a observação do evento de homologação (`note`), que já existia e
+ * já chegava à tela: não há segundo campo. A API recusa `BLOCKED` sem ele — na
+ * rota de homologação e na criação já bloqueada —, e a tela só confirma o
+ * bloqueio com o motivo escrito. Homologar e voltar para pendente seguem com a
+ * observação opcional. Mínimo de 3 caracteres, como os outros motivos
+ * obrigatórios (bloquear lote, recusar laudo); o máximo é o da observação em
+ * qualquer situação, 1000.
+ *
+ * Bloqueio gravado antes da regra, sem observação, continua válido: nada é
+ * inventado para ele, e a tela diz `MOTIVO_DO_BLOQUEIO_NAO_REGISTRADO`.
+ */
+export const MOTIVO_DO_BLOQUEIO_MINIMO = 3;
+
+export const MOTIVO_DO_BLOQUEIO_OBRIGATORIO_MESSAGE =
+  "Informe o motivo do bloqueio, com pelo menos 3 caracteres.";
+
+export const MOTIVO_DO_BLOQUEIO_NAO_REGISTRADO = "Motivo não registrado";
+
+export function motivoDoBloqueioValido(motivo: string | null | undefined): boolean {
+  return (motivo ?? "").trim().length >= MOTIVO_DO_BLOQUEIO_MINIMO;
+}
+
 export type SupplierItemOfferSource = "MANUAL" | "LEGACY_IMPORT";
 
 export const SUPPLIER_ITEM_OFFER_SOURCE_LABELS: Record<SupplierItemOfferSource, string> = {
@@ -256,6 +281,7 @@ export interface CreateSupplierItemInput {
    * dos demais perfis é 403.
    */
   qualificationStatus?: "PENDING" | "APPROVED" | "BLOCKED";
+  /** Com `BLOCKED`, é o motivo do bloqueio, e é obrigatória. */
   qualificationNote?: string | null;
   preferred?: boolean;
   initialOffer?: CreateSupplierItemOfferInput;
@@ -269,6 +295,7 @@ export interface UpdateSupplierItemInput {
 
 export interface ChangeSupplierItemQualificationInput {
   status: SupplierItemQualificationStatus;
+  /** Observação da decisão; com `BLOCKED`, é o motivo, e é obrigatória. */
   note?: string | null;
 }
 

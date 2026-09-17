@@ -13,7 +13,11 @@ import type {
   SupplierItemDetailDTO,
   UnitOfMeasureDTO,
 } from "@veridi/shared";
-import { SUPPLIER_ITEM_QUALIFICATION_LABELS, hojeComercial } from "@veridi/shared";
+import {
+  SUPPLIER_ITEM_QUALIFICATION_LABELS,
+  hojeComercial,
+  motivoDoBloqueioValido,
+} from "@veridi/shared";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { FormSection } from "../../components/FormSection";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
@@ -407,6 +411,9 @@ export function SupplierItemFormModal({
 
   const preencheuOferta = unitPrice.trim() !== "";
   const podeSerPreferencial = qualificationStatus === "APPROVED";
+  /* Nascer bloqueada é bloquear: o motivo é obrigatório aqui como no detalhe
+     (SUPPLIER-QUALITY-REJECTION-REASON-01). */
+  const bloqueando = podeDecidirHomologacao && qualificationStatus === "BLOCKED";
 
   // Bloquear/despender a homologação derruba a preferência: mesma regra do
   // domínio, aplicada já na tela para o estado não ficar impossível.
@@ -534,7 +541,8 @@ export function SupplierItemFormModal({
                 !itemId ||
                 !supplierId ||
                 relacaoExistente !== null ||
-                (preencheuOferta && !effectiveAt)
+                (preencheuOferta && !effectiveAt) ||
+                (bloqueando && !motivoDoBloqueioValido(qualificationNote))
               }
             >
               {itemFixo
@@ -704,14 +712,31 @@ export function SupplierItemFormModal({
               </div>
 
               <div className="field">
-                <label htmlFor="supplier-item-qualification-note">Observação da decisão</label>
+                <label htmlFor="supplier-item-qualification-note">
+                  {bloqueando ? (
+                    <>
+                      Motivo do bloqueio <span className="req">*</span>
+                    </>
+                  ) : (
+                    "Observação da decisão"
+                  )}
+                </label>
                 <input
                   id="supplier-item-qualification-note"
                   type="text"
                   value={qualificationNote}
                   onChange={(event) => setQualificationNote(event.target.value)}
-                  placeholder="Ex.: auditoria de 2026, CoA aprovado"
+                  placeholder={
+                    bloqueando
+                      ? "Ex.: laudo reprovado, especificação divergente"
+                      : "Ex.: auditoria de 2026, CoA aprovado"
+                  }
                 />
+                {bloqueando && (
+                  <span className="field__hint">
+                    Este motivo ficará registrado no histórico de homologação.
+                  </span>
+                )}
               </div>
 
               <div className="field field--checkbox">

@@ -6,6 +6,7 @@ import type { SupplierItemDetailDTO, UnitOfMeasureDTO } from "@veridi/shared";
 import {
   DEFAULT_OFFER_CURRENCY,
   INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS,
+  MOTIVO_DO_BLOQUEIO_NAO_REGISTRADO,
   SUPPLIER_ITEM_OFFER_SOURCE_LABELS,
   SUPPLIER_ITEM_QUALIFICATION_LABELS,
   SUPPLIER_OFFER_AMBIGUITY_MESSAGE,
@@ -14,6 +15,7 @@ import {
   SUPPLIER_ITEM_EDIT_ROLES,
   SUPPLIER_ITEM_QUALIFICATION_ROLES,
   hojeComercial,
+  motivoDoBloqueioValido,
 } from "@veridi/shared";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { FormSection } from "../../components/FormSection";
@@ -81,6 +83,8 @@ export function SupplierItemDetailModal({
   /** O que a última ação confirmou — uma frase, substituída pela próxima. */
   const [feito, setFeito] = useState<{ acao: string; texto: string } | null>(null);
   const [confirmarInativacao, setConfirmarInativacao] = useState(false);
+  /* Bloquear pede o motivo antes de gravar (SUPPLIER-QUALITY-REJECTION-REASON-01). */
+  const [confirmarBloqueio, setConfirmarBloqueio] = useState(false);
   const confirmaPreferencial = preferencialDoItem !== undefined;
   const [confirmarPreferencial, setConfirmarPreferencial] = useState(false);
   /* O preferencial do item acompanha o que ESTE detalhe grava: marcar esta relação
@@ -449,20 +453,12 @@ export function SupplierItemDetailModal({
               >
                 Homologar
               </button>
+              {/* Homologar segue direto; bloquear confirma com o motivo, que a API exige. */}
               <button
                 type="button"
                 className="btn btn--danger btn--sm"
                 disabled={saving || supplierItem.qualificationStatus === "BLOCKED"}
-                onClick={() =>
-                  void run(
-                    () =>
-                      changeSupplierItemQualification(supplierItem.id, {
-                        status: "BLOCKED",
-                        ...(qualificationNote.trim() ? { note: qualificationNote.trim() } : {}),
-                      }),
-                    () => setQualificationNote(""),
-                  )
-                }
+                onClick={() => setConfirmarBloqueio(true)}
               >
                 Bloquear
               </button>
@@ -497,7 +493,7 @@ export function SupplierItemDetailModal({
                 <th>De</th>
                 <th>Para</th>
                 <th>Quem</th>
-                <th>Observação</th>
+                <th>Motivo / observação</th>
               </tr>
             </thead>
             <tbody>
@@ -511,7 +507,12 @@ export function SupplierItemDetailModal({
                   </td>
                   <td>{SUPPLIER_ITEM_QUALIFICATION_LABELS[event.toStatus]}</td>
                   <td>{event.changedByName ?? "—"}</td>
-                  <td>{event.note ?? "—"}</td>
+                  {/* Bloqueio gravado antes do motivo obrigatório continua válido: a
+                      tela diz que o motivo não foi registrado, sem inventar um. */}
+                  <td className="cell-note">
+                    {event.note ??
+                      (event.toStatus === "BLOCKED" ? MOTIVO_DO_BLOQUEIO_NAO_REGISTRADO : "—")}
+                  </td>
                 </tr>
               ))}
               {/* Mesma cortesia que a tabela de ofertas logo abaixo já faz:
@@ -764,6 +765,56 @@ export function SupplierItemDetailModal({
         onConfirm={() => {
           setConfirmarInativacao(false);
           void run(() => updateSupplierItem(supplierItem.id, { active: false }));
+        }}
+      />
+
+      {/*
+          O motivo é a mesma nota da "Observação da decisão": o que já estava
+          escrito chega aqui, e cancelar não apaga o que foi digitado — continua
+          pendente, como qualquer nota ainda não gravada.
+      */}
+      <ConfirmDialog
+        open={confirmarBloqueio}
+        title="Bloquear fornecedor para este item"
+        confirmLabel="Bloquear"
+        cancelLabel="Cancelar"
+        confirmTone="danger"
+        confirmDisabled={saving || !motivoDoBloqueioValido(qualificationNote)}
+        message={
+          <>
+            <p>
+              <b>{supplierItem.supplierName}</b> fica bloqueado para <b>{supplierItem.itemCode}</b>
+              {supplierItem.preferred ? " e deixa de ser o fornecedor preferencial do item" : ""}.
+            </p>
+            <div className="field">
+              <label htmlFor="qualification-block-reason">
+                Motivo <span className="req">*</span>
+              </label>
+              <textarea
+                id="qualification-block-reason"
+                rows={3}
+                value={qualificationNote}
+                onChange={(event) => setQualificationNote(event.target.value)}
+                placeholder="Ex.: laudo reprovado, especificação divergente"
+                aria-describedby="qualification-block-reason-hint"
+              />
+              <p id="qualification-block-reason-hint" className="field__hint">
+                Este motivo ficará registrado no histórico de homologação.
+              </p>
+            </div>
+          </>
+        }
+        onCancel={() => setConfirmarBloqueio(false)}
+        onConfirm={() => {
+          setConfirmarBloqueio(false);
+          void run(
+            () =>
+              changeSupplierItemQualification(supplierItem.id, {
+                status: "BLOCKED",
+                note: qualificationNote.trim(),
+              }),
+            () => setQualificationNote(""),
+          );
         }}
       />
 

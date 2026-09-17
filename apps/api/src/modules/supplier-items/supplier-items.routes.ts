@@ -11,6 +11,7 @@ import {
   InvalidOfferPriceError,
   InvalidOfferValidityError,
   SupplierItemAlreadyExistsError,
+  SupplierItemBlockReasonRequiredError,
   SupplierItemInvalidItemTypeError,
   SupplierItemItemNotFoundError,
   SupplierItemNotEligibleForPreferredError,
@@ -39,11 +40,23 @@ function formatZodError(error: ZodError) {
   return error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message }));
 }
 
-function mapDomainError(
-  error: unknown,
-): { status: number; body: { error: string; message: string } } | null {
+function mapDomainError(error: unknown): {
+  status: number;
+  body: { error: string; message: string; issues?: { path: string; message: string }[] };
+} | null {
   if (error instanceof ForbiddenError) {
     return { status: 403, body: { error: "forbidden", message: error.message } };
+  }
+  if (error instanceof SupplierItemBlockReasonRequiredError) {
+    // Mesma forma da recusa do Zod: a tela sabe de qual campo é a frase.
+    return {
+      status: 400,
+      body: {
+        error: "validation_error",
+        message: error.message,
+        issues: [{ path: error.campo, message: error.message }],
+      },
+    };
   }
   if (error instanceof SupplierItemNotFoundError) {
     return { status: 404, body: { error: "not_found", message: error.message } };
@@ -171,6 +184,8 @@ export const supplierItemsRoutes: FastifyPluginAsync = async (app) => {
       }
       // Homologar/bloquear é ato da Qualidade — a mesma lista que a criação
       // confere; devolver para pendente é administrativo e Compras também pode fazer.
+      // O motivo do bloqueio o serviço confere DEPOIS: quem não decide ouve 403,
+      // não "falta o motivo".
       const actor =
         parsed.data.status === "PENDING"
           ? requireRole(request, "PURCHASING", "QUALITY", "ADMIN")

@@ -504,10 +504,12 @@ describe("ITEM-SUPPLIER-QUALIFICATION-PERMISSION-01 — o Administrador segue co
         expect.objectContaining({ fromStatus: null, toStatus: "BLOCKED", note: "Reprovado na auditoria" }),
       ]);
 
+      // Com o motivo, que bloquear exige (SUPPLIER-QUALITY-REJECTION-REASON-01): a recusa aqui é a do preferencial.
       const preferencialBloqueada = await criarRelacao(app, {
         itemId: item.id,
         supplierId: b.id,
         qualificationStatus: "BLOCKED",
+        qualificationNote: "Reprovado na auditoria",
         preferred: true,
       });
       expect(preferencialBloqueada.statusCode).toBe(409);

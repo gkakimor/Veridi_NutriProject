@@ -7,6 +7,7 @@ import type {
   SupplierItemListResponse,
   SupplierItemOfferDTO,
   SupplierItemQualificationEventDTO,
+  SupplierItemQualificationStatus,
   SupplierOfferEligibility,
 } from "@veridi/shared";
 import {
@@ -16,6 +17,7 @@ import {
   USER_ROLE_LABELS,
   hojeComercial,
   isValidCurrencyCode,
+  motivoDoBloqueioValido,
   normalizeCurrencyCode,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
@@ -38,6 +40,7 @@ import {
   InvalidMinimumOrderError,
   InvalidOfferValidityError,
   SupplierItemAlreadyExistsError,
+  SupplierItemBlockReasonRequiredError,
   SupplierItemInvalidItemTypeError,
   SupplierItemItemNotFoundError,
   SupplierItemNotEligibleForPreferredError,
@@ -477,11 +480,30 @@ function exigirQuemDecideASituacaoInicial(
   );
 }
 
+/**
+ * Bloquear exige motivo, em todas as portas (SUPPLIER-QUALITY-REJECTION-REASON-01).
+ *
+ * Conferido depois de quem decide — Compras que pede Bloqueado ouve que não
+ * decide, não que falta o motivo — e antes de qualquer leitura: sem motivo,
+ * relação, item e fornecedor inexistentes recebem a mesma recusa, e nada é
+ * gravado. Homologar e voltar para pendente seguem com a observação opcional.
+ */
+function exigirMotivoDoBloqueio(
+  status: SupplierItemQualificationStatus | undefined,
+  motivo: string | null | undefined,
+  campo: "note" | "qualificationNote",
+): void {
+  if (status === "BLOCKED" && !motivoDoBloqueioValido(motivo)) {
+    throw new SupplierItemBlockReasonRequiredError(campo);
+  }
+}
+
 export async function createSupplierItem(
   input: CreateSupplierItemInput,
   actor: User,
 ): Promise<SupplierItemDetailDTO> {
   exigirQuemDecideASituacaoInicial(input.qualificationStatus, actor);
+  exigirMotivoDoBloqueio(input.qualificationStatus, input.qualificationNote, "qualificationNote");
 
   const prisma = getPrisma();
 
@@ -621,13 +643,16 @@ export async function updateSupplierItem(
 /**
  * Homologa/bloqueia/devolve para pendente, sempre com evento imutável.
  * Bloquear derruba o preferencial na MESMA transação: fornecedor bloqueado
- * jamais fica como preferencial do item.
+ * jamais fica como preferencial do item. Bloquear exige motivo, gravado na
+ * observação do evento; os eventos anteriores não são tocados.
  */
 export async function changeQualification(
   id: string,
   input: ChangeQualificationInput,
   actor: User,
 ): Promise<SupplierItemDetailDTO> {
+  exigirMotivoDoBloqueio(input.status, input.note, "note");
+
   const prisma = getPrisma();
   const current = await requireSupplierItem(id);
 
