@@ -225,7 +225,9 @@ user to clear them to edit unrelated fields.
 - Approving or blocking is Quality's decision; Purchasing registers the
   relation, the commercial code, the prices and the preferred supplier, and
   either side may send a relation back to pending. Every transition is kept
-  in an immutable history with who and when.
+  in an immutable history with who and when. The decision has one authority
+  at every door, creation included: a relation Purchasing creates is born
+  `PENDING` (§101).
 - **Approved and preferred are different concepts.** At most one preferred
   supplier per item (enforced by a partial unique index, with the previous
   one cleared in the same transaction). Only an active, approved relation can
@@ -2810,6 +2812,11 @@ changed is when it may be informed, not how it is stored.
 
 Qualification history records what happened: a relation born approved is one
 `null → APPROVED` event, not an invented `PENDING` that never existed.
+
+Qualification and preference in that action belong to whoever decides
+qualification (§101): Purchasing's relation is born pending — with price and
+minimum order in the same action — and only Administrador creates it already
+approved or blocked.
 
 
 ## §39 — Rules from the first end-to-end case (VAL-LEG-01)
@@ -6531,7 +6538,9 @@ aberto a toda sessão.
 (`SUPPLIER_EDIT_ROLES`, `SUPPLIER_STATUS_CHANGE_ROLES`). A Qualidade não edita o
 Fornecedor: a homologação continua na relação Item × Fornecedor, com a regra
 própria. Criar e alterar a relação, marcar preferencial e registrar oferta
-seguem de Compras e Administrador (`SUPPLIER_ITEM_EDIT_ROLES`).
+seguem de Compras e Administrador (`SUPPLIER_ITEM_EDIT_ROLES`); a relação que
+Compras cria nasce pendente, e homologar e bloquear, também na criação, são de
+Qualidade e Administrador (§101).
 
 **Produto.** Criar, editar, inativar e reativar: Comercial e Administrador
 (`PRODUCT_EDIT_ROLES`, `PRODUCT_STATUS_CHANGE_ROLES`) — inclusive a criação
@@ -6566,3 +6575,48 @@ só aparece para Compras e Administrador.
 **Fora desta regra.** Travas estruturais além de `operationallyUsed` — Item em
 Formulação ou Modelo, PA ligado a Produto, PATCH do Produto que religa o PA —
 ficam em MASTER-DATA-STRUCTURAL-LOCKS-01. Registros existentes não mudam.
+
+## §101 — Item × Fornecedor: a relação de Compras nasce pendente, e a homologação tem uma autoridade só
+
+ITEM-SUPPLIER-QUALIFICATION-PERMISSION-01, 2026-09-16, decisão D3 do PO
+([discovery](discovery/ITEM-SUPPLIER-UX-DISCOVERY-01.md)).
+
+**Uma decisão, a mesma autoridade em todas as portas.** Homologar (`APPROVED`) e
+bloquear (`BLOCKED`) a relação Item × Fornecedor são decisões de Qualidade e
+Administrador (`SUPPLIER_ITEM_QUALIFICATION_ROLES`) — na rota de homologação e
+também na criação. Antes, a criação aceitava a situação de quem cadastrava, e
+Compras criava a relação já homologada: a decisão que a rota própria recusava
+entrava pelo cadastro.
+
+- **Compras** (`SUPPLIER_ITEM_EDIT_ROLES`) cria a relação, informa código e
+  observações comerciais, registra a primeira oferta na mesma ação e, com a
+  relação homologada, administra o preferencial. A relação que Compras cria
+  nasce `PENDING`. Pedir `APPROVED` ou `BLOCKED` é 403 `forbidden` com o motivo —
+  nunca rebaixado a pendente em silêncio — e nada é gravado: nem relação, nem
+  oferta, nem histórico, nem a troca do preferencial do item. A recusa vem antes
+  de conferir se item e fornecedor existem; corpo inválido continua 400, e
+  `PENDING` explícito passa.
+- **Qualidade** homologa e bloqueia pela rota de homologação, e não cria a
+  relação (§100).
+- **Administrador**, autoridade de exceção, segue criando a relação na situação
+  que informar, com a observação da decisão, e já preferencial quando
+  homologada. O histórico registra um evento `null → situação` com quem decidiu
+  (§38). Nenhuma permissão foi ampliada.
+- **Voltar para pendente** continua com Compras, Qualidade e Administrador.
+- **Preferencial** continua exigindo relação ativa e homologada: relação
+  pendente ou bloqueada não nasce preferencial (409 `not_eligible_preferred`), e
+  o CHECK do banco segue como garantia final.
+- **Oferta** registrada com a relação pendente fica guardada, imutável e
+  visível, marcada "Fornecedor não homologado"; entra no custo só depois da
+  homologação, pelas regras do §76. O motor de custo não mudou.
+- **Histórico** de homologação sem mudança: cada transição é um evento que só se
+  acrescenta.
+
+**A tela diz, não oferece.** Na "Nova relação", quem não decide a homologação vê
+"Situação inicial: Pendente" com a frase de quem homologa, sem seletor de
+situação, observação da decisão nem preferencial, e o pedido não leva esses
+campos — nem vindos de rascunho retomado. O Administrador vê as três situações,
+a observação e o preferencial, como a API aceita. No detalhe, "Homologar" e
+"Bloquear" seguem a mesma lista, e "Voltar para pendente" os perfis de antes.
+
+Relações existentes não mudam: cada uma segue com a situação gravada.

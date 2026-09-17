@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
-import { SUPPLIER_ITEM_EDIT_ROLES } from "@veridi/shared";
+import { SUPPLIER_ITEM_EDIT_ROLES, SUPPLIER_ITEM_QUALIFICATION_ROLES } from "@veridi/shared";
 import { ForbiddenError } from "../auth/auth.errors.js";
 import { requireCurrentUser, requireRole } from "../../lib/current-user.js";
 import {
@@ -89,8 +89,9 @@ function mapDomainError(
  *
  * Compras mantém a relação comercial (cadastro, código do fornecedor,
  * preços, preferencial); homologar/bloquear é da Qualidade — Compras não
- * homologa o próprio fornecedor. Devolver para pendente é administrativo e
- * fica com ambos. Qualquer usuário autenticado consulta.
+ * homologa o próprio fornecedor, nem pela rota de homologação nem criando a
+ * relação já homologada ou bloqueada. Devolver para pendente é administrativo
+ * e fica com ambos. Qualquer usuário autenticado consulta.
  */
 export const supplierItemsRoutes: FastifyPluginAsync = async (app) => {
   app.get("/supplier-items", async (request, reply) => {
@@ -168,12 +169,12 @@ export const supplierItemsRoutes: FastifyPluginAsync = async (app) => {
           .status(400)
           .send({ error: "validation_error", issues: formatZodError(parsed.error) });
       }
-      // Homologar/bloquear é ato da Qualidade; devolver para pendente é
-      // administrativo e Compras também pode fazer.
+      // Homologar/bloquear é ato da Qualidade — a mesma lista que a criação
+      // confere; devolver para pendente é administrativo e Compras também pode fazer.
       const actor =
         parsed.data.status === "PENDING"
           ? requireRole(request, "PURCHASING", "QUALITY", "ADMIN")
-          : requireRole(request, "QUALITY", "ADMIN");
+          : requireRole(request, ...SUPPLIER_ITEM_QUALIFICATION_ROLES);
 
       return reply.send(await changeQualification(id, parsed.data, actor));
     } catch (error) {

@@ -19,6 +19,18 @@ import type { UserRole } from "./users.js";
  */
 export const SUPPLIER_ITEM_EDIT_ROLES: readonly UserRole[] = ["PURCHASING", "ADMIN"];
 
+/**
+ * Quem DECIDE a homologação da relação: homologar (`APPROVED`) e bloquear
+ * (`BLOCKED`), na rota de homologação E na criação.
+ *
+ * A criação era uma segunda porta: Compras cadastrava a relação já homologada,
+ * e a decisão que a rota própria recusava entrava pelo cadastro. Quem não está
+ * aqui cria a relação `PENDING` — pedir outra situação é 403, nunca ignorado
+ * (ITEM-SUPPLIER-QUALIFICATION-PERMISSION-01). Devolver para pendente não é
+ * decisão de Qualidade e segue com regra própria na rota.
+ */
+export const SUPPLIER_ITEM_QUALIFICATION_ROLES: readonly UserRole[] = ["QUALITY", "ADMIN"];
+
 export type SupplierItemQualificationStatus = "PENDING" | "APPROVED" | "BLOCKED";
 
 export const SUPPLIER_ITEM_QUALIFICATION_STATUSES: readonly SupplierItemQualificationStatus[] = [
@@ -239,6 +251,9 @@ export interface CreateSupplierItemInput {
    * Todos opcionais: relação sem oferta continua sendo registro legítimo.
    * A oferta permanece entidade própria e imutável — o que mudou é apenas
    * quando ela pode ser informada, não como é guardada.
+   *
+   * Situação diferente de `PENDING` só de `SUPPLIER_ITEM_QUALIFICATION_ROLES`;
+   * dos demais perfis é 403.
    */
   qualificationStatus?: "PENDING" | "APPROVED" | "BLOCKED";
   qualificationNote?: string | null;

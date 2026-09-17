@@ -5312,6 +5312,45 @@ entre eles nas três —, todos verdes isolados. Typecheck de shared, API e web.
 API e Vite do worktree), 1440 e 390 com três perfis: 42/42 conferências, console e API limpos. Sem
 `validate:migrations:fresh` (schema intocado), E2E, golden path nem Railway.
 
+## A relação de Compras nasce pendente (ITEM-SUPPLIER-QUALIFICATION-PERMISSION-01, 2026-09-16)
+
+**Fecha ITEM-SUPPLIER-QUALIFICATION-PERMISSION-01**, decisão D3 do PO sobre o
+[ITEM-SUPPLIER-UX-DISCOVERY-01](discovery/ITEM-SUPPLIER-UX-DISCOVERY-01.md) — entregue só no chat e persistido nesta
+rodada, a partir do resumo da sessão. Regra durável no §101. Na `main`, fora de PROD (`release/prod` segue `5b7c1a3`).
+Sem migration.
+
+**O problema.** `POST /supplier-items` aceitava `qualificationStatus` de quem criava: Compras cadastrava a relação já
+homologada ou bloqueada — o ato que `POST /supplier-items/:id/qualification` recusava com 403. O formulário oferecia o
+seletor a quem abria "Nova relação", e os testes do cadastro completo rodavam como ADMIN.
+
+**API.** `SUPPLIER_ITEM_QUALIFICATION_ROLES` (Qualidade e Administrador) no shared, lida pela criação e pela rota de
+homologação (`APPROVED`/`BLOCKED`). `createSupplierItem` recusa situação inicial diferente de `PENDING` de quem não está
+nela — 403 `forbidden` com o motivo, antes de qualquer leitura, sem gravar relação, oferta, histórico nem troca de
+preferencial. Voltar para pendente segue com Compras, Qualidade e Administrador; `SUPPLIER_ITEM_EDIT_ROLES`,
+preferencial, oferta, histórico e motor de custo sem mudança. O Administrador continua criando na situação que informar.
+
+**Web.** `pages/supplier-items/supplier-item-permissions.ts` (`usePodeDecidirHomologacao`; fora do provider, como antes).
+Na "Nova relação", Compras vê "Situação inicial: Pendente" com a frase de quem homologa, e o pedido não leva situação,
+observação da decisão nem preferencial, nem vindos de rascunho retomado; o Administrador mantém os três. No detalhe,
+"Homologar"/"Bloquear" leem a lista do shared (mesmos perfis). As duas E2E que escolhem "Homologado" na "Nova relação"
+rodam com o ADMIN do runner e não mudam.
+
+**Validação.** API: `supplier-item-qualification-permissions.test.ts` (15 casos: Compras cria `PENDING` com e sem
+situação explícita; `APPROVED` e `BLOCKED` são 403 com o motivo e nada nasce; recusa antes da existência e 400 do corpo;
+recusa não tira o preferencial do item; pendente não nasce preferencial; oferta pendente fica "Fornecedor não
+homologado" e entra no custo depois da homologação, preferencial por Compras em seguida; Qualidade homologa, bloqueia e
+volta a homologar com Compras devolvendo para pendente e o histórico só acrescentando; Qualidade não cria; Produção,
+Comercial e Consulta sem nenhuma escrita; Administrador cria homologada com preferencial e oferta, e bloqueada) e os
+módulos de Item × Fornecedor, Fornecedor, sourcing e seleção de custo: 8 arquivos e 104 testes. Web:
+`situacao-da-relacao-por-perfil.test.tsx` (15 casos: seletor por perfil nos seis, Compras sem pedir situação, rascunho
+retomado, Administrador com o contrato da API, detalhe por perfil) e os vizinhos que exercem formulário, detalhe, página
+e guardas de fonte: 23 arquivos e 521 testes. Mutação por script, 15 de 15 derrubadas (API 9: gate fora, só
+Homologado, depois da existência, rebaixa em silêncio, rota com a lista comercial, Compras sem voltar para pendente,
+Qualidade criando, preferencial sem a regra, histórico com a origem errada; shared 1: Compras na lista, com build antes e
+depois; web 5: todo perfil decide, pedido com os campos, seletor para todos, detalhe pela lista comercial, voltar para
+pendente só de quem decide), com restauração conferida pelo hash do diff. Typecheck de shared, API e web. Sem suíte
+completa, smoke, E2E nem Railway.
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a

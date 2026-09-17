@@ -12,7 +12,7 @@ import type {
   SupplierItemDetailDTO,
   UnitOfMeasureDTO,
 } from "@veridi/shared";
-import { hojeComercial } from "@veridi/shared";
+import { SUPPLIER_ITEM_QUALIFICATION_LABELS, hojeComercial } from "@veridi/shared";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { FormSection } from "../../components/FormSection";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
@@ -36,6 +36,7 @@ import {
   SELETOR_DE_FORNECEDOR_SEM_CADASTRO,
   usePodeEditarFornecedor,
 } from "../suppliers/supplier-permissions";
+import { QUEM_HOMOLOGA_A_RELACAO, usePodeDecidirHomologacao } from "./supplier-item-permissions";
 
 /**
  * O que a relação leva junto ao sair para cadastrar item ou fornecedor.
@@ -118,6 +119,9 @@ export function SupplierItemFormModal({
      (MASTER-DATA-EDIT-PERMISSIONS-01); escolher existente segue livre. */
   const podeCadastrarItem = usePodeCriarItem();
   const podeCadastrarFornecedor = usePodeEditarFornecedor();
+  /* Situação inicial diferente de Pendente, e o preferencial que depende dela,
+     só para quem decide a homologação (ITEM-SUPPLIER-QUALIFICATION-PERMISSION-01). */
+  const podeDecidirHomologacao = usePodeDecidirHomologacao();
   const [itemId, setItemId] = useState("");
   const [supplierId, setSupplierId] = useState("");
   const [supplierItemCode, setSupplierItemCode] = useState("");
@@ -368,9 +372,14 @@ export function SupplierItemFormModal({
         supplierId,
         ...(supplierItemCode.trim() ? { supplierItemCode: supplierItemCode.trim() } : {}),
         ...(commercialNotes.trim() ? { commercialNotes: commercialNotes.trim() } : {}),
-        ...(qualificationStatus !== "PENDING" ? { qualificationStatus } : {}),
-        ...(qualificationNote.trim() ? { qualificationNote: qualificationNote.trim() } : {}),
-        ...(preferred ? { preferred: true } : {}),
+        // Quem não decide a homologação não pede situação: a relação nasce Pendente.
+        ...(podeDecidirHomologacao
+          ? {
+              ...(qualificationStatus !== "PENDING" ? { qualificationStatus } : {}),
+              ...(qualificationNote.trim() ? { qualificationNote: qualificationNote.trim() } : {}),
+              ...(preferred ? { preferred: true } : {}),
+            }
+          : {}),
         ...(preencheuOferta
           ? {
               initialOffer: {
@@ -531,59 +540,81 @@ export function SupplierItemFormModal({
           </div>
         </FormSection>
 
-        <FormSection
-          title="Homologação (opcional)"
-          subtitle="Homologação é por item, não pelo fornecedor inteiro. Pendente significa ausência de homologação — não é reprovação."
-        >
-          <div className="field-grid-2">
-            <div className="field">
-              <label htmlFor="supplier-item-qualification">Situação</label>
-              <select
-                id="supplier-item-qualification"
-                value={qualificationStatus}
-                onChange={(event) =>
-                  setQualificationStatus(event.target.value as "PENDING" | "APPROVED" | "BLOCKED")
-                }
-              >
-                <option value="PENDING">Pendente</option>
-                <option value="APPROVED">Homologado</option>
-                <option value="BLOCKED">Bloqueado</option>
-              </select>
-              <span className="field__hint">
-                Fica registrado como decisão de quem cadastrou, com data e autoria.
-              </span>
-            </div>
+        {podeDecidirHomologacao ? (
+          <FormSection
+            title="Homologação (opcional)"
+            subtitle="Homologação é por item, não pelo fornecedor inteiro. Pendente significa ausência de homologação — não é reprovação."
+          >
+            <div className="field-grid-2">
+              <div className="field">
+                <label htmlFor="supplier-item-qualification">Situação</label>
+                <select
+                  id="supplier-item-qualification"
+                  value={qualificationStatus}
+                  onChange={(event) =>
+                    setQualificationStatus(event.target.value as "PENDING" | "APPROVED" | "BLOCKED")
+                  }
+                >
+                  <option value="PENDING">Pendente</option>
+                  <option value="APPROVED">Homologado</option>
+                  <option value="BLOCKED">Bloqueado</option>
+                </select>
+                <span className="field__hint">
+                  Fica registrado como decisão de quem cadastrou, com data e autoria.
+                </span>
+              </div>
 
-            <div className="field">
-              <label htmlFor="supplier-item-qualification-note">Observação da decisão</label>
-              <input
-                id="supplier-item-qualification-note"
-                type="text"
-                value={qualificationNote}
-                onChange={(event) => setQualificationNote(event.target.value)}
-                placeholder="Ex.: auditoria de 2026, CoA aprovado"
-              />
-            </div>
-
-            <div className="field field--checkbox">
-              <label htmlFor="supplier-item-preferred">
+              <div className="field">
+                <label htmlFor="supplier-item-qualification-note">Observação da decisão</label>
                 <input
-                  id="supplier-item-preferred"
-                  type="checkbox"
-                  checked={preferred}
-                  disabled={!podeSerPreferencial}
-                  onChange={(event) => setPreferred(event.target.checked)}
+                  id="supplier-item-qualification-note"
+                  type="text"
+                  value={qualificationNote}
+                  onChange={(event) => setQualificationNote(event.target.value)}
+                  placeholder="Ex.: auditoria de 2026, CoA aprovado"
                 />
-                Fornecedor preferencial deste item
-              </label>
-              <span className="field__hint">
-                {podeSerPreferencial
-                  ? "Um por item. Se já houver outro preferencial, ele deixa de ser."
-                  : "Só um fornecedor homologado pode ser preferencial."}
-              </span>
+              </div>
+
+              <div className="field field--checkbox">
+                <label htmlFor="supplier-item-preferred">
+                  <input
+                    id="supplier-item-preferred"
+                    type="checkbox"
+                    checked={preferred}
+                    disabled={!podeSerPreferencial}
+                    onChange={(event) => setPreferred(event.target.checked)}
+                  />
+                  Fornecedor preferencial deste item
+                </label>
+                <span className="field__hint">
+                  {podeSerPreferencial
+                    ? "Um por item. Se já houver outro preferencial, ele deixa de ser."
+                    : "Só um fornecedor homologado pode ser preferencial."}
+                </span>
+              </div>
             </div>
-          </div>
-        </FormSection>
+          </FormSection>
+        ) : (
+          /* Compras cria a relação Pendente: a situação é dita, não oferecida —
+             um seletor com Homologado e Bloqueado terminaria no 403 da API, e o
+             preferencial exige a relação homologada. */
+          <FormSection
+            title="Homologação"
+            subtitle="Homologação é por item, não pelo fornecedor inteiro. Pendente significa ausência de homologação — não é reprovação."
+          >
+            <dl className="definition-list">
+              <dt>Situação inicial</dt>
+              <dd>
+                <span className="badge badge--neutral">
+                  {SUPPLIER_ITEM_QUALIFICATION_LABELS.PENDING}
+                </span>
+              </dd>
+            </dl>
+            <p className="field__hint">
+              {`Homologar ou bloquear é decisão de ${QUEM_HOMOLOGA_A_RELACAO}, no detalhe da relação. O preferencial só pode ser marcado depois da homologação.`}
+            </p>
+          </FormSection>
+        )}
 
         <FormSection
           title="Primeira oferta (opcional)"
