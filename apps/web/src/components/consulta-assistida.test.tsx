@@ -7,9 +7,11 @@ import userEvent from "@testing-library/user-event";
 import type { EntityOption } from "./SearchableEntitySelect";
 import { SearchableEntitySelect } from "./SearchableEntitySelect";
 import type {
+  EntityConsultationBaseProps,
   EntityConsultationColumn,
   EntityConsultationPage,
   EntityConsultationQuery,
+  EntityConsultationSingleSelection,
 } from "./EntityConsultationDialog";
 import { EntityConsultationDialog } from "./EntityConsultationDialog";
 import { FullWorkspaceModal } from "./FullWorkspaceModal";
@@ -239,7 +241,8 @@ function registros(de: number, ate: number): Registro[] {
 
 function abrirDialogo(
   fetchPage: (consulta: EntityConsultationQuery) => Promise<EntityConsultationPage<Registro>>,
-  props: Partial<Parameters<typeof EntityConsultationDialog<Registro>>[0]> = {},
+  // A seleção ÚNICA — a múltipla tem suíte própria (consulta-assistida-multipla).
+  props: Partial<EntityConsultationBaseProps<Registro> & EntityConsultationSingleSelection<Registro>> = {},
 ) {
   const onSelect = vi.fn();
   const onClose = vi.fn();

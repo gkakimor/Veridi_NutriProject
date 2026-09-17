@@ -101,6 +101,7 @@ import {
   errosDaLinha,
   idDoCampo,
   linhaNova,
+  linhasDosItensEscolhidos,
   proximaChaveDaLinha,
   secaoDaLinha,
   unidadeLegadaDaLinha,
@@ -990,6 +991,19 @@ export function FormulationTemplateDetailPage() {
     );
   }
 
+  /**
+   * Os itens marcados na consulta da SEÇÃO — uma linha nova por item, pelo
+   * MESMO `linhasDosItensEscolhidos` da Formulação: base derivada, fornecimento
+   * padrão, unidade e pureza do cadastro, nunca duplicata.
+   */
+  function escolherItensConsultados(secao: SecaoDaFormula, itens: ItemDaBancada[]) {
+    catalogo.mesclar(itens);
+    setLinhas((atual) => [
+      ...atual,
+      ...linhasDosItensEscolhidos(atual, secao, itens, porDose, units),
+    ]);
+  }
+
   /* Unidade gravada que a lista não oferece: legado, e prende o salvar. */
   const temUnidadeInvalida = linhas.some(
     (linha) => unidadeLegadaDaLinha(linha, unidadesDaLinha(linha)) !== null,
@@ -1155,7 +1169,12 @@ export function FormulationTemplateDetailPage() {
         }
         consultaDeItem={
           comEdicao
-            ? { origem: "Modelo de formulação", onEscolher: escolherItemConsultado }
+            ? {
+                origem: "Modelo de formulação",
+                onEscolher: escolherItemConsultado,
+                onEscolherVarios: escolherItensConsultados,
+                jaAdicionado: "Já adicionado neste modelo.",
+              }
             : undefined
         }
         erroDoItem={(linha) =>

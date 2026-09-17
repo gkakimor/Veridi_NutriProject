@@ -113,6 +113,7 @@ import {
   errosDaLinha,
   idDoCampo,
   linhaNova,
+  linhasDosItensEscolhidos,
   proximaChaveDaLinha,
   purezaRegistradaSemAplicar,
   secaoDaLinha,
@@ -927,6 +928,21 @@ export function FormulationVersionPage() {
   }
 
   /**
+   * Os itens marcados na consulta da SEÇÃO (ASSISTED-ENTITY-MULTISELECT-01):
+   * uma linha nova por item, no fim da seção, pelo mesmo caminho da escolha na
+   * linha — base derivada, fornecimento padrão, unidade e pureza do cadastro.
+   * Entram no catálogo porque a coluna de unidade e o rótulo do seletor leem
+   * dele. A receita fica com alteração pendente, como qualquer linha nova.
+   */
+  function handleComponentsConsulted(secao: SecaoDaFormula, itens: ItemDaBancada[]) {
+    catalogo.mesclar(itens);
+    setComponents((prev) => [
+      ...prev,
+      ...linhasDosItensEscolhidos(prev, secao, itens, porDose, units),
+    ]);
+  }
+
+  /**
    * Campo da linha, já sob o contrato da bancada.
    *
    * Digitar na coluna Pureza é o gesto INTEIRO: não há mais painel para abrir,
@@ -1586,7 +1602,12 @@ export function FormulationVersionPage() {
         }
         consultaDeItem={
           isDraft
-            ? { origem: "Formulação", onEscolher: handleComponentItemConsulted }
+            ? {
+                origem: "Formulação",
+                onEscolher: handleComponentItemConsulted,
+                onEscolherVarios: handleComponentsConsulted,
+                jaAdicionado: "Já adicionado nesta formulação.",
+              }
             : undefined
         }
         valoresDaLinha={valoresDaLinha}

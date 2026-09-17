@@ -92,6 +92,13 @@ export function useRecursosDoSeletor(
   catalogo: IndustrialResourceDTO[];
   recurso: (id: string) => IndustrialResourceDTO | undefined;
   buscar: (termo: string) => Promise<IndustrialResourceDTO[]>;
+  /**
+   * Recursos que a tela já tem INTEIROS — escolhidos na consulta assistida,
+   * talvez da terceira página — passam a ser nomeados pelo id, sem perguntar
+   * de novo ao servidor. São valor escolhido, não oferta: não entram no
+   * catálogo do campo.
+   */
+  guardarEscolhidos: (recursos: readonly IndustrialResourceDTO[]) => void;
   respondeu: boolean;
 } {
   const [catalogo, setCatalogo] = useState<IndustrialResourceDTO[]>([]);
@@ -135,11 +142,22 @@ export function useRecursosDoSeletor(
     [recorte],
   );
 
+  const guardarEscolhidos = useCallback((recursos: readonly IndustrialResourceDTO[]) => {
+    if (recursos.length === 0) return;
+    // Já conhecido pelo id não é perguntado depois de a primeira página responder.
+    for (const achado of recursos) idsPedidos.current.add(achado.id);
+    setPorId((atual) => {
+      const proximo = { ...atual };
+      for (const achado of recursos) proximo[achado.id] = achado;
+      return proximo;
+    });
+  }, []);
+
   const recurso = useMemo(() => {
     const mapa = new Map<string, IndustrialResourceDTO>(Object.entries(porId));
     for (const item of catalogo) mapa.set(item.id, item);
     return (id: string) => mapa.get(id);
   }, [catalogo, porId]);
 
-  return { catalogo, recurso, buscar, respondeu: paginaRespondeu };
+  return { catalogo, recurso, buscar, guardarEscolhidos, respondeu: paginaRespondeu };
 }

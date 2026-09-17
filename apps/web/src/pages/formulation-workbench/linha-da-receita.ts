@@ -15,6 +15,7 @@ import { OPCOES_PERCENTUAL_TECNICO, OPCOES_QUANTIDADE } from "../../lib/numeric-
 import { errosDosAjustes } from "./ajustes-da-quantidade";
 import type { AjustesDaQuantidade } from "./ajustes-da-quantidade";
 import type { ItemDaBancada } from "./catalogo-de-itens";
+import { itemElegivelParaSecao } from "./catalogo-de-itens";
 
 /**
  * A LINHA DA RECEITA — o contrato que as duas bancadas editam.
@@ -380,4 +381,34 @@ export function comItemEscolhido(
       ? toPtBrEditText(item.defaultPurityPercent, OPCOES_PERCENTUAL_TECNICO)
       : "",
   });
+}
+
+/**
+ * Uma linha nova por item marcado na consulta MÚLTIPLA da seção
+ * (ASSISTED-ENTITY-MULTISELECT-01).
+ *
+ * É o MESMO caminho de "+ Adicionar" seguido da escolha na linha, repetido
+ * por item: `linhaNova` dá a seção, a base derivada e o fornecimento padrão;
+ * `comItemEscolhido` põe o item com a unidade e a pureza do cadastro. Nenhuma
+ * regra de linha mora aqui.
+ *
+ * A consulta já não deixa marcar o que a receita tem nem o que a seção recusa.
+ * Esta é a segunda trava: item repetido no lote, já presente numa linha, de
+ * outro tipo ou inativo não vira linha — nunca duplicata na receita.
+ */
+export function linhasDosItensEscolhidos(
+  atuais: readonly Pick<LinhaDaReceita, "itemId">[],
+  secao: SecaoDaFormula,
+  itens: readonly ItemDaBancada[],
+  receitaPorDose: boolean,
+  units: UnitOfMeasureDTO[],
+): LinhaDaReceita[] {
+  const presentes = new Set(atuais.map((linha) => linha.itemId).filter(Boolean));
+  const novas: LinhaDaReceita[] = [];
+  for (const item of itens) {
+    if (presentes.has(item.id) || !itemElegivelParaSecao(item, secao)) continue;
+    presentes.add(item.id);
+    novas.push(comItemEscolhido(linhaNova(secao, receitaPorDose), item, units));
+  }
+  return novas;
 }
