@@ -65,7 +65,7 @@ Node é fixado em 22 pelo `.node-version`.
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` | referência ao banco do projeto — não copiar a URL na mão |
 | `VERIDI_WEB_DIST` | `apps/web/dist` | relativo à raiz do monorepo (não ao diretório do processo) |
 | `VERIDI_UPLOAD_DIR` | `/data/uploads` | dentro do volume persistente — ver seção 6 |
-| `VERIDI_STORAGE_PROVIDER` e `VERIDI_R2_*` | ausentes (hoje) | arquivo do Item Rótulo no R2 — ver seção 6.1; sem elas, `LOCAL_FS` |
+| `VERIDI_STORAGE_PROVIDER` e `VERIDI_R2_*` | cadastradas (`R2`, desde 2026-09-17) | arquivo do Item Rótulo no R2 — ver seção 6.1; sem elas, `LOCAL_FS` |
 | `TZ` | `UTC` | container e banco no mesmo relógio; a formatação é no cliente |
 
 **Não copiar `API_HOST` do `.env.example`.** Ele vale `127.0.0.1`, que é
@@ -109,6 +109,12 @@ basta **um** nome (ex.: `erp.seudominio.com`) — não precisa de `api.`.
 
 ## 5. Carga de dados reais
 
+**A carga real da Veridi já está em produção desde 2026-09-14** (release
+`b798e85`): 510 matérias-primas, 188 materiais de embalagem, 173 produtos, 113
+fornecedores, 76 clientes e 182 projetos. Reimportar não é rotina — a carga
+inicial foi aplicada uma vez e as pendências restantes ficam em
+`.local-data/veridi/carga-inicial/`.
+
 O corpus da Veridi vive em `.local-data/`, fora do repositório. A importação de
 produção exige as três camadas de sempre:
 
@@ -148,8 +154,14 @@ Railway deixar de ser a casa — o armazenamento está isolado em três funçõe
 
 O arquivo versionado do Item Rótulo (§103) passa por `lib/storage/`: `LOCAL_FS`
 grava no mesmo `VERIDI_UPLOAD_DIR` (em `items/<itemId>/labels/`), `R2` grava no
-bucket privado. **Sem as variáveis abaixo o serviço continua em `LOCAL_FS`** —
-é o estado de hoje; os anexos genéricos seguem no volume de qualquer jeito.
+bucket privado. **Sem as variáveis abaixo o serviço continua em `LOCAL_FS`.**
+Os anexos genéricos seguem no volume de qualquer jeito.
+
+**Estado de hoje: R2 ATIVO em produção.** As seis variáveis estão cadastradas no
+serviço desde 2026-09-17 (bucket de homologação `veridi-homologacao`), e o
+código que as lê subiu em `8e824e8f`, na release
+PROD-RELEASE-DEPLOY-01 ([`RELEASES.md`](RELEASES.md)). Antes dessa release as
+variáveis existiam sem efeito: a imagem no ar não tinha o `StorageAdapter`.
 
 Para ligar o R2, cadastrar no serviço (Variables do Railway, nunca no Git):
 

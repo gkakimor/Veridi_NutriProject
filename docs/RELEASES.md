@@ -12,6 +12,132 @@ conteúdo de backup.
 | `homologacao-inicial-2026-09-14-r2` | `b798e85` | 2026-09-14 | base da carga inicial da Veridi |
 | `homologacao-inicial-2026-09-14-r3` | `2400def` | 2026-09-14 | NAVIGATION-INFORMATION-ARCHITECTURE-01 |
 | `homologacao-veridi-2026-09-16-r1` | `5b7c1a3` | 2026-09-16 | HOMOLOGATION-RELEASE-RAILWAY-01, abaixo |
+| — (sem tag) | `8e824e8f` | 2026-09-17 | PROD-RELEASE-DEPLOY-01, abaixo; R2 ativo em PROD |
+
+## 2026-09-17 — PROD-RELEASE-DEPLOY-01
+
+**Autorização:** PO, no handoff. Publicar em PROD a versão homologada da `main`, com o SHA candidato
+declarado (`8e824e8f`) e confirmação do SHA real antes de qualquer escrita. A Onda A de duplicatas de Item
+e o `prod-cleanup --apply` ficaram **fora** deste release por decisão explícita do handoff.
+
+**Escopo:** `release/prod` de `5b7c1a3` para `8e824e8f` — 87 commits, 395 arquivos, duas migrations
+aditivas. Entram o Inventário Físico (fatias 1 e 2), o `StorageAdapter` com o R2, o arquivo do Item Rótulo
+versionado, o pagamento padrão do Cliente, a consulta assistida no seletor (única e múltipla), as
+permissões de cadastro mestre, o cadastro inativo (fatias 1 e 2), a base derivada do componente e o
+ferramental de `prod-cleanup`. `schema.prisma` mudou só por adição (+107 linhas, 0 remoções).
+
+O delta entre `24bf25ab` (SHA auditado em PROD-RELEASE-READINESS-01) e `8e824e8f` são 6 commits que tocam
+apenas `scripts/maintenance/` e `docs/`: nenhum arquivo de runtime, de schema ou de migration.
+
+### Gates antes do push (T-0)
+
+| Gate | Como | Resultado |
+|---|---|---|
+| SHAs | `git fetch origin` | `origin/main` = `8e824e8f` (igual ao candidato); `origin/release/prod` = `5b7c1a3`; fast-forward possível |
+| Base do componente (§106) | `prod-component-basis.ts` em transação READ ONLY | Formulação 1.292 ACTIVE + 30 DRAFT, Modelo sem linha, **FORA DA REGRA = 0** |
+| Migrations | `migrate status` + leitura de `_prisma_migrations` em transação READ ONLY | 81 linhas, **0 falha, 0 revertida**, exatamente as duas esperadas pendentes |
+| R2 | leitura das Variables do serviço, sem imprimir segredo | `VERIDI_STORAGE_PROVIDER=R2` e as cinco `VERIDI_R2_*` presentes; nada alterado |
+| Backup | `prod-backup-json.mjs` de um worktree em `5b7c1a3` | 6.763 linhas, 81 models, 0 falha |
+| Prova do backup | `restore-json-backup-check.mjs` em banco local descartável | **RESTAURÁVEL: YES** |
+
+O backup T-0 saiu de um worktree no SHA que estava publicado, não da `main`: o Prisma Client da `main` já
+conhece colunas que PROD ainda não tinha e a leitura falharia.
+
+`migrate status` também aponta uma migration que existe no banco e não no repositório,
+`20260904093000_template_component_quantity_mode`. É o resto conhecido e tolerado do renome de BACKLOG #13
+(commit `665765da`), de 2026-09-04 — não é estado novo. A conta fecha: 82 pastas locais = 80 linhas comuns
++ 2 pendentes; 81 linhas no banco = 80 comuns + 1 nome legado.
+
+### Sequência
+
+| Passo | `release/prod` | Deploy | Resultado |
+|---|---|---|---|
+| antes | `5b7c1a3` | `9d477a48-316e-4612-89e0-27011ee64023` | ativo desde 2026-09-17 16:43Z (redeploy do mesmo SHA pelas variáveis do R2) |
+| push 18:09Z | `5b7c1a3` → `8e824e8f` | `4edfd622-f531-42d4-9e64-effec2500f57` | criado às 18:09:57Z, **SUCCESS às 18:12:49Z** |
+
+Push fast-forward, sem force, sem squash e sem cherry-pick: o SHA publicado é byte a byte o da `main`. O
+pipeline não mudou (`/railway.json`): NIXPACKS com `pnpm build`; pré-deploy `pnpm deploy:prod`
+(`prisma migrate deploy`); início `pnpm start:prod`; healthcheck `/health`. Nenhuma migration foi rodada à
+mão — as duas subiram pelo pré-deploy.
+
+### Migrations aplicadas
+
+| Migration | Aplicada em | O que cria |
+|---|---|---|
+| `20260925093032_customer_payment_defaults` | 2026-09-17 18:12:30.812Z | enum `PaymentInstrument` e 8 colunas anuláveis |
+| `20260925093033_item_label_file_versions` | 2026-09-17 18:12:30.836Z | enum `StorageProvider` e a tabela `item_label_file_versions` |
+
+Depois: 83 linhas em `_prisma_migrations`, **0 falha e 0 revertida**, e `migrate status` responde
+"Database schema is up to date!".
+
+Conferido em transação READ ONLY: `PaymentInstrument` com `PIX, BOLETO, BANK_TRANSFER, CARD, OTHER`;
+`StorageProvider` com `LOCAL_FS, R2`; `item_label_file_versions` presente, 19 colunas e 0 linha; as 8
+colunas novas presentes e todas anuláveis — `customer_orders.agreedPaymentInstrument`,
+`quote_versions.paymentInstrument` e seis em `customers`.
+
+### Dado preservado
+
+Os dois backups lógicos, gerados antes e depois do deploy, diferem em **um único model**:
+
+| | T-0 (18:05Z) | pós-release (18:20Z) |
+|---|---|---|
+| linhas | 6.763 | 6.768 |
+| models | 81 | 82 (`ItemLabelFileVersion`, vazia) |
+| `UserSession` | 698 | 703 (+5, os logins do smoke) |
+| os outros 81 models | — | contagem idêntica |
+
+Clientes 76, produtos 173, itens 871 (510 matérias-primas, 188 embalagens, 173 acabados), fornecedores 113,
+projetos 182, usuários 6. Pedido, OP, compra, recebimento, lote e movimento seguem em 0. Nenhuma tabela
+perdeu linha. **DATA_PRESERVED = YES.**
+
+### Backups
+
+| Quando | Arquivo (em `../.local-data/veridi/backups/`) | Bytes | sha256 | Schema | Prova |
+|---|---|---|---|---|---|
+| T-0, 18:05:40Z | `prod-t0-deploy-20260917T180540Z-schema-5b7c1a3.json` | 4.283.124 | `fbee1bf043b008adcc41fce904c47f41282421a5ea75311bf24f5e7f88379791` | `5b7c1a3` | RESTAURÁVEL: YES |
+| pós, 18:20:47Z | `prod-pos-release-20260917T182047Z-schema-8e824e8f.json` | 4.304.774 | `5bf2140298c54991bdb8ecb8f6af8fbb4d384dca9ac0782212668910c463ab18` | `8e824e8f` | RESTAURÁVEL: YES |
+
+O segundo é o ponto de recuperação compatível com o schema publicado. As duas provas rodaram em banco
+local descartável, com as migrations do checkout correspondente e conferência linha a linha.
+
+### Smoke
+
+`/health` responde 200 com `"database":"up"`. O smoke rodou com a sessão do `prod-demo`, **somente
+leitura**: os únicos verbos fora de GET foram `/auth/login` e `/auth/logout`. 67 verificações OK e nenhuma
+falha aberta:
+
+- casca e sessão: `/health`, login, cookie, `/auth/me`, logout e a recusa (401) depois do logout;
+- API: clientes, produtos, projetos, itens, fornecedores, pedidos, faturamento, OPs, compras, estoque,
+  lotes, formulações, contagens físicas e o arquivo do rótulo;
+- Itens por tipo: 510 matérias-primas, 188 materiais de embalagem, 112 itens inativos na lista filtrada;
+- Rótulo: a seção "Arquivo do rótulo" abre no Item de subtipo LABEL, com 0 versão — o esperado, já que o
+  R2 acabou de entrar;
+- Formulação: lista, versão, bancada e **Ficha Técnica em PDF real**;
+- consulta assistida: o diálogo de seleção múltipla abre na bancada de uma versão DRAFT e fecha no Escape
+  sem escolher nada;
+- Inventário Físico e Modelos de Formulação abrem;
+- produto inativo no Comercial: os 2 produtos inativos não aparecem na lista que a tela do Pedido pede
+  (`active=true&lifecycle=APPROVED`, 171 produtos);
+- telas do smoke padrão: painel, clientes, produtos, itens, projetos, pedidos, estoque e ordens de
+  produção, mais a ajuda contextual;
+- console limpo e **nenhuma resposta 4xx/5xx** em toda a navegação.
+
+Uma verificação falhou por erro do próprio roteiro, não do produto: procurou o botão "Consultar" na tela
+do Pedido, e a consulta assistida está na bancada da Formulação e do Modelo (`consultaDeItem`), não no
+Pedido. Reexecutada no lugar certo, passou.
+
+A perna de escrita do `smoke-prod.mjs` não rodou. **Nenhum dado de negócio foi criado pelo smoke** — a
+comparação dos dois backups prova: só `UserSession` mudou.
+
+### O que não rodou
+
+`prod-cleanup --apply`, a Onda A de duplicatas de Item, seed, import, carga inicial, reset de sequences,
+restore em PROD e SQL destrutivo à mão. Não houve rollback nem incidente. O deployment anterior
+(`9d477a48`, `5b7c1a3`, já com as variáveis do R2) continua disponível como rollback de código pela janela
+do Railway; ele não desfaz migration, e as duas são aditivas e toleradas pelo código antigo.
+
+Sem tag nesta release: o handoff não pediu uma, e mover `release/prod` foi o único push autorizado sobre o
+ambiente publicado.
 
 ## 2026-09-16 — HOMOLOGATION-RELEASE-RAILWAY-01
 

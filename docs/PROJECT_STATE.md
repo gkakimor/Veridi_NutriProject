@@ -39,8 +39,12 @@ reconstruído do zero, DEV e produção são a mesma estrutura, campo a campo.
 
 [`BACKLOG.md`](BACKLOG.md) — **zero CRITICAL, zero BLOCKER**. A ordem vive só na fila viva de lá, reconciliada com o
 estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0d81aae` (MAIN-STABILITY-FAST-GATE-01,
-2026-09-15: MAIN_STABLE = YES); PROD em `release/prod` = `5b7c1a3` (tag `homologacao-veridi-2026-09-16-r1`,
-[`RELEASES.md`](RELEASES.md)).
+2026-09-15: MAIN_STABLE = YES); **PROD em `release/prod` = `8e824e8f`** desde 2026-09-17
+(PROD-RELEASE-DEPLOY-01, [`RELEASES.md`](RELEASES.md)): as duas migrations aditivas entraram, o R2 está
+ATIVO em produção e o ponto de recuperação compatível é o backup pós-release. A Onda A de duplicatas e o
+`prod-cleanup --apply` continuam fora de PROD. As seções mais abaixo que dizem "na `main`, fora de PROD
+(`release/prod` segue `5b7c1a3`)" registram o estado **da época da entrega**: tudo o que está em
+`8e824e8f` foi publicado nesta release.
 
 - **E2E:** WAVE 1–2 e WAVE 3 fechadas (merges `9c60845` e `6256ca9`); a próxima é a WAVE 4 (grupo C) e depois a WAVE 5
   (golden path);
