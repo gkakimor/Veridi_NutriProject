@@ -5566,6 +5566,46 @@ da OC" em "Receber OC" com o custo no envio para Compras e ADMIN, sem campo, com
 demais) e os vizinhos de recebimento, endurecimento e ajuda: 13 arquivos e 207 testes. Typecheck de shared, API e web. Sem
 suíte completa, E2E, Playwright, mutação nem Railway.
 
+## Consulta assistida no seletor de Item (ASSISTED-ENTITY-SELECTOR-FOUNDATION-01, 2026-09-17)
+
+**Fundação de UX + piloto Item.** O autocomplete continua sendo o caminho rápido; quem não percebe que basta digitar, ou
+quer ver uma lista maior e comparar, ganha "Consultar itens" no topo da lista do seletor, sem sair do documento. Padrão
+em [`UI_BRAND.md`](UI_BRAND.md) ("Assisted consultation from a search field"). Na `main`, fora de PROD (`release/prod`
+segue `5b7c1a3`). **Sem API alterada e sem migration.**
+
+**Fundação.** `SearchableEntitySelect` ganhou `onConsult`/`consultLabel`, opt-in: sem eles nada muda; com eles
+"Consultar" encabeça a lista (antes do "+ Novo"), leva o termo digitado e o Enter sem resultado abre a consulta em vez do
+cadastro. `components/EntityConsultationDialog.tsx`: `FullWorkspaceModal` dentro da tela (nunca portal — a largura da
+sidebar só existe no `.shell`), recorte do campo à vista, busca e paginação no servidor por `useListQuery` +
+`useFilteredPage` + `ListStatusRow`, linha recusada desabilitada com motivo, vazio, falha com "Tentar de novo", criação
+só quando o perfil cria e cartões empilhados abaixo de 640px. `FullWorkspaceModal` ganhou `initialFocus` e `closeHint`
+(padrões inalterados).
+
+**Piloto.** `pages/items/ItemConsultationDialog.tsx`: um tipo por campo e só ativos, perguntados ao `GET /items` que já
+existia; colunas Código, Nome (nutriente, fonte e código legado, que a busca também enxerga), Tipo, Unidade e Situação;
+segunda trava de tipo e situação na tela. A bancada hospeda em `TabelaDaReceita` — Formulação e Modelo, matéria-prima e
+embalagem, sem duplicar código: o tipo vem da seção, o item de outra linha aparece desabilitado ("Já está em outra linha
+desta receita."), selecionar põe o item na linha pelo mesmo `comItemEscolhido` (entra no catálogo da tela, sem recarregar
+nem perder pendência) e reescolher o item da própria linha fecha sem reaplicar a pureza do cadastro. "+ Novo item de
+estoque" dentro da consulta é o `onCriarItem` de sempre — tela oficial, rascunho, volta com o item na linha —, só para
+Compras, Qualidade, Produção e ADMIN (`usePodeCriarItem`), e o cadastro passou a abrir com `?tipo=` da seção (mecanismo
+que a `ItemCreatePage` já lia, com os defaults do tipo).
+
+**Validação.** Web: `components/consulta-assistida.test.tsx` (18: opt-in, ordem da lista, autocomplete e Enter no primeiro
+resultado, termo entregue, Enter sem resultado na consulta, cadastro pela seta, foco devolvido sem reabrir; termo e foco
+na abertura, digitação e página 1, paginação, vazio, falha e nova tentativa, motivo desabilitando, criação só com
+`create`, Escape só na camada de cima sobre outro modal; regra e estrutura de 390px) e
+`pages/formulations/consulta-assistida-bancada.test.tsx` (17: autocomplete com as ações, termo e recorte perguntados ao
+servidor, embalagem, registro fora do recorte desabilitado, item de fora do catálogo na linha sem recarga e com pendência,
+item de outra linha, pureza preservada, paginação com recorte e termo, Escape e foco, matriz dos seis perfis no "+ Novo",
+saída para o cadastro com `?tipo=` e volta com o item na linha e o rascunho, Modelo). `create-in-context-navigation`
+passou a achar o "+ Novo" pelo nome. Conjunto focado de 76 arquivos e 926 testes (bancada, Modelo, criação no contexto,
+componentes, Item e Item × Fornecedor) e as 11 guardas de CSS; typecheck do web. Sem suíte completa, E2E, Playwright,
+mutação nem Railway; 390px provado por estrutura e regra (jsdom não mede).
+
+**Registrado.** ASSISTED-ENTITY-SELECTOR-ROLLOUT-01 (BACKLOG, seção G): Cliente, Fornecedor, Produto, Lote e os demais
+seletores, só depois de validar o piloto.
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a
