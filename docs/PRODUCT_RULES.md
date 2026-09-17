@@ -227,7 +227,8 @@ user to clear them to edit unrelated fields.
   either side may send a relation back to pending. Every transition is kept
   in an immutable history with who and when. The decision has one authority
   at every door, creation included: a relation Purchasing creates is born
-  `PENDING` (§101).
+  `PENDING` (§101). The same relation is administered from inside the Item
+  record, with the same lists and routes (§102).
 - **Approved and preferred are different concepts.** At most one preferred
   supplier per item (enforced by a partial unique index, with the previous
   one cleared in the same transaction). Only an active, approved relation can
@@ -6620,3 +6621,77 @@ a observação e o preferencial, como a API aceita. No detalhe, "Homologar" e
 "Bloquear" seguem a mesma lista, e "Voltar para pendente" os perfis de antes.
 
 Relações existentes não mudam: cada uma segue com a situação gravada.
+
+## §102 — Item × Fornecedor no cadastro do Item: a seção administra a relação, sem regra nova
+
+ITEM-SUPPLIER-UX-01, 2026-09-16, decisões D1, D2, D4 e D5 do PO
+([discovery](discovery/ITEM-SUPPLIER-UX-DISCOVERY-01.md)).
+
+**A seção é a mesma relação.** No cadastro e na consulta do Item, a seção
+Fornecedores lista todas as relações do item — ativas e inativas, o preferencial
+primeiro e as inativas no fim — com código e nome do fornecedor, código no
+fornecedor, homologação (Pendente, Homologado, Bloqueado) e a oferta de hoje com a
+validade, ou a referência histórica sem vigência. Três marcas que não se misturam:
+**Preferencial** e **Relação inativa** são da relação (`SupplierItem.preferred` e
+`.active`); **Fornecedor inativo** é do cadastro do fornecedor (`Supplier.active`).
+Relação inativa e fornecedor inativo continuam à vista: o histórico não some. A
+leitura é `GET /supplier-items?itemId=`, sem read model novo, e o Item continua sem
+fornecedor direto — a relação segue N:N.
+
+**Quem faz o quê** — as listas do shared, nenhuma ampliada:
+
+- **Compras e Administrador** (`SUPPLIER_ITEM_EDIT_ROLES`) veem "Adicionar
+  fornecedor" e, na linha de cada relação ativa e homologada que ainda não é a
+  preferencial, "Definir como preferencial". Dados comerciais, ofertas, inativar e
+  reativar ficam no detalhe da relação, como na tela geral.
+- **Qualidade e Administrador** (`SUPPLIER_ITEM_QUALIFICATION_ROLES`) homologam e
+  bloqueiam no detalhe; voltar para pendente segue com Compras, Qualidade e
+  Administrador (§101). A Qualidade não adiciona fornecedor.
+- **Produção, Comercial e Consulta** consultam a seção e o detalhe, sem ação de
+  escrita.
+
+**Detalhe sem sair do Item.** Clicar na relação abre o mesmo detalhe da tela geral
+por cima do cadastro do Item — homologação com histórico, ofertas, preferencial e
+situação —; fechar volta à seção, relida do servidor.
+
+**Adicionar fornecedor.** O formulário da relação abre com o Item fixo: o Item é
+dito, não oferecido, e não se troca. Situação inicial pela §101 (Compras: Pendente,
+sem seletor; Administrador escolhe), primeira oferta opcional. Só fornecedor ativo é
+oferecido, e a API segue recusando fornecedor e item inativos; item inativo não
+recebe a ação ("Item inativo: para adicionar fornecedor, reative o item.").
+Cadastrar fornecedor novo não sai do Item — sair desmontaria o cadastro aberto —, e
+a busca vazia diz que fornecedor novo se cadastra em Cadastros › Fornecedores.
+
+**Duplicidade.** Não existe segunda relação do mesmo Item e Fornecedor. Escolher um
+fornecedor que o item já tem mostra "X já está cadastrado para este item" (com
+"(relação inativa)" quando for o caso) e "Abrir relação existente", que leva ao
+detalhe dela; se só o fornecedor foi escolhido, abre sem pergunta de descarte. Se a
+relação nasceu depois que a seção carregou, o 409 `already_exists` da API leva à
+mesma frase.
+
+**Preferencial.** No máximo um por item e só entre relações ativas e homologadas
+(§5.3). Definir pede confirmação curta — "Definir X como fornecedor preferencial
+deste item?" e, havendo outro, "X substituirá Y como fornecedor preferencial." — e
+usa `POST /supplier-items/:id/preferred`, que desmarca o anterior e marca o novo na
+mesma transação, sob trava do Item, com o índice único parcial do banco como
+garantia final. A tela nunca encadeia "desmarcar, depois marcar". A confirmação vale
+na linha, no "Marcar como preferencial" do detalhe aberto do Item e para o
+Administrador que cria a relação já preferencial. Não há confirmação sem mudança
+real (a ação não aparece na relação que já é a preferencial); remover o preferencial
+segue direto no detalhe. Com dois ou mais homologados com oferta válida e nenhum
+preferencial, a seção repete a frase da ambiguidade do custo (§76).
+
+**Escape** numa confirmação aberta cancela só a confirmação: o cadastro do Item
+continua aberto.
+
+**Produto acabado** não tem fornecedor — a API recusa a relação —, e a seção diz
+isso, sem ação. Não existe tipo "uso e consumo".
+
+**Tela estreita.** Abaixo de 640px a linha empilha: fornecedor na largura toda,
+homologação e oferta, ações embaixo.
+
+**Fora desta regra.** A tela geral Compras › Item × Fornecedor permanece como
+consulta e filas de Compras e da Qualidade, sem mudança (D2) — inclusive o
+"Marcar como preferencial" do detalhe dela, que segue sem confirmação. Fornecedor →
+Itens segue só leitura, em capability separada (D4, SUPPLIER-ITEMS-UX-01). Lead time
+de fornecedor não entra (D5). Sem migration.
