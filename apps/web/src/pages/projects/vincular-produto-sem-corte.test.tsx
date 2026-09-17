@@ -45,11 +45,14 @@ function produto(numero: number, extra: Partial<ProductDTO> = {}): ProductDTO {
 const ALVO = produto(RUIDO + 1, { name: "Pré-Treino Zeta Alvo", lifecycle: "APPROVED" });
 const DE_OUTRO_CLIENTE = produto(RUIDO + 2, { name: "Pré-Treino Zeta de Outro Cliente", customerId: CLIENTE_B });
 const JA_VINCULADO = produto(RUIDO + 3, { name: "Pré-Treino Zeta Já no Projeto" });
+/** Do mesmo cliente, mas inativo: não entra em negociação nova (§108). */
+const INATIVO = produto(RUIDO + 4, { name: "Pré-Treino Zeta Inativo", active: false });
 const UNIVERSO = [
   ...Array.from({ length: RUIDO }, (_, indice) => produto(indice + 1)),
   ALVO,
   DE_OUTRO_CLIENTE,
   JA_VINCULADO,
+  INATIVO,
 ];
 
 function servidor(params: ListProductsParams = {}) {
@@ -107,14 +110,21 @@ const opcaoDe = (codigo: string) => ({ name: new RegExp(`^${codigo}`) });
 async function abrirVinculo() {
   fireEvent.click(screen.getByRole("button", { name: "+ Adicionar produto" }));
   fireEvent.click(screen.getByRole("button", { name: "Vincular produto existente" }));
-  await waitFor(() => expect(listProducts).toHaveBeenCalledWith({ customerId: CLIENTE_A, pageSize: PAGINA }));
+  await waitFor(() =>
+    expect(listProducts).toHaveBeenCalledWith({ customerId: CLIENTE_A, active: true, pageSize: PAGINA }),
+  );
 }
 
 async function buscar(termo: string) {
   fireEvent.focus(campo());
   fireEvent.change(campo(), { target: { value: termo } });
   await waitFor(() =>
-    expect(listProducts).toHaveBeenCalledWith({ customerId: CLIENTE_A, search: termo, pageSize: PAGINA }),
+    expect(listProducts).toHaveBeenCalledWith({
+      customerId: CLIENTE_A,
+      active: true,
+      search: termo,
+      pageSize: PAGINA,
+    }),
   );
 }
 
@@ -191,6 +201,26 @@ describe("Vincular produto existente — busca no servidor", () => {
     expect(screen.queryByRole("option", opcaoDe(DE_OUTRO_CLIENTE.code))).toBeNull();
     expect(screen.queryByRole("option", opcaoDe(JA_VINCULADO.code))).toBeNull();
     perguntasDentroDoCliente();
+  });
+
+  it("produto inativo do cliente não é oferecido: a página e a busca pedem só ativos ao servidor (§108)", async () => {
+    render(secao());
+    await abrirVinculo();
+    await buscar(INATIVO.code);
+    await waitFor(() => expect(screen.queryByRole("option", opcaoDe(ALVO.code))).toBeNull());
+    expect(screen.queryByRole("option", opcaoDe(INATIVO.code))).toBeNull();
+    // Toda pergunta de LISTA leva o filtro; só a releitura do escolhido vai pelo id.
+    for (const [params] of vi.mocked(listProducts).mock.calls) {
+      if (params?.productId === undefined) expect(params?.active).toBe(true);
+    }
+  });
+
+  it("produto já vinculado e depois inativado continua na tabela, marcado Inativo", () => {
+    render(secao([vinculo(JA_VINCULADO), { ...vinculo(INATIVO), productActive: false }]));
+    const linhaInativa = screen.getByRole("link", { name: new RegExp(INATIVO.name) }).closest("tr")!;
+    expect(within(linhaInativa).getByText("Inativo")).toHaveClass("badge", "badge--inactive");
+    const linhaAtiva = screen.getByRole("link", { name: new RegExp(JA_VINCULADO.name) }).closest("tr")!;
+    expect(within(linhaAtiva).queryByText("Inativo")).toBeNull();
   });
 });
 

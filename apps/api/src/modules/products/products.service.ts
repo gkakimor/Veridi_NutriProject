@@ -84,6 +84,9 @@ function toProductDTO(product: ProductWithRelations): ProductDTO {
           controlsExpiry: product.finishedProductItem.controlsExpiry,
           requiresQualityRelease: product.finishedProductItem.requiresQualityRelease,
           requiresCoa: product.finishedProductItem.requiresCoa,
+          // Situação própria do PA (§108): o cadastro do Produto avisa quando o
+          // item está inativo — inativar um nunca muda o outro.
+          active: product.finishedProductItem.active,
         }
       : null,
     dosageForm: product.dosageForm,

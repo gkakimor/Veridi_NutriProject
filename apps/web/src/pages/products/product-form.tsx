@@ -576,27 +576,48 @@ function EstoqueDoProduto({ product }: { product: ProductDTO }) {
   }
   const item = product.finishedProductItem;
   return (
-    <dl className="definition-list">
-      <dt>Item de produto acabado</dt>
-      <dd>
-        <span className="is-code">{item.code}</span> {item.name}
-      </dd>
-      <dt>Controles de estoque</dt>
-      <dd>
-        {[
-          item.controlsLot ? "controla lote" : null,
-          item.controlsExpiry ? "controla validade" : null,
-          item.requiresQualityRelease ? "exige liberação da Qualidade" : null,
-          item.requiresCoa ? "exige CoA / laudo" : null,
-        ]
-          .filter(Boolean)
-          .join(" · ") || "Sem controles — lote e validade não são acompanhados."}
-      </dd>
-      <dt>Estoque</dt>
-      <dd>
-        <Link to={`/estoque/${item.id}`}>Ver estoque e lotes</Link>
-      </dd>
-    </dl>
+    <>
+      {/* Situação própria do PA, sem cascata com o Produto (§108): quem cadastra
+          o produto vê aqui por que o Pedido e a liberação da OP vão recusar. */}
+      {item.active === false && (
+        <div className="pendency-panel" role="status">
+          <p className="pendency-panel__title">Item de produto acabado inativo</p>
+          <p className="pendency-panel__sub">
+            {item.code} está inativo.{" "}
+            {product.active
+              ? "O produto continua ativo, mas não entra em pedido nem libera ordem de produção até o item ser reativado no cadastro de Itens."
+              : "Reativar o produto não reativa o item: os dois mudam de situação separadamente."}
+          </p>
+        </div>
+      )}
+      <dl className="definition-list">
+        <dt>Item de produto acabado</dt>
+        <dd>
+          <span className="is-code">{item.code}</span> {item.name}
+          {item.active === false && (
+            <>
+              {" "}
+              <span className="badge badge--inactive">Inativo</span>
+            </>
+          )}
+        </dd>
+        <dt>Controles de estoque</dt>
+        <dd>
+          {[
+            item.controlsLot ? "controla lote" : null,
+            item.controlsExpiry ? "controla validade" : null,
+            item.requiresQualityRelease ? "exige liberação da Qualidade" : null,
+            item.requiresCoa ? "exige CoA / laudo" : null,
+          ]
+            .filter(Boolean)
+            .join(" · ") || "Sem controles — lote e validade não são acompanhados."}
+        </dd>
+        <dt>Estoque</dt>
+        <dd>
+          <Link to={`/estoque/${item.id}`}>Ver estoque e lotes</Link>
+        </dd>
+      </dl>
+    </>
   );
 }
 

@@ -186,6 +186,8 @@ const productionOrderBase = {
   finishedItemId: "item-1",
   finishedItemCode: "PA-000010",
   finishedItemName: "Magnésio 60 caps",
+  productActive: true,
+  finishedItemActive: true,
   formulationVersionId: "fv-1",
   formulationVersionNumber: 2,
   formulationVersionLabel: "v2",

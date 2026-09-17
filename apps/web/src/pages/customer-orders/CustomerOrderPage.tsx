@@ -86,6 +86,7 @@ import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { TableEmptyRow } from "../../components/TableEmptyRow";
 import { CustomerStatusNotice, pedidoAindaAvanca } from "../customers/CustomerStatusNotice";
+import { ProductInactiveNotice } from "../products/ProductInactiveNotice";
 import {
   SELETOR_DE_CLIENTE_SEM_CADASTRO,
   usePodeEditarCliente,
@@ -154,6 +155,23 @@ interface LineRow {
   productName: string;
   unitCode: string;
   orderedQuantity: string;
+}
+
+/** O item de produto acabado tem situação própria, sem cascata com o Produto (§108). */
+const PA_INATIVO = "Item de produto acabado inativo";
+
+/**
+ * Produto do catálogo como opção. O catálogo só traz produto ativo; o PA inativo
+ * continua achável, e DITO — sumir da lista faria o produto parecer inexistente —,
+ * e quem recusa a linha é o servidor, com a mensagem própria.
+ */
+function opcaoDeProdutoDoPedido(product: ProductDTO): EntityOption {
+  return {
+    id: product.id,
+    code: product.code,
+    name: product.name,
+    ...(product.finishedProductItem?.active === false ? { hint: PA_INATIVO } : {}),
+  };
 }
 
 function statusBadgeClass(status: CustomerOrderStatus): string {
@@ -604,7 +622,7 @@ export function CustomerOrderPage() {
       const conhecidos = new Set(atual.map((x) => x.id));
       return [...atual, ...novos.filter((x) => !conhecidos.has(x.id))];
     });
-    return novos.map((p) => ({ id: p.id, code: p.code, name: p.name }));
+    return novos.map(opcaoDeProdutoDoPedido);
   }
 
   const status: CustomerOrderStatus = customerOrder?.status ?? "DRAFT";
@@ -640,6 +658,17 @@ export function CustomerOrderPage() {
    */
   const linhasInconsistentes = (customerOrder?.lines ?? []).filter(
     (line) => line.productCustomerMismatch,
+  );
+  /*
+   * Situação ATUAL de produto e PA das linhas gravadas (§108), por produto. O
+   * aviso e as marcas leem daqui, e só para o produto que ainda está numa linha
+   * da tela: retirada a linha, o aviso dela sai antes mesmo de gravar.
+   */
+  const linhaGravadaPorProduto = new Map(
+    (customerOrder?.lines ?? []).map((line) => [line.productId, line] as const),
+  );
+  const linhasGravadasNaTela = (customerOrder?.lines ?? []).filter((line) =>
+    lines.some((row) => row.productId === line.productId),
   );
   /*
    * IN_FULFILLMENT entra aqui porque o domínio SEMPRE permitiu cancelar
@@ -949,8 +978,26 @@ export function CustomerOrderPage() {
     const usedByOtherRows = new Set(lines.filter((l) => l.key !== row.key).map((l) => l.productId));
     const base = activeProducts
       .filter((product) => !usedByOtherRows.has(product.id) && product.finishedProductItem)
-      .map((product) => ({ id: product.id, code: product.code, name: product.name }));
+      .map(opcaoDeProdutoDoPedido);
     if (!row.productId || base.some((option) => option.id === row.productId)) return base;
+    /*
+     * Fora do catálogo de ativos também fica a linha GRAVADA cujo produto foi
+     * inativado depois (§108): a opção sintética diz a situação do servidor, em
+     * vez de a tela deduzir inatividade pela ausência na lista.
+     */
+    const gravada = linhaGravadaPorProduto.get(row.productId);
+    const situacao =
+      gravada?.productActive === false
+        ? "Inativo"
+        : gravada?.finishedItemActive === false
+          ? PA_INATIVO
+          : null;
+    if (situacao) {
+      return [
+        ...base,
+        { id: row.productId, code: row.productCode, name: row.productName, hint: situacao },
+      ];
+    }
     /*
      * O produto já escolhido nesta linha não está no catálogo do cliente.
      *
@@ -1568,6 +1615,12 @@ export function CustomerOrderPage() {
             />
           )}
 
+        {/* Produto ou item de produto acabado inativado depois que a linha
+            entrou (§108): o rascunho abre; confirmar é recusado. */}
+        {customerOrder && pedidoAindaAvanca(customerOrder.status) && (
+          <ProductInactiveNotice linhas={linhasGravadasNaTela} passo="confirmar o pedido" />
+        )}
+
         {customerOrder?.status === "CANCELLED" && (
           <FormSection title="Cancelamento">
             <div className="status-line">
@@ -1782,6 +1835,20 @@ options={customerOptions.map((customer) => ({
                       ) : (
                         <>
                           <EntityLink kind="product" id={line.productId} code={line.productCode} name={line.productName} />
+                        </>
+                      )}
+                      {/* Marca real, do servidor, na linha gravada (§108) — no
+                          rascunho também: o campo mostra só o nome escolhido. */}
+                      {linhaGravadaPorProduto.get(line.productId)?.productActive === false && (
+                        <>
+                          {" "}
+                          <span className="badge badge--inactive">Inativo</span>
+                        </>
+                      )}
+                      {linhaGravadaPorProduto.get(line.productId)?.finishedItemActive === false && (
+                        <>
+                          {" "}
+                          <span className="badge badge--inactive">{PA_INATIVO}</span>
                         </>
                       )}
                     </td>

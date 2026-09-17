@@ -49,6 +49,12 @@ export interface ProductFinishedItemSummary {
   controlsExpiry: boolean;
   requiresQualityRelease: boolean;
   requiresCoa: boolean;
+  /**
+   * Situação do item de produto acabado — independente da do Produto (§108: sem
+   * cascata). Inativo recusa Pedido e liberação de OP com mensagem própria, e o
+   * cadastro do Produto avisa.
+   */
+  active: boolean;
 }
 
 /** Forma farmacêutica do produto. */

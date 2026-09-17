@@ -5740,6 +5740,46 @@ provado por estrutura e regra (jsdom não mede).
 **Registrado.** COST-TEMPLATE-RESOURCE-LINE-WITHOUT-USAGE-01 (BACKLOG, seção G): linha de recurso sem uso por lote não
 vai no "Salvar rascunho" e a tela só diz "Alterações não salvas" — anterior a esta rodada, mais visível com o lote.
 
+## Produto inativo não inicia compromisso novo (PRODUCT-INACTIVE-COMMERCIAL-GATE-01, 2026-09-17)
+
+**Decisão do PO** (D6–D7 de [MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01](discovery/MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01.md),
+Fatia 2): Produto inativo não inicia compromisso comercial novo, sem apagar histórico nem cancelar o que já foi assumido;
+Produto × PA sem cascata, com recusa própria de PA inativo. Regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §108. Na
+`main`, fora de PROD (`release/prod` segue `5b7c1a3`). **Sem migration**; perfis intocados.
+
+**API.** `lib/product-active-gate.ts`: `assertProductsActive` (`ProductInactiveError`, 400 `inactive_product`, todos os
+códigos de uma vez) e `assertFinishedItemActive` (`FinishedItemInactiveError`, 400 `inactive_finished_item`), com a
+orientação de cada porta. Recusam: `addProjectProduct` (vínculo), `addQuoteLine`, `sendQuoteVersion`, `acceptQuoteVersion`,
+`approveProject` (dentro da transação), `createOrderFromAcceptedQuote` (depois do retorno idempotente do Pedido já
+gerado; PA inativo também) e `createSample` (inclusive o vínculo automático). Versão nova e duplicação continuam copiando
+a linha. Pedido: `assertLineProductValid` e `confirmCustomerOrder` separam PA inexistente (`missing_finished_item`) de PA
+inativo; `InactiveLineProductError` saiu. OP: `releaseProductionOrder` relê Produto e o PA congelado (`finishedItem`)
+antes da reserva; criar, trocar e planejar intocados. Situação ATUAL nos DTOs: `QuoteLineDTO.productActive`,
+`CustomerOrderLineDTO.productActive`/`finishedItemActive`, `ProductionOrderDTO.productActive`/`finishedItemActive`,
+`ProductFinishedItemSummary.active`. Sem trava de linha, como §95.
+
+**Web.** Vincular produto pede `active: true` na página e na busca (a releitura pelo id segue sem filtro e marca o
+inativo na dica); linha nova do Orçamento e Amostra não oferecem o inativo e dizem qual ficou fora. `ProductInactiveNotice`
+(`pages/products`) avisa o passo recusado no Orçamento (por status), no Pedido em rascunho e na OP em rascunho e
+planejada, sem desabilitar nada; marcas "Inativo" e "Item de produto acabado inativo" nas linhas do Projeto, do
+Orçamento, do Pedido (também no rascunho) e na OP, e a dica "Inativo" na opção do produto gravado. Diálogo de aprovação
+com marca e aviso; `onConfirm` fecha também na recusa (antes o alerta ficava atrás do diálogo). Cadastro do Produto avisa
+o PA inativo. `api-errors` ganhou os dois códigos.
+
+**Validação.** API: `projects/produto-inativo-no-comercial` (10: vínculo; rascunho com linha nova recusada, linha marcada,
+edição e precificação livres, envio recusado e liberado na reativação; versão nova e duplicar; aceite; aprovação desfeita;
+geração com produto e com PA inativo e o Pedido gerado intacto e idempotente; histórico com Pedido confirmado; Amostra
+nova, existente e com dois produtos; sem cascata nos dois sentidos com `finishedProductItem.active`; Pedido com PA e
+produto inativos em linha nova e confirmação) e três casos novos em `production-orders-release` (produto e PA inativados
+depois do planejamento, OP liberada segue com separação confirmada). Pastas tocadas — projetos, Pedido, Amostra, OP,
+Produto e o endurecimento do Cliente: 42 arquivos, 645 testes, em banco de teste exclusivo. Web:
+`projects/produto-inativo-no-comercial` (9), `customer-orders/produto-inativo-no-pedido` (4),
+`production-orders/produto-inativo-na-op` (5), `product-finished-item` (+1) e `vincular-produto-sem-corte` (+2, chamadas com
+`active: true`); vizinhos que importam as telas tocadas: 92 arquivos, 1.162 testes; 16 fixtures tipadas ganharam os campos.
+Mutação por script (extra): guardas da lib desligadas derrubaram os 10 casos de guarda da API; avisos, marcas e filtros
+desligados derrubaram 24 casos Web, e os arquivos voltaram idênticos. Typecheck de shared, API e web. Sem suíte completa,
+E2E nem Playwright; Railway intocado.
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a

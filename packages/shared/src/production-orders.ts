@@ -370,6 +370,13 @@ export interface ProductionOrderDTO {
   finishedItemId: string | null;
   finishedItemCode: string | null;
   finishedItemName: string | null;
+  /**
+   * Situação ATUAL do Produto e do item de produto acabado desta ordem (§108).
+   * A ordem planejada não libera com um dos dois inativo; liberada e em execução
+   * seguem normalmente, só marcadas. `finishedItemActive` é `null` sem item.
+   */
+  productActive: boolean;
+  finishedItemActive: boolean | null;
   formulationVersionId: string | null;
   formulationVersionNumber: number | null;
   /** "V2" — `null` quando a OP ainda não tem versão de formulação definida. */

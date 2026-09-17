@@ -107,6 +107,15 @@ export interface CustomerOrderLineDTO {
    * Produto sem cliente não conta como inconsistência.
    */
   productCustomerMismatch: boolean;
+  /**
+   * Situação ATUAL do Produto e do item de produto acabado (§108), lida a cada
+   * leitura — nunca congelada. A linha continua abrindo e marcada; no rascunho,
+   * a confirmação é recusada enquanto um dos dois estiver inativo. Sem cascata:
+   * um pode estar inativo e o outro não. `finishedItemActive` é `null` quando o
+   * produto não tem item de produto acabado.
+   */
+  productActive: boolean;
+  finishedItemActive: boolean | null;
 }
 
 export interface CustomerOrderReservationLineDTO {

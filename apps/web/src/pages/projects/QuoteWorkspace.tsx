@@ -673,7 +673,14 @@ export function QuoteWorkspace({
 
   const linkedProducts = project.products;
   const usedProductIds = new Set(open.lines.map((line) => line.productId));
-  const availableProducts = linkedProducts.filter((link) => !usedProductIds.has(link.productId));
+  const foraDaProposta = linkedProducts.filter((link) => !usedProductIds.has(link.productId));
+  /*
+   * Produto inativo não entra em linha nova (§108): a lista não o oferece, e a
+   * dica diz qual ficou de fora. Decide pelo valor conhecido — leitura sem o
+   * campo não esconde produto.
+   */
+  const availableProducts = foraDaProposta.filter((link) => link.productActive !== false);
+  const inativosForaDaProposta = foraDaProposta.filter((link) => link.productActive === false);
   const missingPrice = open.lines.some((line) => line.unitPrice === null);
 
   /*
@@ -794,6 +801,14 @@ export function QuoteWorkspace({
                     code={line.productCode}
                     name={line.productName}
                   />
+                  {/* Situação ATUAL do produto, da leitura da versão (§108): a
+                      linha continua, marcada; quem recusa o passo é o servidor. */}
+                  {line.productActive === false && (
+                    <>
+                      {" "}
+                      <span className="badge badge--inactive">Inativo</span>
+                    </>
+                  )}
                 </td>
                 <td className="is-numeric">
                   {editable ? (
@@ -1268,6 +1283,14 @@ export function QuoteWorkspace({
       {editable && availableProducts.length === 0 && linkedProducts.length === 0 && (
         <p className="field__hint">
           O projeto ainda não tem produtos. Adicione um produto ao projeto para poder orçá-lo.
+        </p>
+      )}
+
+      {editable && inativosForaDaProposta.length > 0 && (
+        <p className="field__hint">
+          Produto inativo não entra na proposta:{" "}
+          {inativosForaDaProposta.map((link) => link.productCode).join(", ")}. Reative o produto
+          para incluí-lo.
         </p>
       )}
 

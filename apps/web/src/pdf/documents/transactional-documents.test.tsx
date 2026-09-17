@@ -174,6 +174,8 @@ function pedidoDoCliente(): CustomerOrderDTO {
       sourceQuoteLineId: null,
       agreedPrice: null,
       productCustomerMismatch: false,
+      productActive: true,
+      finishedItemActive: true,
     };
   });
   return {
@@ -412,6 +414,8 @@ function ordemDeProducao(): ProductionOrderDTO {
     finishedItemId: "pa-12",
     finishedItemCode: "PA-000012",
     finishedItemName: "Whey Protein Isolado 900 g — Baunilha",
+    productActive: true,
+    finishedItemActive: true,
     formulationVersionId: "fv-2",
     formulationVersionNumber: 2,
     formulationVersionLabel: "V2",

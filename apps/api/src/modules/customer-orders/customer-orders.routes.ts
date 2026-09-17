@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { FinishedItemInactiveError, ProductInactiveError } from "../../lib/product-active-gate.js";
 import { ProductNotOperationalError } from "../../lib/product-lifecycle.js";
 import { CustomerMismatchError } from "../../lib/product-customer-ownership.js";
 import type { ZodError } from "zod";
@@ -16,7 +17,6 @@ import {
   CustomerOrderNotFoundError,
   DuplicateLineProductError,
   EmptyOrderError,
-  InactiveLineProductError,
   CommercialOriginLockedError,
   InvalidTransitionError,
   LineProductNotFoundError,
@@ -73,8 +73,13 @@ function mapDomainError(
   if (error instanceof LineProductNotFoundError) {
     return { status: 400, body: { error: "product_not_found", message: error.message } };
   }
-  if (error instanceof InactiveLineProductError) {
+  // Produto inativo e PA inativo (§108): o PA existe, e por isso não cai em
+  // `missing_finished_item`.
+  if (error instanceof ProductInactiveError) {
     return { status: 400, body: { error: "inactive_product", message: error.message } };
+  }
+  if (error instanceof FinishedItemInactiveError) {
+    return { status: 400, body: { error: "inactive_finished_item", message: error.message } };
   }
   if (error instanceof MissingFinishedItemError) {
     return { status: 400, body: { error: "missing_finished_item", message: error.message } };

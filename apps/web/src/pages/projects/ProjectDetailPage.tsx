@@ -520,13 +520,26 @@ function ProjectDetail() {
                       onChange={(event) => setSampleProductId(event.target.value)}
                     >
                       <option value="">Selecione…</option>
-                      {project.products.map((link) => (
-                        <option key={link.id} value={link.id}>
-                          {link.productCode} · {link.productName}
-                        </option>
-                      ))}
+                      {/* Produto inativo não recebe amostra nova (§108). */}
+                      {project.products
+                        .filter((link) => link.productActive !== false)
+                        .map((link) => (
+                          <option key={link.id} value={link.id}>
+                            {link.productCode} · {link.productName}
+                          </option>
+                        ))}
                     </select>
                   </div>
+                )}
+                {project.products.some((link) => link.productActive === false) && (
+                  <p className="field__hint">
+                    Produto inativo não recebe amostra nova:{" "}
+                    {project.products
+                      .filter((link) => link.productActive === false)
+                      .map((link) => link.productCode)
+                      .join(", ")}
+                    . Reative o produto para criar a amostra.
+                  </p>
                 )}
                 <button
                   type="button"
@@ -579,11 +592,10 @@ function ProjectDetail() {
           <ApprovalPreviewDialog
             project={project}
             onCancel={() => setApprovalOpen(false)}
+            // Fecha também na recusa: aberto, o diálogo escondia o alerta da
+            // página — a recusa de produto inativo (§108) parecia clique mudo.
             onConfirm={() =>
-              void run(async () => {
-                await approveProject(project.id);
-                setApprovalOpen(false);
-              })
+              void run(() => approveProject(project.id)).finally(() => setApprovalOpen(false))
             }
           />
         )}

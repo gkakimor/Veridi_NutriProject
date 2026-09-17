@@ -36,6 +36,7 @@ import {
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { isPending, reconciliationStatus, unreconciledQuantity } from "./reconciliation.js";
+import { assertFinishedItemActive, assertProductsActive } from "../../lib/product-active-gate.js";
 import { assertProductOperational } from "../../lib/product-lifecycle.js";
 import type { BulkSelectionInput } from "../../lib/bulk-selection.js";
 import { resolverSelecao } from "../../lib/bulk-selection.js";
@@ -643,6 +644,12 @@ async function toProductionOrderDTO(
     finishedItemName: usingSnapshot
       ? order.finishedItemName
       : (order.product.finishedProductItem?.name ?? null),
+    // Situação de agora (§108). O item é o mesmo que a ordem mostra: o congelado
+    // no planejamento, ou o do produto enquanto rascunho.
+    productActive: order.product.active,
+    finishedItemActive: usingSnapshot
+      ? (order.finishedItem?.active ?? null)
+      : (order.product.finishedProductItem?.active ?? null),
     formulationVersionId: order.formulationVersionId,
     formulationVersionNumber: versionNumber,
     formulationVersionLabel: versionNumber ? `V${versionNumber}` : null,
@@ -1330,8 +1337,26 @@ export async function releaseProductionOrder(
 
     const order = await tx.productionOrder.findUniqueOrThrow({
       where: { id },
-      include: { requirements: { include: { item: true }, orderBy: { position: "asc" } } },
+      include: {
+        requirements: { include: { item: true }, orderBy: { position: "asc" } },
+        product: { select: { code: true, active: true } },
+        finishedItem: { select: { code: true, active: true } },
+      },
     });
+
+    /*
+     * Produto e item de produto acabado são relidos na LIBERAÇÃO (§108): o
+     * planejamento os validou, mas podem ter sido inativados depois — e liberar
+     * reserva material e numera o documento. A ordem continua PLANEJADA,
+     * intacta. O PA conferido é o congelado no planejamento, o que a ordem
+     * produz. Ordem já liberada ou em execução não passa por aqui.
+     */
+    assertProductsActive([order.product], "Reative o produto para liberar a ordem.");
+    assertFinishedItemActive(
+      order.product.code,
+      order.finishedItem,
+      "Reative o item para liberar a ordem.",
+    );
 
     if (order.requirements.length === 0) {
       throw new ReleaseValidationError(

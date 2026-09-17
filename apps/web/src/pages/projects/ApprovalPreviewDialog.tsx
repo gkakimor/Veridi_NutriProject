@@ -22,6 +22,8 @@ export function ApprovalPreviewDialog({
   const acceptedProductIds = new Set((accepted?.lines ?? []).map((line) => line.productId));
 
   const toApprove = project.products.filter((link) => acceptedProductIds.has(link.productId));
+  /** Produto aceito e depois inativado: a aprovação é recusada até reativar (§108). */
+  const inativos = toApprove.filter((link) => link.productActive === false);
 
   /*
    * Linhas cujo preço não tem base de custo conhecida.
@@ -79,10 +81,27 @@ export function ApprovalPreviewDialog({
                 {toApprove.map((link) => (
                   <li key={link.id}>
                     <span className="code">{link.productCode}</span> {link.productName}
+                    {link.productActive === false && (
+                      <>
+                        {" "}
+                        <span className="badge badge--inactive">Inativo</span>
+                      </>
+                    )}
                   </li>
                 ))}
               </ul>
             </>
+          )}
+
+          {inativos.length > 0 && (
+            <p className="field__hint" role="note">
+              <strong>
+                {inativos.length === 1 ? "Produto inativo" : "Produtos inativos"}:{" "}
+                {inativos.map((link) => link.productCode).join(", ")}.
+              </strong>{" "}
+              A aprovação é recusada enquanto o produto aceito estiver inativo — reative o
+              cadastro do produto antes de aprovar.
+            </p>
           )}
 
           {semBaseDeCusto.length > 0 && (

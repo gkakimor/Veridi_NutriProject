@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
 import { ForbiddenError } from "../auth/auth.errors.js";
 import { requireCurrentUser, requireRole } from "../../lib/current-user.js";
+import { ProductInactiveError } from "../../lib/product-active-gate.js";
 import { ProjectNotFoundError } from "../projects/projects.errors.js";
 import {
   InsufficientSampleStockError,
@@ -59,6 +60,10 @@ function mapDomainError(
   }
   if (error instanceof ProjectNotOpenForSamplesError) {
     return { status: 409, body: { error: "project_closed", message: error.message } };
+  }
+  // Amostra nova de produto inativo (§108) — o mesmo código do Projeto e do Pedido.
+  if (error instanceof ProductInactiveError) {
+    return { status: 400, body: { error: "inactive_product", message: error.message } };
   }
   if (error instanceof SampleClosedError || error instanceof InvalidSampleTransitionError) {
     return { status: 409, body: { error: "invalid_transition", message: error.message } };

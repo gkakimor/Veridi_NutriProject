@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { Prisma } from "@prisma/client";
+import { FinishedItemInactiveError, ProductInactiveError } from "../../lib/product-active-gate.js";
 import { ProductNotOperationalError } from "../../lib/product-lifecycle.js";
 import { requireRole } from "../../lib/current-user.js";
 import type { ZodError } from "zod";
@@ -120,6 +121,13 @@ function mapDomainError(
   }
   if (error instanceof InactiveProductError) {
     return { status: 400, body: { error: "inactive_product", message: error.message } };
+  }
+  // Liberação da ordem planejada com Produto ou PA inativado depois (§108).
+  if (error instanceof ProductInactiveError) {
+    return { status: 400, body: { error: "inactive_product", message: error.message } };
+  }
+  if (error instanceof FinishedItemInactiveError) {
+    return { status: 400, body: { error: "inactive_finished_item", message: error.message } };
   }
   if (error instanceof MissingFinishedItemError) {
     return { status: 400, body: { error: "missing_finished_item", message: error.message } };

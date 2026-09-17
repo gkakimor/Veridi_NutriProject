@@ -16,6 +16,7 @@ import {
   calcularTotaisOrcamento,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { assertProductsActive } from "../../lib/product-active-gate.js";
 import {
   exigirParcelas,
   padraoDePagamentoDTO,
@@ -186,6 +187,9 @@ function toQuoteLineDTO(
     productId: line.productId,
     productCode: line.productCodeSnapshot ?? line.product.code,
     productName: line.productNameSnapshot ?? line.product.name,
+    // Situação de AGORA, nunca snapshot (§108): o rascunho abre e avisa, e a
+    // marca some na leitura seguinte à reativação.
+    productActive: line.product.active,
     sortOrder: line.sortOrder,
     quotedQuantity: line.quotedQuantity ? line.quotedQuantity.toString() : null,
     uomCode: line.uomCode,
@@ -1037,11 +1041,14 @@ export async function addQuoteLine(
 
   const link = await prisma.projectProduct.findUnique({
     where: { id: input.projectProductId },
-    include: { product: { select: { code: true } } },
+    include: { product: { select: { code: true, active: true } } },
   });
   if (!link || link.projectId !== quote.projectId) {
     throw new QuoteLineProductNotInProjectError(input.projectProductId);
   }
+  // Linha nova é escolha nova (§108). A linha que já estava no rascunho — ou
+  // veio copiada numa versão nova — continua, e quem recusa é o envio.
+  assertProductsActive([link.product], "Reative o produto para incluí-lo na proposta.");
   if (quote.lines.some((line) => line.productId === link.productId)) {
     throw new QuoteLineDuplicateError(link.product.code);
   }
@@ -1208,7 +1215,7 @@ export async function sendQuoteVersion(
     where: { id },
     include: {
       project: { include: { customer: { include: bloqueioVigenteInclude } } },
-      lines: true,
+      lines: { include: { product: { select: { code: true, active: true } } } },
     },
   });
   if (!quote) throw new QuoteNotFoundError(id);
@@ -1219,6 +1226,14 @@ export async function sendQuoteVersion(
    * aqui (§95); o rascunho continua existindo, e nada é cancelado.
    */
   assertCustomerCanSell(quote.project.customer);
+  /*
+   * O mesmo para o produto (§108): o rascunho — e a versão nova que copiou a
+   * linha — abre e edita, mas não vai ao cliente com produto inativo.
+   */
+  assertProductsActive(
+    quote.lines.map((line) => line.product),
+    "Reative o produto ou retire a linha para enviar a proposta.",
+  );
   /*
    * Rascunho pode não ter validade — é trabalho em andamento. O documento que
    * vai ao cliente, não: o preço nele foi calculado sobre o custo de uma data,
@@ -1274,7 +1289,10 @@ export async function acceptQuoteVersion(id: string, actor: User): Promise<Quote
   const prisma = getPrisma();
   const quote = await prisma.quoteVersion.findUnique({
     where: { id },
-    include: { project: { select: { customer: { include: bloqueioVigenteInclude } } } },
+    include: {
+      project: { select: { customer: { include: bloqueioVigenteInclude } } },
+      lines: { select: { product: { select: { code: true, active: true } } } },
+    },
   });
   if (!quote) throw new QuoteNotFoundError(id);
   if (quote.status !== "SENT") throw new QuoteNotSentError(quote.status);
@@ -1284,6 +1302,12 @@ export async function acceptQuoteVersion(id: string, actor: User): Promise<Quote
    * enviada continua no histórico, sem alteração.
    */
   assertCustomerCanSell(quote.project.customer);
+  // Produto inativado depois do envio também não fecha acordo (§108). A
+  // enviada não muda de status: reativar e aceitar, ou negociar versão nova.
+  assertProductsActive(
+    quote.lines.map((line) => line.product),
+    "Reative o produto para registrar o aceite.",
+  );
   /*
    * A validade controla a janela de ACEITE, e só ela. Depois de aceita, a
    * proposta virou acordo: o Pedido pode ser materializado semanas depois sem

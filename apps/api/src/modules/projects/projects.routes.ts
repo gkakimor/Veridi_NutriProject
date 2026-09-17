@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
 import { ForbiddenError } from "../auth/auth.errors.js";
+import { FinishedItemInactiveError, ProductInactiveError } from "../../lib/product-active-gate.js";
 import { ProductNotOperationalError } from "../../lib/product-lifecycle.js";
 import { CustomerMismatchError } from "../../lib/product-customer-ownership.js";
 import { createOrderFromAcceptedQuote } from "./quote-to-order.service.js";
@@ -195,6 +196,17 @@ function mapDomainError(
   }
   if (error instanceof CustomerInactiveForSalesError) {
     return { status: 400, body: { error: "inactive_customer", message: error.message } };
+  }
+  /*
+   * Produto inativo (§108): vínculo, linha nova, envio, aceite, aprovação e
+   * geração do Pedido. Os mesmos códigos do Pedido e da OP; o PA inativo tem o
+   * seu, porque o item existe.
+   */
+  if (error instanceof ProductInactiveError) {
+    return { status: 400, body: { error: "inactive_product", message: error.message } };
+  }
+  if (error instanceof FinishedItemInactiveError) {
+    return { status: 400, body: { error: "inactive_finished_item", message: error.message } };
   }
   if (error instanceof MissingAcceptedQuoteError) {
     return { status: 409, body: { error: "missing_accepted_quote", message: error.message } };
