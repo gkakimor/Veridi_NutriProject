@@ -3,6 +3,7 @@ import { premissasIniciaisDoProduto } from "../formulations/formulations.service
 import type { Prisma as PrismaTypes, ProductLifecycle, Project, User } from "@prisma/client";
 import type { ProjectCostingSummaryDTO } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { exigirNomeDeCadastroLivre } from "../../lib/nome-de-cadastro-mestre.js";
 import { createFinishedItemForProduct } from "../items/finished-item-for-product.js";
 
 type PrismaOrTx = PrismaTypes.TransactionClient;
@@ -65,6 +66,8 @@ export async function createProjectProduct(
   // Mesma construção do cadastro direto de Produto — ver
   // `items/finished-item-for-product`. Duas definições de "como nasce o PA"
   // divergiriam com o tempo.
+  await exigirNomeDeCadastroLivre("PRODUCT", input.name ?? project.name, undefined, tx);
+
   const finishedItem = await createFinishedItemForProduct(tx, {
     name: input.name ?? project.name,
     unitCode: input.finishedUnitCode,

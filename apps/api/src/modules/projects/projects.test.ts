@@ -139,12 +139,19 @@ async function createProject(
   return response;
 }
 
-/** Cria um produto de desenvolvimento no projeto. */
+/**
+ * Cria um produto de desenvolvimento no projeto.
+ *
+ * O nome vai SEMPRE explícito: sem ele a API usa o nome do projeto, e desde
+ * MASTER-DATA-DUPLICATE-SANITIZATION-01 o nome do Produto é único no
+ * catálogo — dois produtos auto-nomeados no mesmo projeto colidiriam. A tela
+ * real sempre manda o nome digitado (`ProjectProductsSection.tsx`).
+ */
 async function addProjectProduct(app: App, projectId: string, name?: string) {
   const response = await app.inject({
     method: "POST",
     url: `/projects/${projectId}/products`,
-    payload: { operation: "create", ...(name ? { name } : {}) },
+    payload: { operation: "create", name: name ?? `Produto ${marker()}` },
   });
   return response.json();
 }

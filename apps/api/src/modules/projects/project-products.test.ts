@@ -118,11 +118,18 @@ async function createProject(app: App, customerId: string) {
   return project;
 }
 
+/**
+ * Nome do produto com marca própria: desde
+ * MASTER-DATA-DUPLICATE-SANITIZATION-01 o nome do Produto é único no
+ * catálogo (sem caixa), e a limpeza deste arquivo é `afterAll` — dois casos
+ * pedindo "Produto A" colidiriam entre si. O nome que cada caso passa
+ * continua sendo o prefixo, que é o que dá sentido à leitura.
+ */
 async function addProduct(app: App, projectId: string, name: string) {
   const response = await app.inject({
     method: "POST",
     url: `/projects/${projectId}/products`,
-    payload: { operation: "create", name, finishedUnitCode: "un" },
+    payload: { operation: "create", name: `${name} ${marker()}`, finishedUnitCode: "un" },
   });
   return response;
 }

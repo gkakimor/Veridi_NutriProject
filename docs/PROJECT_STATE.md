@@ -6016,6 +6016,77 @@ exclusivo. Web: `supplier-items/relacao-com-parte-inativa` (9) e `receiving/rece
 vizinhos das telas tocadas: 33 arquivos, 346 testes; 9 fixtures tipadas ganharam os campos novos. Typecheck de shared,
 API e web. Sem suíte completa, E2E, Playwright nem mutação; PROD e Railway intocados.
 
+## Nome de cadastro mestre é único sem caixa (MASTER-DATA-DUPLICATE-SANITIZATION-01, 2026-09-17)
+
+**Decisão do PO.** Em todo cadastro mestre, "ABC", "Abc" e "abc" são o MESMO nome; acento é preservado, então `ACIDO` e
+`ÁCIDO` seguem diferentes. Regra em §114; a §110 (duplicatas de Item da Onda A) continua valendo e tem ferramenta
+própria. **Sem migration nesta rodada** — a janela de Uso e Consumo está criando a dela, e o índice único é a capability
+seguinte.
+
+**Escopo.** Nove cadastros com nome de catálogo: Item (os quatro tipos, Uso e consumo inclusive), Cliente, Fornecedor, Produto, Recurso industrial, Modelo de
+formulação, Modelo de custo industrial, Modelo de política de preço e Perfil de produção. Fora: documento transacional,
+`units_of_measure` (catálogo fechado, só `GET /units`), `users` (identidade é o e-mail), Calendário de Produção
+(registro único) e as versões.
+
+**Guarda da API.** `lib/nome-de-cadastro-mestre.ts` compara `upper(btrim(<coluna>))` dos dois lados — mesma expressão da
+ferramenta e do índice futuro — e recusa criar e renomear, inclusive nas portas indiretas: o Item de produto acabado que
+nasce com o Produto, o produto nascido de Projeto e "Salvar como modelo". 409 `duplicate_name` com a frase e o código do
+cadastro existente, mapeado uma vez no `setErrorHandler` do `app.ts` (o resto dos erros segue no tratador padrão do
+Fastify). Trocar a caixa do próprio nome passa. **Não é a constraint**: entre o SELECT e o INSERT há janela, e fechá-la é
+MASTER-DATA-NAME-UNIQUENESS-01.
+
+**Ferramenta.** `scripts/maintenance/master-data-duplicate-sanitization.ts` `plan | apply | verify`, com
+`master-data-catalog.ts` (escopo e critério), `master-data-duplicate-report.ts` (planilha) e `xlsx-writer.ts` (gerador de
+`.xlsx` sem dependência: ZIP de XML, texto e número, data como texto ISO). Canônico determinístico: referenciado → mais
+histórico → mais completo → mais antigo → menor código. PLAN é READ ONLY; APPLY é **uma transação por grupo** (trava
+consultiva, `FOR UPDATE`, releitura com a mesma impressão do plano, linhas contadas por escrita,
+`pg_stat_xact_user_tables` e conferência dentro da transação), e exige backup lógico que cubra o plano — mesmas contagens
+de agora e cada removido dentro dele. Grupo bloqueado não impede os seguros.
+
+**DEV.** PLAN sobre o `veridi_dev` nos nove cadastros: **13 grupos, todos BLOQUEADOS, nenhum APPLY.** 12 são de Item
+(Ondas B e C do discovery, todas com conflito em `declaredNutrient` — dependem de D1/D3 e de V1–V7 com a Veridi) e 1 é de
+Modelo de formulação (FT-000001 × FT-000002, ambos "X", colisão de `versionNumber` ao mover a versão). Cliente,
+Fornecedor, Produto, Recurso industrial e os demais modelos: **zero duplicidade**. Uma variante fora da regra entrou na
+aba de revisão: ME-000021 `Sachê Silica gel 5g` × ME-000089 `SACHÊ SÍLICA GEL 5G`, que diferem por acento. Planilha em
+`.local-data/veridi/exports/cadastros-duplicados-dev-20260917T223507Z.xlsx`, plano em
+`.local-data/veridi/saneamento-duplicatas/master-data/`. **PROD e Railway intocados.**
+
+**APPLY provado.** Não havendo grupo seguro no DEV, o caminho completo do CLI (PLAN → backup → APPLY → VERIFY → planilha)
+foi executado no banco de teste sobre um grupo sintético de Recurso industrial: absorvido removido, a tarifa dele movida
+para o canônico, VERIFY OK e fixtures desfeitas.
+
+**Decisões do PO na integração (2026-09-17).** Item é **um espaço de nomes só** para os quatro tipos
+(RAW_MATERIAL, PACKAGING, FINISHED_PRODUCT, INTERNAL_CONSUMABLE). Normalização mantida: `upper(btrim(name))`, sem caixa,
+**acento preservado** — `ACIDO` ≠ `ÁCIDO` pela regra automática. Duplicado verdadeiro é consolidado e removido, nunca
+deixado inativo. Mesmo nome com material diferente **não se funde**: renomeia-se depois para nomes técnicos distintos,
+com o histórico inteiro (§114).
+
+**Onda 2 aprovada, NÃO executada.** O PO aprovou consolidar, numa rodada própria, sete grupos de Item: MP-000115/322,
+MP-000118/304, MP-000165/324/347/349, MP-000204/285, MP-000269/283, MP-000270/284 e MP-000312/317/319 — mesmo material
+com nutrientes declarados diferentes. A regra decidida para `declaredNutrient`: consolidar os valores ÚNICOS no canônico
+na forma "A · B · C", sem repetir termo. **A ferramenta de hoje não faz isso**: ela move referência e remove, e nunca
+escreve campo no canônico. A Onda 2 precisa dessa escrita, e por isso é capability própria
+(MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-2-01, no backlog).
+
+**Par da sílica.** ME-000021 "Sachê Silica gel 5g" × ME-000089 "SACHÊ SÍLICA GEL 5G" são **duplicado verdadeiro por
+decisão explícita do PO**, a consolidar na Onda 2 depois de PLAN e impressão digital. Isso **não** torna a regra geral
+accent-insensitive: é decisão deste par, e como a ferramenta não os agrupa (a regra preserva acento), o par entra por
+decisão nomeada, como na §110.
+
+**Continuam em revisão**, sem consolidar: MP-000149/475, MP-000325/348, MP-000320/468, MP-000014/022 e MP-000393/486 —
+podem ser materiais tecnicamente diferentes.
+
+**Modelo "X" segue BLOQUEADO.** FT-000001 × FT-000002 não se decide automaticamente. Antes: conteúdo de cada Modelo,
+versões, referências, se algum é teste descartável, e o impacto da colisão de `versionNumber` ao mover a versão.
+
+**Validação.** 84 testes nos scripts e no shared (`master-data-catalog`, `master-data-names`, `xlsx-writer` e
+`master-data-duplicate-sanitization`, este contra o banco de teste) e 15 na API (`nome-de-cadastro-mestre.test.ts`), mais
+3 no web (`nome-de-cadastro-duplicado.test.ts`). Suíte completa da API: 4.519/4.521 — `stock-count-telas-2b` é a
+instabilidade conhecida sob carga (verde sozinha) e `products.test.ts` acusou um vazamento real, corrigido: o `afterEach`
+apagava o Produto e deixava o Item de produto acabado no banco, o que com nome único torna um caso de nome fixo
+irrepetível. `projects.test.ts` e `project-products.test.ts` passaram a nomear os produtos de fixture com marca própria
+pelo mesmo motivo. Typecheck da API e dos scripts. Sem E2E, Playwright, mutação nem suíte do web completa.
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a

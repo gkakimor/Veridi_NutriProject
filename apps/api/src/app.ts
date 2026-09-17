@@ -61,6 +61,10 @@ import { finishedGoodsRoutes } from "./modules/finished-goods/finished-goods.rou
 import { reportsRoutes } from "./modules/reports/reports.routes.js";
 import { exportsRoutes } from "./modules/exports/exports.routes.js";
 import { bulkDocumentsRoutes } from "./modules/bulk-documents/bulk-documents.routes.js";
+import {
+  DuplicateMasterDataNameError,
+  responderNomeDuplicado,
+} from "./lib/nome-de-cadastro-mestre.js";
 
 /**
  * Monta a instancia Fastify.
@@ -93,6 +97,27 @@ export function buildApp() {
   // Autenticacao global: toda rota operacional exige sessao valida. Health e
   // as proprias rotas de login/logout/me sao as unicas excecoes.
   app.addHook("preHandler", authenticationHook);
+
+  /*
+   * Nome de cadastro mestre repetido é 409 em QUALQUER rota que grave um
+   * cadastro (MASTER-DATA-DUPLICATE-SANITIZATION-01).
+   *
+   * Aqui, e não em cada rota: são nove cadastros e mais de vinte portas de
+   * escrita — inclusive as indiretas, como o Item de produto acabado que
+   * nasce junto com o Produto e o modelo criado por "Salvar como modelo".
+   * Uma recusa esquecida numa delas viraria 500 justamente no caminho que
+   * ninguém testa.
+   *
+   * Todo o resto segue exatamente como antes: `app.errorHandler` é o
+   * tratador padrão do Fastify, com o mesmo status, o mesmo corpo e o mesmo
+   * log de sempre.
+   */
+  app.setErrorHandler((error, request, reply) => {
+    if (error instanceof DuplicateMasterDataNameError) {
+      return responderNomeDuplicado(reply, error);
+    }
+    return app.errorHandler(error, request, reply);
+  });
 
   app.register(healthRoutes);
   app.register(authRoutes);

@@ -4,6 +4,15 @@ import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const createdProductIds: string[] = [];
+/**
+ * Os Itens de produto acabado que a criação do Produto gera sozinha.
+ *
+ * Ficavam para trás: o `afterEach` apagava o Produto e o PA seguia no banco
+ * com o nome dele. Desde MASTER-DATA-DUPLICATE-SANITIZATION-01 o nome do
+ * Item é único no catálogo, e um PA vazado torna um caso de nome fixo
+ * irrepetível — o segundo `pnpm test` recusava o que o primeiro criou.
+ */
+const createdFinishedItemIds: string[] = [];
 const fixtureCustomerIds: string[] = [];
 const fixtureItemIds: string[] = [];
 
@@ -88,9 +97,13 @@ beforeAll(async () => {
 });
 
 afterEach(async () => {
-  if (createdProductIds.length === 0) return;
-  await getPrisma().product.deleteMany({ where: { id: { in: createdProductIds } } });
+  if (createdProductIds.length === 0 && createdFinishedItemIds.length === 0) return;
+  const prisma = getPrisma();
+  await prisma.product.deleteMany({ where: { id: { in: createdProductIds } } });
+  // Depois do Produto: o PA só sai quando ninguém mais aponta para ele.
+  await prisma.item.deleteMany({ where: { id: { in: createdFinishedItemIds } } });
   createdProductIds.length = 0;
+  createdFinishedItemIds.length = 0;
 });
 
 afterAll(async () => {
@@ -116,6 +129,11 @@ async function createTestProduct(app: App, overrides: Record<string, unknown> = 
   });
   if (response.statusCode === 201) {
     createdProductIds.push(response.json().id);
+    const finishedItemId = response.json().finishedProductItemId;
+    // Só o que a criação gerou: PA informado no payload é fixture de quem chamou.
+    if (finishedItemId && !("finishedProductItemId" in overrides)) {
+      createdFinishedItemIds.push(finishedItemId);
+    }
   }
   return response;
 }

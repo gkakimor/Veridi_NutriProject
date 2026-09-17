@@ -16,6 +16,7 @@ import {
   usageUomForResourceType,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { exigirNomeDeCadastroLivre } from "../../lib/nome-de-cadastro-mestre.js";
 import { diaDaColunaDeData, marcadorDeHojeComercial } from "../../lib/business-day.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
@@ -249,6 +250,7 @@ export async function createIndustrialResource(
   const prisma = getPrisma();
   assertPower(input.type, input.powerKw);
   assertCapacity(input.type, input.capacityQuantity);
+  await exigirNomeDeCadastroLivre("INDUSTRIAL_RESOURCE", input.name);
 
   const code = await nextSequenceCode(prisma, CODE_SEQUENCE, CODE_PREFIX);
   const created = await prisma.industrialResource.create({
@@ -282,6 +284,7 @@ export async function updateIndustrialResource(
   const prisma = getPrisma();
   const resource = await prisma.industrialResource.findUnique({ where: { id } });
   if (!resource) throw new IndustrialResourceNotFoundError(id);
+  if (input.name !== undefined) await exigirNomeDeCadastroLivre("INDUSTRIAL_RESOURCE", input.name, id);
 
   if (input.powerKw !== undefined && input.powerKw !== null) {
     assertPower(resource.type, input.powerKw);
