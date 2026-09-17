@@ -20,5 +20,8 @@ export function OrigemDoMovimento({ movimento }: { movimento: InventoryMovementD
   if (movimento.stockCountId) {
     return <EntityLink kind="stockCount" id={movimento.stockCountId} code={movimento.stockCountCode} />;
   }
+  // Consumo interno (CI-): o código, sem link — o registro vive na lista de
+  // Uso e consumo, e não tem tela própria nesta fatia.
+  if (movimento.internalConsumptionCode) return <>{movimento.internalConsumptionCode}</>;
   return <>{INVENTORY_MOVEMENT_SOURCE_LABELS[movimento.sourceType]}</>;
 }

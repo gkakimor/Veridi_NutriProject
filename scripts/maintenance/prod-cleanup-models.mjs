@@ -28,6 +28,10 @@ export const ALVOS = [
   // sair honesta — se fossem depois, o CASCADE dos pais levaria as linhas
   // embora e o relatório diria "0 removidos".
   "InventoryMovement",
+  // Consumo interno (CI-): o contexto e o snapshot de custo da baixa de uso e
+  // consumo. A FK dele para o movimento e CASCADE, entao `calcularOrdem()` o
+  // remove antes — sem isso a contagem sairia zerada pelo cascade do pai.
+  "InternalConsumption",
   "Attachment",
 
   // Inventário físico (INV-): registros, achados, posições e a contagem.

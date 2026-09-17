@@ -505,6 +505,75 @@ export const suprimentosTopics = {
     ],
   },
 
+  "estoque.usoEConsumo": {
+    module: "estoque",
+    title: "Usar o material é uma saída — não um acerto de saldo",
+    summary:
+      "Uso e consumo registra o material que a própria empresa gasta: papelaria, higiene, limpeza, material administrativo. A quantidade sai do estoque de verdade, com destino, data e quem registrou, e o sistema guarda quanto aquilo custou no dia em que saiu. Não é ajuste: ajuste existe para corrigir um saldo errado, e aqui o saldo estava certo e o material foi usado.",
+    concepts: [
+      {
+        term: "Item de uso e consumo",
+        text: "Material comprado e estocado que nunca entra em receita — luva, detergente, filme, papel. Só ele sai por esta tela.",
+      },
+      {
+        term: "Destino/uso",
+        text: "Para onde o material foi: Escritório, Limpeza, Produção, Expedição. Texto livre e opcional, escrito por quem registra.",
+      },
+      {
+        term: "Disponível",
+        text: "O quanto dá para usar agora, já descontado o que estiver comprometido. É o mesmo número que o sistema confere ao confirmar.",
+      },
+      {
+        term: "Custo do consumo",
+        text: "Quanto custou o material que saiu, congelado no dia da saída. Uma compra mais cara depois não muda o que já foi registrado.",
+      },
+      {
+        term: "Origem do custo",
+        text: "De onde o valor veio: do lote que saiu, da média das compras dos últimos 30 ou 90 dias, ou da última compra conhecida.",
+      },
+      {
+        term: "Custo não disponível",
+        text: "Nenhuma compra com custo informado até a data do consumo. Aparece escrito assim, e nunca como R$ 0,00 — zero seria dizer que o material não custou nada.",
+      },
+    ],
+    flow: [
+      {
+        label: "Escolher o item",
+        detail:
+          "A lista traz só item de uso e consumo. Matéria-prima e embalagem saem pela ordem de produção; produto acabado sai pela expedição.",
+      },
+      {
+        label: "Informar quantidade e data",
+        detail:
+          "A data é o dia em que o material foi usado. Dia futuro não é aceito: o registro é do que já aconteceu.",
+      },
+      {
+        label: "Dizer o destino",
+        detail:
+          "Opcional, e é o que transforma a lista num relato útil depois: sem ele, sabe-se que saiu, não para onde foi.",
+      },
+      {
+        label: "Confirmar",
+        detail:
+          "A saída entra no histórico de estoque na hora e o saldo cai. O custo do momento fica gravado junto.",
+        tone: "accent",
+      },
+      {
+        label: "Conferir depois",
+        detail:
+          "O consumo confirmado não é apagado nem editado. Erro de quantidade se resolve pelo Inventário Físico, que conta o que existe e gera o acerto.",
+        tone: "warn",
+      },
+    ],
+    notes: [
+      "Quem registra: Administrador, Compras, Produção ou Qualidade. O Comercial não registra, e o perfil de consulta só lê a lista.",
+      "O saldo sai do mesmo histórico de estoque de todo o resto. A saída aparece nas Movimentações, com o código do consumo na origem.",
+      "Item de uso e consumo normalmente não controla lote. Quando controlar, o lote passa a ser obrigatório, e valem as mesmas regras de qualidade e validade do resto do estoque.",
+      "Material de cliente nunca sai por aqui: gastar estoque de terceiro como despesa própria seria contabilizar o que não é seu.",
+      "Item inativo com saldo continua podendo ser usado até acabar. Inativar interrompe compra nova, não prende o que já está no depósito.",
+      "O relatório gerencial de uso e consumo ainda não existe; esta lista é o histórico operacional enquanto ele não chega.",
+    ],
+  },
   "estoque.inventario": {
     module: "estoque",
     title: "A contagem física não sobrescreve o saldo",

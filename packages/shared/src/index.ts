@@ -46,6 +46,7 @@ export * from "./purchase-orders.js";
 export * from "./receiving.js";
 export * from "./lots.js";
 export * from "./inventory.js";
+export * from "./internal-consumption.js";
 export * from "./stock-counts.js";
 export * from "./allocation.js";
 export * from "./formulations.js";

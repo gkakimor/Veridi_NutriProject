@@ -74,6 +74,11 @@ enum InventoryMovementType {
   /// Saida fisica de material usado em amostra/piloto. E consumo real de
   /// desenvolvimento — nunca disfarcado de ajuste.
   SAMPLE_CONSUMPTION
+  /// Saida fisica de material de USO E CONSUMO usado pela propria empresa
+  /// (papelaria, higiene, limpeza, administrativo). E consumo real, com
+  /// destino e custo proprios — nunca ADJUSTMENT_OUT, que existe para
+  /// CORRIGIR o saldo e nao para registrar uso.
+  INTERNAL_CONSUMPTION
   FINISHED_GOOD_PRODUCTION
   SHIPMENT_OUT
 }
@@ -88,6 +93,8 @@ enum InventoryMovementSourceType {
   STOCK_COUNT
   MANUAL_LOSS
   PRODUCTION_CONSUMPTION
+  /// Registro de consumo interno (CI-); `sourceId` guarda o id dele.
+  INTERNAL_CONSUMPTION
   FINISHED_GOOD_PRODUCTION
   SHIPMENT
 }
@@ -411,57 +418,58 @@ model User {
   sessions   UserSession[]
   preference UserPreference?
 
-  preparedDocumentRevisions  ControlledDocumentRevision[]       @relation("DocumentPreparedBy")
-  approvedDocumentRevisions  ControlledDocumentRevision[]       @relation("DocumentApprovedBy")
-  startedParts               ProductionOrderPart[]              @relation("PartStartedBy")
-  completedParts             ProductionOrderPart[]              @relation("PartCompletedBy")
-  recipeWeighings            RecipeWeighing[]
-  uploadedAttachments        Attachment[]                       @relation("AttachmentUploadedBy")
-  archivedAttachments        Attachment[]                       @relation("AttachmentArchivedBy")
-  createdLabelFileVersions   ItemLabelFileVersion[]             @relation("ItemLabelFileVersionCreatedBy")
-  voidedLabelFileVersions    ItemLabelFileVersion[]             @relation("ItemLabelFileVersionVoidedBy")
-  reviewedCoaLots            Lot[]                              @relation("CoaReviewedBy")
-  responsibleProjects        Project[]                          @relation("ProjectResponsible")
-  createdProjects            Project[]                          @relation("ProjectCreatedBy")
-  projectStatusChanges       ProjectStatusHistory[]             @relation("ProjectStatusChangedBy")
-  createdProjectProducts     ProjectProduct[]                   @relation("ProjectProductCreatedBy")
-  createdQuotes              QuoteVersion[]                     @relation("QuoteCreatedBy")
-  sentQuotes                 QuoteVersion[]                     @relation("QuoteSentBy")
-  acceptedQuotes             QuoteVersion[]                     @relation("QuoteAcceptedBy")
-  rejectedQuotes             QuoteVersion[]                     @relation("QuoteRejectedBy")
-  createdSamples             ProjectSample[]                    @relation("SampleCreatedBy")
-  startedSamples             ProjectSample[]                    @relation("SampleStartedBy")
-  producedSamples            ProjectSample[]                    @relation("SampleProducedBy")
-  approvedSamples            ProjectSample[]                    @relation("SampleApprovedBy")
-  rejectedSamples            ProjectSample[]                    @relation("SampleRejectedBy")
-  cancelledSamples           ProjectSample[]                    @relation("SampleCancelledBy")
-  sampleConsumptions         SampleConsumption[]                @relation("SampleConsumptionBy")
-  createdSupplierItems       SupplierItem[]                     @relation("SupplierItemCreatedBy")
-  updatedSupplierItems       SupplierItem[]                     @relation("SupplierItemUpdatedBy")
-  supplierItemQualifications SupplierItemQualificationHistory[] @relation("SupplierItemQualificationBy")
-  createdSupplierItemOffers  SupplierItemOffer[]                @relation("SupplierItemOfferCreatedBy")
-  createdIndustrialCosts     IndustrialCostVersion[]            @relation("IndustrialCostCreatedBy")
-  activatedIndustrialCosts   IndustrialCostVersion[]            @relation("IndustrialCostActivatedBy")
-  industrialCostCalculations IndustrialCostCalculation[]        @relation("IndustrialCostCalculationBy")
-  createdPricingVersions     PricingVersion[]                   @relation("PricingVersionCreatedBy")
-  activatedPricingVersions   PricingVersion[]                   @relation("PricingVersionActivatedBy")
-  createdIndustrialResources IndustrialResource[]               @relation("IndustrialResourceCreatedBy")
-  updatedIndustrialResources IndustrialResource[]               @relation("IndustrialResourceUpdatedBy")
-  createdCustomers           Customer[]                         @relation("CustomerCreatedBy")
-  updatedCustomers           Customer[]                         @relation("CustomerUpdatedBy")
-  customerStatusChanges      CustomerStatusHistory[]            @relation("CustomerStatusChangedBy")
-  createdIndustrialRates     IndustrialResourceRate[]           @relation("IndustrialResourceRateCreatedBy")
-  createdItemCostReferences  ItemCostReference[]                @relation("ItemCostReferenceCreatedBy")
-  createdStockCounts         StockCount[]                       @relation("StockCountCreatedBy")
-  firstRoundClosedStockCounts StockCount[]                      @relation("StockCountFirstRoundClosedBy")
-  completedStockCounts       StockCount[]                       @relation("StockCountCompletedBy")
-  cancelledStockCounts       StockCount[]                       @relation("StockCountCancelledBy")
-  addedStockCountPositions   StockCountPosition[]               @relation("StockCountPositionAddedBy")
-  removedStockCountPositions StockCountPosition[]               @relation("StockCountPositionRemovedBy")
-  recountRequestedPositions  StockCountPosition[]               @relation("StockCountRecountRequestedBy")
-  decidedStockCountPositions StockCountPosition[]               @relation("StockCountDecidedBy")
-  stockCountEntries          StockCountEntry[]                  @relation("StockCountEntryCountedBy")
-  stockCountFindings         StockCountFinding[]                @relation("StockCountFindingCreatedBy")
+  preparedDocumentRevisions   ControlledDocumentRevision[]       @relation("DocumentPreparedBy")
+  approvedDocumentRevisions   ControlledDocumentRevision[]       @relation("DocumentApprovedBy")
+  startedParts                ProductionOrderPart[]              @relation("PartStartedBy")
+  completedParts              ProductionOrderPart[]              @relation("PartCompletedBy")
+  recipeWeighings             RecipeWeighing[]
+  uploadedAttachments         Attachment[]                       @relation("AttachmentUploadedBy")
+  archivedAttachments         Attachment[]                       @relation("AttachmentArchivedBy")
+  createdLabelFileVersions    ItemLabelFileVersion[]             @relation("ItemLabelFileVersionCreatedBy")
+  voidedLabelFileVersions     ItemLabelFileVersion[]             @relation("ItemLabelFileVersionVoidedBy")
+  reviewedCoaLots             Lot[]                              @relation("CoaReviewedBy")
+  responsibleProjects         Project[]                          @relation("ProjectResponsible")
+  createdProjects             Project[]                          @relation("ProjectCreatedBy")
+  projectStatusChanges        ProjectStatusHistory[]             @relation("ProjectStatusChangedBy")
+  createdProjectProducts      ProjectProduct[]                   @relation("ProjectProductCreatedBy")
+  createdQuotes               QuoteVersion[]                     @relation("QuoteCreatedBy")
+  sentQuotes                  QuoteVersion[]                     @relation("QuoteSentBy")
+  acceptedQuotes              QuoteVersion[]                     @relation("QuoteAcceptedBy")
+  rejectedQuotes              QuoteVersion[]                     @relation("QuoteRejectedBy")
+  createdSamples              ProjectSample[]                    @relation("SampleCreatedBy")
+  startedSamples              ProjectSample[]                    @relation("SampleStartedBy")
+  producedSamples             ProjectSample[]                    @relation("SampleProducedBy")
+  approvedSamples             ProjectSample[]                    @relation("SampleApprovedBy")
+  rejectedSamples             ProjectSample[]                    @relation("SampleRejectedBy")
+  cancelledSamples            ProjectSample[]                    @relation("SampleCancelledBy")
+  sampleConsumptions          SampleConsumption[]                @relation("SampleConsumptionBy")
+  internalConsumptions        InternalConsumption[]              @relation("InternalConsumptionBy")
+  createdSupplierItems        SupplierItem[]                     @relation("SupplierItemCreatedBy")
+  updatedSupplierItems        SupplierItem[]                     @relation("SupplierItemUpdatedBy")
+  supplierItemQualifications  SupplierItemQualificationHistory[] @relation("SupplierItemQualificationBy")
+  createdSupplierItemOffers   SupplierItemOffer[]                @relation("SupplierItemOfferCreatedBy")
+  createdIndustrialCosts      IndustrialCostVersion[]            @relation("IndustrialCostCreatedBy")
+  activatedIndustrialCosts    IndustrialCostVersion[]            @relation("IndustrialCostActivatedBy")
+  industrialCostCalculations  IndustrialCostCalculation[]        @relation("IndustrialCostCalculationBy")
+  createdPricingVersions      PricingVersion[]                   @relation("PricingVersionCreatedBy")
+  activatedPricingVersions    PricingVersion[]                   @relation("PricingVersionActivatedBy")
+  createdIndustrialResources  IndustrialResource[]               @relation("IndustrialResourceCreatedBy")
+  updatedIndustrialResources  IndustrialResource[]               @relation("IndustrialResourceUpdatedBy")
+  createdCustomers            Customer[]                         @relation("CustomerCreatedBy")
+  updatedCustomers            Customer[]                         @relation("CustomerUpdatedBy")
+  customerStatusChanges       CustomerStatusHistory[]            @relation("CustomerStatusChangedBy")
+  createdIndustrialRates      IndustrialResourceRate[]           @relation("IndustrialResourceRateCreatedBy")
+  createdItemCostReferences   ItemCostReference[]                @relation("ItemCostReferenceCreatedBy")
+  createdStockCounts          StockCount[]                       @relation("StockCountCreatedBy")
+  firstRoundClosedStockCounts StockCount[]                       @relation("StockCountFirstRoundClosedBy")
+  completedStockCounts        StockCount[]                       @relation("StockCountCompletedBy")
+  cancelledStockCounts        StockCount[]                       @relation("StockCountCancelledBy")
+  addedStockCountPositions    StockCountPosition[]               @relation("StockCountPositionAddedBy")
+  removedStockCountPositions  StockCountPosition[]               @relation("StockCountPositionRemovedBy")
+  recountRequestedPositions   StockCountPosition[]               @relation("StockCountRecountRequestedBy")
+  decidedStockCountPositions  StockCountPosition[]               @relation("StockCountDecidedBy")
+  stockCountEntries           StockCountEntry[]                  @relation("StockCountEntryCountedBy")
+  stockCountFindings          StockCountFinding[]                @relation("StockCountFindingCreatedBy")
 
   @@index([active])
   @@map("users")
@@ -1980,6 +1988,21 @@ enum IndustrialMaterialCostSource {
   // MANUAL_REFERENCE_FORCED. O enum do banco fica como nasceu.
 }
 
+/// De onde saiu o custo unitario de um material REALMENTE consumido —
+/// espelho fiel do `CostSource` de `@veridi/shared`, na ordem da hierarquia
+/// (`lib/cost-reference.ts`). Nao confundir com
+/// `IndustrialMaterialCostSource`, que e a fonte PROSPECTIVA.
+///
+/// `NO_COST` e a unica resposta honesta quando nao ha custo real conhecido:
+/// o valor fica `null`. Zero e custo real zero, nunca ausencia de custo.
+enum CostSource {
+  REAL
+  ESTIMATED_30D
+  ESTIMATED_90D
+  LAST_REAL_COST
+  NO_COST
+}
+
 /// Calcular o preco pela margem desejada, ou informar o preco e ver a
 /// margem que ele produz.
 /// Produto em DESENVOLVIMENTO existe para engenharia e custeio: formulacao,
@@ -2209,6 +2232,7 @@ model Item {
   formulationComponents          FormulationComponent[]
   formulationTemplateComponents  FormulationTemplateComponent[]
   sampleConsumptions             SampleConsumption[]
+  internalConsumptions           InternalConsumption[]
   formulationVersionsAsOutput    FormulationVersion[]
   productionOrderRequirements    ProductionOrderRequirement[]
   productionOrdersAsFinishedItem ProductionOrder[]              @relation("ProductionOrderFinishedItem")
@@ -3137,6 +3161,7 @@ model Lot {
   billingLines                  BillingLine[]
   recipeWeighings               RecipeWeighing[]
   sampleConsumptions            SampleConsumption[]
+  internalConsumptions          InternalConsumption[]
   attachments                   Attachment[]
   stockCountPositions           StockCountPosition[]
 
@@ -3198,6 +3223,10 @@ model InventoryMovement {
   shipmentLineId String?       @unique
   shipmentLine   ShipmentLine? @relation(fields: [shipmentLineId], references: [id], onDelete: Cascade)
 
+  /// Consumo interno (CI-): o registro que gerou a baixa. A FK 1:1 mora no
+  /// registro (`inventoryMovementId`), como no consumo de amostra.
+  internalConsumption InternalConsumption?
+
   /// Ajuste de inventario com documento (INV-): a posicao que o gerou. A FK
   /// 1:1 mora na posicao (`adjustmentMovementId`); ajuste STOCK_COUNT anterior
   /// ao documento nao tem posicao.
@@ -3214,6 +3243,75 @@ model InventoryMovement {
   @@index([type])
   @@index([occurredAt])
   @@map("inventory_movements")
+}
+
+/// CONSUMO INTERNO (CI-000001) — Uso e consumo, Fatia 2.
+///
+/// Saida fisica real de material que a propria empresa usa: papelaria,
+/// higiene, limpeza, material administrativo. NAO e ajuste: `ADJUSTMENT_OUT`
+/// existe para CORRIGIR um saldo errado, e usa-lo aqui apagaria a diferenca
+/// entre "o estoque estava errado" e "a empresa usou o material".
+///
+/// A baixa continua sendo do Inventory Ledger — este registro guarda o
+/// CONTEXTO da baixa (destino, observacao, quem, quando) e o SNAPSHOT do
+/// custo; o saldo continua saindo da soma dos movimentos, nunca daqui.
+///
+/// Somente Item `INTERNAL_CONSUMABLE` (`ITEM_TYPES_DO_CONSUMO_INTERNO` no
+/// shared). Materia-prima, embalagem e produto acabado tem saida propria
+/// (producao, amostra, expedicao) e ficam de fora por decisao do PO.
+model InternalConsumption {
+  id String @id @default(uuid())
+
+  /// CI-000001 — identidade do documento.
+  code String @unique
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  /// Null quando o item nao controla lote — o caso comum em uso e consumo,
+  /// que nasce sem controle de lote. A coluna existe porque o tipo PODE
+  /// passar a controlar lote, e ai a baixa precisa dizer de qual.
+  lotId String?
+  lot   Lot?    @relation(fields: [lotId], references: [id], onDelete: Restrict)
+
+  /// Sempre positiva — o sinal da baixa vem do tipo do movimento.
+  quantity Decimal @db.Decimal(24, 12)
+  uomCode  String
+
+  /// Quando o consumo aconteceu. Instante, como todo movimento do ledger.
+  occurredAt DateTime
+
+  /// Destino/uso, texto livre ("Escritorio", "Limpeza", "Expedicao"). Centro
+  /// de Custo e decisao futura do PO — inventar um cadastro aqui seria
+  /// antecipar estrutura contabil que a Veridi ainda nao tem.
+  purpose String?
+  notes   String?
+
+  /// SNAPSHOT do custo no instante do registro, para que uma compra futura
+  /// nao reescreva o historico. `null` quando `costSource = NO_COST`:
+  /// ausencia de custo NUNCA vira R$ 0,00.
+  unitCost    Decimal?   @db.Decimal(20, 8)
+  totalCost   Decimal?   @db.Decimal(14, 4)
+  costSource  CostSource
+  costDetails String?
+
+  /// 1:1 com o movimento INTERNAL_CONSUMPTION do ledger — a baixa continua
+  /// sendo do Inventory Movement, nunca uma segunda contabilidade. O `@unique`
+  /// garante no banco que um consumo tem no maximo uma baixa E que uma baixa
+  /// serve no maximo um consumo.
+  inventoryMovementId String?            @unique
+  inventoryMovement   InventoryMovement? @relation(fields: [inventoryMovementId], references: [id], onDelete: Cascade)
+
+  registeredByUserId       String
+  registeredByUser         User   @relation("InternalConsumptionBy", fields: [registeredByUserId], references: [id])
+  registeredByNameSnapshot String
+
+  createdAt DateTime @default(now())
+
+  @@index([itemId])
+  @@index([lotId])
+  @@index([occurredAt])
+  @@map("internal_consumptions")
 }
 
 /// Inventario fisico — tipo do documento INV-. SESSION e o inventario em lote
@@ -4067,8 +4165,8 @@ model CustomerOrderDelivery {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  lines            CustomerOrderDeliveryLine[]
-  originatedShipments Shipment[]              @relation("ShipmentOriginDelivery")
+  lines               CustomerOrderDeliveryLine[]
+  originatedShipments Shipment[]                  @relation("ShipmentOriginDelivery")
 
   @@unique([customerOrderId, sequence])
   @@index([customerOrderId])

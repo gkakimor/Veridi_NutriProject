@@ -5984,6 +5984,57 @@ ordem de migration (22) e shared puro (395). `item-form.test.tsx` deixou de cong
 a provar que exatamente um — Produto acabado — fica de fora. Typecheck shared, API e web. Sem suíte completa, E2E,
 Playwright nem mutação.
 
+## Uso e consumo: o consumo interno com custo (INTERNAL-CONSUMPTION-01, 2026-09-17)
+
+**Decisão do PO.** Fatia 2 de Uso e consumo — a Fatia 1 é o tipo de Item (§113) e a Fatia 3 será o relatório
+gerencial. Consumo interno ganha movimentação PRÓPRIA (`INTERNAL_CONSUMPTION`) e documento `CI-000001`; nunca
+`ADJUSTMENT_OUT`, porque ajuste corrige saldo errado e aqui o material foi usado. Regra durável em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §115. Na `main`, **fora de PROD** (`release/prod` segue `8e824e8f`).
+
+**Migration.** `20260925093035_internal_consumption`: enum `CostSource` (espelho do tipo do shared), os valores
+`INTERNAL_CONSUMPTION` nos dois enums do ledger, a tabela `internal_consumptions` e a sequence
+`internal_consumption_code_seq`. A FK 1:1 com o movimento mora na tabela NOVA (`inventoryMovementId @unique`) — o
+`@unique` numa tabela existente faz `migration:create` exigir TTY e recusar. Model e sequence classificados em
+`scripts/maintenance/prod-cleanup-models.mjs` e `-sequences.mjs`. `pnpm validate:migrations:fresh`: 84 migrations,
+sem drift.
+
+**Escopo e estoque.** Só Item `INTERNAL_CONSUMABLE` (`ITEM_TYPES_DO_CONSUMO_INTERNO`, lista de permissão no shared);
+matéria-prima, embalagem e produto acabado são recusadas com `invalid_item_type`. A baixa é do MESMO Inventory
+Ledger, 1:1 com o registro e na mesma transação; a guarda é `Available` (`On Hand − Reserved`), nunca On Hand cru.
+Uso e consumo nasce sem controle de lote, mas o caminho com lote existe e exige lote elegível (qualidade, validade,
+CoA); lote de cliente é recusado. Item inativo continua saindo (§107).
+
+**Custo congelado.** `getConsumedLotCostReference` reutilizado sem cópia — lote real → 30 dias → 90 dias → último
+real → `NO_COST` —, com a data do próprio consumo. O registro guarda custo unitário, total, fonte e explicação:
+compra posterior não reescreve a despesa. **`NO_COST` grava nulo, nunca zero**, e a tela escreve "Custo não
+disponível".
+
+**Data.** Dia civil escolhido vira INSTANTE pelo fuso da operação (hoje = agora; dia passado = fim daquele dia
+comercial). A meia-noite UTC seria 21h do dia anterior em São Paulo e faria a hierarquia de custo perguntar pelo dia
+errado. Dia futuro é recusado.
+
+**Permissões.** `INTERNAL_CONSUMPTION_WRITE_ROLES` = ADMIN, PURCHASING, PRODUCTION, QUALITY. `COMMERCIAL` não
+registra; `VIEWER` lê. É MAIS LARGA que `STOCK_WRITE_ROLES` (ajuste/perda) por decisão explícita do PO: Compras
+distribui o material de uso e consumo. Ajuste e perda ficaram como estavam.
+
+**Sem estorno, e não foi inventado.** Nenhum movimento físico confirmado desfaz no sistema. Erro de quantidade se
+resolve pelo Inventário Físico. Pendência no [`BACKLOG.md`](BACKLOG.md).
+
+**Tela.** Estoque › Uso e consumo (`/estoque/uso-e-consumo`): item, lote quando houver, quantidade, data,
+destino/uso, observação e o disponível lido do MESMO cálculo que a gravação confere. Confirmado, mostra quantidade,
+custo unitário, total e origem — ou a frase, sem custo. Abaixo, o histórico operacional. Ajuda contextual
+`estoque.usoEConsumo`. A origem do movimento no extrato passou a mostrar o `CI-`.
+
+**Validação.** Focados: `apps/api/src/modules/internal-consumption/internal-consumption.test.ts` (23: baixa, um
+movimento do tipo certo, saldo reduzido, recusa sem saldo, data futura, as três recusas de tipo, os quatro perfis que
+registram, COMMERCIAL 403 antes do corpo, VIEWER lê e não grava, as cinco fontes de custo, o nulo na coluna, o
+snapshot preservado por compra posterior, histórico, disponibilidade e o `CI-` no extrato) e
+`apps/web/src/pages/inventory/uso-e-consumo-tela.test.tsx` (11: recorte do seletor no servidor, lote obrigatório,
+erro de saldo, custo disponível e indisponível, painel que sobrevive à releitura, histórico e permissões). Regressão:
+API Estoque/`lib`/Consumo interno (1 550) e Itens/Amostras (193); web `src/app` e `src/pages/inventory` (195), ajuda
+(222) e scripts de manutenção. Typecheck shared, API e web. `validate:migrations:fresh` verde. **Sem suíte completa,
+E2E, Playwright nem mutação** (validação focada, decisão do PO).
+
 ## Item × Fornecedor: cadastro inativo não começa compromisso novo (SUPPLIER-ITEM-INACTIVE-GATE-01, 2026-09-17)
 
 **Decisão do PO** (D4 e D8 de [MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01](discovery/MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01.md),

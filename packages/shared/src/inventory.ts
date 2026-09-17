@@ -14,6 +14,7 @@ export type InventoryMovementType =
   | "LOSS"
   | "PRODUCTION_CONSUMPTION"
   | "SAMPLE_CONSUMPTION"
+  | "INTERNAL_CONSUMPTION"
   | "OPENING_BALANCE"
   | "FINISHED_GOOD_PRODUCTION"
   | "SHIPMENT_OUT";
@@ -25,6 +26,7 @@ export const INVENTORY_MOVEMENT_TYPES: readonly InventoryMovementType[] = [
   "LOSS",
   "PRODUCTION_CONSUMPTION",
   "SAMPLE_CONSUMPTION",
+  "INTERNAL_CONSUMPTION",
   "OPENING_BALANCE",
   "FINISHED_GOOD_PRODUCTION",
   "SHIPMENT_OUT",
@@ -37,6 +39,7 @@ export const INVENTORY_MOVEMENT_TYPE_LABELS: Record<InventoryMovementType, strin
   LOSS: "Perda",
   PRODUCTION_CONSUMPTION: "Consumo de produção",
   SAMPLE_CONSUMPTION: "Consumo de amostra",
+  INTERNAL_CONSUMPTION: "Consumo interno",
   OPENING_BALANCE: "Saldo de abertura (migração)",
   FINISHED_GOOD_PRODUCTION: "Entrada — Produção",
   SHIPMENT_OUT: "Saída — Expedição",
@@ -54,6 +57,8 @@ export const INVENTORY_MOVEMENT_DIRECTION: Record<InventoryMovementType, 1 | -1>
   PRODUCTION_CONSUMPTION: -1,
   // Consumo de amostra é saída física real de desenvolvimento.
   SAMPLE_CONSUMPTION: -1,
+  // Uso e consumo saindo para a própria empresa: saída física real, nunca ajuste.
+  INTERNAL_CONSUMPTION: -1,
   // Saldo de abertura da migração: entrada física real, uma vez por lote.
   OPENING_BALANCE: 1,
   FINISHED_GOOD_PRODUCTION: 1,
@@ -68,6 +73,7 @@ export type InventoryMovementSourceType =
   | "STOCK_COUNT"
   | "MANUAL_LOSS"
   | "PRODUCTION_CONSUMPTION"
+  | "INTERNAL_CONSUMPTION"
   | "FINISHED_GOOD_PRODUCTION"
   | "SHIPMENT";
 
@@ -80,6 +86,7 @@ export const INVENTORY_MOVEMENT_SOURCE_LABELS: Record<InventoryMovementSourceTyp
   FINISHED_GOOD_PRODUCTION: "Produção",
   SHIPMENT: "Expedição",
   PROJECT_SAMPLE: "Amostra / teste",
+  INTERNAL_CONSUMPTION: "Consumo interno",
   OPENING_BALANCE: "Abertura da migração",
 };
 
@@ -110,6 +117,9 @@ export interface InventoryMovementDTO {
   /** Consumo de amostra — o teste Tn que originou o movimento. */
   projectSampleId: string | null;
   projectSampleCode: string | null;
+  /** Consumo interno — o registro CI- que originou a baixa de uso e consumo. */
+  internalConsumptionId: string | null;
+  internalConsumptionCode: string | null;
   /**
    * Ajuste de Inventário Físico ou de Contagem rápida — o documento `INV-` da
    * posição ligada ao movimento. `null` no ajuste `STOCK_COUNT` anterior às
