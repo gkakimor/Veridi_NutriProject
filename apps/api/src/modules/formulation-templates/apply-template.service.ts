@@ -8,6 +8,7 @@ import type {
 } from "@veridi/shared";
 import { baseDoComponente, capsulasPorEmbalagem } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { exigirNomeDeCadastroLivre } from "../../lib/nome-de-cadastro-mestre.js";
 import { CASAS_QUANTIDADE } from "../../lib/decimal-schema.js";
 import { convertUomDecimal, isUomCompatible } from "../items/uom.js";
 import {
@@ -429,6 +430,7 @@ export async function createTemplateFromFormulation(
   );
 
   // Só agora o código: recusa acima não consome número da sequência.
+  await exigirNomeDeCadastroLivre("FORMULATION_TEMPLATE", input.name);
   const code = await proximoCodigoDeModelo();
   const criado = await prisma.formulationTemplate.create({
     data: {

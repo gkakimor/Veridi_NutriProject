@@ -7252,3 +7252,82 @@ família, pureza padrão, subtipo de embalagem e arquivo do rótulo não aparece
 agora começa de fora de tudo e só entra onde alguém o escrever.
 
 **Migration.** `20260925093034_item_type_internal_consumable` — valor de enum e sequence, nada mais.
+
+## §114 — Nome de cadastro mestre: a caixa não cria cadastro novo
+
+MASTER-DATA-DUPLICATE-SANITIZATION-01 (2026-09-17), decisão do PO. Generaliza a §110, que continua valendo para os
+grupos de Item já decididos.
+
+> **"ABC", "Abc" e "abc" são o MESMO nome.** Acento, não: `ACIDO` e `ÁCIDO` seguem sendo cadastros diferentes, e
+> fundi-los é decisão de gente.
+
+**A comparação.** `trim` + sem caixa, acento preservado. A autoridade é o banco — `upper(btrim(<coluna>))` —, e a mesma
+expressão vale no guarda da API, na ferramenta de saneamento e no índice único que MASTER-DATA-NAME-UNIQUENESS-01 vai
+criar. `nomeDeCadastroNormalizado` (`@veridi/shared`) é o espelho disso em JavaScript, para mensagem e teste.
+
+**Quais cadastros.** Os nove em que o nome é identidade de catálogo e a pessoa cria e edita:
+
+| Cadastro | Tabela | Coluna |
+|---|---|---|
+| Item | `items` | `name` |
+| Cliente | `customers` | `legalName` |
+| Fornecedor | `suppliers` | `legalName` |
+| Produto | `products` | `name` |
+| Recurso industrial | `industrial_resources` | `name` |
+| Modelo de formulação | `formulation_templates` | `name` |
+| Modelo de custo industrial | `industrial_cost_templates` | `name` |
+| Modelo de política de preço | `pricing_policy_templates` | `name` |
+| Perfil de produção | `production_profiles` | `name` |
+
+Fora: documento transacional (Pedido, Orçamento, OP, Recebimento, Movimento, Expedição), em que repetir o nome é
+histórico; `units_of_measure`, catálogo fechado e semeado, sem rota de escrita; `users`, cuja identidade é o e-mail;
+o Calendário de Produção, registro único; e as versões, que pertencem a um cadastro.
+
+**O Item é um cadastro só.** O nome é único na tabela inteira, não por tipo — matéria-prima, embalagem, produto acabado
+e Uso e consumo (§113) dividem o mesmo espaço de nomes: um Produto cujo PA nasceria com o nome de uma matéria-prima
+existente é recusado, com o código dela na mensagem. Estreitar isso para um espaço por tipo é decisão do PO, e muda
+junto o índice de MASTER-DATA-NAME-UNIQUENESS-01.
+
+**Na API.** Criar e renomear passam por `exigirNomeDeCadastroLivre`, inclusive nas portas indiretas — o Item de produto
+acabado que nasce junto com o Produto, o produto nascido de Projeto e o modelo criado por "Salvar como modelo". A recusa
+é 409 `duplicate_name` com a frase pronta e o código do cadastro existente, mapeada uma vez no `setErrorHandler`.
+Trocar a caixa do próprio nome é permitido: é o mesmo cadastro.
+
+**Isto não é a constraint.** Entre o SELECT e o INSERT há uma janela em que duas requisições simultâneas passam as duas.
+Fechá-la é o índice único de MASTER-DATA-NAME-UNIQUENESS-01, que não nasce por cima de duplicata existente — por isso o
+saneamento vem antes, e por isso esta rodada não tem migration.
+
+**Saneamento.** `scripts/maintenance/master-data-duplicate-sanitization.ts` `plan | apply | verify`, com o critério de
+canônico determinístico do PO: (1) registro referenciado, (2) mais histórico, (3) mais completo, (4) mais antigo e, no
+empate, o de menor código. PLAN é somente leitura e mostra, por grupo, quem fica, por qual critério, que referências
+existem, o que se move, o que se remove e o efeito esperado por tabela. APPLY é **uma transação por grupo** — grupo
+bloqueado não impede os seguros, e grupo que diverge do plano desfaz só a si mesmo.
+
+**O que bloqueia o grupo, sem gravar nada.**
+
+| Caso | Por quê |
+|---|---|
+| Conflito material: a mesma coluna com valores diferentes dos dois lados | São duas verdades, e escolher uma é decisão de produto |
+| Coluna que ninguém declarou neutra (fail closed) | Coluna nova no schema nasce bloqueando, não sendo fundida em silêncio |
+| Referência em coluna JSON | A ferramenta não reescreve JSON |
+| Coluna que guarda o CÓDIGO do cadastro | É retrato histórico, e mover reescreveria o documento |
+| Mover repetiria um índice único | A linha do canônico já existe; somar as duas é decisão de quem fez as duas |
+| Índice único parcial ou por expressão sobre a coluna movida | A colisão não é calculável por SQL genérico |
+| Item cujo código está no arquivo de decisão de ITEM-DUPLICATE-SANITIZATION-01 | Aquele grupo tem ferramenta própria (§110) |
+
+**Campo que some com o absorvido** (preenchido só nele) não bloqueia, mas sai escrito no PLAN e inteiro na planilha: o
+registro sai, e com ele o valor.
+
+**Planilha da rodada.** `.local-data/veridi/exports/cadastros-duplicados-<destino>-<carimbo>.xlsx`, fora do Git, com três
+abas: `Removidos` (uma linha por absorvido, inclusive o que NÃO foi removido, com o Resultado dizendo por quê), `Resumo`
+(por cadastro: grupos, registros, consolidados, removidos, bloqueados, sem alteração) e `Revisão necessária` (grupo
+bloqueado com o conflito exato, mais as variantes que a regra não funde — acento e espaço interno).
+
+**Mesmo nome, material diferente.** Decisão do PO na integração (2026-09-17): **não se funde**. Dois cadastros que
+compartilham o nome mas são materiais tecnicamente distintos continuam existindo, com o histórico inteiro; a correção é
+renomeá-los depois para nomes técnicos que os distingam — nunca escolher um e absorver o outro. É o que o bloqueio por
+conflito material protege, e é por isso que a ferramenta nunca decide sozinha.
+
+**Duplicado verdadeiro não vira inativo.** Confirmado como o mesmo cadastro, escolhe-se o canônico, movem-se as
+referências, remove-se o absorvido e a remoção fica registrada na planilha. Inativar mantém o nome ocupado e o lixo
+histórico — a mesma decisão D2 da §110, agora valendo para os nove cadastros.

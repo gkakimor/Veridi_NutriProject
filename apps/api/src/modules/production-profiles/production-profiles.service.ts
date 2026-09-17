@@ -25,6 +25,7 @@ import {
   planProductionProfile,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { exigirNomeDeCadastroLivre } from "../../lib/nome-de-cadastro-mestre.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
@@ -319,6 +320,7 @@ export async function createProductionProfile(
 ): Promise<ProductionProfileDTO> {
   const prisma = getPrisma();
   const unidade = input.referenceUomCode ?? "un";
+  await exigirNomeDeCadastroLivre("PRODUCTION_PROFILE", input.name);
   await exigirUnidade(unidade);
   const code = await nextSequenceCode(prisma, CODE_SEQUENCE, PRODUCTION_PROFILE_CODE_PREFIX);
 
@@ -349,6 +351,7 @@ export async function updateProductionProfileIdentity(
   input: UpdateProductionProfileIdentityParsed,
 ): Promise<ProductionProfileDTO> {
   await requireProfile(id);
+  if (input.name !== undefined) await exigirNomeDeCadastroLivre("PRODUCTION_PROFILE", input.name, id);
   await getPrisma().productionProfile.update({
     where: { id },
     data: {

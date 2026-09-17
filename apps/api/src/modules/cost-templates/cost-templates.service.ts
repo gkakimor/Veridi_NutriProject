@@ -17,6 +17,7 @@ import type {
 } from "@veridi/shared";
 import { INDUSTRIAL_COST_TEMPLATE_CODE_PREFIX, acceptsResourceCount } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { exigirNomeDeCadastroLivre } from "../../lib/nome-de-cadastro-mestre.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
@@ -255,6 +256,8 @@ export async function createCostTemplate(
   actor: User,
 ): Promise<CostTemplateDTO> {
   const prisma = getPrisma();
+  // Antes do código: recusa não consome número da sequência.
+  await exigirNomeDeCadastroLivre("INDUSTRIAL_COST_TEMPLATE", input.name);
   const code = await nextSequenceCode(prisma, CODE_SEQUENCE, INDUSTRIAL_COST_TEMPLATE_CODE_PREFIX);
 
   const created = await prisma.industrialCostTemplate.create({
@@ -285,6 +288,7 @@ export async function updateCostTemplateIdentity(
   input: UpdateTemplateIdentityInput,
 ): Promise<CostTemplateDTO> {
   await requireTemplate(id);
+  if (input.name !== undefined) await exigirNomeDeCadastroLivre("INDUSTRIAL_COST_TEMPLATE", input.name, id);
   await getPrisma().industrialCostTemplate.update({
     where: { id },
     data: {

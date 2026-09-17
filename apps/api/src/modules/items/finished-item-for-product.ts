@@ -1,4 +1,5 @@
 import type { Item, Prisma, PrismaClient } from "@prisma/client";
+import { exigirNomeDeCadastroLivre } from "../../lib/nome-de-cadastro-mestre.js";
 import { nextItemCode } from "./item-codes.js";
 
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
@@ -25,6 +26,11 @@ export async function createFinishedItemForProduct(
   tx: PrismaOrTx,
   input: { name: string; unitCode: string; requiresCoa?: boolean },
 ): Promise<Item> {
+  // O nome do PA vem do Produto, mas o Item continua sendo cadastro: se o
+  // nome já existe em QUALQUER Item, é o mesmo nome de catálogo, e quem
+  // decide é o guarda único (MASTER-DATA-DUPLICATE-SANITIZATION-01).
+  await exigirNomeDeCadastroLivre("ITEM", input.name, undefined, tx);
+
   const code = await nextItemCode(tx, "FINISHED_PRODUCT");
 
   return tx.item.create({

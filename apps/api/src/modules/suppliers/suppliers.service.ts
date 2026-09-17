@@ -3,6 +3,7 @@ import type { Supplier, User } from "@prisma/client";
 import type { SupplierDTO, SupplierListResponse } from "@veridi/shared";
 import { SUPPLIER_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { exigirNomeDeCadastroLivre } from "../../lib/nome-de-cadastro-mestre.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
@@ -132,6 +133,7 @@ export async function getSupplierById(id: string): Promise<SupplierDTO | null> {
 export async function createSupplier(
   input: CreateSupplierInput,
 ): Promise<SupplierDTO> {
+  await exigirNomeDeCadastroLivre("SUPPLIER", input.legalName);
   if (input.cnpj) await assertCnpjAvailable(input.cnpj);
 
   const prisma = getPrisma();
@@ -164,6 +166,7 @@ export async function updateSupplier(
   input: UpdateSupplierInput,
 ): Promise<SupplierDTO> {
   await requireSupplier(id);
+  if (input.legalName !== undefined) await exigirNomeDeCadastroLivre("SUPPLIER", input.legalName, id);
   if (input.cnpj) await assertCnpjAvailable(input.cnpj, id);
 
   try {

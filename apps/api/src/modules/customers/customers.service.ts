@@ -3,6 +3,7 @@ import type { User } from "@prisma/client";
 import type { CustomerDTO, CustomerListResponse } from "@veridi/shared";
 import { CUSTOMER_CODE_PREFIX, situacaoCadastral } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { exigirNomeDeCadastroLivre } from "../../lib/nome-de-cadastro-mestre.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import {
@@ -164,6 +165,7 @@ export async function createCustomer(
   input: CreateCustomerInput,
   actor: User,
 ): Promise<CustomerDTO> {
+  await exigirNomeDeCadastroLivre("CUSTOMER", input.legalName);
   if (input.cnpj) await assertCnpjAvailable(input.cnpj);
   // Antes de consumir código: condição parcelada sem parcelas não nasce.
   const condicaoPadrao = tocaCondicaoPadrao(input) ? condicaoPadraoParaGravar(null, input) : {};
@@ -220,6 +222,7 @@ export async function updateCustomer(
   actor: User,
 ): Promise<CustomerDTO> {
   await requireCustomer(id);
+  if (input.legalName !== undefined) await exigirNomeDeCadastroLivre("CUSTOMER", input.legalName, id);
   if (input.cnpj) await assertCnpjAvailable(input.cnpj, id);
 
   try {

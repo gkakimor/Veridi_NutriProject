@@ -813,6 +813,62 @@ append-only (§95); o cadastro, não. A pergunta a responder: vale um histórico
 campos estruturais (CNPJ, razão social, perfil tributário e outros), para quais campos, quem lê, e como convive com os
 snapshots que os documentos já congelam. Exigiria migration. Quem pode alterar já está decidido (§98).
 
+### MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-2-01 — Onda 2: consolidar os grupos aprovados — P1 · APROVADO, NÃO EXECUTADO
+
+Aprovado pelo PO em 2026-09-17, na integração de MASTER-DATA-DUPLICATE-SANITIZATION-01 (§114), **sem execução nesta
+rodada e sem APPLY no DEV**. São nove consolidações, em duas naturezas:
+
+| Grupo | Registros | Natureza |
+|---|---|---|
+| Arabinogalactana | MP-000115 · MP-000322 | mesmo material, nutrientes diferentes |
+| Beta-glucana de levedura | MP-000118 · MP-000304 | idem |
+| Concentrado de tomate | MP-000165 · MP-000324 · MP-000347 · MP-000349 | idem (quatro linhas) |
+| Fosfato de magnésio dibásico | MP-000204 · MP-000285 | idem |
+| Fosfato de cálcio monobásico | MP-000269 · MP-000283 | idem |
+| Fosfato de cálcio tribásico | MP-000270 · MP-000284 | idem |
+| Membrana de casca de ovo | MP-000312 · MP-000317 · MP-000319 | idem (três linhas) |
+| Sachê de sílica gel 5 g | ME-000021 · ME-000089 | **par nomeado**: difere por acento, e o PO declarou duplicado verdadeiro |
+
+**O que a ferramenta de hoje ainda não faz**, e é o trabalho desta capability:
+
+1. **Escrever o campo consolidado no canônico.** A regra do PO para `declaredNutrient` é juntar os valores ÚNICOS na
+   forma "A · B · C", sem repetir termo. Hoje o saneamento só move referência e remove — nunca altera o canônico —, e é
+   justamente por divergir em `declaredNutrient` que estes sete grupos saem BLOQUEADOS. Precisa de uma consolidação
+   declarada por coluna, com o valor final no PLAN antes de gravar.
+2. **Aceitar par nomeado fora da regra automática.** A sílica não vira grupo: a regra preserva acento, de propósito. O
+   par entra por decisão versionada, como o arquivo da §110 — e **sem** tornar a regra geral accent-insensitive.
+3. **Reavaliar as colisões de índice único** nos grupos que têm relação com fornecedor (o `supplier_items` parcial de
+   preferencial hoje bloqueia por não ser calculável).
+
+Fora desta onda, por decisão do PO: MP-000149/475, MP-000325/348, MP-000320/468, MP-000014/022 e MP-000393/486
+continuam em revisão (podem ser materiais diferentes), e o Modelo "X" (FT-000001 × FT-000002) segue bloqueado até se
+saber conteúdo, versões, referências, se algum é descartável e o impacto da colisão de `versionNumber`.
+
+### MASTER-DATA-NAME-UNIQUENESS-01 — índice único de nome no banco — P1 · DEPOIS DO SANEAMENTO
+
+Registrado em 2026-09-17 por MASTER-DATA-DUPLICATE-SANITIZATION-01 (§114), **sem implementação e de propósito sem
+migration naquela rodada** — a janela de Uso e Consumo estava criando a dela, e duas migrations concorrentes se
+atropelam.
+
+O guarda da API já recusa nome repetido sem caixa nos nove cadastros, e **não substitui a constraint**: entre o SELECT
+e o INSERT há uma janela em que duas requisições simultâneas passam as duas. Fechá-la é criar, no banco, o índice único
+funcional `CREATE UNIQUE INDEX … ON <tabela> (upper(btrim(<coluna>)))` — a MESMA expressão do guarda e da ferramenta de
+saneamento, para que os três nunca discordem.
+
+O que precisa acontecer **antes**, e é o motivo de esta capability não ter data:
+
+1. **o saneamento tem de fechar.** O índice não nasce por cima de duplicata existente: o `CREATE UNIQUE INDEX` falha e a
+   migration não aplica. Hoje o `veridi_dev` tem 13 grupos bloqueados (12 de Item, 1 de Modelo de formulação) — cada um
+   é decisão de produto, e a ferramenta recusa escolher sozinha;
+2. **PROD tem de ser medido**, em conferência READ ONLY: o estado do DEV não prova o de PROD, e os códigos do ERP saem
+   de sequence por banco;
+3. **o escopo do Item já está decidido**: o PO fixou em 2026-09-17 que os quatro tipos (RAW_MATERIAL, PACKAGING,
+   FINISHED_PRODUCT e INTERNAL_CONSUMABLE) dividem **um único** espaço de nomes, então o índice é um só sobre
+   `items` — não um por tipo.
+
+Quando as três estiverem resolvidas, a migration é uma só, com um índice por cadastro, e o guarda da API continua —
+mensagem amigável é da aplicação, não do banco.
+
 ### MASTER-DATA-STRUCTURAL-LOCKS-01 — travas estruturais do cadastro mestre — sem posição
 
 Registrado em 2026-09-16 por MASTER-DATA-EDIT-PERMISSIONS-01 (DE11 do PO), **sem implementação**. Hoje a única trava

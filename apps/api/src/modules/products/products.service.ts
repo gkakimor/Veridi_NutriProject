@@ -3,6 +3,7 @@ import type { Customer, Item, Product } from "@prisma/client";
 import type { ProductDTO, ProductListResponse } from "@veridi/shared";
 import { PRODUCT_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { exigirNomeDeCadastroLivre } from "../../lib/nome-de-cadastro-mestre.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
@@ -306,6 +307,7 @@ const DEFAULT_FINISHED_UNIT = "un";
  * sequence e aparecendo na lista de itens sem pertencer a produto nenhum.
  */
 export async function createProduct(input: CreateProductInput): Promise<ProductDTO> {
+  await exigirNomeDeCadastroLivre("PRODUCT", input.name);
   await assertCustomerForNewAssociation(input.customerId);
   if (input.doseUomCode) await assertDoseUomExists(input.doseUomCode);
   if (input.finishedProductItemId) {
@@ -374,6 +376,7 @@ export async function updateProduct(
   input: UpdateProductInput,
 ): Promise<ProductDTO> {
   const current = await requireProduct(id);
+  if (input.name !== undefined) await exigirNomeDeCadastroLivre("PRODUCT", input.name, id);
   if (input.doseUomCode) await assertDoseUomExists(input.doseUomCode);
 
   // So valida novamente se a associacao esta MUDANDO — mantem vinculo

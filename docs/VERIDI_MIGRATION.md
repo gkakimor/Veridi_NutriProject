@@ -151,6 +151,32 @@ PLAN sai 2 com grupo em ABORTAR, e o APPLY recusa plano assim. O APPLY também r
 com contagem diferente da atual, banco diferente do confirmado e banco que não seja local — a execução em PROD é rodada
 própria, com conferência READ ONLY e aprovação do PO. PLAN e VERIFY só leem.
 
+### Nome repetido nos demais cadastros mestre
+
+Para os nove cadastros em que o nome é identidade de catálogo (§114), a ferramenta é genérica: ela DESCOBRE os grupos
+pela regra do PO (`trim` + sem caixa, acento preservado), não lê arquivo de decisão, e escolhe o canônico pelo critério
+determinístico. Item que está no arquivo de decisão da §110 é recusado aqui, para que as duas ferramentas nunca disputem
+o mesmo registro.
+
+```bash
+# PLAN — somente leitura. Sem --cadastro, varre os nove.
+pnpm exec dotenv -e .env -- tsx scripts/maintenance/master-data-duplicate-sanitization.ts plan   --plano=<plano.json> --excel=<planilha.xlsx>
+
+# Backup restaurável, como na §110.
+pnpm exec dotenv -e .env -- node scripts/maintenance/prod-backup-json.mjs <backup.json>
+pnpm exec dotenv -e .env -- node scripts/maintenance/restore-json-backup-check.mjs <backup.json>
+
+# APPLY — uma transação POR GRUPO. Sem --grupo, aplica todos os PRONTO do plano.
+pnpm exec dotenv -e .env -- tsx scripts/maintenance/master-data-duplicate-sanitization.ts apply   --plano=<plano.json> --backup=<backup.json> --confirmar-banco=<banco> --excel=<planilha.xlsx> [--grupo=ITEM/NOME]
+
+# VERIFY — somente leitura.
+pnpm exec dotenv -e .env -- tsx scripts/maintenance/master-data-duplicate-sanitization.ts verify --plano=<plano.json>
+```
+
+PLAN sai 2 quando há grupo BLOQUEADO — o que não impede aplicar os seguros, porque a atomicidade é do grupo. O APPLY
+recusa banco diferente do confirmado, banco diferente do plano, backup ausente ou vazio e banco que não seja local. A
+planilha do `--excel` é o arquivo que vai para a Veridi e fica fora do Git, em `.local-data/veridi/exports/`.
+
 ## 7. Apply
 
 ```

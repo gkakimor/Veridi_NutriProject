@@ -95,16 +95,22 @@ só executa a decisão com o banco no estado previsto, por onda, com backup rest
 ## 11. Decisões PO
 
 - **D1 — nutrientes do mesmo material (Onda B).** Recomendado: um Item por material, com todos os nutrientes no campo
-  atual ("A · B · C"), sem migration; estrutura Item × nutriente só com o Bloco H. **Pendente.**
+  atual ("A · B · C"), sem migration; estrutura Item × nutriente só com o Bloco H. **Decidida em 2026-09-17:** é isso
+  mesmo — consolidar os valores ÚNICOS de `declaredNutrient` no canônico na forma "A · B · C", sem repetir termo.
+  Aprovada para os grupos G2, G3, G5, G8, G9, G10 e G15, numa rodada própria
+  (MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-2-01); nada foi executado.
 - **D2 — duplicado sem uso.** Remover (inativar exige nome distinto e conflita com o índice). **Decidido em 2026-09-17:
   remover; não inativar para manter lixo histórico.**
 - **D3 — G6 café verde, se for o mesmo material.** Correção única da carga movendo os 2 componentes ACTIVE (reescrita
-  explícita) × manter os dois. **Pendente.**
+  explícita) × manter os dois. **Pendente** — em 2026-09-17 o PO manteve G6 (MP-000325 × MP-000348) em revisão, junto com
+  G4, G7, G11 e G13: podem ser materiais tecnicamente diferentes, e nome igual com material diferente não se funde (§114).
 - **D4 — rastro do código absorvido.** **Decidido em 2026-09-17:** de-para no arquivo de decisão da carga
   (`scripts/veridi-import/item-duplicate-decisions.ts`) e nesta documentação, backup JSON antes do APPLY, sem tabela de
   alias e sem migration.
 - **D5 — extras fora do índice** (potes ME-000083 → 046 e ME-000085 → 048; acento ME-000021 × 089, e se a unicidade
-  ignora acento). **Pendente** — fora da Onda A por decisão do PO.
+  ignora acento). **Parcialmente decidida em 2026-09-17:** a unicidade **NÃO** ignora acento — a regra automática
+  preserva acento (§114). O par ME-000021 × ME-000089 é duplicado verdadeiro **por decisão explícita do PO sobre este
+  par**, a consolidar na Onda 2 depois de PLAN e impressão digital, sem mudar a regra geral. Os potes seguem pendentes.
 
 ## 12. Pendências PO
 
@@ -154,3 +160,15 @@ Onda B, conforme o PO.
 - 2026-09-17 — Discovery entregue no chat (base `0fc49e4`); persistido neste arquivo na implementação da Onda A.
 - 2026-09-17 — PO: Onda A autorizada (G1, G12, G14, G16, G17, G18), D2 = remover, D4 = arquivo de decisão e documentação
   sem alias; G2–G11 (fora os da Onda A), G13, G15, G6 e os extras de D5 ficam fora.
+- 2026-09-17 — PO: a regra de duplicidade passa a valer para TODOS os cadastros mestre
+  (MASTER-DATA-DUPLICATE-SANITIZATION-01, §114), com ferramenta genérica que descobre os grupos em vez de ler arquivo de
+  decisão. Ela **recusa** os Itens deste discovery: código no arquivo de decisão vai pela ferramenta da §110. Os 12
+  grupos restantes foram remedidos no `veridi_dev` e saíram todos BLOQUEADOS pelo mesmo motivo objetivo —
+  `declaredNutrient` diferente entre os lados —, o que confirma que Ondas B e C dependem de D1/D3 e de V1–V7, e não de
+  ferramenta. O extra de D5 (ME-000021 × ME-000089, acento) saiu na aba "Revisão necessária" da planilha, como variante
+  que a regra não funde.
+- 2026-09-17 — PO, na integração: D1 decidida ("A · B · C" com valores únicos) e Onda 2 aprovada para G2, G3, G5, G8,
+  G9, G10 e G15 mais o par nomeado da sílica, **sem executar**; G4, G6, G7, G11 e G13 seguem em revisão; o Modelo "X"
+  (FT-000001 × FT-000002) segue bloqueado até se saber conteúdo, versões, referências, descarte e o impacto da colisão
+  de `versionNumber`. A execução é MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-2-01, que precisa de escrita no canônico e
+  de par nomeado — nenhuma das duas existe na ferramenta de hoje.

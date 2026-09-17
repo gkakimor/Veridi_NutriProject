@@ -31,6 +31,7 @@ import {
   validarModeloDePrecificacao,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { exigirNomeDeCadastroLivre } from "../../lib/nome-de-cadastro-mestre.js";
 import { ProductNotFoundError } from "../formulations/formulations.errors.js";
 import {
   colunasDoModelo,
@@ -260,6 +261,8 @@ export async function createPricingPolicy(
   actor: User,
 ): Promise<PricingPolicyDTO> {
   const prisma = getPrisma();
+  // Antes do código: recusa não consome número da sequência.
+  await exigirNomeDeCadastroLivre("PRICING_POLICY_TEMPLATE", input.name);
   const code = await nextSequenceCode(prisma, CODE_SEQUENCE, PRICING_POLICY_TEMPLATE_CODE_PREFIX);
   const created = await prisma.pricingPolicyTemplate.create({
     data: {
@@ -278,6 +281,7 @@ export async function updatePricingPolicyIdentity(
   input: UpdateTemplateIdentityInput,
 ): Promise<PricingPolicyDTO> {
   await requirePolicy(id);
+  if (input.name !== undefined) await exigirNomeDeCadastroLivre("PRICING_POLICY_TEMPLATE", input.name, id);
   await getPrisma().pricingPolicyTemplate.update({
     where: { id },
     data: {

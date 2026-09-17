@@ -34,6 +34,7 @@ import {
   secaoDoItem,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { exigirNomeDeCadastroLivre } from "../../lib/nome-de-cadastro-mestre.js";
 /*
  * A MESMA regra da Formulacao para o que o cadastro do Item invalidou
  * (FORMULATION-TEMPLATE-WORKBENCH-01, fatia 3).
@@ -430,6 +431,7 @@ export async function createFormulationTemplate(
 ): Promise<FormulationTemplateDTO> {
   const prisma = getPrisma();
   // Antes do código: recusa não consome número da sequência.
+  await exigirNomeDeCadastroLivre("FORMULATION_TEMPLATE", input.name);
   await exigirUnidadeDoCatalogo(input.outputUnitCode ?? "un");
   const code = await proximoCodigoDeModelo();
   const modo = input.calculationMode ?? "FIXED_BASIS";
@@ -465,6 +467,7 @@ export async function updateFormulationTemplate(
   input: UpdateFormulationTemplateInput,
 ): Promise<FormulationTemplateDTO> {
   await requireTemplate(id);
+  if (input.name !== undefined) await exigirNomeDeCadastroLivre("FORMULATION_TEMPLATE", input.name, id);
   await getPrisma().formulationTemplate.update({
     where: { id },
     data: {

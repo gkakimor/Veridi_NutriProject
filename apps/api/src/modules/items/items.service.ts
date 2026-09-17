@@ -2,6 +2,7 @@ import type { Item, UnitOfMeasure, User } from "@prisma/client";
 import type { ItemDTO, ItemListResponse } from "@veridi/shared";
 import { ITEM_QUALITY_CONTROL_FIELDS, ITEM_TYPE_DEFAULTS } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { exigirNomeDeCadastroLivre } from "../../lib/nome-de-cadastro-mestre.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextItemCode } from "./item-codes.js";
@@ -205,6 +206,7 @@ export async function createItem(
 
   await assertUnitExists(input.unitCode);
   assertPackagingSubtypeCoherent(input.type, input.packagingSubtype);
+  await exigirNomeDeCadastroLivre("ITEM", input.name);
 
   const prisma = getPrisma();
 
@@ -290,6 +292,7 @@ export async function updateItem(
 
   if (input.unitCode) await assertUnitExists(input.unitCode);
   assertPackagingSubtypeCoherent(input.type ?? current.type, input.packagingSubtype);
+  if (input.name !== undefined) await exigirNomeDeCadastroLivre("ITEM", input.name, id);
 
   const structuralChange =
     (input.type !== undefined && input.type !== current.type) ||
