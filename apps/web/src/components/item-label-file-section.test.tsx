@@ -144,15 +144,18 @@ describe("ItemLabelFileSection — o que a tela mostra", () => {
     const tabela = await screen.findByRole("table", { name: "Histórico do arquivo do rótulo" });
     const linhas = within(tabela).getAllByRole("row").slice(1);
     expect(linhas.map((linha) => within(linha).getAllByRole("cell")[0]?.textContent)).toEqual([
-      "V3 da V1",
+      "V3restaurada da V1",
       "V2",
       "V1",
     ]);
     expect(within(linhas[0]!).getByText("Vigente")).toBeInTheDocument();
+    expect(within(linhas[0]!).getByText("por Carla Compras")).toBeInTheDocument();
+    expect(within(linhas[0]!).getByText("Volta a arte aprovada")).toBeInTheDocument();
     expect(within(linhas[1]!).getByText("Anulada")).toBeInTheDocument();
     expect(within(linhas[1]!).getByText(/por Bruno Qualidade em .*: Tabela nutricional errada/)).toBeInTheDocument();
-    expect(within(linhas[1]!).getByText("PNG")).toBeInTheDocument();
+    expect(within(linhas[1]!).getByText("PNG · 2 KB")).toBeInTheDocument();
     expect(within(linhas[2]!).getByText("Histórica")).toBeInTheDocument();
+    expect(within(linhas[2]!).getByText("PDF · 1,5 MB")).toBeInTheDocument();
     // Todas continuam baixáveis, inclusive a anulada.
     expect(within(linhas[1]!).getByRole("link", { name: "Visualizar ou baixar a V2" })).toHaveAttribute(
       "href",

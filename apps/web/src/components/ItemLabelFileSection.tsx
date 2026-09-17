@@ -362,48 +362,54 @@ export function ItemLabelFileSection({ itemId }: { itemId: string }) {
           )}
 
           <div className="table-container table-container--spaced">
+            {/* Cinco colunas com as classes de largura do design system: as
+                ações não podem ficar sob a rolagem lateral a 1440px. A
+                observação é da versão e mora com o arquivo. */}
             <table className="table" aria-label="Histórico do arquivo do rótulo">
               <thead>
                 <tr>
-                  <th>Versão</th>
-                  <th>Arquivo</th>
-                  <th>Tipo</th>
-                  <th>Tamanho</th>
-                  <th>Enviado em</th>
-                  <th>Por</th>
-                  <th>Observação</th>
-                  <th>Situação</th>
-                  <th aria-hidden="true" />
+                  <th className="col-tight">Versão</th>
+                  <th className="col-flex">Arquivo</th>
+                  <th className="col-tight">Enviado</th>
+                  <th className="col-flex">Situação</th>
+                  <th className="col-actions" aria-hidden="true" />
                 </tr>
               </thead>
               <tbody>
                 {data.versions.map((versao) => (
                   <tr key={versao.id}>
-                    <td>
+                    <td className="col-tight">
                       <b>{rotuloDaVersao(versao)}</b>
                       {versao.restoredFromVersionNumber !== null && (
-                        <span className="field__hint"> da V{versao.restoredFromVersionNumber}</span>
+                        <span className="cell-sub cell-sub--wrap">
+                          restaurada da V{versao.restoredFromVersionNumber}
+                        </span>
                       )}
                     </td>
-                    <td>{versao.originalFileName}</td>
-                    <td>{ITEM_LABEL_FILE_TYPE_LABELS[versao.mimeType] ?? versao.mimeType}</td>
-                    <td>{formatFileSize(versao.sizeBytes)}</td>
-                    <td>{formatDateTime(versao.createdAt)}</td>
-                    <td>{versao.createdByName}</td>
-                    <td>{versao.note ?? "—"}</td>
-                    <td>
+                    <td className="col-flex">
+                      {versao.originalFileName}
+                      <span className="cell-sub">
+                        {ITEM_LABEL_FILE_TYPE_LABELS[versao.mimeType] ?? versao.mimeType} ·{" "}
+                        {formatFileSize(versao.sizeBytes)}
+                      </span>
+                      {versao.note && <span className="cell-sub cell-sub--wrap">{versao.note}</span>}
+                    </td>
+                    <td className="col-tight">
+                      {formatDateTime(versao.createdAt)}
+                      <span className="cell-sub">por {versao.createdByName}</span>
+                    </td>
+                    <td className="col-flex">
                       <span className={CLASSE_DA_SITUACAO[versao.status]}>
                         {ITEM_LABEL_FILE_VERSION_STATUS_LABELS[versao.status]}
                       </span>
                       {versao.status === "VOIDED" && (
-                        <span className="field__hint">
-                          {" "}
+                        <span className="cell-sub cell-sub--wrap">
                           por {versao.voidedByName ?? "—"} em {formatDateTime(versao.voidedAt)}:{" "}
                           {versao.voidReason}
                         </span>
                       )}
                     </td>
-                    <td>
+                    <td className="col-actions">
                       <div className="table__actions">
                         <a
                           className="btn btn--ghost btn--sm"
@@ -448,7 +454,7 @@ export function ItemLabelFileSection({ itemId }: { itemId: string }) {
                 ))}
 
                 {data.versions.length === 0 && (
-                  <TableEmptyRow colSpan={9}>Nenhuma versão enviada.</TableEmptyRow>
+                  <TableEmptyRow colSpan={5}>Nenhuma versão enviada.</TableEmptyRow>
                 )}
               </tbody>
             </table>
