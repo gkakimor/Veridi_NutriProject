@@ -14,7 +14,7 @@ import type { ItemDTO, UnitOfMeasureDTO } from "@veridi/shared";
 
 vi.mock("../../lib/items-api", () => ({ createItem: vi.fn(), updateItem: vi.fn() }));
 vi.mock("../../lib/units-api", () => ({ listUnits: vi.fn() }));
-vi.mock("../../components/SupplierItemsSection", () => ({ SupplierItemsSection: () => null }));
+vi.mock("../supplier-items/FornecedoresDoItem", () => ({ FornecedoresDoItemSection: () => null }));
 vi.mock("../../components/ItemCostReferenceSection", () => ({ ItemCostReferenceSection: () => null }));
 vi.mock("../../components/ItemLabelFileSection", () => ({
   ItemLabelFileSection: ({ itemId }: { itemId: string }) => <p>seção do arquivo do rótulo de {itemId}</p>,
