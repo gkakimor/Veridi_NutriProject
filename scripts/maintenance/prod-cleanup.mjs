@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import { writeFileSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { SEQUENCES_DE_NEGOCIO, SEQUENCES_PRESERVADAS } from "./prod-cleanup-sequences.mjs";
 
 const require = createRequire(process.cwd() + "/apps/api/package.json");
 const { PrismaClient, Prisma } = require("@prisma/client");
@@ -28,7 +29,9 @@ const { PrismaClient, Prisma } = require("@prisma/client");
  *  - `user_code_seq` nunca é reiniciada: os usuários ficam, e o próximo USR-
  *    colidiria com um existente.
  *  - Aborta se algum model do schema, ou alguma sequence do banco, estiver sem
- *    classificação — tabela órfã é decisão de gente, não do script.
+ *    classificação — tabela órfã é decisão de gente, não do script. As listas
+ *    de sequences moram em `prod-cleanup-sequences.mjs`, e a suíte de scripts
+ *    reprova a sequence de migration que ficar fora delas.
  *  - Aborta se uma tabela preservada apontar para uma tabela a esvaziar: o
  *    DELETE travaria no meio, ou levaria a linha preservada junto.
  *  - `--apply` exige ambiente `production` e `--confirmar-projeto` igual ao
@@ -171,36 +174,6 @@ const PRESERVAR = ["User", "UserSession", "UnitOfMeasure"];
  * esvaziado só com `--reset-sequences`; sem a flag, preservado.
  */
 const CONTADORES = ["ProductionOrderNumberCounter"];
-
-/** Nunca reiniciada, com ou sem a flag. */
-const SEQUENCES_PRESERVADAS = ["user_code_seq"];
-
-/** Numeração de negócio. Reiniciadas só com `--reset-sequences`. */
-const SEQUENCES_DE_NEGOCIO = [
-  "billing_code_seq",
-  "customer_code_seq",
-  "customer_order_code_seq",
-  "formulation_template_code_seq",
-  "industrial_cost_calculation_code_seq",
-  "industrial_cost_code_seq",
-  "industrial_cost_template_code_seq",
-  "industrial_resource_code_seq",
-  "item_code_finished_product_seq",
-  "item_code_packaging_seq",
-  "item_code_raw_material_seq",
-  "lot_code_seq",
-  "pricing_policy_template_code_seq",
-  "pricing_version_code_seq",
-  "product_code_seq",
-  "production_order_code_seq",
-  "project_code_seq",
-  "project_sample_code_seq",
-  "purchase_order_code_seq",
-  "quote_code_seq",
-  "receipt_code_seq",
-  "shipment_code_seq",
-  "supplier_code_seq",
-];
 
 /** O que esta execução esvazia e o que ela mantém. */
 const ESVAZIAR = RESETAR_SEQUENCES ? [...ALVOS, ...CONTADORES] : ALVOS;
