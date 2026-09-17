@@ -17,7 +17,9 @@
  *   const url = exigirBancoLocal();   // lança se não for local
  */
 
+import { realpathSync } from "node:fs";
 import { hostname } from "node:os";
+import { pathToFileURL } from "node:url";
 
 /** Hosts que são a própria máquina. Nada além disto é local. */
 const HOSTS_LOCAIS = new Set(["localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0"]);
@@ -121,9 +123,26 @@ export function exigirBancoLocal(env = process.env) {
   return { url, alvo, host, banco };
 }
 
+/**
+ * Rodando como comando — e não importado por outro script ou teste.
+ *
+ * URL comparada com URL, as duas pelo mesmo caminho real. Montar
+ * `file://` + caminho à mão dava `file://C:/...` no Windows, onde
+ * `import.meta.url` é `file:///C:/...`: o porteiro nunca rodava e saía 0 sem
+ * checar nada. Sem `argv[1]` (`node -e`, REPL), não é execução direta.
+ */
+function executadoDireto() {
+  if (!process.argv[1]) return false;
+  try {
+    return pathToFileURL(realpathSync(process.argv[1])).href === import.meta.url;
+  } catch {
+    return false;
+  }
+}
+
 // Rodando direto: diz o veredito e sai com código, para servir de porteiro
 // em qualquer script de shell.
-if (import.meta.url === `file://${process.argv[1]?.replace(/\\/g, "/")}`) {
+if (executadoDireto()) {
   try {
     const { alvo } = exigirBancoLocal();
     console.log(`ok  banco local: ${alvo}`);
