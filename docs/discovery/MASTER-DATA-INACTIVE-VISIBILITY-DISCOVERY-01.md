@@ -3,7 +3,9 @@
 ## 1. Status
 
 `EM_ANALISE` — **D1–D3 decididas pelo PO e implementadas** na Fatia 1 (INVENTORY-INACTIVE-ITEM-VISIBILITY-01,
-2026-09-17, [`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §107). **D4–D9 têm recomendação e esperam o handoff** de cada fatia.
+2026-09-17, [`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §107); **D6–D7 decididas e implementadas** na Fatia 2
+(PRODUCT-INACTIVE-COMMERCIAL-GATE-01, 2026-09-17, §108). **D4, D5, D8 e D9 têm recomendação e esperam o handoff** de cada
+fatia.
 
 Discovery READ ONLY de 2026-09-17 sobre `a6fcbdd` (deltas `a2bce62` e `0fc49e4` conferidos), entregue só no chat e
 persistido na implementação da Fatia 1, a partir do resumo da sessão. As linhas de código citadas são as da época; a
@@ -93,14 +95,14 @@ Uma regra por lugar (D1–D9), em quatro fatias e uma opcional, sem migration.
 | D3 | Físico: Contagem rápida sim; saída e perda sim; entrada manual (`ADJUSTMENT_IN`) não — sobra entra pela contagem | **Decidida** (handoff da Fatia 1) |
 | D4 | Receber OC já confirmada com item/fornecedor inativo: sim, com marca; corrigir o texto do "Inativar" | Recomendada |
 | D5 | OP nova com componente inativo: recusar no planejar nomeando o item; OP planejada/liberada segue | Recomendada |
-| D6 | Produto inativo no Comercial: recusar vincular, linha nova, enviar, aceitar, aprovar e gerar Pedido; versão nova e duplicar copiam com aviso; nada é cancelado | Recomendada |
-| D7 | Produto × PA sem cascata (perfis diferentes no §100); mensagem própria de PA inativo no Pedido | Recomendada |
+| D6 | Produto inativo não inicia compromisso novo: recusar vincular, linha nova, enviar, aceitar, aprovar, gerar Pedido e criar Amostra; rascunho abre com aviso; versão nova e duplicar copiam a linha e não enviam nem aceitam até regularizar; OP planejada não libera; nada é cancelado; custos, preço, CMV e roteiro sem bloqueio | **Decidida** (handoff da Fatia 2) |
+| D7 | Produto × PA sem cascata (perfis diferentes no §100); PA existente e inativo com recusa própria, nunca "sem produto acabado"; cadastro do Produto avisa o PA inativo | **Decidida** (handoff da Fatia 2) |
 | D8 | Relação com item/fornecedor inativo: recusar reativar, homologar, preferencial e oferta; inativar fornecedor limpa o preferencial dele | Recomendada |
 | D9 | R-18 abre em "Todos", com a situação | Recomendada |
 
 ## 12. Pendências PO
 
-D4–D9, uma fatia por vez.
+D4, D5, D8 e D9, uma fatia por vez.
 
 ## 13. Escopo recomendado
 
@@ -119,7 +121,7 @@ cancelar documento aberto por causa de inativação.
 
 ## 15. Próxima capability
 
-A próxima fatia que o PO emitir (2, 3 ou 4). Nenhuma depende da outra.
+A próxima fatia que o PO emitir (3 ou 4). Nenhuma depende da outra.
 
 ## 16. Implementação
 
@@ -135,9 +137,24 @@ A próxima fatia que o PO emitir (2, 3 ou 4). Nenhuma depende da outra.
 - Contagem rápida busca ativos e inativos, marca o inativo, e a prévia decide a posição (inativo sem saldo: "nenhuma
   posição para contar"); os seletores do Inventário marcam o inativo.
 
-Fatias 2–4 e a opcional: NÃO IMPLEMENTADO.
+**Fatia 2 — IMPLEMENTADA em 2026-09-17** (PRODUCT-INACTIVE-COMMERCIAL-GATE-01, na `main` e fora de PROD, sem migration, §108).
+F3 reconferido na `main` (`9a739e27`) antes de agir — confirmado inteiro; além dele, a geração do Pedido não olhava o PA e a
+Amostra nova aceitava produto inativo (porta trazida pelo handoff):
+
+- `lib/product-active-gate.ts`: 400 `inactive_product` em vincular ao Projeto, linha nova, envio e aceite de Orçamento,
+  aprovação do Projeto (transação desfeita), geração e confirmação de Pedido e Amostra nova; a liberação da OP planejada
+  relê Produto e o PA congelado; criar, trocar e planejar a OP intocados;
+- PA existente e inativo: 400 `inactive_finished_item` na linha e na confirmação do Pedido, na geração pelo orçamento e na
+  liberação da OP — `missing_finished_item` fica para o produto sem PA; sem cascata Produto × PA;
+- situação atual nos DTOs (`QuoteLineDTO.productActive`, `CustomerOrderLineDTO` e `ProductionOrderDTO` com
+  `productActive`/`finishedItemActive`, `ProductFinishedItemSummary.active`); Web sem o inativo em escolha nova (vincular,
+  linha nova, amostra), marcas no registro salvo, aviso do passo recusado e aviso de PA inativo no cadastro do Produto.
+
+Fatias 3–4 e a opcional: NÃO IMPLEMENTADO.
 
 ## 17. Histórico de decisões
 
 - 2026-09-17 — discovery entregue no chat (READY NO); D1–D3 decididas pelo PO no handoff da Fatia 1 e implementadas no
   mesmo dia; documento persistido nessa implementação.
+- 2026-09-17 — D6–D7 decididas pelo PO no handoff da Fatia 2 (PRODUCT-INACTIVE-COMMERCIAL-GATE-01) e implementadas no mesmo
+  dia; o handoff acrescentou a Amostra nova às portas da D6 e a revalidação de Produto e PA na liberação da OP.

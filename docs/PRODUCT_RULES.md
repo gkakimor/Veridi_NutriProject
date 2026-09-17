@@ -6953,3 +6953,49 @@ posição contável é a prévia, com a mesma regra do escopo: inativo sem saldo
 seletores de item do Inventário também marcam o inativo.
 
 **Sem migration.** Perfis e autoridade das ações inalterados: quem ajusta e quem conta seguem as listas de antes.
+
+## §108 — Produto inativo não inicia compromisso novo
+
+PRODUCT-INACTIVE-COMMERCIAL-GATE-01 (2026-09-17), Fatia 2 de
+[MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01](discovery/MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01.md), decisões D6 e D7
+do PO.
+
+> **Inativar o Produto tira-o de compromisso NOVO, nunca do que já existe.** Nada é apagado nem cancelado, e reativar
+> destrava o mesmo passo, sem refazer nada.
+
+**Recusado com Produto inativo** — 400 `inactive_product`, mensagem com o código de TODOS os produtos inativos da ação e o
+que destrava aquele passo:
+
+| Documento | Passo recusado |
+|---|---|
+| Projeto | vincular produto existente; aprovar com produto da proposta aceita inativo (a transação desfaz tudo, nada é promovido) |
+| Orçamento | linha nova; enviar; registrar o aceite |
+| Pedido | gerar a partir da proposta aceita; linha nova ou mantida num PATCH de linhas; confirmar |
+| Amostra | criar — também no vínculo automático do projeto de um produto só |
+| Ordem de Produção | liberar a planejada. Criar e trocar recusam produto inativo e planejar recusa produto ou PA inativo, como antes |
+
+**O que já existe continua.** Rascunho de Orçamento abre e edita (quantidade, preço, precificação); versão nova e
+duplicação copiam a linha, e o envio recusa até reativar o produto ou retirar a linha. Proposta enviada ou aceita, Pedido
+gerado — gerar de novo devolve o mesmo — ou confirmado, Amostra existente e OP liberada ou em execução seguem sem mudança.
+
+**Produto × item de produto acabado: sem cascata (D7).** Perfis diferentes inativam um e outro (§100); inativar ou
+reativar um nunca muda o outro. PA existente e inativo tem recusa própria — 400 `inactive_finished_item`, nomeando o item e
+o produto —, nunca "sem produto acabado": linha e confirmação do Pedido, geração do Pedido pelo orçamento e liberação da
+OP. Produto sem PA continua `missing_finished_item`. Na liberação, o PA conferido é o congelado no planejamento.
+
+**Revalidado no servidor, no momento da ação.** A tela pode ter aberto antes da inativação: cada passo relê a situação,
+dentro da transação onde ela existe (aprovação, confirmação, liberação). Sem trava de linha, como a guarda do Cliente
+(§95): a inativação que termina no meio do passo equivale a inativar logo depois dele.
+
+**Fora da regra.** Custos, precificação, CMV, formulação, estrutura de custos e roteiro padrão não olham a situação do
+produto. Nenhum documento é cancelado por inativação.
+
+**Tela.** A situação vem do servidor, nunca da ausência numa lista: `productActive` nas linhas do Orçamento e do Pedido e
+na OP, `finishedItemActive` no Pedido e na OP, `finishedProductItem.active` no Produto. Vincular produto, linha nova do
+orçamento e amostra não oferecem o inativo, e a dica diz qual ficou de fora. O registro salvo aparece com a marca
+"Inativo" — "Item de produto acabado inativo" para o PA. O documento que ainda avança avisa o passo que será recusado,
+sem desabilitar nada: Orçamento (enviar; registrar o aceite; aprovar o projeto e gerar o pedido), Pedido em rascunho
+(confirmar), OP em rascunho e planejada (planejar, liberar). O diálogo de aprovação marca o produto aceito inativo e
+fecha também na recusa, para o alerta aparecer. O cadastro do Produto avisa o PA inativo.
+
+**Sem migration.** Perfis e autoridade das ações inalterados.
