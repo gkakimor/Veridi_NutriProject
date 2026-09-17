@@ -5427,8 +5427,11 @@ compensação, vigente restaurável, anulada vigente, inativo recebendo, R2 sem 
 download sem `nosniff`, Anular para todos, seção em qualquer embalagem), arquivos restaurados pelo hash. Smoke em
 navegador contra API e Vite do worktree e banco isolado: 33 verificações (envio PDF e PNG, download com bytes e
 cabeçalhos, 401 sem sessão, anular, restaurar anulada, recusa de assinatura, Pote chamado "Rótulo" sem seção, VIEWER e
-COMMERCIAL por perfil, histórico sem rolagem lateral a 1440px, navegador sem nenhuma chamada fora da API). Smoke no R2
-real **não rodado**: nenhuma credencial injetada na máquina. Typecheck de shared, API e web.
+COMMERCIAL por perfil, histórico sem rolagem lateral a 1440px, navegador sem nenhuma chamada fora da API). **Smoke no R2
+real, uma vez** (`pnpm storage:r2:smoke`, credencial injetada pelo PO fora do Git, nenhum valor lido nem impresso),
+contra `veridi-homologacao`: upload com `If-None-Match: *` e SHA-256 conferido pelo R2, head com o tamanho, download com
+bytes e SHA-256 iguais, sobrescrita recusada (412) e o objeto de `_smoke/` apagado, com o head confirmando a ausência.
+Typecheck de shared, API e web.
 
 ## Próxima prioridade
 

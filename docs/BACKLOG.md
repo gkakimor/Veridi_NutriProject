@@ -812,7 +812,9 @@ variáveis, o arquivo do Item Rótulo vai para o volume (`LOCAL_FS`). Ligar = ca
 `VERIDI_R2_ENDPOINT`, `VERIDI_R2_BUCKET`, `VERIDI_R2_REGION=auto`, `VERIDI_R2_ACCESS_KEY_ID` e
 `VERIDI_R2_SECRET_ACCESS_KEY` no serviço, e provar antes com `pnpm storage:r2:smoke` na mesma credencial
 ([`DEPLOY.md`](DEPLOY.md) §6.1). Infra já pronta pelo PO: bucket privado `veridi-homologacao` e token S3 restrito a
-ele. Decidir também se PROD usa o mesmo bucket de homologação ou um próprio — o bucket mora só na variável.
+ele; o smoke real com essa credencial, injetada fora do Git, passou em 2026-09-16 (upload, head, download com bytes
+iguais, sobrescrita recusada, objeto apagado). Decidir também se PROD usa o mesmo bucket de homologação ou um próprio —
+o bucket mora só na variável.
 
 ### ATTACHMENTS-R2-MIGRATION-01 — anexos genéricos no adaptador de storage — P2 · FUTURO
 

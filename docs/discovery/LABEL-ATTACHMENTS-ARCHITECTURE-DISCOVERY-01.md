@@ -123,7 +123,8 @@ Todas no handoff (§3). Divergências registradas, **sem ampliar permissão exis
 
 ## 12. Pendências PO
 
-- **Configurar o R2 no Railway** e autorizar o smoke real (§16) — nada foi configurado nesta capability.
+- **Configurar o R2 no Railway** (STORAGE-R2-ACTIVATION-01) — nada foi configurado nesta capability. O smoke real
+  com a credencial de homologação passou (§16); no Railway, repetir com a credencial que o serviço usar.
 - Publicação em PROD, quando decidir.
 
 ## 13. Escopo recomendado
@@ -156,7 +157,10 @@ LABEL-ATTACHMENTS-01 (2026-09-16):
   `POST /items/:id/label-file/versions`, `GET …/versions/:versionId/download`, `POST …/void`, `POST …/restore`.
 - **Web** — `components/ItemLabelFileSection.tsx` no `ItemFormModal` só para Item Rótulo.
 - **Smoke R2** — `pnpm storage:r2:smoke` (`scripts/storage-r2-smoke.ts`): grava em `_smoke/`, confere cabeçalho,
-  bytes e recusa de sobrescrita, apaga no fim. **Não rodado**: nenhuma credencial estava injetada na máquina.
+  bytes e recusa de sobrescrita, apaga no fim. **Rodado uma vez em 2026-09-16 contra `veridi-homologacao`, OK**:
+  upload com `If-None-Match: *` e SHA-256, head, download com bytes e SHA-256 iguais, sobrescrita recusada (412),
+  objeto apagado e ausência confirmada. Credencial injetada pelo PO num arquivo fora do repositório; nenhum valor foi
+  lido, impresso ou registrado.
 
 ## 17. Histórico de decisões
 
