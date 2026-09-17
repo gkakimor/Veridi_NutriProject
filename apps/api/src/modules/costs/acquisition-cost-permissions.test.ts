@@ -32,13 +32,14 @@ const fixtureSupplierIds: string[] = [];
 const fixturePurchaseOrderIds: string[] = [];
 const apps = new Map<UserRole, App>();
 
-/** Um app por perfil no arquivo inteiro — subir um por caso seria só custo. */
-async function appDo(role: UserRole): Promise<App> {
-  const existente = apps.get(role);
-  if (existente) return existente;
-  const app = buildTestApp(role);
-  await app.ready();
-  apps.set(role, app);
+/**
+ * Um app por perfil no arquivo inteiro, montado no `beforeAll` — subir um por
+ * caso seria só custo. O acesso é síncrono de propósito: a instância do Fastify
+ * é "thenable", e um `await` sobre ela devolveria o tipo sem `inject` do teste.
+ */
+function appDo(role: UserRole): App {
+  const app = apps.get(role);
+  if (!app) throw new Error(`app do perfil ${role} não foi montado`);
   return app;
 }
 
@@ -48,6 +49,11 @@ beforeAll(async () => {
     update: {},
     create: { code: "kg", label: "Quilograma", dimension: "MASS", toBaseFactor: "1000" },
   });
+  for (const role of USER_ROLES) {
+    const app = buildTestApp(role);
+    await app.ready();
+    apps.set(role, app);
+  }
 });
 
 afterAll(async () => {
@@ -105,7 +111,7 @@ async function ordemConfirmada() {
   });
   fixtureItemIds.push(item.id);
 
-  const admin = await appDo("ADMIN");
+  const admin = appDo("ADMIN");
   const criada = await admin.inject({
     method: "POST",
     url: "/purchase-orders",
@@ -144,7 +150,7 @@ function corpoDoRecebimento(
 /** Material recebido pelo Administrador, com ou sem custo. */
 async function recebido(opcoes: { actualUnitCost?: string; receivedAt?: Date } = {}) {
   const { item, poId, poLineId } = await ordemConfirmada();
-  const admin = await appDo("ADMIN");
+  const admin = appDo("ADMIN");
   const resposta = await admin.inject({
     method: "POST",
     url: `/purchase-orders/${poId}/receipts`,
@@ -174,7 +180,7 @@ function informarCusto(app: App, lineId: string, payload: Record<string, unknown
 }
 
 async function referenciaDoItem(itemId: string) {
-  const admin = await appDo("ADMIN");
+  const admin = appDo("ADMIN");
   const resposta = (await admin.inject({ method: "GET", url: `/items/${itemId}/cost-reference` })).json();
   return { source: resposta.source as string, unitCost: resposta.unitCost as string | null };
 }
@@ -198,7 +204,7 @@ describe("a matriz", () => {
 describe("PUT /receipt-lines/:id/acquisition-cost", () => {
   it.each(AUTORIZADOS)("%s informa o custo: 200, valor e nota gravados, autor da sessão", async (role) => {
     const { line } = await recebido();
-    const app = await appDo(role);
+    const app = appDo(role);
     const { user } = await createAuthenticatedUser(role);
 
     const resposta = await informarCusto(app, line.id, { unitCost: "31.5", note: "NF chegou depois" });
@@ -215,7 +221,7 @@ describe("PUT /receipt-lines/:id/acquisition-cost", () => {
   it.each(RECUSADOS)("%s: 403 forbidden, a linha fica como estava e a consulta segue aberta", async (role) => {
     const { receiptId, line } = await recebido({ actualUnitCost: "7" });
     const antes = await custoGravado(line.id);
-    const app = await appDo(role);
+    const app = appDo(role);
 
     const resposta = await informarCusto(app, line.id, { unitCost: "99", note: "tentativa" });
     expect(resposta.statusCode, `${role}: ${resposta.body}`).toBe(403);
@@ -239,7 +245,7 @@ describe("PUT /receipt-lines/:id/acquisition-cost", () => {
     });
 
     it.each(RECUSADOS)("%s: o 403 vem antes do corpo inválido e da linha inexistente", async (role) => {
-      const app = await appDo(role);
+      const app = appDo(role);
       const corpoInvalido = await informarCusto(app, lineId, { unitCost: "-5" });
       expect(corpoInvalido.statusCode, `${role} corpo inválido: ${corpoInvalido.body}`).toBe(403);
       const semCorpo = await app.inject({ method: "PUT", url: `/receipt-lines/${lineId}/acquisition-cost` });
@@ -249,7 +255,7 @@ describe("PUT /receipt-lines/:id/acquisition-cost", () => {
     });
 
     it.each(AUTORIZADOS)("%s: corpo inválido segue 400 e linha inexistente segue 404", async (role) => {
-      const app = await appDo(role);
+      const app = appDo(role);
       const corpoInvalido = await informarCusto(app, lineId, { unitCost: "-5" });
       expect(corpoInvalido.statusCode, `${role}: ${corpoInvalido.body}`).toBe(400);
       const inexistente = await informarCusto(app, LINHA_INEXISTENTE, { unitCost: "10" });
@@ -261,7 +267,7 @@ describe("PUT /receipt-lines/:id/acquisition-cost", () => {
 describe("POST /purchase-orders/:id/receipts com custo", () => {
   it.each(AUTORIZADOS)("%s recebe já com o custo: 201, custo gravado com o autor da sessão", async (role) => {
     const { poId, poLineId } = await ordemConfirmada();
-    const app = await appDo(role);
+    const app = appDo(role);
     const { user } = await createAuthenticatedUser(role);
 
     const resposta = await app.inject({
@@ -278,9 +284,9 @@ describe("POST /purchase-orders/:id/receipts com custo", () => {
 
   it.each(RECUSADOS)("%s: recebimento que traz custo é 403 e nada é gravado", async (role) => {
     const { item, poId, poLineId } = await ordemConfirmada();
-    const admin = await appDo("ADMIN");
+    const admin = appDo("ADMIN");
     const ocAntes = (await admin.inject({ method: "GET", url: `/purchase-orders/${poId}` })).json();
-    const app = await appDo(role);
+    const app = appDo(role);
 
     const resposta = await app.inject({
       method: "POST",
@@ -308,7 +314,7 @@ describe("POST /purchase-orders/:id/receipts com custo", () => {
 
   it.each(RECUSADOS)("%s: receber sem custo continua aberto — campo ausente ou vazio", async (role) => {
     const { poId, poLineId } = await ordemConfirmada();
-    const app = await appDo(role);
+    const app = appDo(role);
 
     const semCampo = await app.inject({
       method: "POST",
@@ -329,7 +335,7 @@ describe("POST /purchase-orders/:id/receipts com custo", () => {
   });
 
   it.each(RECUSADOS)("%s: o 403 do custo vem antes do corpo inválido e da OC inexistente", async (role) => {
-    const app = await appDo(role);
+    const app = appDo(role);
 
     const corpoInvalido = await app.inject({
       method: "POST",
@@ -356,7 +362,7 @@ describe("POST /purchase-orders/:id/receipts com custo", () => {
   });
 
   it.each(AUTORIZADOS)("%s: o mesmo corpo inválido segue 400, e a OC inexistente, 400 de OC", async (role) => {
-    const app = await appDo(role);
+    const app = appDo(role);
 
     const corpoInvalido = await app.inject({
       method: "POST",
@@ -384,7 +390,7 @@ describe("REAL, 30D e 90D seguem a mesma fonte depois do gate", () => {
     expect(await referenciaRealDoLote(item.id, lotId)).toEqual({ source: "NO_COST", unitCost: null });
     expect(await referenciaDoItem(item.id)).toEqual({ source: "NO_COST", unitCost: null });
 
-    const compras = await appDo("PURCHASING");
+    const compras = appDo("PURCHASING");
     expect((await informarCusto(compras, line.id, { unitCost: "10" })).statusCode).toBe(200);
 
     const real = { source: "REAL", unitCost: "10" };
@@ -393,7 +399,7 @@ describe("REAL, 30D e 90D seguem a mesma fonte depois do gate", () => {
     expect(await referenciaDoItem(item.id)).toEqual(media30);
 
     for (const role of RECUSADOS) {
-      const app = await appDo(role);
+      const app = appDo(role);
       expect((await informarCusto(app, line.id, { unitCost: "99" })).statusCode, role).toBe(403);
 
       // A outra porta: um recebimento novo do MESMO item, com custo, também
@@ -415,14 +421,14 @@ describe("REAL, 30D e 90D seguem a mesma fonte depois do gate", () => {
     const { item, line } = await recebido({ receivedAt: new Date(Date.now() - 60 * DAY_MS) });
     expect(await referenciaDoItem(item.id)).toEqual({ source: "NO_COST", unitCost: null });
 
-    const admin = await appDo("ADMIN");
+    const admin = appDo("ADMIN");
     expect((await informarCusto(admin, line.id, { unitCost: "20" })).statusCode).toBe(200);
 
     const media90 = { source: "ESTIMATED_90D", unitCost: "20.00000000" };
     expect(await referenciaDoItem(item.id)).toEqual(media90);
 
     for (const role of RECUSADOS) {
-      const app = await appDo(role);
+      const app = appDo(role);
       expect((await informarCusto(app, line.id, { unitCost: "1" })).statusCode, role).toBe(403);
       expect(await referenciaDoItem(item.id), `${role}: 90D`).toEqual(media90);
     }
@@ -437,7 +443,7 @@ async function ordemComMesmoItem(itemId: string) {
   });
   fixtureSupplierIds.push(supplier.id);
 
-  const admin = await appDo("ADMIN");
+  const admin = appDo("ADMIN");
   const criada = await admin.inject({
     method: "POST",
     url: "/purchase-orders",
