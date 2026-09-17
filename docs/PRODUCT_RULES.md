@@ -6907,3 +6907,49 @@ fechada com base fora da regra explica a base gravada na ajuda do cálculo do "P
 diz: "A base de cálculo é definida automaticamente pela configuração da formulação."
 
 **Sem migration.** A coluna `basis` continua no schema, com o mesmo enum.
+
+## §107 — Item inativo não some do estoque físico
+
+INVENTORY-INACTIVE-ITEM-VISIBILITY-01 (2026-09-17), Fatia 1 de
+[MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01](discovery/MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01.md), decisões D1–D3
+do PO.
+
+> **Inativar o Item tira-o de escolha nova, nunca do físico.** Material que existe, está reservado ou vem a caminho
+> continua à vista, marcado.
+
+**Posição** é saldo físico, reservado ou em compra maior que zero — o mesmo critério que já ordenava a visão.
+
+**Visão de Estoque e CSV.**
+
+- Item ativo: como antes, com ou sem posição.
+- Item inativo COM posição: aparece por padrão, com a marca "Item inativo" (D1).
+- Item inativo SEM posição: fora por padrão; entra com o filtro "Incluir inativos sem saldo"
+  (`includeInactiveWithoutPosition`, `"true"`/`"false"` exatos) (D2).
+- "Somente com estoque" continua lendo só o saldo físico e se soma ao recorte acima.
+- O CSV lê o mesmo schema e o mesmo serviço da listagem: o mesmo recorte, com a coluna "Item ativo" (Sim/Não).
+
+A situação vem do servidor (`itemActive` no `InventoryItemSummaryDTO`); a tela nunca deduz inatividade pela ausência numa
+lista.
+
+**Detalhe do item** (`GET /inventory/:itemId` e a tela): mostra a situação; lotes, reservas, movimentações e histórico
+seguem como para o ativo.
+
+**Operação física do inativo (D3).**
+
+| Operação | Item inativo |
+|---|---|
+| Contagem rápida | Permitida |
+| Ajuste de saída | Permitido |
+| Perda | Permitida |
+| Ajuste de entrada manual (`ADJUSTMENT_IN`) | **Recusado** — 400 `inactive_item`, nada gravado |
+
+Inativo não ganha estoque novo por número digitado: sobra ou diferença física entra pela contagem (Contagem rápida ou
+Inventário Físico), que registra o que foi encontrado. O ajuste da tela não oferece a entrada para item inativo e diz por
+quê.
+
+**Inventário Físico — regra mantida.** Inativo com saldo é contável; sem saldo fica fora do escopo. A busca da Contagem
+rápida passa a achar o inativo, marcado — a primeira página, antes de digitar, segue só com ativos —, e quem decide a
+posição contável é a prévia, com a mesma regra do escopo: inativo sem saldo não tem posição, e a tela diz isso. Os
+seletores de item do Inventário também marcam o inativo.
+
+**Sem migration.** Perfis e autoridade das ações inalterados: quem ajusta e quem conta seguem as listas de antes.
