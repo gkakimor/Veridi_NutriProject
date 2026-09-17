@@ -5818,6 +5818,42 @@ consulta assistida, ajuda, rotas, fornecedores do item), antes e depois do rebas
 mutação; 390px por estrutura e CSS (grids de uma coluna até 720px, campo de arquivo a 100%, nome longo quebra na
 `definition-list`, rodapé com "Concluir" curto).
 
+## Duplicatas de Item: Onda A saneada no DEV (ITEM-DUPLICATE-SANITIZATION-01, 2026-09-17)
+
+**Decisão do PO.** Onda A de [ITEM-DUPLICATE-SANITIZATION-DISCOVERY-01](discovery/ITEM-DUPLICATE-SANITIZATION-DISCOVERY-01.md):
+G1 MP-000034 → MP-000032, G12 MP-000509 → MP-000458, G14 MP-000507 → MP-000049, G16 ME-000084 → ME-000047, G17
+ME-000086 → ME-000049, G18 ME-000129 → ME-000127. Duplicado sem uso é removido; de-para no arquivo de decisão e na
+documentação, sem tabela de alias. Regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §110. **Sem migration.** Só DEV:
+PROD não foi lido nem escrito, Railway intocado.
+
+**Ferramenta.** `scripts/maintenance/item-duplicate-sanitization.ts` `plan | apply | verify --onda=A`, sobre o arquivo de
+decisão `scripts/veridi-import/item-duplicate-decisions.ts` (validado por `item-duplicates.ts`). PLAN somente leitura com
+impressão digital por grupo; APPLY numa transação com trava consultiva, `SELECT FOR UPDATE` antes de reler, comparação
+com o plano, linhas contadas por escrita e efeito por tabela (`pg_stat_xact_user_tables`, diferença entre o início e o
+fim: a view soma transações anteriores da mesma conexão ainda não descarregadas); VERIFY de resíduo. APPLY só em banco
+local. Comandos em [`VERIDI_MIGRATION.md`](VERIDI_MIGRATION.md).
+
+**Importador.** Com pacote, a duplicata absorvida nunca é criada, o código do ERP dela é consumido, o código da planilha
+resolve para o canônico; base que ainda tem a duplicata ou canônico fora da carga reprovam o plano; plano e APPLY carimbam
+a impressão das decisões.
+
+**DEV (`veridi_dev`).** PLAN idêntico à Onda A → backup `dev-pre-item-dup-onda-a-20260917T103047Z.json` (82 models, 5.854
+linhas, `RESTAURÁVEL: YES`) → APPLY: Itens −6, relações −2 e 1 movida (SALOPET), 2 ofertas e 4 eventos movidos para as
+relações HECAPLAST do canônico, nenhuma outra tabela → VERIFY OK. Itens 825 → 819, relações 721 → 719, ofertas 773,
+eventos 1.233 e componentes 1.330 iguais. Restam 12 grupos (27 Itens) das Ondas B e C.
+
+**Validação.** `scripts/maintenance/item-duplicate-sanitization.test.ts` (11: sem referência; FK inesperada, inclusive
+`CASCADE`; impressão divergente; relação simples; relação duplicada; preferencial dos dois lados, status divergente e
+histórico além da importação; ACTIVE aborta e rascunho move; APPLY atômico e trava consultiva; escrita fora do plano;
+VERIFY de resíduo; backup), `item-duplicates.test.ts` (3) e o bloco novo de `importer.test.ts` (3), em banco de teste
+exclusivo; 10 mutações por script derrubaram os testes (extra). Typecheck avulso dos scripts tocados. PLAN do importador
+contra o DEV sujo reprova (6 × `ITEM_DUPLICATE_ABSORBED_CONFLICT`) e contra o DEV saneado sai `readyForLoad` sem nada a
+criar; rebuild descartável da carga reproduz os 637 Itens, 719 relações, 773 ofertas e 1.292 componentes ACTIVE do DEV
+saneado, com as sequences provando o código consumido. Sem suíte completa, E2E nem Playwright.
+
+**Registrado.** Onda A em PROD, Ondas B e C e ITEM-NAME-STANDARDIZATION-01 (índice ainda bloqueado), em "Abertos fora da
+fila" do [`BACKLOG.md`](BACKLOG.md).
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a
@@ -5920,6 +5956,8 @@ real do cliente (#7, #11). Roteiro em
 Banco local `veridi_dev` = **DEV_REALDATA_BASELINE** desde 2026-09-14 (DEV-REALDATA-BASELINE-RESET-01): as 74
 migrations, o ADMIN local do `seed-infra` e a carga inicial que PROD recebeu — mesmo pacote, mesmos códigos do ERP,
 mesmas contagens de negócio. Estoque, OP, pedido e custo real seguem vazios: é o que a Veridi ainda não lançou.
+**Desde 2026-09-17 com a Onda A de duplicatas de Item saneada** (§110): 6 Itens MP/ME a menos que PROD, que não foi
+saneado; reconstruir pelo importador chega ao mesmo estado, porque a carga segue o arquivo de decisão.
 
 Reconstruir, nesta ordem, no Git Bash e na raiz. `W` é uma pasta de trabalho com cópia de `csv/`, `overrides/` e
 `cmv-product-overrides.csv` de `../.local-data/veridi/` (o importador grava plano, findings e de-para ao lado dos

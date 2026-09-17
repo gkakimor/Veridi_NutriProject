@@ -7053,3 +7053,44 @@ anulação, pelas listas de sempre; a seção vem logo depois do cadastro, antes
 
 **Sem API alterada e sem migration.** Nenhum tipo novo nesta regra: um quarto tipo ganha a sua seção e os seus campos
 próprios no formulário.
+
+## §110 — Item duplicado: o canônico absorve, e a carga não recria
+
+ITEM-DUPLICATE-SANITIZATION-01 (2026-09-17), Onda A de
+[ITEM-DUPLICATE-SANITIZATION-DISCOVERY-01](discovery/ITEM-DUPLICATE-SANITIZATION-DISCOVERY-01.md), decisões D2 e D4 do PO.
+
+> **Duplicata sai por decisão, não por FK.** Quem absorve quem é do PO, grupo a grupo; a ferramenta só executa com o
+> banco no estado que o plano aprovado descreve, e desfaz tudo na primeira divergência.
+
+**Decisão.** Um arquivo só, versionado: `scripts/veridi-import/item-duplicate-decisions.ts` — onda, grupo, nome e, dos
+dois lados, o código do ERP e o código da planilha. É o de-para do código absorvido; não há tabela de alias. O código do
+ERP sai de sequence por banco: a ferramenta confere o código da planilha dos dois lados e recusa se não bater.
+
+**O que acontece com o duplicado.** Sem uso, é removido — inativar manteria o nome repetido (D2). Com relação com
+fornecedor, a relação vai inteira para o canônico; se o canônico já tem o mesmo fornecedor, ofertas (com a mesma
+`sourceKey`) e eventos de homologação passam para a relação do canônico e a do duplicado sai. Linha de Formulação em
+rascunho vai para o canônico quando o rascunho ainda não o tem.
+
+**O que aborta, sem gravar nada.**
+
+| Caso | Por quê |
+|---|---|
+| Formulação ACTIVE ou INACTIVE usando o duplicado | Versão fechada é histórica e não é reescrita |
+| Rascunho que já tem o canônico | Somar linhas é decisão de formulação |
+| Qualquer outra referência: estoque, lote, compra, OP, custo, contagem, Modelo, rótulo, coluna sem FK, JSON | A FK real pode ser `CASCADE` ou `SET NULL`; nenhuma ficou prevista |
+| Relação preferencial no duplicado (inclusive dos dois lados) | Preferência é decisão de Compras, não se funde |
+| Homologação ou situação divergente entre as duas relações do mesmo fornecedor | Uma das duas decisões se perderia |
+| Relação, evento ou oferta além da importação | Histórico feito por gente não se funde sem ela |
+| Nome, código da planilha, tipo ou unidade diferentes da decisão; canônico ausente ou inativo; terceiro Item com o mesmo nome; duplicata recriada com outro código | A decisão não descreve mais este cadastro |
+
+**Execução.** PLAN (somente leitura, impressão digital por grupo) → backup JSON com `RESTAURÁVEL: YES` → APPLY numa
+transação (trava consultiva, `SELECT FOR UPDATE` antes de reler, mesma impressão do plano, linhas contadas por escrita e
+nenhuma tabela mexida além do plano) → VERIFY (duplicado fora, canônico no lugar, nenhum resíduo, um Item com o nome do
+grupo). APPLY só em banco local; produção exige conferência READ ONLY e aprovação do PO.
+
+**A carga segue a decisão.** Com pacote de revisão, o importador nunca cria o duplicado absorvido: o código da planilha
+dele resolve para o canônico (fórmula e oferta), o código do ERP é consumido para os seguintes nascerem com o código da
+base saneada, e o plano reprova se a base ainda tem o duplicado ou se o canônico não vem na carga. Saldo legado do código
+absorvido fica fora do template de abertura, com finding apontando o canônico.
+
+**Sem migration.** Nenhuma tela nova.

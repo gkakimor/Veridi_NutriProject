@@ -76,6 +76,14 @@ export const SEVERITY_BY_CODE: Record<string, FindingSeverity> = {
   ITEM_REVIEW_CODE_COLLISION: "BLOCKING",
   ITEM_REVIEW_NOT_IMPORTED: "INFO",
 
+  // Duplicata de Item absorvida (ITEM-DUPLICATE-SANITIZATION-01): decisão do
+  // PO em `item-duplicate-decisions.ts`. Absorver é transformação conhecida;
+  // base que ainda tem a duplicata, ou canônico fora da carga, reprova.
+  ITEM_DUPLICATE_ABSORBED: "INFO",
+  ITEM_DUPLICATE_ABSORBED_CONFLICT: "BLOCKING",
+  ITEM_DUPLICATE_CANONICAL_UNRESOLVED: "BLOCKING",
+  STOCK_LEGACY_CODE_ABSORBED: "REVIEW",
+
   PRODUCT_REVIEW_WITHOUT_NAME: "BLOCKING",
   PRODUCT_REVIEW_WITHOUT_CUSTOMER: "BLOCKING",
   PRODUCT_REVIEW_WITHOUT_FINISHED_ITEM: "BLOCKING",

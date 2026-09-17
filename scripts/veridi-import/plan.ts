@@ -3,6 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { CORPUS_DIR, corpusAvailable } from "../veridi-data/corpus.js";
 import { assertImportEnvironment } from "./environment.js";
+import { DECISOES_DE_DUPLICATAS } from "./item-duplicate-decisions.js";
+import { impressaoDasDecisoes } from "./item-duplicates.js";
 import { readOverrides, writeOverrideTemplate, ITEM_MAP_FILE, PRICE_UOM_FILE, SAMPLE_FILE } from "./overrides.js";
 import { WORKBOOKS_DO_ESCOPO, runPipeline } from "./pipeline.js";
 import {
@@ -148,6 +150,12 @@ export async function buildPlan(options: { quiet?: boolean } = {}): Promise<void
       // antes de escrever: plano aprovado sobre um pacote e aplicado sobre
       // outro é a mesma armadilha do manifesto de fontes.
       reviewPackage: review ? carimboDoPacote(review) : null,
+      // Mesma armadilha para a decisão de duplicatas de Item: o APPLY recusa
+      // se o arquivo de decisão mudou depois do PLAN.
+      duplicateDecisions: {
+        groups: DECISOES_DE_DUPLICATAS.length,
+        fingerprint: impressaoDasDecisoes(DECISOES_DE_DUPLICATAS),
+      },
       review: result.review,
       readyForLoad: review !== null && bloqueios.length === 0 && !result.review?.blocked,
     };

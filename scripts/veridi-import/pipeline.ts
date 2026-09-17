@@ -45,6 +45,8 @@ import type {
   ProdutoRevisado,
 } from "./master-data-review.js";
 import type { Overrides } from "./overrides.js";
+import { absorvidosPorCodigoDaPlanilha } from "./item-duplicates.js";
+import type { DecisaoDeDuplicata } from "./item-duplicates.js";
 
 /**
  * Migração Veridi — o mesmo código roda em PLAN (dry-run) e em APPLY.
@@ -185,6 +187,12 @@ export interface PipelineContext {
    * como sempre rodou, o que serve para desenvolvimento; o APPLY recusa.
    */
   review?: PacoteRevisao | null;
+  /**
+   * Duplicatas de Item absorvidas. Ausente, vale o arquivo de decisão
+   * versionado (`item-duplicate-decisions.ts`) — a mesma decisão que a
+   * ferramenta de saneamento aplica no banco. Só a carga com pacote usa.
+   */
+  duplicatas?: readonly DecisaoDeDuplicata[];
 }
 
 /**
@@ -490,6 +498,19 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
   const itemUnitByExternal = new Map<string, string>();
   let itemReview: LeituraRevisada<ItemRevisado> | null = null;
 
+  /*
+   * Duplicata de Item absorvida (ITEM-DUPLICATE-SANITIZATION-01). A carga com
+   * pacote segue o arquivo de decisão: a duplicata nunca é criada, e o código da
+   * planilha dela resolve para o canônico — fórmula e oferta inclusas. Base que
+   * ainda tem a duplicata, ou canônico fora da carga, reprova o plano. Sem
+   * pacote, o caminho de desenvolvimento segue como era.
+   */
+  const absorvidos = review
+    ? absorvidosPorCodigoDaPlanilha(ctx.duplicatas)
+    : new Map<string, DecisaoDeDuplicata>();
+  const absorvidosDaCarga: { item: ItemRevisado; decisao: DecisaoDeDuplicata; conflito: boolean }[] = [];
+  let duplicataBloqueia = false;
+
   if (review) {
     // Catálogo real de unidades: unidade revisada é conferida contra o que
     // existe no banco, nunca criada a partir de texto do Excel.
@@ -512,6 +533,30 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
       domains.items.skipped += 1;
     }
     for (const item of lidos) {
+      const decisao = absorvidos.get(item.externalCode);
+      if (decisao) {
+        const sequencia = ITEM_CODE_SEQUENCE[item.type];
+        const naBase = await prisma.item.findFirst({ where: { externalCode: item.externalCode } });
+        const conflito = Boolean(naBase) || !decisao.absorvido.codigo.startsWith(`${sequencia.prefix}-`);
+        if (conflito) {
+          findings.add(
+            "ITEM_DUPLICATE_ABSORBED_CONFLICT",
+            "Item",
+            item.key,
+            naBase
+              ? `${naBase.code} ainda existe na base — rode o saneamento de duplicatas (grupo ${decisao.grupo}) antes da carga`
+              : `o pacote traz ${item.type}, e o grupo ${decisao.grupo} absorve ${decisao.absorvido.codigo}`,
+          );
+          duplicataBloqueia = true;
+        } else {
+          // O código do ERP é consumido mesmo sem Item: os seguintes nascem
+          // com o código que têm na base saneada.
+          await nextCode(sequencia.sequence, sequencia.prefix, item.externalCode);
+        }
+        absorvidosDaCarga.push({ item, decisao, conflito });
+        domains.items.skipped += 1;
+        continue;
+      }
       const data = {
         name: item.name,
         type: item.type,
@@ -548,6 +593,36 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
       itemIdByExternal.set(item.externalCode, id);
       itemIdByKey.set(item.key, id);
       domains.items.created += 1;
+    }
+
+    // Depois do laço: o canônico pode vir antes ou depois da duplicata no pacote.
+    for (const { item, decisao, conflito } of absorvidosDaCarga) {
+      if (conflito) continue;
+      const canonicoId = itemIdByExternal.get(decisao.canonico.codigoPlanilha);
+      const canonico =
+        canonicoId && !isPlanned(canonicoId)
+          ? await prisma.item.findUnique({ where: { id: canonicoId }, select: { code: true } })
+          : null;
+      if (!canonicoId || (canonico && canonico.code !== decisao.canonico.codigo)) {
+        findings.add(
+          "ITEM_DUPLICATE_CANONICAL_UNRESOLVED",
+          "Item",
+          item.key,
+          canonicoId
+            ? `o Item da planilha ${decisao.canonico.codigoPlanilha} e ${canonico?.code} nesta base, e o grupo ${decisao.grupo} diz ${decisao.canonico.codigo}`
+            : `canonico ${decisao.canonico.codigo} (planilha ${decisao.canonico.codigoPlanilha}) nao esta aprovado nesta carga`,
+        );
+        duplicataBloqueia = true;
+        continue;
+      }
+      itemIdByExternal.set(item.externalCode, canonicoId);
+      itemIdByKey.set(item.key, canonicoId);
+      findings.add(
+        "ITEM_DUPLICATE_ABSORBED",
+        "Item",
+        item.key,
+        `duplicata absorvida por ${decisao.canonico.codigo} (grupo ${decisao.grupo}) — nao criada; formula e oferta resolvem para o canonico`,
+      );
     }
   } else {
   for (const item of items) {
@@ -1691,6 +1766,18 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
 
     stock.positive += 1;
     const item = legacyItemCode ? (dbItemByExternal.get(legacyItemCode) ?? null) : null;
+    const absorvidoPor = item ? undefined : absorvidos.get(legacyItemCode);
+    if (absorvidoPor) {
+      // Somar ao canônico no template quebraria a conferência por Item
+      // (`opening-stock.ts` lê um saldo legado por código): fica o rastro.
+      findings.add(
+        "STOCK_LEGACY_CODE_ABSORBED",
+        "Inventory",
+        legacyItemCode,
+        `saldo legado ${value.toString()} de duplicata absorvida por ${absorvidoPor.canonico.codigo} (grupo ${absorvidoPor.grupo}) — reconciliar junto do canonico, fora do template`,
+      );
+      continue;
+    }
     if (!item) {
       findings.add(
         "STOCK_NEEDS_LOT_RECONCILIATION",
@@ -1783,7 +1870,8 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
             supplierReview?.bloqueado ||
               customerReview?.bloqueado ||
               itemReview?.bloqueado ||
-              productReview?.bloqueado,
+              productReview?.bloqueado ||
+              duplicataBloqueia,
           ),
         }
       : null,
