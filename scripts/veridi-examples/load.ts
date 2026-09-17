@@ -1,10 +1,16 @@
 import { PrismaClient } from "@prisma/client";
-import type { Prisma } from "@prisma/client";
+import type { ItemType, Prisma } from "@prisma/client";
 import fs from "node:fs";
 import path from "node:path";
 import { CORPUS_DIR, parseCsv } from "../veridi-data/corpus.js";
 import { assertImportEnvironment, hasApplyFlag } from "../veridi-import/environment.js";
 import { nextSequenceCode } from "../../apps/api/src/lib/sequence-code.js";
+/*
+ * A base da linha do Modelo sai da regra ÚNICA (§106), pelo fonte do shared:
+ * `@veridi/shared` não resolve fora do workspace da API, e copiar a regra para
+ * cá seria uma segunda implementação dela.
+ */
+import { baseDoComponente } from "../../packages/shared/src/formulations.js";
 
 /**
  * Pacote de EXEMPLOS: recursos industriais, tarifas, template de Formulação e
@@ -87,10 +93,12 @@ const relatorio: Relatorio = { criados: [], existentes: [], pulados: [] };
 async function resolverItem(
   prisma: PrismaClient,
   nome: string,
-): Promise<{ id: string; code: string; name: string; unitCode: string } | { erro: string }> {
+): Promise<
+  { id: string; code: string; name: string; unitCode: string; type: ItemType } | { erro: string }
+> {
   const exatos = await prisma.item.findMany({
     where: { name: { equals: nome, mode: "insensitive" }, type: "RAW_MATERIAL", active: true },
-    select: { id: true, code: true, name: true, unitCode: true },
+    select: { id: true, code: true, name: true, unitCode: true, type: true },
   });
   if (exatos.length === 1) return exatos[0]!;
   if (exatos.length > 1) {
@@ -99,7 +107,7 @@ async function resolverItem(
 
   const parciais = await prisma.item.findMany({
     where: { name: { startsWith: nome, mode: "insensitive" }, type: "RAW_MATERIAL", active: true },
-    select: { id: true, code: true, name: true, unitCode: true },
+    select: { id: true, code: true, name: true, unitCode: true, type: true },
   });
   if (parciais.length === 1) return parciais[0]!;
   if (parciais.length === 0) return { erro: `nenhum Item ativo começa por "${nome}"` };
@@ -235,6 +243,7 @@ async function principal(): Promise<void> {
     const resolvidos: {
       itemId: string;
       itemCode: string;
+      itemType: ItemType;
       quantidade: string;
       unidade: string;
       linha: Linha;
@@ -257,6 +266,7 @@ async function principal(): Promise<void> {
       resolvidos.push({
         itemId: item.id,
         itemCode: item.code,
+        itemType: item.type,
         quantidade: convertido.quantidade,
         unidade: convertido.unidade,
         linha: componente,
@@ -310,7 +320,8 @@ async function principal(): Promise<void> {
             itemId: componente.itemId,
             quantity: componente.quantidade,
             unitCode: componente.unidade,
-            basis: "PER_DOSE",
+            // Derivada do tipo do Item e das premissas da versão criada acima.
+            basis: baseDoComponente(componente.itemType, versao),
             quantityMode: modo,
             applyPurityAdjustment: aplicarPureza,
             applyOverageAdjustment: aplicarOverage,
