@@ -153,7 +153,8 @@ Recebimento, Projeto e Amostra (as telas ainda oferecem a todos — achado regis
 
 ## 15. Próxima capability
 
-MASTER-DATA-EDIT-PERMISSIONS-01 (entregue). Depois, sem posição: ACQUISITION-COST-PERMISSION-01 (P1),
+MASTER-DATA-EDIT-PERMISSIONS-01 (entregue). Depois, sem posição: ACQUISITION-COST-PERMISSION-01 (P1; entregue em
+2026-09-16 — Compras e Administrador, no PUT e no recebimento, [`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §105),
 MASTER-DATA-STRUCTURAL-LOCKS-01 e MASTER-DATA-STATUS-HISTORY-01.
 
 ## 16. Implementação

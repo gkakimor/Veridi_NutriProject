@@ -32,6 +32,10 @@ import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 import { formatQuantity } from "../../lib/quantity";
+import {
+  CUSTO_DE_AQUISICAO_POR_OUTRO_PERFIL,
+  usePodeInformarCustoDeAquisicao,
+} from "./acquisition-cost-permissions";
 
 /** ⓘ de um campo, lido do registro central — o texto nunca mora no JSX. */
 function DicaDoCampo({ id }: { id: HelpHintId }) {
@@ -138,6 +142,12 @@ export function ReceivePurchaseOrderPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preselectedId = searchParams.get("purchaseOrderId");
+  /*
+   * Receber é de toda sessão; o custo efetivo, de Compras e Administrador. Quem
+   * não informa recebe sem o campo, e o envio nunca leva custo — a API recusaria
+   * o recebimento inteiro (ACQUISITION-COST-PERMISSION-01).
+   */
+  const podeInformarCusto = usePodeInformarCustoDeAquisicao();
 
   /** A OC escolhida no seletor — sem `?purchaseOrderId=`, é por aqui que se chega. */
   const [ocEscolhida, setOcEscolhida] = useState("");
@@ -312,11 +322,13 @@ export function ReceivePurchaseOrderPage() {
         ...(documentReference.trim() ? { documentReference: documentReference.trim() } : {}),
         ...(notes.trim() ? { notes: notes.trim() } : {}),
         lines: enviadas.map((line) => {
-          const custo = exigirDecimalOpcional(
-            line.actualUnitCost,
-            `Custo efetivo de aquisição de ${line.itemCode}`,
-            OPCOES_CUSTO_UNITARIO,
-          );
+          const custo = podeInformarCusto
+            ? exigirDecimalOpcional(
+                line.actualUnitCost,
+                `Custo efetivo de aquisição de ${line.itemCode}`,
+                OPCOES_CUSTO_UNITARIO,
+              )
+            : undefined;
           const quantidade = validacoes.get(line.purchaseOrderLineId);
           if (quantidade?.estado !== "ok") {
             throw new Error(`Receber agora de ${line.itemCode}: corrija a quantidade.`);
@@ -487,6 +499,9 @@ export function ReceivePurchaseOrderPage() {
               />
             </div>
           </div>
+          {/* Uma frase só, e não uma por item: quem recebia com o campo de custo
+              sabe por que ele sumiu e a quem cabe o número. */}
+          {!podeInformarCusto && <p className="field__hint">{CUSTO_DE_AQUISICAO_POR_OUTRO_PERFIL}</p>}
         </FormSection>
 
         {lines.length === 0 ? (
@@ -573,44 +588,46 @@ export function ReceivePurchaseOrderPage() {
                   </div>
                 )}
 
-                <div className="field">
-                  <label htmlFor={`cost-${line.purchaseOrderLineId}`}>
-                    Custo efetivo de aquisição ({line.unitCode})
-                    <DicaDoCampo id="compras.custoEfetivo" />
-                  </label>
-                  <MoneyField
-                    id={`cost-${line.purchaseOrderLineId}`}
-                    scale={CASAS_CUSTO_UNITARIO}
-                    placeholder="Opcional"
-                    value={line.actualUnitCost}
-                    onChangeValue={(valor) =>
-                      handleLineChange(line.purchaseOrderLineId, "actualUnitCost", valor)
-                    }
-                  />
-                  <p className="field__hint">
-                    {line.purchaseUnitPrice
-                      ? `Preço previsto da OC: ${formatUnitPriceBRL(line.purchaseUnitPrice)} / ${line.unitCode}. `
-                      : ""}
-                    Opcional — o recebimento não depende do custo. Informe apenas o custo realmente
-                    praticado; o preço da OC nunca é assumido como custo real.
-                  </p>
-                  {line.purchaseUnitPrice && (
-                    <button
-                      type="button"
-                      className="btn btn--ghost btn--sm"
-                      onClick={() =>
-                        handleLineChange(
-                          line.purchaseOrderLineId,
-                          "actualUnitCost",
-                          // O preço da OC no texto do campo, em português.
-                          toPtBrEditText(line.purchaseUnitPrice, OPCOES_CUSTO_UNITARIO),
-                        )
+                {podeInformarCusto && (
+                  <div className="field">
+                    <label htmlFor={`cost-${line.purchaseOrderLineId}`}>
+                      Custo efetivo de aquisição ({line.unitCode})
+                      <DicaDoCampo id="compras.custoEfetivo" />
+                    </label>
+                    <MoneyField
+                      id={`cost-${line.purchaseOrderLineId}`}
+                      scale={CASAS_CUSTO_UNITARIO}
+                      placeholder="Opcional"
+                      value={line.actualUnitCost}
+                      onChangeValue={(valor) =>
+                        handleLineChange(line.purchaseOrderLineId, "actualUnitCost", valor)
                       }
-                    >
-                      Usar preço da OC
-                    </button>
-                  )}
-                </div>
+                    />
+                    <p className="field__hint">
+                      {line.purchaseUnitPrice
+                        ? `Preço previsto da OC: ${formatUnitPriceBRL(line.purchaseUnitPrice)} / ${line.unitCode}. `
+                        : ""}
+                      Opcional — o recebimento não depende do custo. Informe apenas o custo realmente
+                      praticado; o preço da OC nunca é assumido como custo real.
+                    </p>
+                    {line.purchaseUnitPrice && (
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--sm"
+                        onClick={() =>
+                          handleLineChange(
+                            line.purchaseOrderLineId,
+                            "actualUnitCost",
+                            // O preço da OC no texto do campo, em português.
+                            toPtBrEditText(line.purchaseUnitPrice, OPCOES_CUSTO_UNITARIO),
+                          )
+                        }
+                      >
+                        Usar preço da OC
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {line.controlsLot && (
                   <div className="field">

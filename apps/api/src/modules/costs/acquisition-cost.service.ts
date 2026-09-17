@@ -9,9 +9,6 @@ import {
 } from "./costs.errors.js";
 import type { SetAcquisitionCostInput } from "./costs.schemas.js";
 
-/** Sem autenticacao/Usuarios no MVP ainda — mesma string ja usada na topbar. */
-const SYSTEM_ACTOR = "Ambiente local";
-
 /**
  * Define/atualiza/limpa o CUSTO EFETIVO DE AQUISICAO de uma ReceiptLine ja
  * confirmada. E uma atualizacao de CUSTEIO, nunca do recebimento fisico:
@@ -23,10 +20,14 @@ const SYSTEM_ACTOR = "Ambiente local";
  * `unitCost` vazio limpa o custo (volta a desconhecido = `null`). Zero e
  * um valor valido e explicitamente informado, nunca reinterpretado como
  * desconhecido. Negativo e rejeitado.
+ *
+ * Quem informa vem da sessão, já conferida na rota contra
+ * `ACQUISITION_COST_ROLES` — nunca de um campo do pedido.
  */
 export async function setAcquisitionCost(
   receiptLineId: string,
   input: SetAcquisitionCostInput,
+  actor: { name: string },
 ): Promise<ReceiptDTO> {
   const prisma = getPrisma();
 
@@ -51,7 +52,7 @@ export async function setAcquisitionCost(
       data: {
         actualUnitCost: unitCost,
         costUpdatedAt: new Date(),
-        costUpdatedBy: SYSTEM_ACTOR,
+        costUpdatedBy: actor.name,
         costNote: input.note?.trim() || null,
       },
     });

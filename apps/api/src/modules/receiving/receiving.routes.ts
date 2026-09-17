@@ -1,6 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
-import { requireCurrentUser } from "../../lib/current-user.js";
+import { requireCurrentUser, responderSemPermissao } from "../../lib/current-user.js";
+import {
+  podeInformarCustoDeAquisicao,
+  recebimentoInformaCusto,
+  recusaDoCustoNoRecebimento,
+} from "../costs/acquisition-cost-permissions.js";
 import {
   createCustomerSuppliedReceipt,
   createReceipt,
@@ -132,6 +137,14 @@ export const receivingRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/purchase-orders/:id/receipts", async (request, reply) => {
+    // Receber continua aberto; o custo efetivo que vier junto tem dono
+    // (ACQUISITION-COST-PERMISSION-01). A recusa vem antes do corpo e da OC,
+    // e nada é gravado — nem recebimento, nem lote, nem estoque.
+    const actor = requireCurrentUser(request);
+    if (!podeInformarCustoDeAquisicao(actor.role) && recebimentoInformaCusto(request.body)) {
+      return responderSemPermissao(reply, recusaDoCustoNoRecebimento());
+    }
+
     const { id } = request.params as { id: string };
     const parsed = createReceiptSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -141,7 +154,7 @@ export const receivingRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const receipt = await createReceipt(id, parsed.data, requireCurrentUser(request));
+      const receipt = await createReceipt(id, parsed.data, actor);
       return reply.status(201).send(receipt);
     } catch (error) {
       const mapped = mapDomainError(error);

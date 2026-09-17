@@ -19,6 +19,7 @@ import { formatDate } from "../../lib/dates";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
+import { usePodeInformarCustoDeAquisicao } from "./acquisition-cost-permissions";
 
 /** ⓘ de uma coluna, lido do registro central — o texto nunca mora no JSX. */
 function DicaDaColuna({ id }: { id: HelpHintId }) {
@@ -36,6 +37,9 @@ function DicaDaColuna({ id }: { id: HelpHintId }) {
 export function ReceiptDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  // Custo efetivo é de Compras e Administrador: os demais consultam o valor,
+  // sem a ação que a API recusaria (ACQUISITION-COST-PERMISSION-01).
+  const podeInformarCusto = usePodeInformarCustoDeAquisicao();
 
   const [receipt, setReceipt] = useState<ReceiptDTO | null>(null);
   const [loading, setLoading] = useState(true);
@@ -303,7 +307,7 @@ export function ReceiptDetailPage() {
                           não há valor a informar. */}
                       {materialDoCliente ? (
                         <span className="field__hint">Material do cliente</span>
-                      ) : editingLineId === line.id ? (
+                      ) : !podeInformarCusto ? null : editingLineId === line.id ? (
                         <div className="table__actions">
                           <button
                             type="button"
