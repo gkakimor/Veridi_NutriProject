@@ -184,6 +184,66 @@ export function conferirClassificacao(modelsDoSchema, listas = { ALVOS, PRESERVA
   };
 }
 
+/** Tabelas do banco que não são model e a limpeza nunca toca. */
+export const TABELAS_SEM_MODEL = ["_prisma_migrations"];
+
+/**
+ * Confere o que o banco tem além das listas. Tudo vazio = pode seguir.
+ *
+ * - `tabelas`: tabelas comuns e particionadas do schema `public`;
+ * - `tabelaDoModel`: model -> tabela (`@@map`), como o client descreve;
+ * - `foraDoPublic`: `schema.nome` de tabela ou view em schema de usuário que
+ *   não é o `public` — o script só lê e só apaga no `public`;
+ * - `gatilhos` e `regras`: `tabela.nome` de trigger e rule criados por gente.
+ *   Um DELETE que dispara escrita em outra tabela é cascata sem FK, e ninguém
+ *   a leu.
+ *
+ * Tabela sem model ficaria de fora sem ninguém decidir; model sem tabela quer
+ * dizer banco atrás do client, e contar com ele seria adivinhação.
+ *
+ * @param {{ tabelas: string[], tabelaDoModel: Map<string, string>, foraDoPublic?: string[], gatilhos?: string[], regras?: string[] }} banco
+ */
+export function conferirTabelas({ tabelas, tabelaDoModel, foraDoPublic = [], gatilhos = [], regras = [] }) {
+  const doModel = new Set(tabelaDoModel.values());
+  return {
+    tabelaSemModel: tabelas.filter((t) => !doModel.has(t) && !TABELAS_SEM_MODEL.includes(t)).sort(),
+    modelSemTabela: [...tabelaDoModel]
+      .filter(([, tabela]) => !tabelas.includes(tabela))
+      .map(([model]) => model)
+      .sort(),
+    foraDoPublic: [...foraDoPublic].sort(),
+    gatilhos: [...gatilhos].sort(),
+    regras: [...regras].sort(),
+  };
+}
+
+/**
+ * CASCADE de que a limpeza DEPENDE: fecha ciclo, a ordem não o neutraliza, e
+ * é ele que esvazia a tabela filha. Todo outro CASCADE entre alvos é
+ * neutralizado pela ordem — a filha sai antes e o CASCADE não acha linha.
+ *
+ * Nada entra aqui sem ter sido lido: `calcularOrdem()` aborta com CASCADE em
+ * ciclo fora desta lista, e o script aborta com item desta lista que o banco
+ * não tem mais.
+ */
+export const CASCADES_EM_CICLO_DOCUMENTADAS = [
+  {
+    nome: "stock_count_entries_positionId_fkey",
+    filha: "stock_count_entries",
+    pai: "stock_count_positions",
+    motivo:
+      "a posição aponta para o registro que vale (validEntryId, NO ACTION) e o registro aponta para a posição " +
+      "(positionId, CASCADE); a posição sai antes e leva os registros na mesma instrução",
+  },
+];
+
+const mesmaFk = (documentada, fk) =>
+  documentada.nome === fk.nome && documentada.filha === fk.src && documentada.pai === fk.tgt;
+
+/** CASCADE documentado que não apareceu entre os CASCADE em ciclo do banco. */
+export const cascatasDocumentadasAusentes = (cascatasEmCiclo, documentadas = CASCADES_EM_CICLO_DOCUMENTADAS) =>
+  documentadas.filter((d) => !cascatasEmCiclo.some((fk) => mesmaFk(d, fk)));
+
 /** Letras de `pg_constraint.confdeltype` que impõem ordem: RESTRICT, NO ACTION, CASCADE. */
 const ORDENAM = ["r", "a", "c"];
 
@@ -204,8 +264,16 @@ const ORDENAM = ["r", "a", "c"];
  * da instrução — já não acha posição apontando para eles. O CASCADE volta em
  * `cascatasEmCiclo`, para a remoção contar o que ele levou. Ciclo só de
  * RESTRICT/NO ACTION continua abortando: esse nenhuma ordem desfaz.
+ *
+ * Aborta também:
+ *  - com CASCADE em ciclo fora de `documentadas` — a limpeza passaria a
+ *    depender de apagamento em cascata que ninguém leu;
+ *  - com a filha desse CASCADE referenciada por mais alguém além da pai do
+ *    ciclo. Ela sai junto com a pai, ANTES da própria vez na ordem; quem
+ *    apontasse para ela com RESTRICT/NO ACTION travaria o DELETE da pai, e com
+ *    CASCADE sumiria ainda mais cedo. A ordem não modela isso.
  */
-export function calcularOrdem(fks, alvoTabelas) {
+export function calcularOrdem(fks, alvoTabelas, documentadas = CASCADES_EM_CICLO_DOCUMENTADAS) {
   const ordenam = fks.filter(
     (fk) =>
       alvoTabelas.has(fk.src) &&
@@ -235,6 +303,20 @@ export function calcularOrdem(fks, alvoTabelas) {
   };
   // `filho -> pai` fecha ciclo quando o pai alcança o filho.
   const cascatasEmCiclo = ordenam.filter((fk) => fk.acao === "c" && alcanca(fk.tgt, fk.src));
+  const descrever = (lista) => lista.map((fk) => `${fk.src}.${fk.nome} -> ${fk.tgt}`).join(", ");
+
+  const semDocumentacao = cascatasEmCiclo.filter((fk) => !documentadas.some((d) => mesmaFk(d, fk)));
+  if (semDocumentacao.length) {
+    throw new Error(`CASCADE em ciclo sem documentação (a limpeza dependeria dele): ${descrever(semDocumentacao)}`);
+  }
+  const apontamParaFilha = ordenam.filter((fk) =>
+    cascatasEmCiclo.some((c) => fk.tgt === c.src && fk.src !== c.tgt),
+  );
+  if (apontamParaFilha.length) {
+    throw new Error(
+      `Tabela que sai pelo CASCADE em ciclo é referenciada por outra: ${descrever(apontamParaFilha)}`,
+    );
+  }
 
   // `libera`: ao remover o filho, o pai fica um pré-requisito mais perto de
   // poder sair. `pendentes[pai]` = quantos filhos ainda precisam sair antes.
