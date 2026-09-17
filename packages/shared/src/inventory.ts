@@ -137,6 +137,12 @@ export interface InventoryItemSummaryDTO {
   itemType: ItemType;
   unitCode: string;
   controlsLot: boolean;
+  /**
+   * Situação do cadastro, dita pelo servidor (§107). Item inativo não some do
+   * estoque físico: com posição ele aparece na visão, marcado; a tela nunca
+   * deduz inatividade por ausência de uma lista.
+   */
+  itemActive: boolean;
   /** Soma algébrica dos InventoryMovements — nunca uma coluna armazenada. */
   onHand: string;
   /** Soma das MaterialReservationLine de reservas ACTIVE — real a partir do RELEASE de OP. */

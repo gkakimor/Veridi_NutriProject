@@ -40,6 +40,18 @@ export class InsufficientStockError extends Error {
   }
 }
 
+/**
+ * §107: item inativo não ganha estoque novo por ajuste manual. Saída e perda
+ * seguem permitidas; sobra física entra pela contagem, que registra o que foi
+ * encontrado em vez de um número digitado.
+ */
+export class InactiveItemAdjustmentInError extends Error {
+  constructor(itemCode: string) {
+    super(`Item inativo não recebe ajuste de entrada: ${itemCode}. Sobra física entra pela contagem.`);
+    this.name = "InactiveItemAdjustmentInError";
+  }
+}
+
 export class MissingCountReasonError extends Error {
   constructor() {
     super("Motivo é obrigatório quando a contagem diverge do saldo do sistema");

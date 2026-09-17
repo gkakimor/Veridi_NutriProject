@@ -25,6 +25,7 @@ import {
   isLotExpired,
 } from "../../lib/inventory-ledger.js";
 import {
+  InactiveItemAdjustmentInError,
   InsufficientStockError,
   ItemNotFoundError,
   LotItemMismatchError,
@@ -204,6 +205,7 @@ async function buildItemSummaries(
       itemType: item.type,
       unitCode: item.unitCode,
       controlsLot: item.controlsLot,
+      itemActive: item.active,
       onHand: onHand.toString(),
       reserved: reserved.toString(),
       available: available.toString(),
@@ -221,7 +223,13 @@ export async function listInventory(
   pagination: Pagination = query,
 ): Promise<InventoryListResponse> {
   const prisma = getPrisma();
-  const where: Record<string, unknown> = { active: true };
+  /*
+   * Sem `active: true` fixo (§107). Ele escondia do estoque físico o item
+   * inativo que ainda tinha saldo, reserva ou compra aberta — material no
+   * depósito que a visão, o CSV e a busca deixavam de mostrar. Quem decide se
+   * o inativo entra é a posição, calculada abaixo.
+   */
+  const where: Record<string, unknown> = {};
 
   if (query.type) where["type"] = query.type;
   if (query.search) {
@@ -239,13 +247,18 @@ export async function listInventory(
     new Prisma.Decimal(summary.reserved).greaterThan(0) ||
     new Prisma.Decimal(summary.onOrder).greaterThan(0);
 
+  // Inativo com posição fica, marcado pelo `itemActive`; sem posição, só a pedido.
+  const visible = query.includeInactiveWithoutPosition
+    ? summaries
+    : summaries.filter((summary) => summary.itemActive || hasPosition(summary));
+
   // Sem filtro, quem tem posição vem primeiro: ordenado só por código, a
   // primeira página do estoque real fica coberta por itens zerados e o
   // módulo parece vazio. Nada é escondido — a ordem dentro de cada grupo
   // continua por código.
   const filtered = query.onlyWithStock
-    ? summaries.filter((summary) => new Prisma.Decimal(summary.onHand).greaterThan(0))
-    : [...summaries].sort((a, b) => Number(hasPosition(b)) - Number(hasPosition(a)));
+    ? visible.filter((summary) => new Prisma.Decimal(summary.onHand).greaterThan(0))
+    : [...visible].sort((a, b) => Number(hasPosition(b)) - Number(hasPosition(a)));
 
   return { items: slicePage(filtered, pagination), ...pageMeta(pagination, filtered.length) };
 }
@@ -378,6 +391,9 @@ export async function createInventoryAdjustment(
   actorName?: string,
 ): Promise<InventoryMovementDTO> {
   const { item, lot } = await resolveItemAndLot(input.itemId, input.lotId);
+  // §107: só a entrada manual é recusada. Saída e perda de inativo seguem, e a
+  // Contagem rápida grava o próprio movimento — não passa por aqui.
+  if (input.type === "ADJUSTMENT_IN" && !item.active) throw new InactiveItemAdjustmentInError(item.code);
 
   const quantity = new Prisma.Decimal(input.quantity);
   const isOutbound = input.type === "ADJUSTMENT_OUT" || input.type === "LOSS";

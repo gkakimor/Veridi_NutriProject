@@ -26,6 +26,12 @@ export const listInventoryQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
   type: z.enum(["RAW_MATERIAL", "PACKAGING", "FINISHED_PRODUCT"]).optional(),
   onlyWithStock: booleanoDeConsultaSchema().optional(),
+  /**
+   * Item inativo COM posição (saldo, reservado ou em compra) aparece sempre;
+   * `true` traz também o inativo sem posição (§107). A lista e o CSV leem o
+   * mesmo schema, então o recorte é um só.
+   */
+  includeInactiveWithoutPosition: booleanoDeConsultaSchema().optional(),
   page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
   pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
 });

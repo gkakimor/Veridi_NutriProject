@@ -15,6 +15,8 @@ export interface ListInventoryParams {
   search?: string;
   type?: ItemType;
   onlyWithStock?: boolean;
+  /** Inativo com posição vem sempre; este traz também o inativo sem posição (§107). */
+  includeInactiveWithoutPosition?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -24,6 +26,7 @@ export async function listInventory(params: ListInventoryParams = {}): Promise<I
   if (params.search) query.set("search", params.search);
   if (params.type) query.set("type", params.type);
   if (params.onlyWithStock) query.set("onlyWithStock", "true");
+  if (params.includeInactiveWithoutPosition) query.set("includeInactiveWithoutPosition", "true");
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 20));
 

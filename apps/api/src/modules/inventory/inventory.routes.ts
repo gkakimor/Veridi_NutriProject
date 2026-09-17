@@ -16,6 +16,7 @@ import { mapStockCountError } from "./stock-count.routes.js";
 import { createQuickStockCount } from "./stock-count.service.js";
 import {
   CountBelowReservedError,
+  InactiveItemAdjustmentInError,
   InsufficientStockError,
   ItemNotFoundError,
   LotItemMismatchError,
@@ -63,6 +64,9 @@ function mapDomainError(
   }
   if (error instanceof InsufficientStockError) {
     return { status: 400, body: { error: "insufficient_stock", message: error.message } };
+  }
+  if (error instanceof InactiveItemAdjustmentInError) {
+    return { status: 400, body: { error: "inactive_item", message: error.message } };
   }
   if (error instanceof MissingCountReasonError) {
     return { status: 400, body: { error: "missing_count_reason", message: error.message } };

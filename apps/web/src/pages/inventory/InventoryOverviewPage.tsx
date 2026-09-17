@@ -43,6 +43,7 @@ export function InventoryOverviewPage() {
   const [search, setSearch] = useState(urlFilter("search"));
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [onlyWithStock, setOnlyWithStock] = useState(false);
+  const [includeInactive, setIncludeInactive] = useState(false);
 
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput), 300);
@@ -54,6 +55,7 @@ export function InventoryOverviewPage() {
     ...(search ? { search } : {}),
     ...(typeFilter !== "all" ? { type: typeFilter } : {}),
     ...(onlyWithStock ? { onlyWithStock: true } : {}),
+    ...(includeInactive ? { includeInactiveWithoutPosition: true } : {}),
   };
   const [page, setPage] = useFilteredPage(filtrosDaConsulta);
 
@@ -85,7 +87,15 @@ export function InventoryOverviewPage() {
         >
           Folha de posição (FO-02)
         </button>
-        <ExportCsvButton path="/inventory/export.csv" filters={{ search, type: typeFilter === "all" ? undefined : typeFilter, onlyWithStock }} />
+        <ExportCsvButton
+          path="/inventory/export.csv"
+          filters={{
+            search,
+            type: typeFilter === "all" ? undefined : typeFilter,
+            onlyWithStock,
+            includeInactiveWithoutPosition: includeInactive,
+          }}
+        />
 </div>
 
       {/* A legenda abaixo define as quatro palavras; o painel explica de onde
@@ -130,6 +140,18 @@ export function InventoryOverviewPage() {
             onChange={(event) => setOnlyWithStock(event.target.checked)}
           />
           Somente com estoque
+        </label>
+
+        {/* Item inativo com saldo, reserva ou compra aberta aparece sempre,
+            marcado (§107). Sem posição ele não tem o que mostrar no físico, e
+            só entra a pedido. */}
+        <label className="field--checkbox field">
+          <input
+            type="checkbox"
+            checked={includeInactive}
+            onChange={(event) => setIncludeInactive(event.target.checked)}
+          />
+          Incluir inativos sem saldo
         </label>
       </div>
 
@@ -198,7 +220,15 @@ export function InventoryOverviewPage() {
                 }}
               >
                 <td className="col-tight is-code">{item.itemCode}</td>
-                <td className="col-flex">{item.itemName}</td>
+                <td className="col-flex">
+                  {item.itemName}
+                  {!item.itemActive && (
+                    <>
+                      {" "}
+                      <span className="badge badge--inactive">Item inativo</span>
+                    </>
+                  )}
+                </td>
                 <td className="col-tight">{ITEM_TYPE_LABELS[item.itemType]}</td>
                 <td className="col-tight">{item.unitCode}</td>
                 <td className="col-tight is-numeric">{formatQuantity(item.onHand)}</td>

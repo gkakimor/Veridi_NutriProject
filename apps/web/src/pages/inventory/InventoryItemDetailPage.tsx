@@ -136,6 +136,8 @@ export function InventoryItemDetailPage() {
               <EntityLink kind="item" id={detail.itemId} code={detail.itemCode} name={detail.itemName} />
             </h1>
             <span className="badge badge--neutral">{ITEM_TYPE_LABELS[detail.itemType]}</span>
+            {/* §107: a situação vem do servidor; saldo, lotes e histórico continuam abaixo. */}
+            {!detail.itemActive && <span className="badge badge--inactive">Item inativo</span>}
           </div>
         </div>
         <button type="button" className="btn btn--ghost" onClick={() => navigate("/estoque")}>
@@ -434,6 +436,7 @@ export function InventoryItemDetailPage() {
       {adjustOpen && (
         <AdjustStockDialog
           itemId={detail.itemId}
+          itemActive={detail.itemActive}
           unitCode={detail.unitCode}
           controlsLot={detail.controlsLot}
           lots={detail.lots}
