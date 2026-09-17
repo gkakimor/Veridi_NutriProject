@@ -268,12 +268,15 @@ export function BulkSelectionCheckbox({
   checked,
   indeterminate = false,
   disabled = false,
+  describedBy,
   onChange,
 }: {
   label: string;
   checked: boolean;
   indeterminate?: boolean;
   disabled?: boolean;
+  /** Por que a caixa está travada — o motivo da linha ou o teto da seleção. */
+  describedBy?: string | undefined;
   onChange: () => void;
 }) {
   const caixa = useRef<HTMLInputElement>(null);
@@ -287,6 +290,7 @@ export function BulkSelectionCheckbox({
         ref={caixa}
         type="checkbox"
         aria-label={label}
+        aria-describedby={describedBy}
         checked={checked}
         disabled={disabled}
         onChange={onChange}

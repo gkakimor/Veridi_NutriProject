@@ -48,7 +48,7 @@ export const formulacaoVersao = {
       system: "O sistema deriva as doses por embalagem e passa a ler todos os números abaixo em relação a essa base.",
     },
     {
-      you: 'Use "Adicionar matéria-prima" ou "Adicionar embalagem": item, quantidade, unidade, base da linha e quem fornece.',
+      you: 'Use "Adicionar matérias-primas" ou "Adicionar embalagens" e marque até 10; depois, quantidade, unidade e fornecimento.',
       system: "O sistema traz a pureza do cadastro do item e mostra a física por dose e por embalagem.",
     },
     {

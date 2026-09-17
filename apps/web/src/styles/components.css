@@ -1917,8 +1917,51 @@ body:has(.confirm-dialog) .entity-select__list {
    quebram linha; o motivo de não escolher fica junto do botão, sem espremer a
    coluna de ação. */
 .table--consulta td.col-flex,
-.table--consulta td.col-flex .cell-sub {
+.table--consulta td.col-flex .cell-sub,
+.table--consulta td.col-detail,
+.table--consulta td.col-detail .cell-sub {
   white-space: normal;
+}
+
+/* A informação técnica que distingue registros parecidos: largura para ser
+   lida em duas linhas curtas, não uma palavra por linha. */
+.table--consulta td.col-detail {
+  min-width: 9rem;
+}
+
+/* "Para cadastrar um novo item, use o cadastro individual." — no lugar do botão. */
+.consulta-assistida__dica {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+/*
+ * Seleção múltipla (ASSISTED-ENTITY-MULTISELECT-01): o motivo de uma linha não
+ * se marcar ocupa a última coluna, sem botão, e quebra linha em vez de cortar.
+ */
+.table--consulta-multipla td.col-acao .cell-sub {
+  max-width: 16rem;
+  white-space: normal;
+}
+
+/* O rodapé diz quantos estão marcados e, no teto, por que o próximo não marca. */
+.consulta-assistida__selecao {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.consulta-assistida__contador {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--ink);
+}
+
+.consulta-assistida__limite {
+  font-size: 12.5px;
+  font-weight: var(--fw-semibold);
+  color: var(--warn-fg);
 }
 
 /*
@@ -1956,22 +1999,56 @@ body:has(.confirm-dialog) .entity-select__list {
     border-bottom: 0;
   }
 
+  /* Código e nome dividem a primeira linha; o nome quebra dentro dela. */
   .table--consulta td.col-flex {
-    flex: 1 1 60%;
+    flex: 1 1 9rem;
     min-width: 0;
     overflow-wrap: anywhere;
   }
 
-  .table--consulta td.col-tight:not(.is-code):not(.col-acao)::before {
+  .table--consulta td.col-tight:not(.is-code):not(.col-acao)::before,
+  .table--consulta td.col-detail::before {
     content: attr(data-label) ": ";
     color: var(--ink-3);
     font-size: var(--fs-xs);
   }
 
+  /* A informação técnica em linha própria, logo depois do nome. */
+  .table--consulta td.col-detail {
+    flex: 1 1 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  /* Prioridade do cartão: caixa, código e nome, técnica, situação, o resto. */
+  .table--consulta td.col-tight:not(.is-code):not(.col-acao):not(.col-status) {
+    order: 1;
+  }
+
   .table--consulta td.col-acao {
+    order: 2;
     flex: 1 1 100%;
     margin-top: var(--sp-2);
     white-space: normal;
+  }
+
+  /* Múltipla: linha que se marca não tem motivo, e a célula vazia não ocupa o cartão. */
+  .table--consulta td.col-acao:empty {
+    display: none;
+  }
+
+  /* A caixa de marcar abre o cartão, centrada no alvo de 40px. */
+  .table--consulta td.table__select {
+    align-self: center;
+  }
+
+  /* Rodapé da múltipla: o contador em linha própria, os botões abaixo. */
+  .modal-fullscreen__foot:has(.consulta-assistida__selecao) {
+    flex-wrap: wrap;
+  }
+
+  .consulta-assistida__selecao {
+    flex: 1 1 100%;
   }
 
   .table--consulta td.col-acao .btn {

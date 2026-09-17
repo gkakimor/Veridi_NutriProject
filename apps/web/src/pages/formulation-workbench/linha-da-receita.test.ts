@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { UnitOfMeasureDTO } from "@veridi/shared";
 import type { ItemDaBancada } from "./catalogo-de-itens";
-import { baseForaDaRegra, comBaseDerivada, comItemEscolhido, linhaNova } from "./linha-da-receita";
+import {
+  baseForaDaRegra,
+  comBaseDerivada,
+  comItemEscolhido,
+  linhaNova,
+  linhasDosItensEscolhidos,
+} from "./linha-da-receita";
 
 /**
  * FORMULATION-COMPONENT-BASIS-AUTOMATION-01 — a base da linha, na bancada.
@@ -90,5 +96,54 @@ describe("Base fora da regra — só dado anterior a ela", () => {
     const pote = { ...linhaNova("EMBALAGEM", false), itemType: "PACKAGING" as const };
     expect(baseForaDaRegra(pote, true)).toBeNull();
     expect(baseForaDaRegra({ ...pote, basis: "PER_DOSE" }, true)).toBe("PER_DOSE");
+  });
+});
+
+/*
+ * ASSISTED-ENTITY-MULTISELECT-01 — as linhas da consulta múltipla da seção.
+ * Uma por item marcado, pelo mesmo caminho da escolha na linha, e nunca
+ * duplicata nem item que a seção recusa.
+ */
+describe("Linhas dos itens marcados na consulta da seção", () => {
+  const triptofano = item({ id: "trp", code: "MP-000049", name: "L-Triptofano", defaultPurityPercent: "98" });
+  const cafeina = item({ id: "caf", code: "MP-000050", name: "Cafeína" });
+  const tampa = item({ id: "tampa", code: "ME-000100", name: "Tampa", type: "PACKAGING", unitCode: "un", unitDimension: "COUNT" });
+
+  it("composição: uma linha por item, base por dose na receita por dose, mg, pureza do cadastro, Veridi fornece", () => {
+    const linhas = linhasDosItensEscolhidos([], "COMPOSICAO", [triptofano, cafeina], true, UNIDADES);
+    expect(linhas.map((linha) => linha.itemCode)).toEqual(["MP-000049", "MP-000050"]);
+    expect(linhas.map((linha) => linha.basis)).toEqual(["PER_DOSE", "PER_DOSE"]);
+    expect(linhas.map((linha) => linha.unitCode)).toEqual(["mg", "mg"]);
+    expect(linhas.map((linha) => linha.purityPercentApplied)).toEqual(["98", ""]);
+    expect(linhas.every((linha) => linha.supplyResponsibility === "VERIDI")).toBe(true);
+    expect(linhas.every((linha) => linha.quantity === "")).toBe(true);
+    expect(new Set(linhas.map((linha) => linha.key)).size).toBe(2);
+  });
+
+  it("composição em base fixa: base sobre a base e a unidade de estoque", () => {
+    const [linha] = linhasDosItensEscolhidos([], "COMPOSICAO", [triptofano], false, UNIDADES);
+    expect(linha!.basis).toBe("FIXED_BASIS");
+    expect(linha!.unitCode).toBe("kg");
+  });
+
+  it("embalagem: por unidade acabada, sem pureza", () => {
+    const [linha] = linhasDosItensEscolhidos([], "EMBALAGEM", [tampa], true, UNIDADES);
+    expect(linha!.basis).toBe("PER_FINISHED_UNIT");
+    expect(linha!.purityPercentApplied).toBe("");
+    expect(linha!.unitCode).toBe("un");
+  });
+
+  it("segunda trava: nem o que a receita tem, nem repetido no lote, nem inativo, nem de outra seção", () => {
+    const presente = linhaNova("COMPOSICAO", true);
+    presente.itemId = "trp";
+    const inativo = item({ id: "velho", code: "MP-000900", active: false });
+    const linhas = linhasDosItensEscolhidos(
+      [presente],
+      "COMPOSICAO",
+      [triptofano, cafeina, cafeina, inativo, tampa],
+      true,
+      UNIDADES,
+    );
+    expect(linhas.map((linha) => linha.itemCode)).toEqual(["MP-000050"]);
   });
 });

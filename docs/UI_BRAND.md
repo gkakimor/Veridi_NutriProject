@@ -300,8 +300,9 @@ before "+ Novo X". Never "Pesquisar": the field itself is already the search.
   canonical create page, draft snapshot, back with the new record selected by
   id — and only for profiles that can create. The consultation does not open a
   parallel form.
-- **390px.** Rows become cards (`.table--consulta`): code and name on top;
-  type, unit and status with the column name; "Selecionar" full width, 44px
+- **390px.** Rows become cards (`.table--consulta`), in decision order: code
+  and name on top; the technical detail on its own line; status; the other
+  short values — each with the column name; "Selecionar" full width, 44px
   high. No horizontal scroll.
 
 Pilot: Item on the formulation workbench (`pages/items/ItemConsultationDialog.tsx`,
@@ -310,6 +311,63 @@ One item type per field: a field that accepts several types needs an additive
 API filter before it gets the consultation, because merging pages of two types
 in the browser breaks paging and the count. Rollout to other selectors is
 ASSISTED-ENTITY-SELECTOR-ROLLOUT-01 (`BACKLOG.md`, section G).
+
+### Assisted consultation: single or multiple selection (ASSISTED-ENTITY-MULTISELECT-01)
+
+The consultation works in **single selection** (the default, above) or in
+**multiple selection, limited and explicit**. The mode follows the gesture, not
+the entity: the field of ONE line picks one record and replaces that line; the
+action of a SECTION that builds a list ("+ Adicionar matérias-primas", "+
+Adicionar embalagens", "+ Adicionar recursos") picks several and creates one
+line per record. The single-line add button stays next to it.
+
+- **Contract.** `EntityConsultationDialog` takes `selectionMode: "multiple"`
+  with `onSelectMany(records)`, `recordNoun` ("item"/"itens") and optional
+  `maxSelection`; `onSelect` and `create` belong to the single mode only. The
+  component stays generic: each contextual dialog (`ItemConsultationDialog`,
+  `IndustrialResourceConsultationDialog`) passes the mode through.
+- **Checkbox per record**, first column, the bulk-selection checkbox
+  (`BulkSelectionCheckbox`, 40px target) — it does not take the width of the
+  columns that tell records apart. Footer: "N itens selecionados", "Cancelar"
+  and "Adicionar N itens" (disabled with nothing marked).
+- **The marking belongs to the consultation, not to the page.** Kept by record
+  key with the whole record: it survives a new search, a cleared search, page
+  changes and reloads. Marking 3 in one search, 2 in another and 1 in a third is
+  "Adicionar 6 itens". Pagination stays on the server.
+- **Limit: 10 per operation** (`CONSULTA_MULTIPLA_MAXIMO`; `maxSelection` can
+  only lower it). At the limit the unmarked checkboxes lock, and the footer says
+  "Você pode adicionar até 10 itens por vez." — never a silent cut.
+- **One confirmation.** "Adicionar" returns every marked record once, in the
+  order they were marked; the host closes the dialog and creates the lines.
+  "Cancelar" and Escape close without touching the origin. Focus returns to the
+  action that opened it.
+- **Already in the list = visible and locked**, with the reason ("Já adicionado
+  nesta formulação.", "Já adicionado neste modelo.") linked to the checkbox by
+  `aria-describedby`. The host checks again when creating the lines: no
+  duplicate by any path.
+- **No "+ Novo" in multiple mode.** Creating leaves the screen, and the marking
+  does not travel across routes; profiles that can create read "Para cadastrar
+  um novo item, use o cadastro individual."
+
+#### Columns that tell similar records apart
+
+The consultation is where people DECIDE between look-alikes, so each contextual
+dialog shows what the master data knows — and only what makes sense for that
+entity. The workbench line stays compact.
+
+- **Column roles** (`kind`): `code`, `flex` (name), `detail` (the technical
+  data that distinguishes), `status`, `tight` (other short values). In 390px
+  cards they order the reading: checkbox, code and name, detail on its own line,
+  status, the rest.
+- **Raw material:** Código · Nome (legacy code) · Fonte / Função (source; family
+  · declared nutrient) · **Pureza cadastrada** · Unidade · Situação. It is the
+  purity of the ITEM master data, named as such; the formulation purity is the
+  editable snapshot of the line. Missing purity reads "Não informada", never 0%.
+- **Packaging:** Código · Nome · Subtipo ("Não informado" when absent) · Unidade
+  · Situação. No purity, no source.
+- **Industrial resource:** Código · Nome (description) · Tipo (power for
+  equipment) · Capacidade ("Não cadastrada" when absent, "—" for energy) ·
+  Unidade de uso · Situação. No tariff: money belongs to the calculation date.
 
 ### Table columns
 

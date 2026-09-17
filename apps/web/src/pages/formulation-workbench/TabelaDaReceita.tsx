@@ -53,6 +53,15 @@ export interface TabelaDaReceitaProps {
         origem: string;
         /** O item escolhido na consulta — a página o põe no catálogo e na linha. */
         onEscolher: (linha: LinhaDaReceita, item: ItemDaBancada) => void;
+        /**
+         * A ação da SEÇÃO (ASSISTED-ENTITY-MULTISELECT-01): "+ Adicionar
+         * matérias-primas" abre a consulta com caixas de marcar, e os itens
+         * marcados chegam aqui de uma vez — a página cria uma linha para cada
+         * um. O campo de uma linha continua escolhendo UM item.
+         */
+        onEscolherVarios: (secao: SecaoDaFormula, itens: ItemDaBancada[]) => void;
+        /** Por que um item já presente não se marca: "Já adicionado nesta formulação." */
+        jaAdicionado: string;
       }
     | undefined;
   /** O que falta no Item da linha, quando a tela prende o salvar por isso. */
@@ -141,6 +150,8 @@ export function TabelaDaReceita({
   const [consulta, setConsulta] = useState<{ chave: string; termo: string } | null>(null);
   const linhaConsultada =
     consulta === null ? null : (linhas.find((linha) => linha.key === consulta.chave) ?? null);
+  /** A consulta da SEÇÃO, com várias escolhas — uma de cada vez com a da linha. */
+  const [consultaDaSecao, setConsultaDaSecao] = useState(false);
 
   /*
    * O que outra linha já usa, como o seletor: aparece na consulta, mas não se
@@ -310,13 +321,25 @@ export function TabelaDaReceita({
 
       {editavel && (
         <div className="line-actions">
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            onClick={() => onAdicionar(secao)}
-          >
-            {daComposicao ? "+ Adicionar matéria-prima" : "+ Adicionar embalagem"}
-          </button>
+          <div className="form-actions__group">
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              onClick={() => onAdicionar(secao)}
+            >
+              {daComposicao ? "+ Adicionar matéria-prima" : "+ Adicionar embalagem"}
+            </button>
+            {/* Várias de uma vez, pela consulta: uma linha por item marcado. */}
+            {consultaDeItem && (
+              <button
+                type="button"
+                className="btn btn--secondary btn--sm"
+                onClick={() => setConsultaDaSecao(true)}
+              >
+                {daComposicao ? "+ Adicionar matérias-primas" : "+ Adicionar embalagens"}
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -361,6 +384,37 @@ export function TabelaDaReceita({
             daComposicao
               ? "Selecionar põe a matéria-prima nesta linha da receita."
               : "Selecionar põe a embalagem nesta linha da receita."
+          }
+        />
+      )}
+
+      {/*
+        A consulta da SEÇÃO: o mesmo recorte do seletor (tipo da seção, só
+        ativos), e o que a seção já tem aparece desabilitado, com o motivo —
+        nunca duplicata. "+ Novo" não mora aqui: cadastrar sai da tela, e o que
+        já foi marcado não atravessa a rota.
+      */}
+      {consultaDeItem && consultaDaSecao && (
+        <ItemConsultationDialog
+          selectionMode="multiple"
+          type={tipoDaSecao(secao)}
+          initialTerm=""
+          crumb={consultaDeItem.origem}
+          unavailableReason={(item) =>
+            linhas.some((linha) => linha.itemId === item.id) ? consultaDeItem.jaAdicionado : null
+          }
+          onSelectMany={(itens) => {
+            setConsultaDaSecao(false);
+            consultaDeItem.onEscolherVarios(secao, itens.map(itemDaBancada));
+          }}
+          onClose={() => setConsultaDaSecao(false)}
+          createHint={
+            onCriarItem ? "Para cadastrar um novo item, use o cadastro individual." : undefined
+          }
+          footerNote={
+            daComposicao
+              ? "Adicionar cria uma linha de matéria-prima para cada item marcado."
+              : "Adicionar cria uma linha de embalagem para cada item marcado."
           }
         />
       )}

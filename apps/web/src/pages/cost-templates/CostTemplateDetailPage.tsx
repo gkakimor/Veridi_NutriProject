@@ -28,6 +28,7 @@ import {
 } from "../../lib/cost-pricing-templates-api";
 import { opcaoDeRecurso, useRecursosDoSeletor } from "../../lib/recursos-do-seletor";
 import type { RecorteDeRecursos } from "../../lib/recursos-do-seletor";
+import { IndustrialResourceConsultationDialog } from "../industrial-resources/IndustrialResourceConsultationDialog";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { FormSection } from "../../components/FormSection";
@@ -85,6 +86,22 @@ interface LinhaRecurso extends CostTemplateResourceUsageInput {
   chave: string;
   /** Texto do campo "Quantidade de recursos" — vira inteiro só ao salvar (§87). */
   quantidadeDeRecursos: string;
+}
+
+/**
+ * Linha nova de recurso — a mesma para "+ Adicionar recurso" (em branco) e para
+ * cada recurso marcado em "+ Adicionar recursos". Uso por lote fica em branco
+ * para a pessoa preencher; unidade e quantidade de recursos nascem como sempre
+ * nasceram. Nenhum default de negócio novo.
+ */
+function linhaDeRecursoNova(chave: string, industrialResourceId: string): LinhaRecurso {
+  return {
+    chave,
+    industrialResourceId,
+    usageQuantity: "",
+    usageUom: "HOUR",
+    quantidadeDeRecursos: "1",
+  };
 }
 
 /** As linhas de recurso da versão, na forma que a tela edita. */
@@ -163,6 +180,8 @@ export function CostTemplateDetailPage() {
   const [recursoEnergia, setRecursoEnergia] = useState<string>("");
   const [linhas, setLinhas] = useState<LinhaRecurso[]>([]);
   const [diff, setDiff] = useState<TemplateDiffDTO | null>(null);
+  /** A consulta de recursos com várias escolhas (ASSISTED-ENTITY-MULTISELECT-01). */
+  const [consultandoRecursos, setConsultandoRecursos] = useState(false);
 
   /*
    * O que o servidor devolveu na última leitura, campo a campo.
@@ -768,17 +787,19 @@ export function CostTemplateDetailPage() {
                     onClick={() =>
                       setLinhas((atual) => [
                         ...atual,
-                        {
-                          chave: `novo-${atual.length}-${Date.now()}`,
-                          industrialResourceId: "",
-                          usageQuantity: "",
-                          usageUom: "HOUR",
-                          quantidadeDeRecursos: "1",
-                        },
+                        linhaDeRecursoNova(`novo-${atual.length}-${Date.now()}`, ""),
                       ])
                     }
                   >
                     + Adicionar recurso
+                  </button>
+                  {/* Vários de uma vez, pela consulta: uma linha por recurso marcado. */}
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => setConsultandoRecursos(true)}
+                  >
+                    + Adicionar recursos
                   </button>
                 </div>
                 <div className="form-actions__group">
@@ -845,6 +866,42 @@ export function CostTemplateDetailPage() {
                   </button>
                 </div>
               </div>
+            )}
+
+            {/*
+              A consulta de recursos da LINHA do modelo, com várias escolhas: o
+              universo do seletor da linha (todos os tipos, inativos incluídos) e
+              o que o rascunho já tem desabilitado, com o motivo. Mora dentro da
+              tela, nunca num portal no `body` — o modal acompanha a sidebar.
+            */}
+            {editavel && consultandoRecursos && (
+              <IndustrialResourceConsultationDialog
+                selectionMode="multiple"
+                onlyActive={TODOS_OS_RECURSOS.somenteAtivos}
+                initialTerm=""
+                crumb="Modelo de Estrutura de Custo"
+                unavailableReason={(recurso) =>
+                  linhas.some((linha) => linha.industrialResourceId === recurso.id)
+                    ? "Já adicionado neste modelo."
+                    : null
+                }
+                onSelectMany={(recursos) => {
+                  setConsultandoRecursos(false);
+                  recursosDasLinhas.guardarEscolhidos(recursos);
+                  setLinhas((atual) => {
+                    const presentes = new Set(atual.map((linha) => linha.industrialResourceId));
+                    const carimbo = Date.now();
+                    const novas = recursos
+                      .filter((recurso) => !presentes.has(recurso.id))
+                      .map((recurso, indice) =>
+                        linhaDeRecursoNova(`novo-${atual.length + indice}-${carimbo}`, recurso.id),
+                      );
+                    return [...atual, ...novas];
+                  });
+                }}
+                onClose={() => setConsultandoRecursos(false)}
+                footerNote="Adicionar cria uma linha para cada recurso marcado; o uso por lote fica para preencher."
+              />
             )}
           </FormSection>
         )}
