@@ -4929,7 +4929,7 @@ permissão. O comentário de `customer-form.tsx` que dizia que o servidor recusa
 
 **Preservado.** Situação cadastral e suas ações (§95); `businessLotSuffix` sem campo na tela; clientes, documentos e
 snapshots existentes intocados. Sem histórico de antes/depois do cadastro (CUSTOMER-MASTER-DATA-AUDIT-01, P2, futuro) e
-sem consulta de CNPJ (CUSTOMER-CNPJ-AUTOFILL-01, P1, **não iniciar sem aprovação explícita da Veridi**).
+sem consulta de CNPJ *à época* — ela chegou em 2026-09-17 com CUSTOMER-CNPJ-LOOKUP-01 (seção própria abaixo, §111), e respeita esta mesma lista de permissão.
 
 **Validação.** API: faixa de Clientes (7 arquivos, 97 testes, 12 novos — tabela dos seis perfis, 403 antes do corpo e
 da existência, linha idêntica depois da recusa, VIEWER explícito) e as suítes que gravam Cliente fora do módulo (17
@@ -5883,6 +5883,65 @@ Retrato antes/depois: INSERT, UPDATE e DELETE 0, `relfilenode` igual nas 83 tabe
 **Validação.** `prod-cleanup-models.test.ts` (15), `prod-cleanup-sequences.test.ts` (7) e `prod-cleanup-dry-run.test.ts`
 (3, o script real contra o banco de teste), em banco de teste exclusivo; typecheck avulso dos três. Sem suíte completa,
 E2E, Playwright nem mutação.
+
+## Consulta assistida de CNPJ no cadastro do Cliente (CUSTOMER-CNPJ-LOOKUP-01, 2026-09-17)
+
+**Decisão do PO.** Reconcilia CUSTOMER-CNPJ-AUTOFILL-01, que aguardava a Veridi: aprovada, com **OpenCNPJ** como
+primeiro provedor e **Serpro como provedor futuro**. O nome mudou de propósito — não é atualização automática, é
+**assistência ao preenchimento**. Regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §111. **Sem migration.**
+
+**Fluxo.** Cliente → "Consultar CNPJ" (ao lado do campo) → escolher a fonte → Consultar → comparar Atual × Retornado →
+marcar o que aplicar → "Aplicar selecionados" → **Salvar**. Vale igual na criação (sem id) e na edição. Consultar e
+aplicar **não gravam nada**.
+
+**Shared.** `cnpj-lookup.ts`: `CNPJ_LOOKUP_PROVIDERS` (hoje só `OPEN_CNPJ`), rótulos, o contrato normalizado
+(`CnpjLookupResult` = provedor + `consultedAt` + CNPJ + `CnpjLookupCompany` com 17 campos `string | null`), os dois
+códigos de erro com as frases e o aviso de proveniência. `customers.ts` ganhou `CUSTOMER_FIELD_MAX_LENGTHS`, lido pelo
+Zod do Cliente E pela tela de comparação — os limites deixaram de existir em dois lugares.
+
+**API.** `modules/cnpj-lookup/`: `GET /cnpj-lookup/:cnpj?provider=OPEN_CNPJ`, autenticado, **somente leitura** (não
+grava cadastro, histórico nem payload). Perfil pela MESMA lista do cadastro (`CUSTOMER_EDIT_ROLES`, §98) — 403 antes de
+qualquer chamada externa. O CNPJ é validado pelo `isValidCnpj` canônico antes de sair da máquina; provedor fora do
+registro é 400. `cnpj-lookup.provider.ts` guarda a interface `CnpjLookupProviderAdapter` e o registro (falha fechado
+para provedor sem adaptador); `open-cnpj.provider.ts` é o único adaptador: `GET https://api.opencnpj.org/{CNPJ}?datasets=receita`
+(contrato oficial conferido em 2026-09-17 na documentação e no JSON Schema do serviço), `AbortController` de 8 s, teto
+de 512 KB lido do stream (o serviço não manda `content-length`), parsing que só aceita `string` e descarta o resto,
+logradouro remontado de `tipo_logradouro` + `logradouro`, telefone do primeiro não-fax que o cadastro aceitaria. Dois
+desfechos para a Web: 404 `cnpj_not_found` e 503 `cnpj_lookup_unavailable` — timeout, 5xx, 429, JSON ilegível e
+resposta grande demais caem todos no segundo, com o motivo técnico só no log.
+
+**Web.** `lib/cnpj-lookup-api.ts` nunca lança (como o `lookupCep`): devolve `found`/`not_found`/`unavailable`.
+`pages/customers/cnpj-lookup-fields.ts` é a lógica pura da comparação — o mapa dos 11 campos, a forma canônica de cada
+um e as três regras: vazio da fonte nunca apaga, só se oferece o que o campo guardaria, e normalizar é **só para
+comparar**. `CnpjLookupDialog.tsx` é o diálogo em duas etapas (fonte → comparação) sobre o `FullWorkspaceModal`, com
+proveniência ("Fonte: OpenCNPJ · Consultado em …"), o aviso de fonte pública e a informação complementar (situação,
+abertura, CNAE, natureza jurídica, porte) claramente separada, sem virar campo. `customer-form.tsx` ganhou
+`validarCnpjParaConsulta` e `aplicarConsultaDeCnpj`.
+
+**A comparação é contra o FORMULÁRIO**, não contra o registro salvo: quem editou e não salvou compara com o que está
+vendo. Marcado por padrão só o que é diferente e utilizável; equivalente vira "Sem alteração"; ausente vira "Não
+informado pela fonte"; e o que o campo não guardaria (CEP incompleto, UF desconhecida, telefone inválido, texto acima do
+limite) aparece com o valor e o motivo, sem caixa. Endereço aplicado passa a ser **manual** (`addressZip` vazio), então
+um CEP digitado depois só completa o que ficou vazio.
+
+**Campos preenchidos.** Razão social, nome fantasia, CEP, logradouro, número, complemento, bairro, cidade, UF, telefone
+e e-mail. **Intocados:** perfil tributário (§83, com a frase revista), forma e condição de pagamento (§99), notas
+internas, situação cadastral (§95) e bloqueios.
+
+**Preparado para o SERPRO.** Um segundo adaptador entra no registro e no enum sem reescrever tela de comparação,
+endpoint, contrato normalizado nem a aplicação dos campos. Nenhum código morto de SERPRO nasceu: sem credencial, sem
+provider desabilitado na tela.
+
+**Efeito colateral registrado.** O Tab sai do CNPJ e passa por "Consultar CNPJ" antes do Perfil tributário — a ação é do
+próprio campo, e `perfil-tributario.test.tsx` passou a afirmar a ordem nova.
+
+**Validação.** API `cnpj-lookup.test.ts` (26: CNPJ inválido sem chamada externa, sucesso normalizado, 404 tipado,
+timeout/5xx/429/rede, payload parcial e malformado, JSON que não é objeto, teto de tamanho, provedor arbitrário recusado,
+401 e a tabela dos seis perfis) e a faixa de Clientes da API (8 arquivos, 131). Web `cnpj-lookup-comparacao.test.ts`
+(22, regra pura) e `cliente-consulta-de-cnpj.test.tsx` (21, A–L do handoff), mais `src/pages/customers` (10 arquivos,
+175), os quatro arquivos fora da pasta que montam o formulário (52) e os dois portões da ajuda (211). Typecheck dos três
+pacotes. **Sem E2E e sem suíte completa** (validação focada, decisão do PO). Nenhum teste toca a internet: o provedor é
+mockado dos dois lados.
 
 ## Próxima prioridade
 

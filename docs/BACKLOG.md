@@ -50,6 +50,7 @@ zero BLOCKER. O MVP foi entregue; o que está aqui é evolução do produto.
 | 9o | P1 | ~~**PRODUCT-INACTIVE-COMMERCIAL-GATE-01**~~ — Produto inativo iniciava compromisso comercial novo | **FECHADO em 2026-09-17, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · Fatia 2 de MASTER-DATA-INACTIVE-VISIBILITY, D6–D7 do PO ([discovery](discovery/MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01.md)): vincular ao Projeto, linha nova, envio e aceite de Orçamento, aprovação do Projeto, geração e confirmação de Pedido e Amostra nova recusam Produto inativo (400 `inactive_product`); liberação da OP planejada relê Produto e PA; PA existente e inativo tem recusa própria (400 `inactive_finished_item`), sem cascata Produto × PA; rascunho abre marcado, versão nova copia a linha, nada é cancelado; Web não oferece o inativo em escolha nova e marca o registro salvo com a situação do servidor · custos, preço, CMV e roteiro intocados · **sem migration** | Publicação quando o PO decidir; fatias 3–4 esperam o handoff (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §108, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
 | 9p | P1 | ~~**ITEM-FORM-BY-TYPE-01**~~ — cadastro do Item contextual ao Tipo, com o arquivo do Rótulo escolhido já na criação | **FECHADO em 2026-09-17, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · decisões do PO no handoff: `Item.type` decide o formulário, nunca a Família · matéria-prima com Classificação industrial, embalagem com Dados da embalagem (subtipo e consumido na produção), Rótulo com Arquivo do rótulo logo depois · troca de tipo e subtipo na criação limpa o que ficou escondido, e o envio só leva os campos do tipo · arquivo opcional, guardado na tela até existir o id e enviado pela rota de LABEL-ATTACHMENTS-01 · falha depois de criar não recria: "Item criado, mas o arquivo do rótulo não pôde ser enviado." e a seção oficial do Item criado para reenviar · **sem API, shared nem migration** · `INTERNAL_CONSUMABLE` fora | Publicação quando o PO decidir (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §109, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
 | 9q | P1 | **ITEM-DUPLICATE-SANITIZATION-01** — Itens de matéria-prima e embalagem com o mesmo nome, Onda A | **Onda A aplicada no `veridi_dev` em 2026-09-17; PROD não saneado** (`release/prod` segue `5b7c1a3`) · decisões do PO no handoff ([discovery](discovery/ITEM-DUPLICATE-SANITIZATION-DISCOVERY-01.md), persistido nesta rodada): G1, G12, G14, G16, G17 e G18; duplicado sem uso removido; de-para no arquivo de decisão da carga, sem alias · ferramenta PLAN/APPLY/VERIFY com trava consultiva, `SELECT FOR UPDATE`, impressão digital e falha fechada; APPLY só em banco local · importador não recria a duplicata absorvida · DEV: Itens −6, relações −2 e 1 movida, ofertas e eventos preservados; restam 12 grupos · **sem migration** | Onda A em PROD (conferência READ ONLY, PLAN em PROD, backup restaurável e APPLY liberado para produção, com aprovação do PO); Ondas B e C (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §110, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md)) | PO |
+| 9r | P1 | ~~**CUSTOMER-CNPJ-LOOKUP-01**~~ — consulta assistida de CNPJ no cadastro do Cliente | **FECHADO em 2026-09-17, na `main` e fora de PROD** (`release/prod` segue `8e824e8f`) · RECONCILIA e substitui CUSTOMER-CNPJ-AUTOFILL-01, aprovado pelo PO com OpenCNPJ como primeiro provedor (Serpro passa a ser provedor futuro) · assistência ao preenchimento: consultar não grava, comparação Atual × Retornado contra o ESTADO DO FORMULÁRIO, diferença aplicável marcada por padrão, vazio da fonte nunca apaga valor existente, Cancelar não muda nada, falha externa mantém o cadastro manual inteiro · `GET /cnpj-lookup/:cnpj?provider=` autenticado, somente leitura, com `CUSTOMER_EDIT_ROLES` (§98); chamada externa no servidor, com timeout, teto de resposta e parsing que não confia no payload · abstração `CnpjLookupProviderAdapter` + registro, pronta para o SERPRO sem reescrever tela, endpoint nem contrato · perfil tributário, pagamento, notas e situação intocados · **sem migration** | Publicação quando o PO decidir; SERPRO quando houver credencial e decisão (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §111, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
 | 10 | P2 | **Estabilização final ampla do produto** | Sem ID e sem escopo | Abrir ID e escopo quando 4–8 fecharem | WAVE 4, permissões e WAVE 5 |
 | 11 | — | **DEMO-DATASET-01** — ambiente DEMO com massa fictícia determinística | **AGUARDANDO DEFINIÇÃO DO PO** | Massa fictícia determinística + reset protegido para um futuro ambiente Railway DEMO, e o fluxo `main` → `release/demo` → aprovação → o MESMO SHA em `release/prod`. Nada criado: sem ambiente, sem `release/demo` | PO |
 
@@ -60,7 +61,6 @@ watchlist (E). A estabilização final (10) é o lugar natural para varrê-los.
 
 | Item | Por que não está na fila | Onde |
 |---|---|---|
-| **CUSTOMER-CNPJ-AUTOFILL-01** — consulta automática de CNPJ no cadastro do Cliente (P1) | **Aguardando aprovação explícita da Veridi.** NÃO INICIAR SEM APROVAÇÃO EXPLÍCITA DA VERIDI. Provedor definido: Serpro — Consulta CNPJ Básica | C |
 | **CUSTOMER-MASTER-DATA-AUDIT-01** — histórico de antes/depois do cadastro do Cliente (P2) | Futuro, registrado em 2026-09-16 (CUSTOMER-EDIT-PERMISSIONS-01); avaliar antes de construir | G |
 | **MASTER-DATA-STRUCTURAL-LOCKS-01** — travas estruturais do cadastro mestre além de `operationallyUsed` | Registrado em 2026-09-16 (MASTER-DATA-EDIT-PERMISSIONS-01); pergunta de produto antes de construir | G |
 | **MASTER-DATA-STATUS-HISTORY-01** — motivo e histórico de Inativar/Reativar de Item, Fornecedor e Produto (P2) | Futuro, registrado em 2026-09-16 (MASTER-DATA-EDIT-PERMISSIONS-01); exigiria migration | G |
@@ -408,16 +408,23 @@ Também fica para auditar nessa rodada: se a pureza nominal por fornecedor deve
 morar no relacionamento Fornecedor ↔ Item, em vez de só no Item. Nada a decidir
 nem a implementar agora.
 
-### CUSTOMER-CNPJ-AUTOFILL-01 — consulta automática de CNPJ no cadastro do Cliente — P1 · AGUARDANDO A VERIDI
+### ~~CUSTOMER-CNPJ-AUTOFILL-01~~ — consulta de CNPJ no cadastro do Cliente — RECONCILIADO em 2026-09-17
 
-**NÃO INICIAR SEM APROVAÇÃO EXPLÍCITA DA VERIDI.**
+**Aprovado pela Veridi e entregue como CUSTOMER-CNPJ-LOOKUP-01** (fila 9r, regra em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §111). Este registro fica como histórico da decisão, não como item aberto — e
+não deve ser reaberto como capability separada.
 
-Registrado pelo PO em 2026-09-16 (CUSTOMER-EDIT-PERMISSIONS-01). Provedor definido para quando houver aprovação:
-**Serpro — Consulta CNPJ Básica**. Nada implementado: nem integração, nem botão de consulta, nem token ou credencial,
-nem chamada externa. Hoje o sistema confere só a consistência do número (dígitos verificadores, numérico e
-alfanumérico) e não consulta a Receita — é o que dizem [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §83 e a ajuda do Cliente.
-Aprovada a consulta, a rodada revê essas duas frases, decide o que o retorno preenche e o que continua do usuário (o
-perfil tributário segue informado, §83) e respeita quem edita o cadastro (§98).
+O que mudou em relação ao registrado em 2026-09-16: o provedor de estreia é o **OpenCNPJ** (base pública, sem token),
+e o **Serpro passa a ser provedor futuro** — a arquitetura nasceu com registro de provedores justamente para que ele
+entre como um segundo adaptador, sem reescrever tela, endpoint nem contrato. O nome também mudou de propósito:
+"autofill" descrevia atualização automática, e a decisão do PO é o contrário — **assistência ao preenchimento**, com o
+usuário escolhendo campo a campo e salvando por conta própria.
+
+As duas frases que este item mandava rever foram revistas: [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §83 passou a dizer
+que a consulta existe e que ela **não** define o perfil tributário, e a ajuda do Cliente ganhou o conceito
+"Consultar CNPJ". Quem consulta é quem edita o cadastro (§98).
+
+**Continua sem decisão:** ligar o SERPRO — exige credencial, contrato e decisão do PO, e nada disso foi feito.
 
 ---
 

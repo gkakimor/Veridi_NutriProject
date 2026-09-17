@@ -282,6 +282,10 @@ export const cadastrosTopics = {
         text: "Opcional, mas único entre clientes: dois não podem ter o mesmo, mesmo que um esteja inativo. Os dígitos verificadores são conferidos, inclusive na forma alfanumérica nova. A conferência é de consistência do número, não de existência da empresa na Receita.",
       },
       {
+        term: "Consultar CNPJ",
+        text: "Com o CNPJ preenchido e consistente, o botão consulta uma base pública de dados empresariais (hoje, OpenCNPJ) e mostra o que ela devolveu ao lado do que está na tela, campo a campo. Você marca o que quer aproveitar, aplica ao formulário e salva normalmente — a consulta não grava nada sozinha, não valida a empresa juridicamente e não define o perfil tributário. Campo que a fonte não informou nunca apaga o que já estava preenchido, e se a consulta falhar o cadastro manual continua inteiro.",
+      },
+      {
         term: "Perfil tributário",
         text: "Classificação informada pela empresa: Não informado, MEI, Simples Nacional, Lucro Presumido, Lucro Real ou Outro. Não calcula impostos, não é deduzida do CNPJ e não bloqueia projeto, orçamento, pedido nem faturamento. Quem não escolhe fica como Não informado, e retirar uma classificação é escolher Não informado de novo.",
       },
@@ -330,6 +334,7 @@ export const cadastrosTopics = {
       "Inativar um cliente não é bloqueado por pedido em aberto — o sistema deixa inativar e passa a recusar o que vier depois: novo produto para ele, criação e confirmação de pedido, e registro de material enviado por ele.",
       "Estoque de propriedade do cliente é identificado por este cadastro. É ele que decide qual material de cliente uma formulação, uma ordem ou uma amostra pode consumir.",
       "Alterar razão social ou endereço não reescreve documento já emitido: a proposta enviada guarda a cópia congelada do cliente daquela data.",
+      "Consultar CNPJ é assistência de preenchimento, não certificação: os dados vêm de fonte pública processada por terceiro, e confira antes de salvar. Só quem edita o cadastro — Comercial e Administrador — vê o botão.",
       "Observações são notas internas: nunca saem em documento para o cliente. Na lista, a busca casa código, razão social, nome fantasia e CNPJ; os filtros são UF e situação, e Exportar leva o recorte. Novo cliente abre em tela própria, que usa esta mesma ajuda.",
       "Criar e editar o cadastro são de Comercial e Administrador. Os demais perfis abrem o cliente em consulta — pela linha, por Ver ou pelo link de outra tela — e escolhem clientes já cadastrados nos documentos; cliente novo se pede ao Comercial ou ao Administrador.",
     ],

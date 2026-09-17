@@ -53,6 +53,9 @@ import {
 } from "../../lib/payment-condition";
 import { IntegerField, PercentField } from "../../components/NumericField";
 import { customerStatusBadgeClass } from "./customer-status-badge";
+import { CnpjLookupDialog } from "./CnpjLookupDialog";
+import { CAMPOS_DA_CONSULTA_DE_CNPJ } from "./cnpj-lookup-fields";
+import type { ValoresDoFormulario } from "./cnpj-lookup-fields";
 
 /** "Comercial e Administrador" — lido da mesma lista que a API aplica. */
 const PERFIS_QUE_MUDAM_A_SITUACAO = CUSTOMER_STATUS_CHANGE_ROLES.map(
@@ -511,6 +514,68 @@ export function useCustomerForm({
     });
   }
 
+  /**
+   * O CNPJ está pronto para consultar? — CUSTOMER-CNPJ-LOOKUP-01.
+   *
+   * A consulta externa só parte de um CNPJ que o PRÓPRIO cadastro aceitaria:
+   * reusa `isValidCnpj` (a mesma do submit e do servidor), nunca um segundo
+   * algoritmo. Número ausente ou inconsistente termina na mensagem do campo,
+   * como qualquer outra recusa da tela — e nada sai da máquina.
+   */
+  function validarCnpjParaConsulta(): boolean {
+    const digitado = form.cnpj.trim();
+    const mensagem =
+      digitado === ""
+        ? "Informe o CNPJ para consultar."
+        : isValidCnpj(digitado)
+          ? null
+          : "CNPJ inválido.";
+
+    setClientErrors((prev) => {
+      const next = { ...prev };
+      if (mensagem) next["cnpj"] = mensagem;
+      else delete next["cnpj"];
+      return next;
+    });
+    return mensagem === null;
+  }
+
+  /**
+   * Aplica ao formulário SÓ os campos que a pessoa marcou no diálogo.
+   *
+   * Não grava nada: escreve no estado da tela, e o cadastro continua exigindo
+   * "Salvar". Os campos não marcados ficam exatamente como estavam — inclusive
+   * os que a fonte trouxe e a pessoa recusou.
+   *
+   * O endereço aplicado passa a ser MANUAL (`addressZip` vazio), e é o certo:
+   * ele não veio de uma consulta de CEP, e pode ser uma mistura deliberada —
+   * o CEP da fonte com a rua que já estava na tela, por exemplo. Marcá-lo como
+   * "endereço deste CEP" faria a próxima consulta de CEP se calar sobre um
+   * bloco que ela não respondeu. Como manual, o CEP digitado depois apenas
+   * COMPLETA o que estiver vazio, e nada do que foi aplicado é sobrescrito.
+   */
+  function aplicarConsultaDeCnpj(valores: Partial<ValoresDoFormulario>) {
+    const campos = Object.keys(valores) as (keyof ValoresDoFormulario)[];
+    if (campos.length === 0) return;
+
+    setForm((prev) => ({ ...prev, ...valores }));
+
+    // O que foi substituído não carrega o erro do valor anterior.
+    const limpar = (anterior: Record<string, string>) => {
+      const next = { ...anterior };
+      for (const campo of campos) delete next[campo];
+      return next;
+    };
+    setClientErrors(limpar);
+    setFieldErrors(limpar);
+
+    if (valores.zipCode !== undefined) typedZip.current = normalizeZipCode(valores.zipCode);
+    if (campos.some((campo) => campo === "zipCode" || CEP_OWNED_FIELDS.includes(campo as AddressField))) {
+      addressZip.current = "";
+      setCepStatus("idle");
+    }
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (saving || readOnly) return;
@@ -619,6 +684,8 @@ export function useCustomerForm({
     handleBlur,
     handleZipLookup,
     handleSubmit,
+    validarCnpjParaConsulta,
+    aplicarConsultaDeCnpj,
     errorFor,
     mode,
     customer,
@@ -812,6 +879,18 @@ function CustomerConsultaFields({ customer }: { customer: CustomerDTO }) {
   );
 }
 
+/**
+ * O recorte do formulário que a consulta de CNPJ compara.
+ *
+ * Deriva da lista de campos da própria consulta: campo novo lá entra aqui
+ * sozinho, e não existe um segundo lugar para esquecer de atualizar.
+ */
+function valoresDaConsultaDeCnpj(form: FormState): ValoresDoFormulario {
+  return Object.fromEntries(
+    CAMPOS_DA_CONSULTA_DE_CNPJ.map((campo) => [campo, form[campo]]),
+  ) as ValoresDoFormulario;
+}
+
 export function CustomerFormFields({
   form,
   setField,
@@ -825,7 +904,16 @@ export function CustomerFormFields({
   mode,
   customer,
   readOnly,
+  validarCnpjParaConsulta,
+  aplicarConsultaDeCnpj,
 }: CustomerFormController) {
+  /*
+   * O diálogo de "Consultar CNPJ" (CUSTOMER-CNPJ-LOOKUP-01). Aberto é o CNPJ
+   * já validado que ele vai consultar — guardar o número, e não um booleano,
+   * garante que a consulta é sobre o que estava na tela no clique.
+   */
+  const [consultaDeCnpj, setConsultaDeCnpj] = useState<string | null>(null);
+
   if (readOnly && customer) return <CustomerConsultaFields customer={customer} />;
 
   /** Liga input, `aria-invalid` e a mensagem, para leitor de tela também. */
@@ -849,6 +937,7 @@ export function CustomerFormFields({
   }
 
   return (
+    <>
     <form id={CUSTOMER_FORM_ID} onSubmit={handleSubmit}>
       {error && <p className="form-alert" role="alert">{error}</p>}
 
@@ -903,8 +992,27 @@ export function CustomerFormFields({
               onChange={(event) => setField("cnpj", maskCnpjInput(event.target.value))}
               {...fieldProps("cnpj")}
             />
+            {/* Assistência de preenchimento: consultar não altera o cadastro,
+                e nada é gravado antes de "Salvar". O botão não fica
+                desabilitado — clicar com o campo vazio ou com número
+                inconsistente responde no PRÓPRIO campo, que é onde a pessoa
+                pode corrigir; botão apagado sem motivo não ensina nada. */}
+            <div className="field__acao">
+              <button
+                type="button"
+                className="btn btn--secondary btn--sm"
+                onClick={() => {
+                  if (validarCnpjParaConsulta()) setConsultaDeCnpj(form.cnpj.trim());
+                }}
+              >
+                Consultar CNPJ
+              </button>
+            </div>
             {fieldError("cnpj") ?? (
-              <p className="field__hint">Aceita o formato numérico e o alfanumérico.</p>
+              <p className="field__hint">
+                Aceita o formato numérico e o alfanumérico. A consulta preenche o
+                formulário com dados públicos que você escolhe — e não salva nada.
+              </p>
             )}
           </div>
 
@@ -1193,5 +1301,22 @@ export function CustomerFormFields({
       {mode === "edit" && customer && <SituacaoDoCadastro customer={customer} />}
       {mode === "edit" && customer && <InformacoesDoCadastro customer={customer} />}
     </form>
+
+    {/* Abre POR CIMA do cadastro: o que foi digitado continua na tela, e a
+        comparação é contra o ESTADO DO FORMULÁRIO — não contra o registro
+        salvo. Quem editou a razão social e ainda não salvou compara com o
+        que está vendo. */}
+    {consultaDeCnpj !== null && (
+      <CnpjLookupDialog
+        cnpj={consultaDeCnpj}
+        valoresAtuais={valoresDaConsultaDeCnpj(form)}
+        onClose={() => setConsultaDeCnpj(null)}
+        onApply={(valores) => {
+          aplicarConsultaDeCnpj(valores);
+          setConsultaDeCnpj(null);
+        }}
+      />
+    )}
+    </>
   );
 }

@@ -91,10 +91,14 @@ Opção A, com a lista própria `CUSTOMER_EDIT_ROLES`, separada de `CUSTOMER_STA
   futuro).
 - **D4 — decidida:** consulta automática de CNPJ fica registrada como CUSTOMER-CNPJ-AUTOFILL-01 (P1), provedor Serpro —
   Consulta CNPJ Básica, e NÃO INICIA SEM APROVAÇÃO EXPLÍCITA DA VERIDI.
+  **Atualização de 2026-09-17:** aprovada pela Veridi e entregue como CUSTOMER-CNPJ-LOOKUP-01 — assistência ao
+  preenchimento (nunca atualização automática), com **OpenCNPJ** como primeiro provedor e **Serpro como provedor
+  futuro**. Regra em [`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §111.
 
 ## 12. Pendências PO
 
-Nenhuma para esta capability. CUSTOMER-CNPJ-AUTOFILL-01 aguarda a Veridi.
+Nenhuma para esta capability. CUSTOMER-CNPJ-AUTOFILL-01 aguardava a Veridi e foi reconciliado em 2026-09-17 por
+CUSTOMER-CNPJ-LOOKUP-01 (§111); segue sem decisão apenas ligar o SERPRO.
 
 ## 13. Escopo recomendado
 
@@ -109,8 +113,8 @@ Faturamento; dados existentes (nada alterado).
 
 ## 15. Próxima capability
 
-CUSTOMER-EDIT-PERMISSIONS-01 (entregue). Depois, sem posição: CUSTOMER-MASTER-DATA-AUDIT-01 e, com aprovação da
-Veridi, CUSTOMER-CNPJ-AUTOFILL-01.
+CUSTOMER-EDIT-PERMISSIONS-01 (entregue). Depois, sem posição: CUSTOMER-MASTER-DATA-AUDIT-01. A consulta de CNPJ saiu
+desta fila em 2026-09-17, entregue como CUSTOMER-CNPJ-LOOKUP-01 (§111).
 
 ## 16. Implementação
 
