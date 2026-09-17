@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
+import { SUPPLIER_ITEM_EDIT_ROLES } from "@veridi/shared";
 import { ForbiddenError } from "../auth/auth.errors.js";
 import { requireCurrentUser, requireRole } from "../../lib/current-user.js";
 import {
@@ -125,7 +126,7 @@ export const supplierItemsRoutes: FastifyPluginAsync = async (app) => {
 
   app.post("/supplier-items", async (request, reply) => {
     try {
-      const actor = requireRole(request, "PURCHASING", "ADMIN");
+      const actor = requireRole(request, ...SUPPLIER_ITEM_EDIT_ROLES);
       const parsed = createSupplierItemSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply
@@ -143,7 +144,7 @@ export const supplierItemsRoutes: FastifyPluginAsync = async (app) => {
   app.patch("/supplier-items/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      const actor = requireRole(request, "PURCHASING", "ADMIN");
+      const actor = requireRole(request, ...SUPPLIER_ITEM_EDIT_ROLES);
       const parsed = updateSupplierItemSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply
@@ -185,7 +186,7 @@ export const supplierItemsRoutes: FastifyPluginAsync = async (app) => {
   app.post("/supplier-items/:id/preferred", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      const actor = requireRole(request, "PURCHASING", "ADMIN");
+      const actor = requireRole(request, ...SUPPLIER_ITEM_EDIT_ROLES);
       const parsed = setPreferredSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply
@@ -203,7 +204,7 @@ export const supplierItemsRoutes: FastifyPluginAsync = async (app) => {
   app.post("/supplier-items/:id/offers", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      const actor = requireRole(request, "PURCHASING", "ADMIN");
+      const actor = requireRole(request, ...SUPPLIER_ITEM_EDIT_ROLES);
       const parsed = createOfferSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply

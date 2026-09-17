@@ -64,6 +64,33 @@ export class FinishedUnitNotFoundError extends Error {
 }
 
 /**
+ * "Exige CoA" pedido na criação do Produto para um item de produto acabado que
+ * JÁ EXISTE, com valor diferente do que o item tem.
+ *
+ * O Produto só decide o laudo do PA que nasce com ele. Depois disso o controle
+ * é do cadastro do Item, com o gate da Qualidade: aceitar aqui seria uma porta
+ * lateral para desligar (ou ligar) o laudo de um item existente, e ignorar em
+ * silêncio deixaria quem pediu achando que o lote exige laudo.
+ */
+export class FinishedItemControlsNotEditableHereError extends Error {
+  constructor(itemCode: string) {
+    super(
+      `O item de produto acabado ${itemCode} já existe: "Exige CoA / Laudo" dele se altera no cadastro de Itens, pela Qualidade. ` +
+        "Crie o produto sem informar o laudo.",
+    );
+    this.name = "FinishedItemControlsNotEditableHereError";
+  }
+}
+
+/** Inativar o inativo, reativar o ativo: 409 com a frase, nunca 500 nem 200 silencioso. */
+export class InvalidProductStatusTransitionError extends Error {
+  constructor(active: boolean) {
+    super(active ? "Produto já está ativo." : "Produto já está inativo.");
+    this.name = "InvalidProductStatusTransitionError";
+  }
+}
+
+/**
  * Produto já em uso não muda de Cliente.
  *
  * Trocar o dono de um produto que já tem pedido, ordem de produção ou

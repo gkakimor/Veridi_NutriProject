@@ -1,6 +1,6 @@
 import type { Item, UnitOfMeasure, User } from "@prisma/client";
 import type { ItemDTO, ItemListResponse } from "@veridi/shared";
-import { ITEM_TYPE_DEFAULTS } from "@veridi/shared";
+import { ITEM_QUALITY_CONTROL_FIELDS, ITEM_TYPE_DEFAULTS } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
@@ -8,6 +8,14 @@ import { nextItemCode } from "./item-codes.js";
 import { TIPOS_DE_MATERIAL_DO_CLIENTE } from "./item-customer-supplied.js";
 import { insertItemCostReference } from "./item-cost-references.service.js";
 import {
+  autoridadeNoItem,
+  controlesAlterados,
+  recusaDoConsumoNaProducao,
+  recusaDoCustoInicial,
+  recusaDosControles,
+} from "./item-permissions.js";
+import {
+  InvalidItemStatusTransitionError,
   ItemNotFoundError,
   PackagingSubtypeNotApplicableError,
   StructuralFieldLockedError,
@@ -168,14 +176,36 @@ export async function getItemById(id: string): Promise<ItemDTO | null> {
   return toItemDTO(item, await isItemOperationallyUsed(id));
 }
 
+/**
+ * Cria o Item. Quem cria já passou pelo gate da rota (`ITEM_EDIT_ROLES`); aqui
+ * se julga o que o perfil pediu DENTRO do cadastro, antes de qualquer leitura:
+ * referência de custo inicial, controles fora do padrão do tipo e a marca
+ * "Consumido na produção" — cada um com o seu dono (`item-permissions.ts`).
+ */
 export async function createItem(
   input: CreateItemInput,
-  actor: Pick<User, "id" | "name"> | null = null,
+  actor: Pick<User, "id" | "name" | "role">,
 ): Promise<ItemDTO> {
+  const autoridade = autoridadeNoItem(actor.role);
+  const defaults = ITEM_TYPE_DEFAULTS[input.type];
+
+  if (input.initialCostReference && !autoridade.custoDeReferencia) {
+    throw recusaDoCustoInicial();
+  }
+  if (!autoridade.controles) {
+    // Igual ao padrão do tipo passa — é o que a tela manda para quem não
+    // decide os controles. Diferente, em qualquer direção, é recusa.
+    const foraDoPadrao = controlesAlterados(defaults, input);
+    if (foraDoPadrao.length > 0) throw recusaDosControles(foraDoPadrao, "criacao");
+  }
+  // A marca nasce `false` pelo default da coluna.
+  if (input.consumedInProduction === true && !autoridade.consumoNaProducao) {
+    throw recusaDoConsumoNaProducao();
+  }
+
   await assertUnitExists(input.unitCode);
   assertPackagingSubtypeCoherent(input.type, input.packagingSubtype);
 
-  const defaults = ITEM_TYPE_DEFAULTS[input.type];
   const prisma = getPrisma();
 
   // Item e referência inicial nascem juntos ou não nascem: uma referência
@@ -193,9 +223,9 @@ export async function createItem(
       controlsExpiry: input.controlsExpiry ?? defaults.controlsExpiry,
       requiresQualityRelease:
         input.requiresQualityRelease ?? defaults.requiresQualityRelease,
-      // Sem default por tipo: exigir laudo é decisão explícita do cadastro,
+      // `false` em todo tipo: exigir laudo é decisão explícita da Qualidade,
       // nunca inferida de `requiresQualityRelease`.
-      requiresCoa: input.requiresCoa ?? false,
+      requiresCoa: input.requiresCoa ?? defaults.requiresCoa,
       ...(input.sourceName !== undefined ? { sourceName: input.sourceName } : {}),
       ...(input.declaredNutrient !== undefined
         ? { declaredNutrient: input.declaredNutrient }
@@ -226,11 +256,38 @@ export async function createItem(
   return toItemDTO(item, false);
 }
 
+/**
+ * Altera o Item. O gate da rota já recusou quem não edita Item; aqui se julga,
+ * contra o GRAVADO, o que tem dono mais estreito.
+ *
+ * Quem não decide os controles (ou a marca de consumo) salva com os valores
+ * gravados, e eles NÃO são regravados: uma alteração da Qualidade que chegue
+ * entre esta leitura e a escrita não é desfeita por quem não pode alterá-la.
+ */
 export async function updateItem(
   id: string,
-  input: UpdateItemInput,
+  pedido: UpdateItemInput,
+  actor: Pick<User, "role">,
 ): Promise<ItemDTO> {
   const current = await requireItem(id);
+  const autoridade = autoridadeNoItem(actor.role);
+
+  const input: UpdateItemInput = { ...pedido };
+  if (!autoridade.controles) {
+    const mudados = controlesAlterados(current, pedido);
+    if (mudados.length > 0) throw recusaDosControles(mudados, "edicao");
+    for (const campo of ITEM_QUALITY_CONTROL_FIELDS) delete input[campo];
+  }
+  if (!autoridade.consumoNaProducao) {
+    if (
+      pedido.consumedInProduction !== undefined &&
+      pedido.consumedInProduction !== current.consumedInProduction
+    ) {
+      throw recusaDoConsumoNaProducao();
+    }
+    delete input.consumedInProduction;
+  }
+
   if (input.unitCode) await assertUnitExists(input.unitCode);
   assertPackagingSubtypeCoherent(input.type ?? current.type, input.packagingSubtype);
 
@@ -300,22 +357,30 @@ export async function updateItem(
   return toItemDTO(item, await isItemOperationallyUsed(id));
 }
 
-export async function activateItem(id: string): Promise<ItemDTO> {
-  await requireItem(id);
-  const item = await getPrisma().item.update({
-    where: { id },
-    data: { active: true },
-    include: { unit: true },
+/**
+ * Inativar e reativar: a gravação só acontece se o Item estiver na situação
+ * de partida, e a condição mora no próprio UPDATE. Dois pedidos concorrentes
+ * não partem da mesma situação — o segundo não casa linha nenhuma e cai no
+ * 409, em vez de "confirmar" uma transição que não fez.
+ */
+async function mudarSituacaoDoItem(id: string, active: boolean): Promise<ItemDTO> {
+  const prisma = getPrisma();
+  const { count } = await prisma.item.updateMany({
+    where: { id, active: !active },
+    data: { active },
   });
+  if (count === 0) {
+    await requireItem(id);
+    throw new InvalidItemStatusTransitionError(active);
+  }
+  const item = await prisma.item.findUniqueOrThrow({ where: { id }, include: { unit: true } });
   return toItemDTO(item, await isItemOperationallyUsed(id));
 }
 
+export async function activateItem(id: string): Promise<ItemDTO> {
+  return mudarSituacaoDoItem(id, true);
+}
+
 export async function deactivateItem(id: string): Promise<ItemDTO> {
-  await requireItem(id);
-  const item = await getPrisma().item.update({
-    where: { id },
-    data: { active: false },
-    include: { unit: true },
-  });
-  return toItemDTO(item, await isItemOperationallyUsed(id));
+  return mudarSituacaoDoItem(id, false);
 }

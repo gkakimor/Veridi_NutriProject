@@ -96,6 +96,40 @@ export function requireRole(request: FastifyRequest, ...roles: UserRole[]): User
   return user;
 }
 
+/** A recusa por perfil, no corpo que toda rota devolve: `403 forbidden` com a frase. */
+export function responderSemPermissao(reply: FastifyReply, error: ForbiddenError): FastifyReply {
+  return reply.status(403).send({ error: "forbidden", message: error.message });
+}
+
+/**
+ * O perfil, conferido ANTES do corpo e do registro: quem não pode recebe 403 —
+ * nunca o 400 da validação, nem o 404 que diria se o registro existe. Esconder
+ * a ação na tela é conveniência; a autoridade é a rota.
+ *
+ * Existe porque `requireRole` LANÇA `ForbiddenError`, e a aplicação não tem
+ * tratador de erro global: rota que não mapeia a exceção devolve 500. Aqui a
+ * recusa já sai respondida (CUSTOMER-EDIT-PERMISSIONS-01, compartilhado desde
+ * MASTER-DATA-EDIT-PERMISSIONS-01).
+ *
+ * Devolve o usuário da sessão, ou `null` quando a recusa já foi respondida —
+ * quem chama só precisa de `if (!actor) return reply;`.
+ */
+export function exigirPerfil(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  roles: readonly UserRole[],
+): User | null {
+  try {
+    return requireRole(request, ...roles);
+  } catch (error) {
+    if (error instanceof ForbiddenError) {
+      responderSemPermissao(reply, error);
+      return null;
+    }
+    throw error;
+  }
+}
+
 /** Cookie de sessão: HttpOnly sempre, Secure quando em produção (HTTPS). */
 export function sessionCookie(token: string, expiresAt: Date): string {
   const parts = [

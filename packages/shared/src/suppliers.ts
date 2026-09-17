@@ -1,6 +1,27 @@
 /** Contratos do módulo de Fornecedores, consumidos por `apps/api` e `apps/web`. */
 
+import type { UserRole } from "./users.js";
+
 export const SUPPLIER_CODE_PREFIX = "FOR";
+
+/**
+ * Quem CRIA e EDITA o cadastro do Fornecedor — MASTER-DATA-EDIT-PERMISSIONS-01,
+ * decisão do PO.
+ *
+ * O Fornecedor é cadastro de Compras. A Qualidade não edita o Fornecedor: ela
+ * homologa no relacionamento Item × Fornecedor, que tem gates próprios. Os
+ * demais perfis consultam e escolhem Fornecedor existente. A API recusa com 403
+ * antes do corpo e da existência; a tela usa a MESMA lista só para não oferecer
+ * o que seria recusado.
+ */
+export const SUPPLIER_EDIT_ROLES: readonly UserRole[] = ["PURCHASING", "ADMIN"];
+
+/**
+ * Quem INATIVA e REATIVA o Fornecedor. Hoje os mesmos perfis da edição, em
+ * lista própria: são perguntas diferentes e podem divergir quando a situação
+ * ganhar motivo e histórico (MASTER-DATA-STATUS-HISTORY-01).
+ */
+export const SUPPLIER_STATUS_CHANGE_ROLES: readonly UserRole[] = ["PURCHASING", "ADMIN"];
 
 /**
  * Endereço estruturado do Fornecedor — o MESMO modelo do Cliente, campo a

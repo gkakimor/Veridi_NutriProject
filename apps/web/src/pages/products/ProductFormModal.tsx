@@ -11,6 +11,12 @@ interface ProductFormModalProps {
   onClose: () => void;
   /** Recebe o registro criado — permite selecioná-lo de volta na origem. */
   onSaved: (created?: ProductDTO) => void;
+  /**
+   * Abre o Produto existente em CONSULTA: o perfil não edita o cadastro
+   * (MASTER-DATA-EDIT-PERMISSIONS-01). Quem hospeda decide pela sessão; o modal
+   * só não oferece o que a API recusaria.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -26,7 +32,15 @@ interface ProductFormModalProps {
  * Editar continua sendo exclusividade deste modal — a página oficial cobre a
  * criação, que é a que precisa de URL própria.
  */
-export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFormModalProps) {
+export function ProductFormModal({
+  mode,
+  product,
+  onClose,
+  onSaved,
+  readOnly = false,
+}: ProductFormModalProps) {
+  // Consulta só existe para registro que já existe: criar é sempre edição.
+  const consulta = readOnly && mode === "edit" && product !== null;
   /** Cadastro de cliente aberto a partir do campo de busca. */
   const [criandoCliente, setCriandoCliente] = useState(false);
 
@@ -35,6 +49,7 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
     product,
     onSaved,
     onCreateCustomer: () => setCriandoCliente(true),
+    readOnly: consulta,
   });
   const { saving, selectCustomer } = controller;
 
@@ -52,7 +67,7 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
 
   const codeChip = mode === "create" ? "Código gerado automaticamente ao salvar" : product?.code;
 
-  const footer =
+  const rodapeDeEdicao =
     mode === "create" ? (
       <>
         <span className="modal-fullscreen__foot-meta">
@@ -93,12 +108,28 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
       </>
     );
 
+  // Consulta: nada a gravar, então nada de "Cancelar" nem de "Salvar".
+  const footer = consulta ? (
+    <>
+      <span className="modal-fullscreen__foot-meta">
+        Última alteração: {product ? formatDate(product.updatedAt) : "—"}
+      </span>
+      <div className="modal-fullscreen__actions">
+        <button type="button" className="btn btn--secondary" onClick={fechar}>
+          Fechar
+        </button>
+      </div>
+    </>
+  ) : (
+    rodapeDeEdicao
+  );
+
   return (
     <FullWorkspaceModal
       open
       onClose={fechar}
       crumb="Cadastros / Produtos Acabados"
-      crumbActive={mode === "create" ? "Novo" : "Editar"}
+      crumbActive={mode === "create" ? "Novo" : consulta ? "Consulta" : "Editar"}
       title={mode === "create" ? "Novo produto" : product?.name}
       {...(codeChip ? { codeChip } : {})}
       footer={footer}

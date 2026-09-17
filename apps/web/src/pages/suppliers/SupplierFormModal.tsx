@@ -15,6 +15,12 @@ interface SupplierFormModalProps {
   onClose: () => void;
   /** Recebe o registro criado — permite selecioná-lo de volta na origem. */
   onSaved: (created?: SupplierDTO) => void;
+  /**
+   * Abre o Fornecedor existente em CONSULTA: o perfil não edita o cadastro
+   * (MASTER-DATA-EDIT-PERMISSIONS-01). Quem hospeda decide pela sessão; o modal
+   * só não oferece o que a API recusaria.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -25,8 +31,16 @@ interface SupplierFormModalProps {
  * o rodapé. Editar continua sendo exclusividade deste modal — a página
  * oficial cobre a criação, que é a que precisa de URL própria.
  */
-export function SupplierFormModal({ mode, supplier, onClose, onSaved }: SupplierFormModalProps) {
-  const controller = useSupplierForm({ mode, supplier, onSaved });
+export function SupplierFormModal({
+  mode,
+  supplier,
+  onClose,
+  onSaved,
+  readOnly = false,
+}: SupplierFormModalProps) {
+  // Consulta só existe para registro que já existe: criar é sempre edição.
+  const consulta = readOnly && mode === "edit" && supplier !== null;
+  const controller = useSupplierForm({ mode, supplier, onSaved, readOnly: consulta });
 
   /**
    * Cancelar, ✕ e Esc: o router não vê nada disso — a guarda vê.
@@ -43,7 +57,7 @@ export function SupplierFormModal({ mode, supplier, onClose, onSaved }: Supplier
 
   const codeChip = mode === "create" ? "Código gerado ao salvar" : supplier?.code;
 
-  const footer =
+  const rodapeDeEdicao =
     mode === "create" ? (
       <>
         <span className="modal-fullscreen__foot-meta">
@@ -84,12 +98,28 @@ export function SupplierFormModal({ mode, supplier, onClose, onSaved }: Supplier
       </>
     );
 
+  // Consulta: nada a gravar, então nada de "Cancelar" nem de "Salvar".
+  const footer = consulta ? (
+    <>
+      <span className="modal-fullscreen__foot-meta">
+        Última alteração: {supplier ? formatDate(supplier.updatedAt) : "—"}
+      </span>
+      <div className="modal-fullscreen__actions">
+        <button type="button" className="btn btn--secondary" onClick={fechar}>
+          Fechar
+        </button>
+      </div>
+    </>
+  ) : (
+    rodapeDeEdicao
+  );
+
   return (
     <FullWorkspaceModal
       open
       onClose={fechar}
       crumb="Cadastros / Fornecedores"
-      crumbActive={mode === "create" ? "Novo" : "Editar"}
+      crumbActive={mode === "create" ? "Novo" : consulta ? "Consulta" : "Editar"}
       title={mode === "create" ? "Novo fornecedor" : supplier?.legalName}
       {...(codeChip ? { codeChip } : {})}
       footer={footer}

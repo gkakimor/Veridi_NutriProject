@@ -1,18 +1,12 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
-import type { User } from "@prisma/client";
 import type { ZodError } from "zod";
-import type {
-  CustomerStatusAction,
-  CustomerStatusHistoryResponse,
-  UserRole,
-} from "@veridi/shared";
+import type { CustomerStatusAction, CustomerStatusHistoryResponse } from "@veridi/shared";
 import { CUSTOMER_EDIT_ROLES, CUSTOMER_STATUS_CHANGE_ROLES } from "@veridi/shared";
-import { requireRole } from "../../lib/current-user.js";
+import { exigirPerfil } from "../../lib/current-user.js";
 import {
   InstallmentsWithoutCountError,
   respostaDaRecusaDeParcelas,
 } from "../../lib/payment-condition.js";
-import { ForbiddenError } from "../auth/auth.errors.js";
 import {
   createCustomer,
   getCustomerById,
@@ -37,29 +31,6 @@ function formatZodError(error: ZodError) {
     path: issue.path.join("."),
     message: issue.message,
   }));
-}
-
-/**
- * O perfil, conferido ANTES do corpo e do cliente: quem não pode recebe 403 —
- * nunca o 400 da validação, nem o 404 que diria se o cliente existe. Esconder
- * a ação na tela é conveniência; a autoridade é a rota.
- *
- * Devolve o usuário da sessão, ou `null` quando a recusa já foi respondida.
- */
-function exigirPerfil(
-  request: FastifyRequest,
-  reply: FastifyReply,
-  roles: readonly UserRole[],
-): User | null {
-  try {
-    return requireRole(request, ...roles);
-  } catch (error) {
-    if (error instanceof ForbiddenError) {
-      reply.status(403).send({ error: "forbidden", message: error.message });
-      return null;
-    }
-    throw error;
-  }
 }
 
 /**

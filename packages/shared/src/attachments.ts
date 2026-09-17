@@ -7,6 +7,8 @@
  * autenticada — e nunca é excluído pela operação: arquiva-se.
  */
 
+import type { UserRole } from "./users.js";
+
 export type AttachmentType =
   | "COA"
   | "INVOICE"
@@ -25,6 +27,19 @@ export const ATTACHMENT_TYPE_LABELS: Record<AttachmentType, string> = {
   SAMPLE_RESULT: "Resultado de amostra",
   OTHER: "Outro",
 };
+
+/**
+ * Quem ANEXA documento ao Produto (arte de rótulo, ficha técnica). Seção com
+ * permissão própria dentro do cadastro do Produto: a Qualidade anexa mesmo sem
+ * editar o cadastro, e a Produção consulta (MASTER-DATA-EDIT-PERMISSIONS-01).
+ */
+export const PRODUCT_DOCUMENT_UPLOAD_ROLES: readonly UserRole[] = ["COMMERCIAL", "QUALITY", "ADMIN"];
+
+/**
+ * Quem ARQUIVA documento anexado, em qualquer contexto: documento é evidência,
+ * e tirá-lo de circulação é decisão da Qualidade.
+ */
+export const ATTACHMENT_ARCHIVE_ROLES: readonly UserRole[] = ["QUALITY", "ADMIN"];
 
 /** Tipos aceitos por contexto — CoA só existe em lote, arte só em produto. */
 export const LOT_ATTACHMENT_TYPES: readonly AttachmentType[] = ["COA", "OTHER"];

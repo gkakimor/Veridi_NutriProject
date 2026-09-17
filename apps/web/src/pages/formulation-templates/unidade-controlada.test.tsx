@@ -40,7 +40,7 @@ vi.mock("../../lib/items-api", () => ({
   getItem: (...a: unknown[]) => getItem(...a),
 }));
 vi.mock("../../lib/units-api", () => ({ listUnits: (...a: unknown[]) => listUnits(...a) }));
-vi.mock("../../app/AuthProvider", () => ({
+vi.mock("../../app/AuthProvider", () => ({ useOptionalAuth: () => null,
   useAuth: () => ({ user: { id: "u1", name: "Admin", role: "ADMIN" } }),
 }));
 vi.mock("react-router-dom", async () => {

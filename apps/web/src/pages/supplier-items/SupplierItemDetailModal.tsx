@@ -11,12 +11,14 @@ import {
   SUPPLIER_OFFER_AMBIGUITY_MESSAGE,
   SUPPLIER_OFFER_ELIGIBILITY_HINTS,
   SUPPLIER_OFFER_ELIGIBILITY_LABELS,
+  SUPPLIER_ITEM_EDIT_ROLES,
   hojeComercial,
 } from "@veridi/shared";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useAuth } from "../../app/AuthProvider";
+import { perfilPermite } from "../../lib/perfis";
 import { listUnits } from "../../lib/units-api";
 import {
   changeSupplierItemQualification,
@@ -90,7 +92,8 @@ export function SupplierItemDetailModal({
   const [validUntil, setValidUntil] = useState("");
   const [offerNotes, setOfferNotes] = useState("");
 
-  const canPurchase = user?.role === "PURCHASING" || user?.role === "ADMIN";
+  // A mesma lista que a API aplica à relação comercial (MASTER-DATA-EDIT-PERMISSIONS-01).
+  const canPurchase = perfilPermite(SUPPLIER_ITEM_EDIT_ROLES, user?.role);
   const canQualify = user?.role === "QUALITY" || user?.role === "ADMIN";
 
   const load = useCallback(() => {

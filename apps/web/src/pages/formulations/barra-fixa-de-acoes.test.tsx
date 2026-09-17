@@ -43,7 +43,7 @@ vi.mock("../../lib/formulation-templates-api", () => ({
 }));
 
 let papel = "ADMIN";
-vi.mock("../../app/AuthProvider", () => ({ useAuth: () => ({ user: { role: papel } }) }));
+vi.mock("../../app/AuthProvider", () => ({ useOptionalAuth: () => null, useAuth: () => ({ user: { role: papel } }) }));
 
 import { getFormulationVersion, updateFormulationVersion } from "../../lib/formulations-api";
 import { createTemplateFromFormulation } from "../../lib/formulation-templates-api";

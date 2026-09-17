@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
+import { ITEM_COST_REFERENCE_ROLES } from "@veridi/shared";
 import { ForbiddenError } from "../auth/auth.errors.js";
 import { requireCurrentUser, requireRole } from "../../lib/current-user.js";
 import {
@@ -23,7 +24,8 @@ export const createItemCostReferenceSchema = z.object({
  * `POST /items/:id/cost-references` — nova vigência (nunca atualiza a anterior).
  *
  * Definir referência é decisão de custeio, como salvar um cálculo: fica com
- * quem negocia (COMMERCIAL) e com ADMIN.
+ * quem negocia (COMMERCIAL) e com ADMIN — `ITEM_COST_REFERENCE_ROLES`, a mesma
+ * lista que recusa a referência inicial pedida na criação do Item.
  */
 export const itemCostReferencesRoutes: FastifyPluginAsync = async (app) => {
   app.get("/items/:id/cost-references", async (request, reply) => {
@@ -42,7 +44,7 @@ export const itemCostReferencesRoutes: FastifyPluginAsync = async (app) => {
   app.post("/items/:id/cost-references", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      const actor = requireRole(request, "COMMERCIAL", "ADMIN");
+      const actor = requireRole(request, ...ITEM_COST_REFERENCE_ROLES);
       const parsed = createItemCostReferenceSchema.safeParse(request.body ?? {});
       if (!parsed.success) {
         return reply.status(400).send({

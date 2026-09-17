@@ -10,6 +10,8 @@ import { useFilteredPage, useListQuery } from "../../lib/list-query";
 import type { ListSuppliersParams } from "../../lib/suppliers-api";
 import { listSuppliers, setSupplierActive } from "../../lib/suppliers-api";
 import { SupplierFormModal } from "./SupplierFormModal";
+import { podeMudarSituacaoDoFornecedor, usePodeEditarFornecedor } from "./supplier-permissions";
+import { useOptionalAuth } from "../../app/AuthProvider";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { RowActions } from "../../components/RowActions";
 import {
@@ -36,6 +38,15 @@ const PAGE_SIZE = 20;
 
 /** Cadastros → Fornecedores. Mesmo padrao de tabela densa + modal de Items. */
 export function SuppliersPage() {
+  /*
+   * MASTER-DATA-EDIT-PERMISSIONS-01: criar, editar, inativar e reativar são de
+   * Compras e Administrador. Os demais perfis abrem o Fornecedor em consulta —
+   * pela linha, pelo "Ver" ou por link de outra tela — e não recebem
+   * "+ Novo fornecedor".
+   */
+  const podeEditar = usePodeEditarFornecedor();
+  const sessao = useOptionalAuth();
+  const podeMudarSituacao = sessao === null || podeMudarSituacaoDoFornecedor(sessao.user?.role);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
@@ -97,6 +108,8 @@ export function SuppliersPage() {
       reload();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Falha ao atualizar status");
+      // Recusa por situação que já mudou (409): a linha volta a mostrar a verdade.
+      reload();
     }
   }
 
@@ -115,9 +128,11 @@ export function SuppliersPage() {
         {/* Leva à tela oficial, não ao modal: o cadastro passou a ter URL
             própria, e é ela que sobrevive a um F5 e vale como link. O modal
             continua servindo à EDIÇÃO, aberta a partir da linha. */}
-        <Link className="btn btn--primary" to="/cadastros/fornecedores/novo">
-          + Novo fornecedor
-        </Link>
+        {podeEditar && (
+          <Link className="btn btn--primary" to="/cadastros/fornecedores/novo">
+            + Novo fornecedor
+          </Link>
+        )}
         <ExportCsvButton path="/suppliers/export.csv" filters={{ search, active: activeFilter === "all" ? undefined : activeFilter === "active" }} />
 </div>
 
@@ -218,20 +233,24 @@ export function SuppliersPage() {
                 <td onClick={(event) => event.stopPropagation()}>
                   <RowActions
                     label={`Mais ações de ${supplier.code}`}
-                    actions={[
-                      {
-                        label: supplier.active ? "Inativar" : "Reativar",
-                        destructive: supplier.active,
-                        onSelect: () => handleToggleActive(supplier),
-                      },
-                    ]}
+                    actions={
+                      podeMudarSituacao
+                        ? [
+                            {
+                              label: supplier.active ? "Inativar" : "Reativar",
+                              destructive: supplier.active,
+                              onSelect: () => handleToggleActive(supplier),
+                            },
+                          ]
+                        : []
+                    }
                   >
                     <button
                       type="button"
                       className="btn btn--ghost btn--sm"
                       onClick={() => setModalState({ mode: "edit", supplier })}
                     >
-                      Editar
+                      {podeEditar ? "Editar" : "Ver"}
                     </button>
                   </RowActions>
                 </td>
@@ -281,6 +300,7 @@ export function SuppliersPage() {
           key={modalState.mode === "edit" ? modalState.supplier.id : "create"}
           mode={modalState.mode}
           supplier={modalState.mode === "edit" ? modalState.supplier : null}
+          readOnly={!podeEditar}
           onClose={() => setModalState({ mode: "closed" })}
           onSaved={() => {
             setModalState({ mode: "closed" });

@@ -364,7 +364,10 @@ describe("Revisão do CoA", () => {
     await quality.ready();
     const { user: qualityUser } = await createAuthenticatedUser("QUALITY");
 
-    const item = await createItem(purchasing, { requiresCoa: true });
+    // "Exige CoA" é controle da Qualidade (MASTER-DATA-EDIT-PERMISSIONS-01):
+    // Compras não cria item com laudo exigido. O item nasce pela Qualidade, e
+    // o que este teste prova continua sendo de Compras — anexar sem aprovar.
+    const item = await createItem(quality, { requiresCoa: true });
     const customer = await createCustomer();
     const { lotId } = await receiveCustomerSupplied(purchasing, customer.id, item.id);
 

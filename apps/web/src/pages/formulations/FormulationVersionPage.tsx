@@ -113,6 +113,7 @@ import {
   secaoDaLinha,
 } from "../formulation-workbench/linha-da-receita";
 import type { CampoDoComponente, LinhaDaReceita } from "../formulation-workbench/linha-da-receita";
+import { usePodeCriarItem } from "../items/item-permissions";
 import {
   operandosDoFisico,
   previaDaDose,
@@ -377,6 +378,9 @@ export function FormulationVersionPage() {
   const [activateDialogOpen, setActivateDialogOpen] = useState(false);
   const [impact, setImpact] = useState<FormulationActivationImpactDTO | null>(null);
   const { user } = useAuth();
+  /* "+ Novo item de estoque" na bancada só para quem cadastra Item
+     (MASTER-DATA-EDIT-PERMISSIONS-01); escolher item existente segue livre. */
+  const podeCadastrarItem = usePodeCriarItem();
   const [costEstimate, setCostEstimate] = useState<FormulationCostEstimateDTO | null>(null);
   /*
    * "Salvar como template": o BOTÃO mora na barra fixa, o formulário de nome
@@ -1517,15 +1521,18 @@ export function FormulationVersionPage() {
         onBuscarItem={buscarItens}
         /* Sair para cadastrar o item NÃO é descartar: o rascunho vai junto e
            volta aplicado na linha. */
-        onCriarItem={(row) =>
-          liberarGuarda(() =>
-            origem.goCreate({
-              route: "/cadastros/itens/novo",
-              fieldKey: "itemId",
-              entityType: "item",
-              context: { rowKey: row.key },
-            }),
-          )
+        onCriarItem={
+          podeCadastrarItem
+            ? (row) =>
+                liberarGuarda(() =>
+                  origem.goCreate({
+                    route: "/cadastros/itens/novo",
+                    fieldKey: "itemId",
+                    entityType: "item",
+                    context: { rowKey: row.key },
+                  }),
+                )
+            : undefined
         }
         valoresDaLinha={valoresDaLinha}
         explicacaoDoFisico={explicacaoDoFisico}

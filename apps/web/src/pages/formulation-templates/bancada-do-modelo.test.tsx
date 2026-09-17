@@ -84,7 +84,7 @@ vi.mock("../../lib/units-api", () => ({
       { code: "mg", label: "Miligrama", dimension: "MASS", toBaseFactor: "0.001" },
     ]),
 }));
-vi.mock("../../app/AuthProvider", () => ({
+vi.mock("../../app/AuthProvider", () => ({ useOptionalAuth: () => null,
   useAuth: () => ({ user: { id: "u1", name: "Admin", role: "ADMIN" } }),
 }));
 

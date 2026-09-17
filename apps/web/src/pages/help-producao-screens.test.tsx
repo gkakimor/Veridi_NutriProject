@@ -19,7 +19,7 @@ import type { AnyHelpTopic, HelpTopic } from "../help/help-content";
  * frase é permitido, mas não sem passar por aqui.
  */
 
-vi.mock("../app/AuthProvider", () => ({
+vi.mock("../app/AuthProvider", () => ({ useOptionalAuth: () => null,
   useAuth: () => ({ user: { id: "u1", name: "Admin", role: "ADMIN" } }),
 }));
 

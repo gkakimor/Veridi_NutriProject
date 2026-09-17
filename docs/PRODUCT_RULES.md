@@ -74,6 +74,12 @@ whether a lot received for that item starts `AWAITING_RELEASE` or already
 `AVAILABLE`. It is a per-item setting the user can override, never inferred
 permanently from `type` alone.
 
+The four traceability controls (`controlsLot`, `controlsExpiry`,
+`requiresQualityRelease`, `requiresCoa`) have their per-type defaults in one
+place, `ITEM_TYPE_DEFAULTS` (`packages/shared/src/items.ts`); `requiresCoa`
+defaults to false for every type. Who may change them — and who may create,
+edit, deactivate and reactivate the item — is §100.
+
 ## Durable rules confirmed at implementation
 
 - Once an item is operationally used (referenced by a Purchase Order line,
@@ -3210,7 +3216,9 @@ produzido.
 
 Os quatro controles aparecem em leitura na tela do Produto. Alterá-los depois
 é operação do cadastro de Itens, com as travas dele — um item que já tem lote
-e histórico não muda de regime por formulário de produto.
+e histórico não muda de regime por formulário de produto. Quem cria o Produto e
+quem altera cada controle está no §100: pedir pela criação do Produto um laudo
+diferente do de um item de produto acabado que já existe é recusado.
 
 ### Vocabulário de ação
 
@@ -6453,3 +6461,77 @@ quando exibido, é *Observações de pagamento*.
   reimpressa: mesmos valores, rótulos novos.
 - **Só escritas futuras.** Migration aditiva, sem UPDATE nem backfill; nada é
   preenchido em cliente, versão ou Pedido existentes.
+
+## §100 — Item, Fornecedor e Produto: quem cria, edita e muda a situação
+
+MASTER-DATA-EDIT-PERMISSIONS-01, 2026-09-16, decisões DE1–DE12 do PO
+([discovery](discovery/MASTER-DATA-EDIT-PERMISSIONS-DISCOVERY-01.md)).
+
+**A API é a autoridade.** Toda recusa por perfil é 403 `forbidden`. O gate do
+ato — criar, editar, inativar, reativar — é conferido antes do corpo e antes de
+olhar se o registro existe (sem permissão, existente e inexistente recebem a
+mesma resposta), e nada é gravado. A tela usa as MESMAS listas de
+`@veridi/shared` só para não oferecer o que seria recusado. Consultar continua
+aberto a toda sessão.
+
+**Item.**
+
+- **Criar e editar** identidade, classificação industrial e códigos: Compras,
+  Qualidade, Produção e Administrador (`ITEM_EDIT_ROLES`). Comercial e Consulta
+  leem.
+- **Os quatro controles** — controla lote, controla validade, requer liberação
+  da Qualidade, exige CoA — só mudam por Qualidade e Administrador
+  (`ITEM_QUALITY_CONTROL_ROLES`). O gate é pela MUDANÇA de valor, nunca pela
+  presença da chave: quem edita o resto do cadastro salva com os valores
+  gravados, e eles não são regravados — uma alteração da Qualidade que chegue no
+  meio não é desfeita. Na criação por outro perfil, o item nasce com os
+  controles canônicos do tipo (§4); valor diferente, em qualquer direção, é 403
+  com o nome do controle.
+- **"Consumido na produção"** (§52) só muda por Produção e Administrador
+  (`ITEM_PRODUCTION_CONSUMPTION_ROLES`), pelo mesmo critério de mudança; criar já
+  marcado também é deles.
+- **Referência de custo** — a vigência nova e a inicial pedida na criação — é de
+  Comercial e Administrador (`ITEM_COST_REFERENCE_ROLES`). Pedir referência
+  inicial sem ser deles é 403 e nenhum item nasce; o pedido nunca é ignorado.
+- **Inativar:** Compras, Qualidade e Administrador (`ITEM_DEACTIVATE_ROLES`).
+  **Reativar:** Qualidade e Administrador (`ITEM_REACTIVATE_ROLES`).
+
+**Fornecedor.** Criar, editar, inativar e reativar: Compras e Administrador
+(`SUPPLIER_EDIT_ROLES`, `SUPPLIER_STATUS_CHANGE_ROLES`). A Qualidade não edita o
+Fornecedor: a homologação continua na relação Item × Fornecedor, com a regra
+própria. Criar e alterar a relação, marcar preferencial e registrar oferta
+seguem de Compras e Administrador (`SUPPLIER_ITEM_EDIT_ROLES`).
+
+**Produto.** Criar, editar, inativar e reativar: Comercial e Administrador
+(`PRODUCT_EDIT_ROLES`, `PRODUCT_STATUS_CHANGE_ROLES`) — inclusive a criação
+direta, que nasce aprovada. Formulação e Roteiro continuam com a Produção. Nos
+documentos, anexar arte e ficha técnica é de Comercial, Qualidade e Administrador
+(`PRODUCT_DOCUMENT_UPLOAD_ROLES`), e arquivar documento é de Qualidade e
+Administrador (`ATTACHMENT_ARCHIVE_ROLES`).
+
+- **Exige CoA na criação** vale para o item de produto acabado que nasce com o
+  Produto: endurece o controle e por isso é de quem cria o Produto. Item de
+  produto acabado que já existe tem o laudo no cadastro de Itens — pedir outro
+  valor pela criação do Produto é 409 `finished_item_controls_not_editable_here`
+  (o mesmo valor passa), e editar o Produto não mexe no laudo.
+
+**Situação.** Inativar o que já está inativo e reativar o que já está ativo é
+409 `invalid_status_transition` nos três cadastros. A condição mora no próprio
+UPDATE: de dois pedidos concorrentes, o segundo cai no 409. Sem motivo nem
+histórico nesta fase (MASTER-DATA-STATUS-HISTORY-01).
+
+**A tela não finge.** Quem não edita abre o registro — pela linha, pelo "Ver" ou
+pelo link de outra tela — no mesmo modal, em consulta: mesmas seções e rótulos,
+valores no lugar das caixas, "Fechar" no lugar de "Salvar alterações". "+ Novo"
+e "Inativar/Reativar" só aparecem para quem pode, e a página de criação recusa e
+oferece a volta. Seções com permissão própria seguem no modal: referência de
+custo no Item; roteiro padrão, custos, CMV e documentos no Produto. Nas criações
+no contexto — Ordem de Compra (item e fornecedor), Formulação e Modelo (item),
+relação Item × Fornecedor (item e fornecedor) e Pedido (produto) — "+ Novo" só
+aparece para quem cadastra, e a busca sem resultado diz a quem pedir ("Solicite
+a … o cadastro"); escolher o registro existente continua livre. "Nova relação"
+só aparece para Compras e Administrador.
+
+**Fora desta regra.** Travas estruturais além de `operationallyUsed` — Item em
+Formulação ou Modelo, PA ligado a Produto, PATCH do Produto que religa o PA —
+ficam em MASTER-DATA-STRUCTURAL-LOCKS-01. Registros existentes não mudam.

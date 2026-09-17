@@ -12,6 +12,16 @@
  */
 
 import type { IndustrialMaterialCostSource } from "./industrial-cost-calculation.js";
+import type { UserRole } from "./users.js";
+
+/**
+ * Quem DEFINE referência de custo do Item — a vigência nova
+ * (`POST /items/:id/cost-references`) e a inicial, pedida junto com a criação
+ * do Item (`POST /items` com `initialCostReference`). Duas portas, uma lista:
+ * criar o Item não é caminho para definir custo sem ser do custeio
+ * (MASTER-DATA-EDIT-PERMISSIONS-01).
+ */
+export const ITEM_COST_REFERENCE_ROLES: readonly UserRole[] = ["COMMERCIAL", "ADMIN"];
 
 export interface ItemCostReferenceDTO {
   id: string;

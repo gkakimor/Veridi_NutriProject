@@ -5214,6 +5214,58 @@ derrubadas (teto 101, padrão 25, página mínimo 0, página por `z.coerce`, tam
 `pnpm --filter @veridi/api test` inteiro em banco de teste isolado — faixa paralela com 174 arquivos e 4.175 testes, e a
 serial, que esse script não alcançava desde `86e84c1`, com 8 arquivos e 132 testes.
 
+## Quem cria, edita e muda a situação de Item, Fornecedor e Produto (MASTER-DATA-EDIT-PERMISSIONS-01, 2026-09-16)
+
+**Fecha MASTER-DATA-EDIT-PERMISSIONS-01** ([discovery](discovery/MASTER-DATA-EDIT-PERMISSIONS-DISCOVERY-01.md), DE1–DE12
+do PO). Regra durável no §100. Na `main`, fora de PROD (`release/prod` segue `5b7c1a3`). Sem migration.
+
+**API.** `exigirPerfil` saiu de `customers.routes.ts` para `lib/current-user.ts` (com `responderSemPermissao`): 403
+`forbidden` antes do corpo e da existência, sem o 500 do `ForbiddenError` não mapeado. Listas por ato em
+`@veridi/shared`, as mesmas na tela: `ITEM_EDIT_ROLES`, `ITEM_QUALITY_CONTROL_ROLES`,
+`ITEM_PRODUCTION_CONSUMPTION_ROLES`, `ITEM_DEACTIVATE_ROLES`, `ITEM_REACTIVATE_ROLES`, `ITEM_COST_REFERENCE_ROLES`,
+`SUPPLIER_EDIT_ROLES`, `SUPPLIER_STATUS_CHANGE_ROLES`, `PRODUCT_EDIT_ROLES`, `PRODUCT_STATUS_CHANGE_ROLES`,
+`SUPPLIER_ITEM_EDIT_ROLES`, `PRODUCT_DOCUMENT_UPLOAD_ROLES` e `ATTACHMENT_ARCHIVE_ROLES`. No Item, a autoridade por campo
+mora em `items/item-permissions.ts`: controles e marca de consumo julgados contra o GRAVADO (na criação, contra
+`ITEM_TYPE_DEFAULTS`, que ganhou `requiresCoa`) e retirados da gravação de quem não os decide; custo de referência
+inicial de outro perfil é 403 e nada nasce. Inativar e reativar dos três cadastros usam UPDATE condicional
+(`active = !active`) e respondem 409 `invalid_status_transition` quando não mudam nada. `POST /products` com PA existente
+e laudo diferente é 409 `finished_item_controls_not_editable_here`. As rotas de referência de custo, da relação Item ×
+Fornecedor e de anexo passaram a ler as listas do shared, com os mesmos perfis de antes.
+
+**Web.** `pages/items/item-permissions.ts`, `pages/suppliers/supplier-permissions.ts` e
+`pages/products/product-permissions.ts` sobre `useOptionalAuth` (fora do provider, o comportamento de antes) e
+`lib/perfis.ts`. Quem não edita abre Item, Fornecedor e Produto em CONSULTA no mesmo modal (`definition-list`, trilha
+"Consulta", só "Fechar"); "+ Novo", "Editar"/"Ver" e "Inativar/Reativar" seguem as listas; as três páginas de criação
+recusam com "Seu perfil não permite cadastrar … Solicite a … o cadastro." e a volta. No formulário do Item, controles e
+"Consumido na produção" aparecem travados para quem não os decide (com a frase de quem altera) e o custo inicial só
+aparece para Comercial e Administrador. Subações preservadas: "Definir referência" no Item para o Comercial; roteiro
+padrão, resumo de custos, CMV e Documentos no Produto — anexar e arquivar agora pelas listas da API. Criação contextual
+condicionada: OC (item e fornecedor), relação Item × Fornecedor (item e fornecedor), Formulação e Modelo (item) e Pedido
+(produto), com a ajuda de a quem pedir; "Nova relação" e `?nova=1` só para Compras e Administrador. Ajuda "Como funciona"
+de Item, Produto e Fornecedor com a frase de permissão. 32 arquivos de teste antigos ganharam `useOptionalAuth` no mock do
+`AuthProvider`; o teste de Cliente no contexto deixou de exercitar a página de Produto para quem não a abre.
+
+**Fixtures.** `gmp-execution.test.ts` cria o Produto pelo Comercial (formulação e OP seguem com a Produção);
+`quality-documents.test.ts` cria o item com CoA pela Qualidade.
+
+**Fora do escopo, registrado.** ACQUISITION-COST-PERMISSION-01 (P1, custo de aquisição sem gate),
+ATTACHMENT-ACTIONS-BY-ROLE-01 (anexar e arquivar oferecidos a todos em Lote, Recebimento, Projeto e Amostra),
+MASTER-DATA-STRUCTURAL-LOCKS-01 e MASTER-DATA-STATUS-HISTORY-01. A regra D3 (Compras cria relação já homologada) segue
+com o ITEM-SUPPLIER-UX-DISCOVERY-01.
+
+**Validação.** Novas matrizes: API 41 testes de Item, 10 de Fornecedor e 15 de Produto; web 30 de Item, 12 de
+Fornecedor, 18 de Produto e 30 de criação no contexto. Mutação por script, 46 de 46 derrubadas (API 21: gates de POST,
+PATCH e situação nos três, listas vizinhas, controles, marca e custo liberados, gate pela presença da chave, 409 fora,
+laudo de PA existente, anexo aberto à Produção, rota da referência aberta a Compras, `exigirPerfil` sem perfil; web 25:
+ofertas, consulta, situação, páginas sem recusa, travas do formulário, documentos, OC, Formulação, Pedido, "Nova
+relação", `?nova=1` e a ajuda da bancada), com restauração conferida pelo hash do diff. `pnpm --filter @veridi/api test`
+em banco de teste isolado: faixa paralela 177 arquivos e 4.241 testes, serial 8 e 132; faixa de scripts 38 e 624;
+typecheck de shared, API e web. Suíte web completa (3.796 testes) duas vezes: 5 quedas em cada, todas por prazo de 5 s
+(`Test timed out`), sem asserção, e em conjuntos diferentes — `campo-numerico-guarda`, `listas-sem-consulta-solta` e
+`dates-formatador` na primeira; `dates-formatador` e `base-calculada-impressos` na segunda, rodada em paralelo com a
+suíte web completa de outra sessão. Nenhum dos quatro arquivos toca código desta rodada, e os quatro passam sozinhos
+(20/20 em 9,3 s).
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a

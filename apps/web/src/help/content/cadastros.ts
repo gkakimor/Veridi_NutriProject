@@ -135,6 +135,7 @@ export const cadastrosTopics = {
       "Inativar não exclui e não interrompe o que já está em curso: recebimento contra ordem de compra existente, consumo de produção e saldo em estoque continuam funcionando. O que o item deixa de aceitar é vínculo novo — nova relação com fornecedor, nova linha de ordem de compra, novo produto acabado e novo componente de formulação.",
       "Referência manual de custo é estimativa: entra na seleção automática só depois de compra real e oferta válida. Existindo compra real nos últimos 30 dias, é a compra que vale — a referência fica registrada e a tela do item diz que ela não está sendo usada. Várias ofertas válidas sem preferencial também não deixam a referência entrar sozinha: a fonte fica em “Ofertas disponíveis · seleção necessária” até alguém definir o preferencial. Material do cliente nunca ganha custo Veridi, mesmo com referência no item.",
       "Na lista, a busca casa código, nome ou código de barras; os filtros são por tipo e por situação. Marcar linhas permite exportar só o que foi marcado; Exportar CSV sem marcação leva o recorte filtrado.",
+      "Criar e editar o item são de Compras, Qualidade, Produção e Administrador; Comercial e Consulta abrem o item em consulta. Os quatro controles de rastreabilidade só mudam por Qualidade ou Administrador — quem cria sem ser deles recebe o padrão do tipo —, Consumido na produção só por Produção ou Administrador, e o custo de referência, inclusive o inicial, só por Comercial ou Administrador. Inativar é de Compras, Qualidade e Administrador; reativar, de Qualidade e Administrador.",
     ],
   },
 
@@ -256,6 +257,7 @@ export const cadastrosTopics = {
       "Inativar um produto não apaga nada e não pede confirmação de nada em aberto. A partir daí ele é recusado em nova linha de pedido, na confirmação de pedido e em nova ordem de produção.",
       "Documentos (arte de rótulo, ficha técnica) e Observações são referência: anexar e anotar não mudam nenhuma regra do produto. Dose e apresentação descrevem o produto e não alimentam cálculo — quem manda no cálculo por dose é a formulação.",
       "Na lista, cada linha oferece os atalhos CMV e Custos industriais, além de Inativar/Reativar. A busca casa código, nome, referência e cliente; os filtros são cliente, situação e ciclo de vida. Novo produto abre em tela própria.",
+      "Criar, editar, inativar e reativar o produto são de Comercial e Administrador — inclusive a criação direta, que nasce aprovada. Os demais perfis abrem o produto em consulta e seguem nas seções que são deles: roteiro padrão com a Produção, documentos com a Qualidade, CMV e custos. Exige CoA na criação vale só para o item de produto acabado que nasce junto; depois, o laudo muda no cadastro de Itens, pela Qualidade.",
     ],
   },
 
@@ -386,6 +388,7 @@ export const cadastrosTopics = {
       "Inativar não é bloqueado por ordem de compra em aberto: as compras e os recebimentos existentes seguem íntegros. O fornecedor inativo passa a ser recusado em nova ordem de compra e em nova relação Item x Fornecedor, e deixa de aparecer como candidato em sugestão de compra e como referência de custo.",
       "O cadastro de fornecedor não registra autoria de criação e alteração. Quem precisa dessa informação a encontra nos documentos de compra e recebimento.",
       "Na edição, o bloco Itens fornecidos é só leitura: código no fornecedor, homologação, preferencial, preço e pedido mínimo, com o caminho para Compras › Item x Fornecedor. Observações são notas internas. Novo fornecedor abre em tela própria, com esta mesma ajuda.",
+      "Criar, editar, inativar e reativar o fornecedor são de Compras e Administrador. Os demais perfis abrem o fornecedor em consulta; a Qualidade decide a homologação em Item x Fornecedor, não neste cadastro.",
     ],
   },
 

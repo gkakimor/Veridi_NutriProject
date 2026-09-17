@@ -25,7 +25,7 @@ import type { ListSuppliersParams } from "../lib/suppliers-api";
  * `<select>` só tinha ativos, todos onde tinha todos.
  */
 
-vi.mock("../app/AuthProvider", () => ({ useAuth: () => ({ user: { id: "u-1", role: "ADMIN" } }) }));
+vi.mock("../app/AuthProvider", () => ({ useOptionalAuth: () => null, useAuth: () => ({ user: { id: "u-1", role: "ADMIN" } }) }));
 vi.mock("../lib/customers-api", () => ({ listCustomers: vi.fn() }));
 vi.mock("../lib/suppliers-api", () => ({ listSuppliers: vi.fn() }));
 vi.mock("../lib/projects-api", () => ({ listProjects: vi.fn(), getProjectVocabulary: vi.fn() }));

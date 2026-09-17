@@ -25,7 +25,7 @@ vi.mock("../../lib/units-api", () => ({ listUnits: () => Promise.resolve([]) }))
 vi.mock("../../lib/costs-api", () => ({
   getFormulationCostEstimate: () => Promise.resolve(null),
 }));
-vi.mock("../../app/AuthProvider", () => ({ useAuth: () => ({ user: { role: "ADMIN" } }) }));
+vi.mock("../../app/AuthProvider", () => ({ useOptionalAuth: () => null, useAuth: () => ({ user: { role: "ADMIN" } }) }));
 
 import {
   activateFormulationVersion,

@@ -44,7 +44,7 @@ vi.mock("../../lib/items-api", () => ({
 vi.mock("../../lib/units-api", () => ({ listUnits: () => Promise.resolve(UNIDADES) }));
 
 const papel = { role: "ADMIN" };
-vi.mock("../../app/AuthProvider", () => ({
+vi.mock("../../app/AuthProvider", () => ({ useOptionalAuth: () => null,
   useAuth: () => ({ user: { id: "u1", name: "Pessoa", role: papel.role } }),
 }));
 

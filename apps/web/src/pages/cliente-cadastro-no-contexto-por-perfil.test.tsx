@@ -91,6 +91,13 @@ interface Hospedeiro {
   rota: string;
   campo: string;
   tela: () => ReactElement;
+  /**
+   * A tela só abre para quem cadastra Produto — Comercial e Administrador
+   * (MASTER-DATA-EDIT-PERMISSIONS-01), que também cadastram Cliente. Para os
+   * demais perfis ela recusa antes do campo existir: o caso "sem + Novo
+   * cliente" não acontece ali, e a recusa é provada na suíte do Produto.
+   */
+  soQuemCadastraProduto?: boolean;
 }
 
 const nada = () => undefined;
@@ -114,6 +121,7 @@ const HOSPEDEIROS: Hospedeiro[] = [
     rota: "/cadastros/produtos/novo",
     campo: "product-customer",
     tela: () => <ProductCreatePage />,
+    soQuemCadastraProduto: true,
   },
   {
     nome: "Produto (modal)",
@@ -196,34 +204,39 @@ describe.each(HOSPEDEIROS)("CUSTOMER-EDIT-PERMISSIONS-01 — Cliente no $nome", 
     ).toBeInTheDocument();
     expect(within(lista()).queryByText(AJUDA), `${hospedeiro.nome} ${role}`).toBeNull();
   });
-
-  it.each(NAO_CADASTRAM)(
-    "%s: sem + Novo cliente, a busca vazia diz a quem pedir, e o Cliente existente continua escolhível",
-    async (role) => {
-      sessao.role = role;
-      const user = userEvent.setup();
-      abrir(hospedeiro);
-      const campo = await campoDeCliente(hospedeiro.campo);
-
-      const termo = "cliente que ainda nao existe";
-      await user.type(campo, termo);
-      await buscaFeita(termo);
-
-      expect(within(lista()).getByText(AJUDA), `${hospedeiro.nome} ${role}`).toBeInTheDocument();
-      expect(
-        within(lista()).queryByRole("option", { name: /Novo cliente/ }),
-        `${hospedeiro.nome} ${role}`,
-      ).toBeNull();
-      expect(screen.queryByText("cadastro de cliente"), `${hospedeiro.nome} ${role}`).toBeNull();
-
-      // O mesmo campo escolhe o Cliente que já existe.
-      await user.clear(campo);
-      await user.type(campo, "Vida");
-      await buscaFeita("Vida");
-      const opcoes = within(lista()).getAllByRole("option");
-      expect(opcoes, `${hospedeiro.nome} ${role}`).toHaveLength(1);
-      await user.click(opcoes[0]!);
-      await waitFor(() => expect(campo.value, `${hospedeiro.nome} ${role}`).toContain("CLI-000001"));
-    },
-  );
 });
+
+describe.each(HOSPEDEIROS.filter((hospedeiro) => !hospedeiro.soQuemCadastraProduto))(
+  "CUSTOMER-EDIT-PERMISSIONS-01 — Cliente no $nome, para quem não cadastra",
+  (hospedeiro) => {
+    it.each(NAO_CADASTRAM)(
+      "%s: sem + Novo cliente, a busca vazia diz a quem pedir, e o Cliente existente continua escolhível",
+      async (role) => {
+        sessao.role = role;
+        const user = userEvent.setup();
+        abrir(hospedeiro);
+        const campo = await campoDeCliente(hospedeiro.campo);
+
+        const termo = "cliente que ainda nao existe";
+        await user.type(campo, termo);
+        await buscaFeita(termo);
+
+        expect(within(lista()).getByText(AJUDA), `${hospedeiro.nome} ${role}`).toBeInTheDocument();
+        expect(
+          within(lista()).queryByRole("option", { name: /Novo cliente/ }),
+          `${hospedeiro.nome} ${role}`,
+        ).toBeNull();
+        expect(screen.queryByText("cadastro de cliente"), `${hospedeiro.nome} ${role}`).toBeNull();
+
+        // O mesmo campo escolhe o Cliente que já existe.
+        await user.clear(campo);
+        await user.type(campo, "Vida");
+        await buscaFeita("Vida");
+        const opcoes = within(lista()).getAllByRole("option");
+        expect(opcoes, `${hospedeiro.nome} ${role}`).toHaveLength(1);
+        await user.click(opcoes[0]!);
+        await waitFor(() => expect(campo.value, `${hospedeiro.nome} ${role}`).toContain("CLI-000001"));
+      },
+    );
+  },
+);

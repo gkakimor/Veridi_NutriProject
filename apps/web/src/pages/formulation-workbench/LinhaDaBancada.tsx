@@ -18,6 +18,7 @@ import { DecimalField, PercentField } from "../../components/NumericField";
 import { EntityLink } from "../../components/EntityLink";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
+import { SELETOR_DE_ITEM_SEM_CADASTRO } from "../items/item-permissions";
 import { decimalLegivel } from "../../lib/decimal-field";
 import { decimalDaApiComparavel } from "../../lib/dirty-fields";
 import { formatPercentPtBr } from "../../lib/numeric-ptbr";
@@ -160,6 +161,8 @@ export function LinhaDaBancada({
             options={opcoesDeItem}
             onSearch={onBuscarItem}
             canCreate={Boolean(onCriarItem)}
+            /* Sem cadastro daqui, a busca vazia diz a quem pedir o item. */
+            {...(onCriarItem ? {} : SELETOR_DE_ITEM_SEM_CADASTRO)}
             createLabel="Novo item de estoque"
             /* Sair para cadastrar o item NÃO é descartar: o rascunho vai
                junto e volta aplicado na linha. */

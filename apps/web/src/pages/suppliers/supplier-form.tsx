@@ -4,6 +4,7 @@ import type { SupplierDTO } from "@veridi/shared";
 import {
   BR_STATE_CODES,
   formatBrPhone,
+  formatCnpj,
   formatZipCode,
   maskPhoneInput,
   maskZipCodeInput,
@@ -17,6 +18,7 @@ import { assinaturaDoFormulario } from "../../lib/dirty-fields";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
 import { isCompleteZipCode, lookupCep } from "../../lib/cep-api";
+import { QUEM_EDITA_FORNECEDOR } from "./supplier-permissions";
 
 /**
  * O formulário de Fornecedor, uma vez só.
@@ -136,11 +138,17 @@ export function useSupplierForm({
   mode,
   supplier,
   onSaved,
+  readOnly = false,
 }: {
   mode: "create" | "edit";
   supplier: SupplierDTO | null;
   /** Recebe o registro criado — permite selecioná-lo de volta na origem. */
   onSaved: (created?: SupplierDTO) => void;
+  /**
+   * Consulta: o perfil não edita o Fornecedor (MASTER-DATA-EDIT-PERMISSIONS-01).
+   * Os campos viram valores e nada é enviado — a API recusaria com 403.
+   */
+  readOnly?: boolean;
 }) {
   const [form, setForm] = useState<FormState>(() => initialState(supplier));
   const [saving, setSaving] = useState(false);
@@ -291,6 +299,7 @@ export function useSupplierForm({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (readOnly) return;
 
     const digitos = normalizeZipCode(form.zipCode);
     if (digitos.length > 0 && !isCompleteZipCode(digitos)) {
@@ -382,10 +391,120 @@ export function useSupplierForm({
     supplier,
     confirmarSaida,
     liberarGuarda,
+    readOnly,
   };
 }
 
 export type SupplierFormController = ReturnType<typeof useSupplierForm>;
+
+/** Ordens de compra e itens homologados — iguais em edição e em consulta. */
+function AtalhosDoFornecedor({ supplier }: { supplier: SupplierDTO }) {
+  return (
+    <RelatedLinks
+      links={[
+        { label: "Ordens de compra", to: `/compras/ordens?supplierId=${supplier.id}` },
+        {
+          label: "Itens homologados",
+          to: `/compras/item-fornecedor?supplierId=${supplier.id}`,
+        },
+      ]}
+    />
+  );
+}
+
+function StatusDoFornecedor({ supplier }: { supplier: SupplierDTO }) {
+  return (
+    <FormSection title="Status">
+      <div className="status-line">
+        <span className={supplier.active ? "badge badge--active" : "badge badge--inactive"}>
+          {supplier.active ? "Ativo" : "Inativo"}
+        </span>
+        <span className="field__hint">
+          Use "Inativar"/"Reativar" na lista para alterar o status.
+        </span>
+      </div>
+    </FormSection>
+  );
+}
+
+/** Um campo em consulta: o mesmo rótulo do formulário e o valor, sem caixa de edição. */
+function ValorConsultado({
+  rotulo,
+  valor,
+  multilinha = false,
+}: {
+  rotulo: string;
+  valor: string | null;
+  multilinha?: boolean;
+}) {
+  return (
+    <>
+      <dt>{rotulo}</dt>
+      <dd {...(multilinha ? { className: "is-multiline" } : {})}>{valor?.trim() ? valor : "—"}</dd>
+    </>
+  );
+}
+
+/**
+ * O Fornecedor em CONSULTA — MASTER-DATA-EDIT-PERMISSIONS-01.
+ *
+ * Mesmas seções, mesma ordem e mesmos rótulos do formulário, com os valores no
+ * lugar das caixas: quem não edita o Fornecedor lê tudo o que o formulário
+ * mostraria, sem campo que aceite digitação, sem consulta de CEP e sem
+ * "Salvar alterações" que terminaria em 403.
+ */
+function SupplierConsultaFields({ supplier }: { supplier: SupplierDTO }) {
+  return (
+    <div>
+      <AtalhosDoFornecedor supplier={supplier} />
+
+      <p className="field__hint">
+        Consulta. Só os perfis {QUEM_EDITA_FORNECEDOR} alteram o cadastro do fornecedor.
+      </p>
+
+      <FormSection
+        title="Identificação"
+        subtitle="Dados básicos do fornecedor usados em compras e recebimento."
+      >
+        <dl className="definition-list">
+          <ValorConsultado rotulo="Razão Social / Nome" valor={supplier.legalName} />
+          <ValorConsultado rotulo="Nome Fantasia" valor={supplier.tradeName} />
+          <ValorConsultado
+            rotulo="CNPJ"
+            valor={supplier.cnpj ? formatCnpj(supplier.cnpj) : null}
+          />
+        </dl>
+      </FormSection>
+
+      <FormSection title="Contato" subtitle="Usados para tratativas de compra e recebimento.">
+        <dl className="definition-list">
+          <ValorConsultado rotulo="Email" valor={supplier.email} />
+          <ValorConsultado rotulo="Telefone" valor={formatBrPhone(supplier.phone)} />
+        </dl>
+      </FormSection>
+
+      <FormSection title="Endereço">
+        <dl className="definition-list">
+          <ValorConsultado rotulo="CEP" valor={formatZipCode(supplier.zipCode)} />
+          <ValorConsultado rotulo="Logradouro" valor={supplier.street} />
+          <ValorConsultado rotulo="Número" valor={supplier.number} />
+          <ValorConsultado rotulo="Complemento" valor={supplier.complement} />
+          <ValorConsultado rotulo="Bairro" valor={supplier.district} />
+          <ValorConsultado rotulo="Cidade" valor={supplier.city} />
+          <ValorConsultado rotulo="UF" valor={supplier.state} />
+        </dl>
+      </FormSection>
+
+      <FormSection title="Observações">
+        <dl className="definition-list">
+          <ValorConsultado rotulo="Notas internas" valor={supplier.notes} multilinha />
+        </dl>
+      </FormSection>
+
+      <StatusDoFornecedor supplier={supplier} />
+    </div>
+  );
+}
 
 export function SupplierFormFields({
   form,
@@ -400,22 +519,15 @@ export function SupplierFormFields({
   handleSubmit,
   mode,
   supplier,
+  readOnly,
 }: SupplierFormController) {
+  if (readOnly && supplier) return <SupplierConsultaFields supplier={supplier} />;
+
   return (
     <form id={SUPPLIER_FORM_ID} onSubmit={handleSubmit}>
       {error && <p className="form-alert" role="alert">{error}</p>}
 
-      {supplier && (
-        <RelatedLinks
-          links={[
-            { label: "Ordens de compra", to: `/compras/ordens?supplierId=${supplier.id}` },
-            {
-              label: "Itens homologados",
-              to: `/compras/item-fornecedor?supplierId=${supplier.id}`,
-            },
-          ]}
-        />
-      )}
+      {supplier && <AtalhosDoFornecedor supplier={supplier} />}
 
       <FormSection
         title="Identificação"
@@ -645,18 +757,7 @@ export function SupplierFormFields({
         </div>
       </FormSection>
 
-      {mode === "edit" && supplier && (
-        <FormSection title="Status">
-          <div className="status-line">
-            <span className={supplier.active ? "badge badge--active" : "badge badge--inactive"}>
-              {supplier.active ? "Ativo" : "Inativo"}
-            </span>
-            <span className="field__hint">
-              Use "Inativar"/"Reativar" na lista para alterar o status.
-            </span>
-          </div>
-        </FormSection>
-      )}
+      {mode === "edit" && supplier && <StatusDoFornecedor supplier={supplier} />}
     </form>
   );
 }

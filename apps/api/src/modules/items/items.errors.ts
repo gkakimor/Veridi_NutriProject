@@ -47,6 +47,18 @@ export class InvalidCostReferenceError extends Error {
   }
 }
 
+/**
+ * Inativar o que já está inativo, reativar o que já está ativo: a tela partiu
+ * de uma situação que não é mais a do banco. Recusa de negócio — 409 com a
+ * frase —, nunca 500 nem 200 silencioso.
+ */
+export class InvalidItemStatusTransitionError extends Error {
+  constructor(active: boolean) {
+    super(active ? "Item já está ativo." : "Item já está inativo.");
+    this.name = "InvalidItemStatusTransitionError";
+  }
+}
+
 export class StructuralFieldLockedError extends Error {
   constructor(field: string) {
     const label = STRUCTURAL_FIELD_LABELS[field] ?? field;

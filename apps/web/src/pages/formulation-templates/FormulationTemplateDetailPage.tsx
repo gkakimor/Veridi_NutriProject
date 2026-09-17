@@ -102,6 +102,7 @@ import {
   unidadeLegadaDaLinha,
 } from "../formulation-workbench/linha-da-receita";
 import type { LinhaDaReceita } from "../formulation-workbench/linha-da-receita";
+import { usePodeCriarItem } from "../items/item-permissions";
 import {
   operandosDoFisico,
   previaDaDose,
@@ -372,6 +373,8 @@ export function FormulationTemplateDetailPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const canEdit = user?.role === "ADMIN" || user?.role === "PRODUCTION";
+  /* Cadastrar Item no meio do Modelo segue a lista do Item, não a do Modelo. */
+  const podeCadastrarItem = usePodeCriarItem();
 
   const [template, setTemplate] = useState<FormulationTemplateDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1120,7 +1123,7 @@ export function FormulationTemplateDetailPage() {
         opcoesDeItem={(linha) => opcoesDaLinha(linha).map(opcaoDoItem)}
         onBuscarItem={buscarItens}
         onCriarItem={
-          comEdicao
+          comEdicao && podeCadastrarItem
             ? (linha) =>
                 liberarGuarda(() =>
                   origem.goCreate({

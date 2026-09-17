@@ -53,7 +53,7 @@ vi.mock("../../lib/items-api", () => ({
 }));
 vi.mock("../../lib/units-api", () => ({ listUnits: () => Promise.resolve([]) }));
 
-vi.mock("../../app/AuthProvider", () => ({
+vi.mock("../../app/AuthProvider", () => ({ useOptionalAuth: () => null,
   useAuth: () => ({ user: { id: "u1", name: "Admin", role: "ADMIN" } }),
 }));
 

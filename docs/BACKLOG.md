@@ -37,6 +37,7 @@ zero BLOCKER. O MVP foi entregue; o que está aqui é evolução do produto.
 | 9b | P1 | ~~**CUSTOMER-STATUS-HARDENING-01**~~ — quem muda a situação cadastral e o aviso no documento em andamento (pré-homologação) | **FECHADO em 2026-09-16** · absorve CUSTOMER-STATUS-PERMISSIONS-01 (só ADMIN e COMMERCIAL alteram, 403 na API para os demais, que seguem consultando) e CUSTOMER-STATUS-DRAFT-WARNING-01 (aviso no Orçamento, Projeto e Pedido em andamento, pela situação atual que a leitura traz) · guardas de venda intactas · **sem migration** | — (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §95, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
 | 9c | P1 | ~~**CUSTOMER-EDIT-PERMISSIONS-01**~~ — quem cria e edita o cadastro do Cliente | **FECHADO em 2026-09-16, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · decisão do PO (opção A do [discovery](discovery/CUSTOMER-EDIT-PERMISSIONS-DISCOVERY-01.md)): só ADMIN e COMMERCIAL criam e editam (`CUSTOMER_EDIT_ROLES`, lista própria), 403 na API antes do corpo e da existência · os demais perfis consultam o Cliente no mesmo modal, sem campo editável · "+ Novo cliente" só para quem cadastra, com a ajuda de a quem pedir nos seletores · `UpdateCustomerInput` com o endereço que já trafegava · **sem migration** | Publicação quando o PO decidir (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §98, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
 | 9d | P1 | ~~**CUSTOMER-PAYMENT-DEFAULTS-01**~~ — forma e condição de pagamento padrão do Cliente como sugestão para novos orçamentos | **FECHADO em 2026-09-16, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · D1–D6 do PO ([discovery](discovery/CUSTOMER-PAYMENT-DEFAULTS-DISCOVERY-01.md)): forma (PIX, Boleto, Transferência, Cartão, Outro) e condição opcionais no Cliente, copiadas para a V1 (e para a primeira proposta depois de só legado); V2, recompra e duplicação partem da versão; "Aplicar padrão do cliente" só na tela; o Pedido congela a forma; "Forma de pagamento" passou a ser o meio e à vista/parcelado virou "Condição de pagamento"; parcelado sem parcelas recusado no Cliente e no Orçamento · **migration aditiva** `20260925093032` (sem backfill) | Publicação quando o PO decidir (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §99, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
+| 9e | P1 | ~~**MASTER-DATA-EDIT-PERMISSIONS-01**~~ — quem cria, edita, inativa e reativa Item, Fornecedor e Produto | **FECHADO em 2026-09-16, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · DE1–DE12 do PO ([discovery](discovery/MASTER-DATA-EDIT-PERMISSIONS-DISCOVERY-01.md)): Item com Compras, Qualidade, Produção e ADMIN, os quatro controles só Qualidade e ADMIN pela mudança de valor, "Consumido na produção" só Produção e ADMIN, custo de referência inicial só Comercial e ADMIN (recusado, nunca ignorado), inativar Compras/Qualidade/ADMIN e reativar Qualidade/ADMIN · Fornecedor com Compras e ADMIN · Produto com Comercial e ADMIN, inclusive a criação direta aprovada, e "Exige CoA" só para o PA que nasce junto · 403 antes do corpo e da existência (`exigirPerfil` compartilhado), 409 de situação · consulta no mesmo modal, criação contextual e "Nova relação" por perfil · **sem migration** | Publicação quando o PO decidir (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §100, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
 | 10 | P2 | **Estabilização final ampla do produto** | Sem ID e sem escopo | Abrir ID e escopo quando 4–8 fecharem | WAVE 4, permissões e WAVE 5 |
 | 11 | — | **DEMO-DATASET-01** — ambiente DEMO com massa fictícia determinística | **AGUARDANDO DEFINIÇÃO DO PO** | Massa fictícia determinística + reset protegido para um futuro ambiente Railway DEMO, e o fluxo `main` → `release/demo` → aprovação → o MESMO SHA em `release/prod`. Nada criado: sem ambiente, sem `release/demo` | PO |
 
@@ -49,6 +50,9 @@ watchlist (E). A estabilização final (10) é o lugar natural para varrê-los.
 |---|---|---|
 | **CUSTOMER-CNPJ-AUTOFILL-01** — consulta automática de CNPJ no cadastro do Cliente (P1) | **Aguardando aprovação explícita da Veridi.** NÃO INICIAR SEM APROVAÇÃO EXPLÍCITA DA VERIDI. Provedor definido: Serpro — Consulta CNPJ Básica | C |
 | **CUSTOMER-MASTER-DATA-AUDIT-01** — histórico de antes/depois do cadastro do Cliente (P2) | Futuro, registrado em 2026-09-16 (CUSTOMER-EDIT-PERMISSIONS-01); avaliar antes de construir | G |
+| **ACQUISITION-COST-PERMISSION-01** — `PUT /receipt-lines/:id/acquisition-cost` só exige sessão (P1) | Registrado em 2026-09-16 (MASTER-DATA-EDIT-PERMISSIONS-01), sem corrigir: quem define custo de aquisição é decisão do PO | A |
+| **MASTER-DATA-STRUCTURAL-LOCKS-01** — travas estruturais do cadastro mestre além de `operationallyUsed` | Registrado em 2026-09-16 (MASTER-DATA-EDIT-PERMISSIONS-01); pergunta de produto antes de construir | G |
+| **MASTER-DATA-STATUS-HISTORY-01** — motivo e histórico de Inativar/Reativar de Item, Fornecedor e Produto (P2) | Futuro, registrado em 2026-09-16 (MASTER-DATA-EDIT-PERMISSIONS-01); exigiria migration | G |
 | **OPS-BACKUP-01** — backup agendado de PROD (HIGH) | Snapshot do Railway recusado e PITR desligado; o backup lógico JSON é restaurável e provado. Rotina agendada é decisão de infraestrutura | A |
 | COST-VAR-02 — variação de CMV e proteção de margem | Bloqueado: sete decisões do PO e dado real em produção | [`archive/COST-VAR-01…`](archive/COST-VAR-01_AUDITORIA_VARIACAO_CMV.md) |
 | #8E, #8F, #8G · PLAN-DATE-01 · UX-HELP-03 | Melhorias aguardando autorização | B, E |
@@ -157,6 +161,15 @@ conferência numérica ficam em [`archive/E2E_AUDIT_2026-09-07.md`](archive/E2E_
 aqui fica só o que exige trabalho, com a severidade **do PO**, que nem sempre é
 a do auditor.
 
+### ACQUISITION-COST-PERMISSION-01 — custo de aquisição definido por qualquer sessão — P1
+
+Registrado em 2026-09-16 por MASTER-DATA-EDIT-PERMISSIONS-01, **sem corrigir** (DE12 do PO). `PUT
+/receipt-lines/:id/acquisition-cost` (`apps/api/src/modules/costs/costs.routes.ts`) valida o corpo e grava o custo de
+aquisição da linha de recebimento sem conferir perfil: VIEWER define o custo real que a seleção automática (§53) usa
+antes de qualquer oferta ou referência. A referência manual já é de Comercial e Administrador
+(`ITEM_COST_REFERENCE_ROLES`, §100). A pergunta: quem define custo de aquisição — Compras, Comercial, Administrador —, e
+se a recusa segue o padrão `exigirPerfil` (403 antes do corpo e da existência).
+
 ### LOW e UX da triagem de 2026-09-07
 
 | ID | Título | Sev. | Tam. |
@@ -204,6 +217,7 @@ mudou.
 | ~~**FORMULATION-PRINT-ADJUSTMENTS-01**~~ | **ABSORVIDO por FORMULATION-TECHNICAL-SHEET-PDF-01 (2026-09-15).** O achado era que nenhum impresso lia a pureza, a reserva (o antigo *overage*) nem o físico por unidade da Formulação. A Ficha Técnica do Produto lê os três direto da VERSÃO — pureza aplicada com nota quando o cadastro divergiu desde então, reserva por linha e "Por embalagem" na unidade de estoque — e diz "não aplicada" quando a versão histórica registrou pureza sem autorizar a correção, que é o que o modo da quantidade significa no papel. Fora da Formulação (Folha de Receita, OP, CMV, Cálculo) o achado do PDF-DOCUMENT-SYSTEM-01 segue como está: aqueles DTOs não trazem os ajustes, e levá-los é decisão de outro item | UX | — |
 | ~~**FORMULATION-TEMPLATE-BASIS-EDIT-01**~~ | **ABSORVIDO por FORMULATION-TEMPLATE-WORKBENCH-01 (2026-09-16).** O achado era a falta de seletor de base na linha do Modelo. A base deixou de ser um campo genérico a oferecer: ela é consequência da SEÇÃO — embalagem conta por unidade acabada, composição conta por dose quando a receita é por dose (`baseSugeridaDaSecao`, `packages/shared`) —, e a fatia 1 já a sugere na linha nova pelo tipo real do Item. A linha que já declarou base não é tocada, e `FIXED_BASIS` continua existindo: matriz histórica escrita sobre a base continua sobre a base. O acabamento visual das duas seções é da fatia 2 | UX | — |
 | **UI-NUMERIC-FIELD-STANDARD-01** | Aplicar ao sistema inteiro o padrão de campo numérico homologado na Formulação: caixa compacta, borda única, canto arredondado, número à direita, pt-BR, setas de incremento/decremento respeitando a última casa escrita e limites conforme o domínio. Pedido do PO em 2026-09-16, registrado sem implementar: é varredura de tela por tela, e entra na estabilização final (10) ou numa rodada própria | UX | — |
+| **ATTACHMENT-ACTIONS-BY-ROLE-01** | Documentos de Lote, Recebimento, Projeto e Amostra (`AttachmentsSection`) oferecem anexar e "Arquivar" a todo perfil, mas a API só aceita anexar com a lista do contexto (Lote e Recebimento: Compras, Qualidade e ADMIN; Projeto: Comercial, Qualidade e ADMIN; Amostra: também Produção) e arquivar com Qualidade e ADMIN — o clique termina em 403. O Produto já passa `canUpload`/`canArchive` pelas listas de `@veridi/shared` desde MASTER-DATA-EDIT-PERMISSIONS-01; levar o mesmo às outras quatro telas pede as listas dos contextos no shared | UX | S |
 | **NAV-TWO-SEARCHES-01** | Convivem "Buscar ou escanear lote" no topo e "Buscar telas…" na coluna; unificar é assunto da busca global de registros. Conferido no código em 2026-09-15: as duas seguem | UX | — |
 
 ### Achados do FAST-DEVELOPMENT-RESET-02 (2026-09-11)
@@ -279,7 +293,8 @@ Veridi, quebrar em requirements independentes:
 
 - regra de geração automática do número de lote;
 - limiar/alerta de validade próxima;
-- permissões detalhadas por papel;
+- permissões detalhadas por papel — o cadastro mestre já tem decisão do PO (Cliente §98; Item, Fornecedor e
+  Produto §100) e a execução da Produção tem discovery próprio (fila, posição 7);
 - regras de responsabilidade e liberação da Qualidade;
 - códigos de motivo de perda/rendimento;
 - conteúdo, formato e dimensões da etiqueta e impressora;
@@ -423,6 +438,7 @@ apareceu em nenhuma das 40 execuções completas dessa medição.
 | **W8** | Tetos de 100 que SELECTOR-CUTOFF-WAVE-02 revalidou e manteve por não serem corte de escolha: dica de homologação da OC (`PurchaseOrderPage.tsx:380`, relações do fornecedor — acima de 100 a dica some da linha, mas fornecedor e item seguem com busca e a OC não depende dela), relações do cadastro de Item/Fornecedor (`SupplierItemsSection.tsx:29`, tabela só leitura; a lista completa, com filtro, é Compras → Item × Fornecedor), amostras da ficha do Projeto (`ProjectDetailPage.tsx:114`, as 100 mais recentes), usuários (`UsersPage.tsx:41`, listagem, fora da fase — Auth). FO-03 saiu em FO03-PENDING-CUTOFF-01 (2026-09-13): a folha lê todas as páginas de `onlyPending` até o total | Medido no dev: até 59 relações por fornecedor e 9 por item, 1 amostra por projeto; 685 usuários, quase todos resíduo de teste (TEST-USERS-LEGACY-RESIDUE-01, que saiu com a recriação do `veridi_dev` em 2026-09-14). Os de recurso industrial (Modelo de Estrutura de Custo, Roteiro, `porId` do Planejamento) eram seletor e fecharam na wave. Vira item da seção A quando algum passar do teto |
 | **W9** | `pages/print/operational-sheets.test.tsx`: os dois primeiros testes do FO-02 caíram por `waitFor` de 1 s em `abrirFolha` (a folha ainda em "Gerando PDF…") numa execução fria de 19 arquivos em paralelo (FO03-PENDING-CUTOFF-01); o arquivo sozinho e duas reexecuções do mesmo gate passaram | FO-02 intocado na rodada e sem falha de conteúdo: é o primeiro `import()` do documento sob CPU disputada. Se voltar no `pnpm test`, o remédio é o prazo do `waitFor` de `abrirFolha`, não o código da folha |
 | **W10** | `pages/periodo-invertido-listas.test.tsx`, caso "'Recebimentos': a resposta atrasada não aparece; voltar ao período consulta uma vez": caiu uma vez na suíte web completa de CUSTOMER-EDIT-PERMISSIONS-01 (2026-09-16, 3.657 testes) com `Unable to find an element with the text: Carregando…` — o estado de carregamento é transitório e já tinha passado | Sozinho passou 3 de 3, e nenhum módulo da rodada está no caminho da tela de Recebimentos. Não caiu na suíte completa seguinte (WEB-SUITE-PREEXISTING-FAILURES-01, 2026-09-16: 3.657 testes, 0 falhas). Se voltar, o remédio é o teste esperar o carregamento sem depender de ver o instante dele |
+| **W11** | Prazo de 5 s do Vitest estourado sob carga na suíte web completa (MASTER-DATA-EDIT-PERMISSIONS-01, 2026-09-16, 3.796 testes, duas execuções com 5 quedas cada, só `Test timed out in 5000ms`): `lib/dates-formatador.test.ts` nas duas; `components/campo-numerico-guarda.test.ts` e `pages/listas-sem-consulta-solta.test.ts` (guardas que varrem o código-fonte) na primeira; `pages/print/base-calculada-impressos.test.tsx` na segunda, que rodou em paralelo com a suíte web completa de outra sessão | Sem asserção falhando, conjunto diferente a cada execução, nenhum dos arquivos no caminho da rodada, e os quatro passam sozinhos (20/20 em 9,3 s). Se virar rotina, o remédio é prazo próprio nesses arquivos (o formatador percorre todos os fusos; as guardas leem a árvore inteira), não reexecutar até passar |
 
 ---
 
@@ -737,6 +753,23 @@ CNPJ, de razão social ou de perfil tributário não deixa rastro do valor anter
 append-only (§95); o cadastro, não. A pergunta a responder: vale um histórico append-only de antes/depois para os
 campos estruturais (CNPJ, razão social, perfil tributário e outros), para quais campos, quem lê, e como convive com os
 snapshots que os documentos já congelam. Exigiria migration. Quem pode alterar já está decidido (§98).
+
+### MASTER-DATA-STRUCTURAL-LOCKS-01 — travas estruturais do cadastro mestre — sem posição
+
+Registrado em 2026-09-16 por MASTER-DATA-EDIT-PERMISSIONS-01 (DE11 do PO), **sem implementação**. Hoje a única trava
+de campo estrutural é `Item.operationallyUsed` (OC, recebimento, lote ou movimento travam tipo, unidade, lote e
+validade). Ficaram de fora, sem trava nenhuma: Item usado em Formulação ou Modelo (mudar tipo ou unidade reescreve o
+significado das linhas), item de produto acabado ligado a Produto, e `PATCH /products/:id`, que religa ou desliga o PA
+do Produto sem conferir lote, OP ou Pedido. A pergunta: quais vínculos travam quais campos, e se a recusa é por campo
+(como `structural_field_locked`) ou por ato. Quem pode editar já está decidido (§100).
+
+### MASTER-DATA-STATUS-HISTORY-01 — motivo e histórico de Inativar/Reativar — P2 · FUTURO
+
+Registrado em 2026-09-16 por MASTER-DATA-EDIT-PERMISSIONS-01 (DE5 do PO), **sem posição e sem implementação**. Item,
+Fornecedor e Produto inativam e reativam sem motivo e sem histórico: só `active` e `updatedAt` mudam. O Cliente já tem
+motivo obrigatório e histórico append-only (§95). A pergunta: motivo obrigatório nos três, histórico com autor e data,
+e se a reativação do Item continua mais estreita (Qualidade e Administrador) quando houver motivo registrado. Exigiria
+migration. Quem inativa e reativa, e o 409 da transição repetida, já estão decididos (§100).
 
 ---
 

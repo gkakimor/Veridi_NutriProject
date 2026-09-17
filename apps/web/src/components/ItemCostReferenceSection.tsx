@@ -7,6 +7,7 @@ import {
   COST_SOURCE_AUTO_SELECTION_TEXT,
   hojeComercial,
   INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS,
+  ITEM_COST_REFERENCE_ROLES,
 } from "@veridi/shared";
 import { useAuth } from "../app/AuthProvider";
 import { createItemCostReference, getItemCostReferences } from "../lib/items-api";
@@ -14,6 +15,7 @@ import { listUnits } from "../lib/units-api";
 import { formatBRL, formatUnitPriceBRL } from "../lib/currency";
 import { formatDate, formatDateTime } from "../lib/dates";
 import { mensagemNumeroVazio } from "../lib/decimal-field";
+import { perfilPermite } from "../lib/perfis";
 import { numericInvalidMessage, parsePtBrNumber } from "../lib/numeric-ptbr";
 import { CASAS_CUSTO_UNITARIO, OPCOES_CUSTO_UNITARIO } from "../lib/numeric-scales";
 import { FormSection } from "./FormSection";
@@ -44,7 +46,8 @@ function hojeISO(): string {
  */
 export function ItemCostReferenceSection({ itemId }: { itemId: string }) {
   const { user } = useAuth();
-  const podeDefinir = user?.role === "COMMERCIAL" || user?.role === "ADMIN";
+  // A mesma lista da API — que recusa também o custo inicial pedido na criação do Item.
+  const podeDefinir = perfilPermite(ITEM_COST_REFERENCE_ROLES, user?.role);
 
   const [data, setData] = useState<ItemCostReferencesResponse | null>(null);
   const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
