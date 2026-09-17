@@ -37,7 +37,7 @@ vi.mock("../../lib/units-api", () => ({
     Promise.resolve([{ code: "kg", label: "Quilograma", dimension: "MASS", toBaseFactor: "1000" }]),
 }));
 vi.mock("../../lib/costs-api", () => ({ getFormulationCostEstimate: vi.fn() }));
-vi.mock("../../app/AuthProvider", () => ({ useAuth: () => ({ user: { role: "ADMIN" } }) }));
+vi.mock("../../app/AuthProvider", () => ({ useOptionalAuth: () => null, useAuth: () => ({ user: { role: "ADMIN" } }) }));
 
 import {
   getFormulationVersion,

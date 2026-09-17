@@ -6,7 +6,11 @@ import { getPrisma } from "../../db/prisma.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
-import { DuplicateCnpjError, SupplierNotFoundError } from "./suppliers.errors.js";
+import {
+  DuplicateCnpjError,
+  InvalidSupplierStatusTransitionError,
+  SupplierNotFoundError,
+} from "./suppliers.errors.js";
 import type {
   CreateSupplierInput,
   ListSuppliersQuery,
@@ -184,20 +188,28 @@ export async function updateSupplier(
   }
 }
 
-export async function activateSupplier(id: string): Promise<SupplierDTO> {
-  await requireSupplier(id);
-  const supplier = await getPrisma().supplier.update({
-    where: { id },
-    data: { active: true },
+/**
+ * Inativar e reativar: a gravação só acontece se o Fornecedor estiver na
+ * situação de partida, e a condição mora no próprio UPDATE — dois pedidos
+ * concorrentes não partem da mesma situação, e o segundo cai no 409.
+ */
+async function mudarSituacaoDoFornecedor(id: string, active: boolean): Promise<SupplierDTO> {
+  const prisma = getPrisma();
+  const { count } = await prisma.supplier.updateMany({
+    where: { id, active: !active },
+    data: { active },
   });
-  return toSupplierDTO(supplier);
+  if (count === 0) {
+    await requireSupplier(id);
+    throw new InvalidSupplierStatusTransitionError(active);
+  }
+  return toSupplierDTO(await prisma.supplier.findUniqueOrThrow({ where: { id } }));
+}
+
+export async function activateSupplier(id: string): Promise<SupplierDTO> {
+  return mudarSituacaoDoFornecedor(id, true);
 }
 
 export async function deactivateSupplier(id: string): Promise<SupplierDTO> {
-  await requireSupplier(id);
-  const supplier = await getPrisma().supplier.update({
-    where: { id },
-    data: { active: false },
-  });
-  return toSupplierDTO(supplier);
+  return mudarSituacaoDoFornecedor(id, false);
 }

@@ -1,5 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
+import { SUPPLIER_EDIT_ROLES, SUPPLIER_STATUS_CHANGE_ROLES } from "@veridi/shared";
+import { exigirPerfil } from "../../lib/current-user.js";
 import {
   activateSupplier,
   createSupplier,
@@ -8,7 +10,11 @@ import {
   listSuppliers,
   updateSupplier,
 } from "./suppliers.service.js";
-import { DuplicateCnpjError, SupplierNotFoundError } from "./suppliers.errors.js";
+import {
+  DuplicateCnpjError,
+  InvalidSupplierStatusTransitionError,
+  SupplierNotFoundError,
+} from "./suppliers.errors.js";
 import {
   createSupplierSchema,
   listSuppliersQuerySchema,
@@ -26,6 +32,12 @@ function formatZodError(error: ZodError) {
  * `GET /suppliers`, `GET /suppliers/:id`, `POST /suppliers`,
  * `PATCH /suppliers/:id`, `POST /suppliers/:id/activate`,
  * `POST /suppliers/:id/deactivate`.
+ *
+ * Consultar é de toda sessão. Criar e editar são de Compras e Administrador
+ * (`SUPPLIER_EDIT_ROLES`); inativar e reativar também, por lista própria
+ * (`SUPPLIER_STATUS_CHANGE_ROLES`) — conferido antes do corpo e da existência
+ * (MASTER-DATA-EDIT-PERMISSIONS-01). A Qualidade homologa na relação Item ×
+ * Fornecedor, não no cadastro do Fornecedor.
  *
  * Sem exclusão física: fornecedores inativos permanecem visíveis.
  */
@@ -50,6 +62,9 @@ export const suppliersRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/suppliers", async (request, reply) => {
+    const actor = exigirPerfil(request, reply, SUPPLIER_EDIT_ROLES);
+    if (!actor) return reply;
+
     const parsed = createSupplierSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply
@@ -71,6 +86,11 @@ export const suppliersRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.patch("/suppliers/:id", async (request, reply) => {
+    // Antes do `id` servir para qualquer leitura: sem permissão, fornecedor
+    // existente e inexistente recebem a mesma resposta.
+    const actor = exigirPerfil(request, reply, SUPPLIER_EDIT_ROLES);
+    if (!actor) return reply;
+
     const { id } = request.params as { id: string };
     const parsed = updateSupplierSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -96,6 +116,9 @@ export const suppliersRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/suppliers/:id/activate", async (request, reply) => {
+    const actor = exigirPerfil(request, reply, SUPPLIER_STATUS_CHANGE_ROLES);
+    if (!actor) return reply;
+
     const { id } = request.params as { id: string };
     try {
       return reply.send(await activateSupplier(id));
@@ -103,17 +126,30 @@ export const suppliersRoutes: FastifyPluginAsync = async (app) => {
       if (error instanceof SupplierNotFoundError) {
         return reply.status(404).send({ error: "not_found" });
       }
+      if (error instanceof InvalidSupplierStatusTransitionError) {
+        return reply
+          .status(409)
+          .send({ error: "invalid_status_transition", message: error.message });
+      }
       throw error;
     }
   });
 
   app.post("/suppliers/:id/deactivate", async (request, reply) => {
+    const actor = exigirPerfil(request, reply, SUPPLIER_STATUS_CHANGE_ROLES);
+    if (!actor) return reply;
+
     const { id } = request.params as { id: string };
     try {
       return reply.send(await deactivateSupplier(id));
     } catch (error) {
       if (error instanceof SupplierNotFoundError) {
         return reply.status(404).send({ error: "not_found" });
+      }
+      if (error instanceof InvalidSupplierStatusTransitionError) {
+        return reply
+          .status(409)
+          .send({ error: "invalid_status_transition", message: error.message });
       }
       throw error;
     }

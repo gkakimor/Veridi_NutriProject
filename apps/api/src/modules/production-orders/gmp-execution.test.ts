@@ -175,26 +175,35 @@ async function receiveStock(itemId: string, quantity: string) {
   return lot;
 }
 
+/**
+ * O Produto nasce pelo Comercial: o cadastro é dele
+ * (MASTER-DATA-EDIT-PERMISSIONS-01). O que estas suítes provam — formulação,
+ * OP e execução — continua com a Produção, no `app` de cada teste.
+ */
+async function criarProdutoPeloComercial(payload: Record<string, unknown>) {
+  const comercial = buildTestApp("COMMERCIAL");
+  await comercial.ready();
+  const resposta = await comercial.inject({ method: "POST", url: "/products", payload });
+  await comercial.close();
+  expect(resposta.statusCode, resposta.body).toBe(201);
+  const product = resposta.json();
+  fixtureProductIds.push(product.id);
+  return product;
+}
+
 async function createProductWithFormulation(
   app: App,
   components: { itemId: string; quantity: string; unitCode: string }[],
   overrides: { customerId?: string; shelfLifeMonths?: number; businessLotCode?: string } = {},
 ) {
   const finishedItem = await createItem("FINISHED_PRODUCT", { unitCode: "un", controlsExpiry: true });
-  const product = (
-    await app.inject({
-      method: "POST",
-      url: "/products",
-      payload: {
-        name: `Produto GMP ${marker()}`,
-        finishedProductItemId: finishedItem.id,
-        customerId: overrides.customerId ?? (await fixtureCustomerId()),
-        ...(overrides.shelfLifeMonths ? { shelfLifeMonths: overrides.shelfLifeMonths } : {}),
-        ...(overrides.businessLotCode ? { businessLotCode: overrides.businessLotCode } : {}),
-      },
-    })
-  ).json();
-  fixtureProductIds.push(product.id);
+  const product = await criarProdutoPeloComercial({
+    name: `Produto GMP ${marker()}`,
+    finishedProductItemId: finishedItem.id,
+    customerId: overrides.customerId ?? (await fixtureCustomerId()),
+    ...(overrides.shelfLifeMonths ? { shelfLifeMonths: overrides.shelfLifeMonths } : {}),
+    ...(overrides.businessLotCode ? { businessLotCode: overrides.businessLotCode } : {}),
+  });
 
   const version = (
     await app.inject({ method: "POST", url: `/products/${product.id}/formulation-versions`, payload: {} })
@@ -646,18 +655,11 @@ describe("Folha de Receita", () => {
     });
 
     const finishedItem = await createItem("FINISHED_PRODUCT", { unitCode: "un", controlsExpiry: true });
-    const product = (
-      await app.inject({
-        method: "POST",
-        url: "/products",
-        payload: {
-          name: `Produto Cliente GMP ${marker()}`,
-          finishedProductItemId: finishedItem.id,
-          customerId: customerA.id,
-        },
-      })
-    ).json();
-    fixtureProductIds.push(product.id);
+    const product = await criarProdutoPeloComercial({
+      name: `Produto Cliente GMP ${marker()}`,
+      finishedProductItemId: finishedItem.id,
+      customerId: customerA.id,
+    });
     const version = (
       await app.inject({ method: "POST", url: `/products/${product.id}/formulation-versions`, payload: {} })
     ).json();

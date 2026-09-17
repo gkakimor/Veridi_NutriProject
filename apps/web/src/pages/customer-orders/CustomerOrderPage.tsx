@@ -90,6 +90,11 @@ import {
   SELETOR_DE_CLIENTE_SEM_CADASTRO,
   usePodeEditarCliente,
 } from "../customers/customer-permissions";
+import {
+  PEDIR_CADASTRO_DE_PRODUTO,
+  SELETOR_DE_PRODUTO_SEM_CADASTRO,
+  usePodeEditarProduto,
+} from "../products/product-permissions";
 
 /**
  * Ícone de ajuda de uma coluna do Plano, lido do registro central.
@@ -370,6 +375,9 @@ export function CustomerOrderPage() {
   const isNew = !id;
   /* Escolher Cliente existente é de quem monta o Pedido; cadastrar um novo, não. */
   const podeCadastrarCliente = usePodeEditarCliente();
+  /* O mesmo para o Produto: cadastrar é de Comercial e Administrador
+     (MASTER-DATA-EDIT-PERMISSIONS-01). */
+  const podeCadastrarProduto = usePodeEditarProduto();
 
   const [customerOrder, setCustomerOrder] = useState<CustomerOrderDTO | null>(null);
   const [loading, setLoading] = useState(!isNew);
@@ -1748,10 +1756,17 @@ options={customerOptions.map((customer) => ({
                               ? "Digite código ou nome do produto…"
                               : "Selecione o cliente primeiro."
                           }
-                          noOptionsMessage="Este cliente ainda não possui produtos disponíveis para pedido."
+                          noOptionsMessage={
+                            podeCadastrarProduto
+                              ? "Este cliente ainda não possui produtos disponíveis para pedido."
+                              : `Este cliente ainda não possui produtos disponíveis para pedido. ${PEDIR_CADASTRO_DE_PRODUTO}`
+                          }
+                          {...(podeCadastrarProduto
+                            ? {}
+                            : { emptyMessage: SELETOR_DE_PRODUTO_SEM_CADASTRO.emptyMessage })}
                           onSearch={buscarProdutos}
                           options={optionsForRow(line)}
-                          canCreate
+                          canCreate={podeCadastrarProduto}
                           createLabel="Novo produto"
                           onCreateNew={() =>
                             liberarGuarda(() =>

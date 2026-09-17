@@ -16,6 +16,7 @@ import { listItems, setItemActive } from "../../lib/items-api";
 import { useFilteredPage, useListQuery } from "../../lib/list-query";
 import { listUnits } from "../../lib/units-api";
 import { ItemFormModal } from "./ItemFormModal";
+import { useAutoridadeNoItem } from "./item-permissions";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { RowActions } from "../../components/RowActions";
 import {
@@ -45,6 +46,13 @@ const PAGE_SIZE = 20;
  * tabela densa + modal fullscreen para os proximos cadastros.
  */
 export function ItemsPage() {
+  /*
+   * MASTER-DATA-EDIT-PERMISSIONS-01: criar e editar são de Compras, Qualidade,
+   * Produção e Administrador; inativar e reativar têm listas próprias. Quem não
+   * edita abre o Item em consulta — pela linha, pelo "Ver" ou por link de outra
+   * tela — e não recebe "+ Novo item de estoque".
+   */
+  const autoridade = useAutoridadeNoItem();
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<ItemType | "">("");
@@ -121,6 +129,8 @@ export function ItemsPage() {
       window.alert(
         err instanceof Error ? err.message : "Falha ao atualizar status",
       );
+      // Recusa por situação que já mudou (409): a linha volta a mostrar a verdade.
+      reload();
     }
   }
 
@@ -140,9 +150,11 @@ export function ItemsPage() {
         {/* Leva à tela oficial, não ao modal: o cadastro passou a ter URL
             própria, e é ela que sobrevive a um F5 e vale como link. O modal
             continua servindo à EDIÇÃO, aberta a partir da linha. */}
-        <Link className="btn btn--primary" to="/cadastros/itens/novo">
-          + Novo item de estoque
-        </Link>
+        {autoridade.editar && (
+          <Link className="btn btn--primary" to="/cadastros/itens/novo">
+            + Novo item de estoque
+          </Link>
+        )}
         <ExportCsvButton path="/items/export.csv" filters={{ search, type: typeFilter, active: activeFilter === "all" ? undefined : activeFilter === "active" }} />
 </div>
 
@@ -301,20 +313,24 @@ export function ItemsPage() {
                 <td onClick={(event) => event.stopPropagation()}>
                   <RowActions
                     label={`Mais ações de ${item.code}`}
-                    actions={[
-                      {
-                        label: item.active ? "Inativar" : "Reativar",
-                        destructive: item.active,
-                        onSelect: () => handleToggleActive(item),
-                      },
-                    ]}
+                    actions={
+                      (item.active ? autoridade.inativar : autoridade.reativar)
+                        ? [
+                            {
+                              label: item.active ? "Inativar" : "Reativar",
+                              destructive: item.active,
+                              onSelect: () => handleToggleActive(item),
+                            },
+                          ]
+                        : []
+                    }
                   >
                     <button
                       type="button"
                       className="btn btn--ghost btn--sm"
                       onClick={() => setModalState({ mode: "edit", item })}
                     >
-                      Editar
+                      {autoridade.editar ? "Editar" : "Ver"}
                     </button>
                   </RowActions>
                 </td>
@@ -365,6 +381,7 @@ export function ItemsPage() {
           mode={modalState.mode}
           item={modalState.mode === "edit" ? modalState.item : null}
           units={units}
+          readOnly={!autoridade.editar}
           onClose={() => setModalState({ mode: "closed" })}
           onSaved={() => {
             setModalState({ mode: "closed" });

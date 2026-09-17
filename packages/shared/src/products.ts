@@ -1,6 +1,29 @@
 /** Contratos do módulo de Produtos, consumidos por `apps/api` e `apps/web`. */
 
+import type { UserRole } from "./users.js";
+
 export const PRODUCT_CODE_PREFIX = "PROD";
+
+/**
+ * Quem CRIA e EDITA o cadastro do Produto — MASTER-DATA-EDIT-PERMISSIONS-01,
+ * decisão do PO.
+ *
+ * O Produto é cadastro comercial: cliente, nome, perfil, dose, apresentação e
+ * notas. A criação direta nasce aprovada, então ela também só é deles. Produção
+ * continua administrando Formulação e Roteiro, e Qualidade os documentos e os
+ * controles do item de produto acabado — cada um pelas rotas próprias, com
+ * gates próprios. Os demais perfis abrem o Produto em consulta. A API recusa
+ * com 403 antes do corpo e da existência; a tela usa a MESMA lista só para não
+ * oferecer o que seria recusado.
+ */
+export const PRODUCT_EDIT_ROLES: readonly UserRole[] = ["COMMERCIAL", "ADMIN"];
+
+/**
+ * Quem INATIVA e REATIVA o Produto. Hoje os mesmos perfis da edição, em lista
+ * própria: são perguntas diferentes e podem divergir quando a situação ganhar
+ * motivo e histórico (MASTER-DATA-STATUS-HISTORY-01).
+ */
+export const PRODUCT_STATUS_CHANGE_ROLES: readonly UserRole[] = ["COMMERCIAL", "ADMIN"];
 
 export interface ProductCustomerSummary {
   id: string;

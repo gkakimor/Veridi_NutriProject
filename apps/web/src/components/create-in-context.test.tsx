@@ -24,7 +24,7 @@ vi.mock("../lib/formulation-templates-api", () => ({
   setFormulationTemplateArchived: vi.fn(),
   compareTemplateVersions: vi.fn(),
 }));
-vi.mock("../app/AuthProvider", () => ({ useAuth: vi.fn() }));
+vi.mock("../app/AuthProvider", () => ({ useOptionalAuth: () => null, useAuth: vi.fn() }));
 
 /*
  * Cliente e Item já têm suíte própria (CNPJ, CEP, unidade, controle de

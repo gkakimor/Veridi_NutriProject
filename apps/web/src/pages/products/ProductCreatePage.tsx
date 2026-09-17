@@ -8,6 +8,7 @@ import {
 } from "../../lib/use-contextual-create";
 import { PRODUCT_FORM_ID, ProductFormFields, useProductForm } from "./product-form";
 import type { ProductCustomerLock, ProductFormState } from "./product-form";
+import { PEDIR_CADASTRO_DE_PRODUTO, usePodeEditarProduto } from "./product-permissions";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
 
@@ -36,10 +37,16 @@ import { helpTopics } from "../../help/help-content";
  * A trilha permanece canônica nos dois casos — `Cadastros e Configurações › Produtos Acabados › Novo
  * produto`. De onde a pessoa veio é caminho de volta, não hierarquia do
  * sistema.
+ *
+ * Só Comercial e Administrador cadastram — a criação direta nasce aprovada
+ * (MASTER-DATA-EDIT-PERMISSIONS-01). Os outros perfis não recebem o caminho
+ * até aqui; quem chega pelo endereço vê a recusa e a volta, nunca um
+ * formulário que terminaria em 403.
  */
 export function ProductCreatePage() {
   const navigate = useNavigate();
   const contexto = useContextualCreateTarget("product");
+  const podeCadastrar = usePodeEditarProduto();
 
   /*
    * Cliente mandado pela origem. Um Pedido já é de um cliente: o produto que
@@ -106,15 +113,38 @@ export function ProductCreatePage() {
     navigate("/cadastros/produtos");
   }
 
+  const trilha = (
+    <PageBreadcrumbs
+      items={[
+        { label: "Cadastros e Configurações" },
+        { label: "Produtos Acabados", href: "/cadastros/produtos" },
+        { label: "Novo produto", current: true },
+      ]}
+    />
+  );
+
+  if (!podeCadastrar) {
+    return (
+      <>
+        {trilha}
+        <div className="page__header">
+          <div>
+            <h1 className="page__title">Novo produto</h1>
+          </div>
+          <button type="button" className="btn btn--ghost" onClick={cancelar}>
+            ← Voltar para {contexto.isContextual ? contexto.originLabel : "Produtos Acabados"}
+          </button>
+        </div>
+        <p className="form-alert" role="alert">
+          Seu perfil não permite cadastrar produtos. {PEDIR_CADASTRO_DE_PRODUTO}
+        </p>
+      </>
+    );
+  }
+
   return (
     <>
-      <PageBreadcrumbs
-        items={[
-          { label: "Cadastros e Configurações" },
-          { label: "Produtos Acabados", href: "/cadastros/produtos" },
-          { label: "Novo produto", current: true },
-        ]}
-      />
+      {trilha}
 
       <div className="page__header">
         <div>

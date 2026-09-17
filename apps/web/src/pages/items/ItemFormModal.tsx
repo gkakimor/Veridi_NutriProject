@@ -13,6 +13,12 @@ interface ItemFormModalProps {
   onClose: () => void;
   /** Recebe o registro criado — permite selecioná-lo de volta na origem. */
   onSaved: (created?: ItemDTO) => void;
+  /**
+   * Abre o Item existente em CONSULTA: o perfil não edita o cadastro
+   * (MASTER-DATA-EDIT-PERMISSIONS-01). Quem hospeda decide pela sessão; o modal
+   * só não oferece o que a API recusaria.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -23,8 +29,17 @@ interface ItemFormModalProps {
  * rodapé. Editar continua sendo exclusividade deste modal — a página oficial
  * cobre a criação, que é a que precisa de URL própria.
  */
-export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormModalProps) {
-  const controller = useItemForm({ mode, item, units, onSaved });
+export function ItemFormModal({
+  mode,
+  item,
+  units,
+  onClose,
+  onSaved,
+  readOnly = false,
+}: ItemFormModalProps) {
+  // Consulta só existe para registro que já existe: criar é sempre edição.
+  const consulta = readOnly && mode === "edit" && item !== null;
+  const controller = useItemForm({ mode, item, units, onSaved, readOnly: consulta });
   const { saving } = controller;
 
   /**
@@ -39,7 +54,7 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
     [controller.confirmarSaida, onClose],
   );
 
-  const footer =
+  const rodapeDeEdicao =
     mode === "create" ? (
       <>
         <span className="modal-fullscreen__foot-meta">
@@ -80,6 +95,22 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
       </>
     );
 
+  // Consulta: nada a gravar, então nada de "Cancelar" nem de "Salvar".
+  const footer = consulta ? (
+    <>
+      <span className="modal-fullscreen__foot-meta">
+        Última alteração: {item ? formatDate(item.updatedAt) : "—"}
+      </span>
+      <div className="modal-fullscreen__actions">
+        <button type="button" className="btn btn--secondary" onClick={fechar}>
+          Fechar
+        </button>
+      </div>
+    </>
+  ) : (
+    rodapeDeEdicao
+  );
+
   const codeChip = mode === "create" ? "Código gerado ao salvar" : item?.code;
 
   return (
@@ -87,7 +118,7 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
       open
       onClose={fechar}
       crumb="Cadastros / Itens de estoque"
-      crumbActive={mode === "create" ? "Novo" : "Editar"}
+      crumbActive={mode === "create" ? "Novo" : consulta ? "Consulta" : "Editar"}
       title={mode === "create" ? "Novo item de estoque" : item?.name}
       {...(codeChip ? { codeChip } : {})}
       footer={footer}
@@ -101,7 +132,9 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
       {/* Custo de referência vem DEPOIS dos fornecedores de propósito: a
           referência manual é a última fonte da seleção automática, e a
           ordem na tela repete a ordem da regra. Produto acabado não é
-          comprado — não tem custo de aquisição a referenciar. */}
+          comprado — não tem custo de aquisição a referenciar. A seção tem
+          permissão própria e aparece também em consulta: o Comercial não
+          edita o Item, mas define a referência de custo dele. */}
       {mode === "edit" && item && item.type !== "FINISHED_PRODUCT" && (
         <ItemCostReferenceSection itemId={item.id} />
       )}

@@ -12,6 +12,12 @@ import type { ListProductsParams } from "../../lib/products-api";
 import { listProducts, setProductActive } from "../../lib/products-api";
 import { clienteFilterSource } from "../../lib/filter-sources";
 import { ProductFormModal } from "./ProductFormModal";
+import {
+  PEDIR_CADASTRO_DE_PRODUTO,
+  podeMudarSituacaoDoProduto,
+  usePodeEditarProduto,
+} from "./product-permissions";
+import { useOptionalAuth } from "../../app/AuthProvider";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
 import { RetornoDoContexto } from "../../components/RecordContext";
@@ -37,6 +43,16 @@ const PAGE_SIZE = 20;
 /** Cadastros → Produtos Acabados. Mesmo padrao de tabela densa + modal de Items. */
 export function ProductsPage() {
   const navigate = useNavigate();
+  /*
+   * MASTER-DATA-EDIT-PERMISSIONS-01: criar, editar, inativar e reativar são de
+   * Comercial e Administrador. Os demais perfis abrem o Produto em consulta —
+   * pela linha, pelo "Ver" ou por link de outra tela — e não recebem
+   * "+ Novo produto". CMV e Custos industriais seguem no menu: são telas com
+   * regra própria, não o cadastro.
+   */
+  const podeEditar = usePodeEditarProduto();
+  const sessao = useOptionalAuth();
+  const podeMudarSituacao = sessao === null || podeMudarSituacaoDoProduto(sessao.user?.role);
 
   /**
    * Link contextual conhece o produto: vem `productId`, não texto. Busca
@@ -139,6 +155,8 @@ export function ProductsPage() {
       reload();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Falha ao atualizar status");
+      // Recusa por situação que já mudou (409): a linha volta a mostrar a verdade.
+      reload();
     }
   }
 
@@ -156,9 +174,11 @@ export function ProductsPage() {
         {/* Leva à tela oficial, não ao modal: o cadastro passou a ter URL
             própria, e é ela que sobrevive a um F5 e vale como link. O modal
             continua servindo à EDIÇÃO, aberta a partir da linha. */}
-        <Link className="btn btn--primary" to="/cadastros/produtos/novo">
-          + Novo produto
-        </Link>
+        {podeEditar && (
+          <Link className="btn btn--primary" to="/cadastros/produtos/novo">
+            + Novo produto
+          </Link>
+        )}
         <ExportCsvButton path="/products/export.csv" filters={{ search, customerId: customerFilter, active: activeFilter === "all" ? undefined : activeFilter === "active" }} />
 </div>
 
@@ -341,11 +361,15 @@ export function ProductsPage() {
                         label: "Custos industriais",
                         onSelect: () => navigate(`/produtos/${product.id}/custos`),
                       },
-                      {
-                        label: product.active ? "Inativar" : "Reativar",
-                        destructive: product.active,
-                        onSelect: () => handleToggleActive(product),
-                      },
+                      ...(podeMudarSituacao
+                        ? [
+                            {
+                              label: product.active ? "Inativar" : "Reativar",
+                              destructive: product.active,
+                              onSelect: () => handleToggleActive(product),
+                            },
+                          ]
+                        : []),
                     ]}
                   >
                     <button
@@ -353,7 +377,7 @@ export function ProductsPage() {
                       className="btn btn--ghost btn--sm"
                       onClick={() => setModalState({ mode: "edit", product })}
                     >
-                      Editar
+                      {podeEditar ? "Editar" : "Ver"}
                     </button>
                   </RowActions>
                 </td>
@@ -372,8 +396,10 @@ export function ProductsPage() {
                     Limpar filtros
                   </button>
                 </>
-              ) : (
+              ) : podeEditar ? (
                 "Nenhum produto cadastrado."
+              ) : (
+                `Nenhum produto cadastrado. ${PEDIR_CADASTRO_DE_PRODUTO}`
               )}
             </ListStatusRow>
           </tbody>
@@ -416,6 +442,7 @@ export function ProductsPage() {
           key={modalState.mode === "edit" ? modalState.product.id : "create"}
           mode={modalState.mode}
           product={modalState.mode === "edit" ? modalState.product : null}
+          readOnly={!podeEditar}
           onClose={() => setModalState({ mode: "closed" })}
           onSaved={() => {
             setModalState({ mode: "closed" });

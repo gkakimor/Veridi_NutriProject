@@ -31,6 +31,11 @@ import {
 import { DecimalField, MoneyField } from "../../components/NumericField";
 import { listUnits } from "../../lib/units-api";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
+import { SELETOR_DE_ITEM_SEM_CADASTRO, usePodeCriarItem } from "../items/item-permissions";
+import {
+  SELETOR_DE_FORNECEDOR_SEM_CADASTRO,
+  usePodeEditarFornecedor,
+} from "../suppliers/supplier-permissions";
 
 /**
  * O que a relação leva junto ao sair para cadastrar item ou fornecedor.
@@ -109,6 +114,10 @@ export function SupplierItemFormModal({
   onClose: () => void;
   onSaved: (created: SupplierItemDetailDTO) => void;
 }) {
+  /* Cadastrar Item ou Fornecedor no meio da relação só para quem cadastra
+     (MASTER-DATA-EDIT-PERMISSIONS-01); escolher existente segue livre. */
+  const podeCadastrarItem = usePodeCriarItem();
+  const podeCadastrarFornecedor = usePodeEditarFornecedor();
   const [itemId, setItemId] = useState("");
   const [supplierId, setSupplierId] = useState("");
   const [supplierItemCode, setSupplierItemCode] = useState("");
@@ -451,7 +460,8 @@ export function SupplierItemFormModal({
                 placeholder="Digite código ou nome do item…"
                 options={purchasableItems.map(opcaoDoItem)}
                 onSearch={buscarItens}
-                canCreate
+                canCreate={podeCadastrarItem}
+                {...(podeCadastrarItem ? {} : SELETOR_DE_ITEM_SEM_CADASTRO)}
                 createLabel="Novo item de estoque"
                 onCreateNew={() =>
                   liberarGuarda(() =>
@@ -477,7 +487,8 @@ export function SupplierItemFormModal({
                 placeholder="Digite código ou nome do fornecedor…"
                 options={catalogoDeFornecedores.map(opcaoDoFornecedor)}
                 onSearch={buscarFornecedores}
-                canCreate
+                canCreate={podeCadastrarFornecedor}
+                {...(podeCadastrarFornecedor ? {} : SELETOR_DE_FORNECEDOR_SEM_CADASTRO)}
                 createLabel="Novo fornecedor"
                 onCreateNew={() =>
                   liberarGuarda(() =>

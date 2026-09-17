@@ -11,7 +11,7 @@ import type { InventoryItemSummaryDTO } from "@veridi/shared";
  */
 
 vi.mock("../lib/inventory-api", () => ({ listInventory: vi.fn() }));
-vi.mock("../app/AuthProvider", () => ({ useAuth: () => ({ user: { role: "ADMIN" } }) }));
+vi.mock("../app/AuthProvider", () => ({ useOptionalAuth: () => null, useAuth: () => ({ user: { role: "ADMIN" } }) }));
 vi.mock("../lib/supplier-items-api", () => ({
   createSupplierItem: vi.fn(),
   getSupplierItem: vi.fn(),

@@ -10,6 +10,7 @@ import {
   parseCreatableItemType,
   useItemForm,
 } from "./item-form";
+import { PEDIR_CADASTRO_DE_ITEM, usePodeCriarItem } from "./item-permissions";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
 
@@ -40,11 +41,17 @@ const PARAM_TIPO = "tipo";
  * As unidades são carregadas aqui: no modal elas chegavam prontas da
  * listagem, que já as tinha para a tabela. A página não tem essa listagem
  * atrás dela, então busca a sua.
+ *
+ * Só Compras, Qualidade, Produção e Administrador cadastram
+ * (MASTER-DATA-EDIT-PERMISSIONS-01). Os outros perfis não recebem o caminho
+ * até aqui; quem chega pelo endereço vê a recusa e a volta, nunca um
+ * formulário que terminaria em 403.
  */
 export function ItemCreatePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const contexto = useContextualCreateTarget("item");
+  const podeCadastrar = usePodeCriarItem();
 
   const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
 
@@ -75,15 +82,38 @@ export function ItemCreatePage() {
     navigate("/cadastros/itens");
   }
 
+  const trilha = (
+    <PageBreadcrumbs
+      items={[
+        { label: "Cadastros e Configurações" },
+        { label: "Itens de estoque", href: "/cadastros/itens" },
+        { label: "Novo item de estoque", current: true },
+      ]}
+    />
+  );
+
+  if (!podeCadastrar) {
+    return (
+      <>
+        {trilha}
+        <div className="page__header">
+          <div>
+            <h1 className="page__title">Novo item de estoque</h1>
+          </div>
+          <button type="button" className="btn btn--ghost" onClick={cancelar}>
+            ← Voltar para {contexto.isContextual ? contexto.originLabel : "Itens de estoque"}
+          </button>
+        </div>
+        <p className="form-alert" role="alert">
+          Seu perfil não permite cadastrar itens. {PEDIR_CADASTRO_DE_ITEM}
+        </p>
+      </>
+    );
+  }
+
   return (
     <>
-      <PageBreadcrumbs
-        items={[
-          { label: "Cadastros e Configurações" },
-          { label: "Itens de estoque", href: "/cadastros/itens" },
-          { label: "Novo item de estoque", current: true },
-        ]}
-      />
+      {trilha}
 
       <div className="page__header">
         <div>

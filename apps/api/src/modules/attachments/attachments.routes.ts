@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import type { AttachmentType, User } from "@prisma/client";
 import type { ZodError } from "zod";
+import { ATTACHMENT_ARCHIVE_ROLES, PRODUCT_DOCUMENT_UPLOAD_ROLES } from "@veridi/shared";
 import { ForbiddenError } from "../auth/auth.errors.js";
 import { requireCurrentUser, requireRole } from "../../lib/current-user.js";
 import { MAX_FILE_SIZE_BYTES, readFile, sanitizeFileName } from "../../lib/file-storage.js";
@@ -84,7 +85,8 @@ export const attachmentsRoutes: FastifyPluginAsync = async (app) => {
     [
       { path: "lots", kind: "LOT", uploadRoles: ["PURCHASING", "QUALITY", "ADMIN"] },
       { path: "receipts", kind: "RECEIPT", uploadRoles: ["PURCHASING", "QUALITY", "ADMIN"] },
-      { path: "products", kind: "PRODUCT", uploadRoles: ["COMMERCIAL", "QUALITY", "ADMIN"] },
+      // A mesma lista que a tela do Produto usa para oferecer o anexo.
+      { path: "products", kind: "PRODUCT", uploadRoles: [...PRODUCT_DOCUMENT_UPLOAD_ROLES] },
       { path: "projects", kind: "PROJECT", uploadRoles: ["COMMERCIAL", "QUALITY", "ADMIN"] },
       // Resultado de teste de amostra vem de quem produziu ou de quem
       // avalia — Produção entra aqui, ao contrário do projeto comercial.
@@ -163,7 +165,7 @@ export const attachmentsRoutes: FastifyPluginAsync = async (app) => {
   app.post("/attachments/:id/archive", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      const actor = requireRole(request, "QUALITY", "ADMIN");
+      const actor = requireRole(request, ...ATTACHMENT_ARCHIVE_ROLES);
       const attachment = await requireAttachment(id);
       const archived = await archiveAttachment(id, actor);
 

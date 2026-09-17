@@ -20,7 +20,7 @@ import type { ListSuppliersParams } from "../../lib/suppliers-api";
  * 1002 fornecedores e filtra, ordena e pagina o universo inteiro.
  */
 
-vi.mock("../../app/AuthProvider", () => ({ useAuth: () => ({ user: { id: "u-1", role: "ADMIN" } }) }));
+vi.mock("../../app/AuthProvider", () => ({ useOptionalAuth: () => null, useAuth: () => ({ user: { id: "u-1", role: "ADMIN" } }) }));
 vi.mock("../../lib/suppliers-api", () => ({ listSuppliers: vi.fn() }));
 vi.mock("../../lib/items-api", () => ({ listItems: vi.fn(), getItem: vi.fn() }));
 vi.mock("../../lib/units-api", () => ({

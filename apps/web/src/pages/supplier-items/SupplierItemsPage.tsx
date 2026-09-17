@@ -7,6 +7,7 @@ import type { ItemDTO, SupplierDTO, SupplierItemDTO, SupplierItemQualificationSt
 import {
   ITEM_FAMILIES,
   ITEM_FAMILY_LABELS,
+  SUPPLIER_ITEM_EDIT_ROLES,
   SUPPLIER_ITEM_QUALIFICATION_LABELS,
   SUPPLIER_ITEM_QUALIFICATION_STATUSES,
   SUPPLIER_OFFER_AMBIGUITY_MESSAGE,
@@ -21,6 +22,7 @@ import { useFilteredPage, useListQuery } from "../../lib/list-query";
 import type { ListSupplierItemsParams } from "../../lib/supplier-items-api";
 import { listSupplierItems } from "../../lib/supplier-items-api";
 import { useAuth } from "../../app/AuthProvider";
+import { perfilPermite } from "../../lib/perfis";
 import { useInitialFilters } from "../../lib/filter-params";
 import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
 import { SupplierItemFormModal } from "./SupplierItemFormModal";
@@ -93,6 +95,12 @@ export function SupplierItemPriceCell({ row }: { row: SupplierItemDTO }) {
 /** Comercial → Compras → Item × Fornecedor. */
 export function SupplierItemsPage() {
   const { user } = useAuth();
+  /*
+   * Cadastrar relação é de Compras e Administrador — a lista da API
+   * (MASTER-DATA-EDIT-PERMISSIONS-01). Os demais perfis consultam e abrem o
+   * detalhe, sem "Nova relação" que terminaria em 403.
+   */
+  const podeCriarRelacao = perfilPermite(SUPPLIER_ITEM_EDIT_ROLES, user?.role);
 
   /**
    * A relação nova mora na URL enquanto está aberta (`?nova=1`).
@@ -243,9 +251,11 @@ export function SupplierItemsPage() {
             referência comercial do fornecedor — o custo real continua vindo do recebimento.
           </p>
         </div>
-        <button type="button" className="btn btn--primary" onClick={abrirCriacao}>
-          Nova relação
-        </button>
+        {podeCriarRelacao && (
+          <button type="button" className="btn btn--primary" onClick={abrirCriacao}>
+            Nova relação
+          </button>
+        )}
         <ExportCsvButton
           path="/supplier-items/export.csv"
           filters={{
@@ -471,7 +481,8 @@ export function SupplierItemsPage() {
         </div>
       )}
 
-      {createOpen && (
+      {/* `?nova=1` na URL não abre o formulário para quem não cria relação. */}
+      {createOpen && podeCriarRelacao && (
         <SupplierItemFormModal
           items={items}
           suppliers={suppliers}

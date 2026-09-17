@@ -53,6 +53,11 @@ import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 import { TableEmptyRow } from "../../components/TableEmptyRow";
+import { SELETOR_DE_ITEM_SEM_CADASTRO, usePodeCriarItem } from "../items/item-permissions";
+import {
+  SELETOR_DE_FORNECEDOR_SEM_CADASTRO,
+  usePodeEditarFornecedor,
+} from "../suppliers/supplier-permissions";
 
 /** ⓘ de um campo, lido do registro central — o texto nunca mora no JSX. */
 function DicaDoCampo({ id }: { id: HelpHintId }) {
@@ -219,6 +224,13 @@ export function PurchaseOrderPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const isNew = !id;
+  /*
+   * Escolher Fornecedor e Item existentes é de quem monta a OC; cadastrar um
+   * novo no meio dela, só de quem cadastra (MASTER-DATA-EDIT-PERMISSIONS-01).
+   * Sem permissão, a busca sem resultado diz a quem pedir.
+   */
+  const podeCadastrarFornecedor = usePodeEditarFornecedor();
+  const podeCadastrarItem = usePodeCriarItem();
 
   const [purchaseOrder, setPurchaseOrder] = useState<PurchaseOrderDTO | null>(null);
   const [loading, setLoading] = useState(!isNew);
@@ -967,7 +979,8 @@ options={supplierOptions.map((supplier) => ({
                   name: supplier.tradeName ?? supplier.legalName,
                   ...(supplier.active ? {} : { hint: "inativo" }),
                 }))}
-                canCreate
+                canCreate={podeCadastrarFornecedor}
+                {...(podeCadastrarFornecedor ? {} : SELETOR_DE_FORNECEDOR_SEM_CADASTRO)}
                 createLabel="Novo fornecedor"
                 /* Sair para cadastrar NÃO é descartar: o rascunho vai junto e
                    volta aplicado. */
@@ -1071,7 +1084,8 @@ options={supplierOptions.map((supplier) => ({
                           placeholder="Digite código ou nome do item…"
                           options={optionsForRow(line).map(opcaoDoItem)}
                           onSearch={(termo) => buscarItens(line, termo)}
-                          canCreate
+                          canCreate={podeCadastrarItem}
+                          {...(podeCadastrarItem ? {} : SELETOR_DE_ITEM_SEM_CADASTRO)}
                           createLabel="Novo item de estoque"
                           onCreateNew={() =>
                             liberarGuarda(() =>

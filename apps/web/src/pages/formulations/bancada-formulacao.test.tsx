@@ -32,7 +32,7 @@ vi.mock("../../lib/items-api", () => ({
 }));
 vi.mock("../../lib/units-api", () => ({ listUnits: () => Promise.resolve(UNIDADES) }));
 vi.mock("../../lib/costs-api", () => ({ getFormulationCostEstimate: () => Promise.resolve(null) }));
-vi.mock("../../app/AuthProvider", () => ({ useAuth: () => ({ user: { role: "ADMIN" } }) }));
+vi.mock("../../app/AuthProvider", () => ({ useOptionalAuth: () => null, useAuth: () => ({ user: { role: "ADMIN" } }) }));
 
 import { getFormulationVersion } from "../../lib/formulations-api";
 import { FormulationVersionPage } from "./FormulationVersionPage";

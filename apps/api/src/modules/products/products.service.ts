@@ -10,6 +10,7 @@ import { createFinishedItemForProduct } from "../items/finished-item-for-product
 import {
   CustomerNotFoundError,
   DoseUomNotFoundError,
+  FinishedItemControlsNotEditableHereError,
   FinishedUnitNotFoundError,
   DuplicateFinishedItemError,
   ProductCustomerLockedError,
@@ -17,6 +18,7 @@ import {
   InactiveCustomerError,
   InactiveFinishedItemError,
   InvalidFinishedItemTypeError,
+  InvalidProductStatusTransitionError,
   ProductNotFoundError,
 } from "./products.errors.js";
 import type {
@@ -140,7 +142,7 @@ async function assertCustomerForNewAssociation(id: string): Promise<void> {
 async function assertFinishedItemForNewAssociation(
   id: string,
   excludeProductId?: string,
-): Promise<void> {
+): Promise<Item> {
   const item = await getPrisma().item.findUnique({ where: { id } });
   if (!item) throw new FinishedItemNotFoundError(id);
   if (item.type !== "FINISHED_PRODUCT") throw new InvalidFinishedItemTypeError(id);
@@ -153,6 +155,7 @@ async function assertFinishedItemForNewAssociation(
     },
   });
   if (existing) throw new DuplicateFinishedItemError(id);
+  return item;
 }
 
 /**
@@ -303,7 +306,17 @@ export async function createProduct(input: CreateProductInput): Promise<ProductD
   await assertCustomerForNewAssociation(input.customerId);
   if (input.doseUomCode) await assertDoseUomExists(input.doseUomCode);
   if (input.finishedProductItemId) {
-    await assertFinishedItemForNewAssociation(input.finishedProductItemId);
+    const itemExistente = await assertFinishedItemForNewAssociation(input.finishedProductItemId);
+    // O laudo que a criação do Produto decide é o do PA que nasce com ele.
+    // Item que já existe tem o controle no próprio cadastro, sob o gate da
+    // Qualidade: pedir o MESMO valor passa; pedir outro é recusa, nunca
+    // ignorado nem gravado por esta porta.
+    if (
+      input.finishedRequiresCoa !== undefined &&
+      input.finishedRequiresCoa !== itemExistente.requiresCoa
+    ) {
+      throw new FinishedItemControlsNotEditableHereError(itemExistente.code);
+    }
   }
 
   const prisma = getPrisma();
@@ -399,22 +412,30 @@ export async function updateProduct(
   }
 }
 
-export async function activateProduct(id: string): Promise<ProductDTO> {
-  await requireProduct(id);
-  const product = await getPrisma().product.update({
-    where: { id },
-    data: { active: true },
-    include: productInclude,
+/**
+ * Inativar e reativar: a gravação só acontece se o Produto estiver na
+ * situação de partida, e a condição mora no próprio UPDATE — dois pedidos
+ * concorrentes não partem da mesma situação, e o segundo cai no 409.
+ */
+async function mudarSituacaoDoProduto(id: string, active: boolean): Promise<ProductDTO> {
+  const prisma = getPrisma();
+  const { count } = await prisma.product.updateMany({
+    where: { id, active: !active },
+    data: { active },
   });
-  return toProductDTO(product);
+  if (count === 0) {
+    await requireProduct(id);
+    throw new InvalidProductStatusTransitionError(active);
+  }
+  return toProductDTO(
+    await prisma.product.findUniqueOrThrow({ where: { id }, include: productInclude }),
+  );
+}
+
+export async function activateProduct(id: string): Promise<ProductDTO> {
+  return mudarSituacaoDoProduto(id, true);
 }
 
 export async function deactivateProduct(id: string): Promise<ProductDTO> {
-  await requireProduct(id);
-  const product = await getPrisma().product.update({
-    where: { id },
-    data: { active: false },
-    include: productInclude,
-  });
-  return toProductDTO(product);
+  return mudarSituacaoDoProduto(id, false);
 }

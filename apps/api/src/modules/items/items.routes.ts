@@ -1,6 +1,12 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
-import { requireCurrentUser } from "../../lib/current-user.js";
+import {
+  ITEM_DEACTIVATE_ROLES,
+  ITEM_EDIT_ROLES,
+  ITEM_REACTIVATE_ROLES,
+} from "@veridi/shared";
+import { exigirPerfil, responderSemPermissao } from "../../lib/current-user.js";
+import { ForbiddenError } from "../auth/auth.errors.js";
 import {
   activateItem,
   createItem,
@@ -12,6 +18,7 @@ import {
 import {
   CostReferenceUnitIncompatibleError,
   InvalidCostReferenceError,
+  InvalidItemStatusTransitionError,
   ItemNotFoundError,
   PackagingSubtypeNotApplicableError,
   StructuralFieldLockedError,
@@ -33,6 +40,12 @@ function formatZodError(error: ZodError) {
 /**
  * `GET /items`, `GET /items/:id`, `POST /items`, `PATCH /items/:id`,
  * `POST /items/:id/activate`, `POST /items/:id/deactivate`.
+ *
+ * Consultar é de toda sessão. Criar e editar são de `ITEM_EDIT_ROLES`;
+ * inativar e reativar, de listas próprias — tudo conferido antes do corpo e da
+ * existência do Item (MASTER-DATA-EDIT-PERMISSIONS-01). Dentro do cadastro, os
+ * controles, a marca de consumo e o custo inicial têm dono mais estreito: o
+ * serviço recusa com `ForbiddenError`, que sai aqui como 403.
  *
  * Sem exclusão física: itens inativos permanecem visíveis no histórico.
  */
@@ -57,6 +70,9 @@ export const itemsRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/items", async (request, reply) => {
+    const actor = exigirPerfil(request, reply, ITEM_EDIT_ROLES);
+    if (!actor) return reply;
+
     const parsed = createItemSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply
@@ -65,9 +81,10 @@ export const itemsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const item = await createItem(parsed.data, requireCurrentUser(request));
+      const item = await createItem(parsed.data, actor);
       return reply.status(201).send(item);
     } catch (error) {
+      if (error instanceof ForbiddenError) return responderSemPermissao(reply, error);
       if (error instanceof PackagingSubtypeNotApplicableError) {
         return reply
           .status(400)
@@ -93,6 +110,11 @@ export const itemsRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.patch("/items/:id", async (request, reply) => {
+    // Antes do `id` servir para qualquer leitura: sem permissão, item
+    // existente e inexistente recebem a mesma resposta.
+    const actor = exigirPerfil(request, reply, ITEM_EDIT_ROLES);
+    if (!actor) return reply;
+
     const { id } = request.params as { id: string };
     const parsed = updateItemSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -102,12 +124,13 @@ export const itemsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const item = await updateItem(id, parsed.data);
+      const item = await updateItem(id, parsed.data, actor);
       return reply.send(item);
     } catch (error) {
       if (error instanceof ItemNotFoundError) {
         return reply.status(404).send({ error: "not_found" });
       }
+      if (error instanceof ForbiddenError) return responderSemPermissao(reply, error);
       if (error instanceof PackagingSubtypeNotApplicableError) {
         return reply
           .status(400)
@@ -128,6 +151,9 @@ export const itemsRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/items/:id/activate", async (request, reply) => {
+    const actor = exigirPerfil(request, reply, ITEM_REACTIVATE_ROLES);
+    if (!actor) return reply;
+
     const { id } = request.params as { id: string };
     try {
       return reply.send(await activateItem(id));
@@ -135,17 +161,30 @@ export const itemsRoutes: FastifyPluginAsync = async (app) => {
       if (error instanceof ItemNotFoundError) {
         return reply.status(404).send({ error: "not_found" });
       }
+      if (error instanceof InvalidItemStatusTransitionError) {
+        return reply
+          .status(409)
+          .send({ error: "invalid_status_transition", message: error.message });
+      }
       throw error;
     }
   });
 
   app.post("/items/:id/deactivate", async (request, reply) => {
+    const actor = exigirPerfil(request, reply, ITEM_DEACTIVATE_ROLES);
+    if (!actor) return reply;
+
     const { id } = request.params as { id: string };
     try {
       return reply.send(await deactivateItem(id));
     } catch (error) {
       if (error instanceof ItemNotFoundError) {
         return reply.status(404).send({ error: "not_found" });
+      }
+      if (error instanceof InvalidItemStatusTransitionError) {
+        return reply
+          .status(409)
+          .send({ error: "invalid_status_transition", message: error.message });
       }
       throw error;
     }

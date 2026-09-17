@@ -8,6 +8,16 @@
  */
 
 import type { IndustrialMaterialCostSource } from "./industrial-cost-calculation.js";
+import type { UserRole } from "./users.js";
+
+/**
+ * Quem mantém a relação COMERCIAL Item × Fornecedor: cadastrar a relação,
+ * alterar código e observação, marcar preferencial e registrar oferta.
+ * Homologar e bloquear são da Qualidade, na rota de homologação, que tem regra
+ * própria. A tela usa a mesma lista para oferecer "Nova relação" — convite que
+ * terminaria em 403 não aparece (MASTER-DATA-EDIT-PERMISSIONS-01).
+ */
+export const SUPPLIER_ITEM_EDIT_ROLES: readonly UserRole[] = ["PURCHASING", "ADMIN"];
 
 export type SupplierItemQualificationStatus = "PENDING" | "APPROVED" | "BLOCKED";
 

@@ -15,7 +15,12 @@ import { useCallback, useRef } from "react";
 import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import { assinaturaDoFormulario } from "../../lib/dirty-fields";
 import { ApiValidationError } from "../../lib/api-errors";
-import { numericInvalidMessage, parsePtBrNumber, toPtBrEditText } from "../../lib/numeric-ptbr";
+import {
+  formatDecimalPtBr,
+  numericInvalidMessage,
+  parsePtBrNumber,
+  toPtBrEditText,
+} from "../../lib/numeric-ptbr";
 import {
   CASAS_CUSTO_UNITARIO,
   CASAS_PERCENTUAL_TECNICO,
@@ -26,6 +31,12 @@ import { MoneyField, PercentField } from "../../components/NumericField";
 import { RelatedLinks } from "../../components/RelatedLinks";
 import { FormSection } from "../../components/FormSection";
 import { ToggleCard } from "../../components/ToggleCard";
+import {
+  QUEM_ALTERA_CONTROLES_DO_ITEM,
+  QUEM_EDITA_ITEM,
+  QUEM_MARCA_CONSUMO_NA_PRODUCAO,
+  useAutoridadeNoItem,
+} from "./item-permissions";
 
 /**
  * O formulário de Item de estoque, uma vez só.
@@ -160,6 +171,7 @@ export function useItemForm({
   units,
   initialType = null,
   onSaved,
+  readOnly = false,
 }: {
   mode: "create" | "edit";
   item: ItemDTO | null;
@@ -168,6 +180,11 @@ export function useItemForm({
   initialType?: ItemType | null;
   /** Recebe o registro criado — permite selecioná-lo de volta na origem. */
   onSaved: (created?: ItemDTO) => void;
+  /**
+   * Consulta: o perfil não edita o Item (MASTER-DATA-EDIT-PERMISSIONS-01). Os
+   * campos viram valores e nada é enviado — a API recusaria com 403.
+   */
+  readOnly?: boolean;
 }) {
   const [form, setForm] = useState<FormState>(() =>
     initialState(item, mode === "create" ? initialType : null),
@@ -175,6 +192,17 @@ export function useItemForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  /*
+   * Dentro do cadastro, três partes têm dono mais estreito. Quem edita o Item
+   * sem ser o dono vê o valor e não o altera: os controles ficam com a
+   * Qualidade (e, na criação, no padrão do tipo), a marca de consumo com a
+   * Produção, e o custo inicial nem é oferecido fora do custeio.
+   */
+  const autoridade = useAutoridadeNoItem();
+  const controlesTravadosPorPerfil = !autoridade.controles;
+  const consumoTravadoPorPerfil = !autoridade.consumoNaProducao;
+  const ofereceCustoInicial = autoridade.custoDeReferencia;
 
   const structuralLocked = mode === "edit" && (item?.operationallyUsed ?? false);
 
@@ -235,6 +263,7 @@ export function useItemForm({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (readOnly) return;
     if (!form.type) {
       setError("Selecione o tipo do item.");
       return;
@@ -321,7 +350,7 @@ export function useItemForm({
       if (mode === "create") {
         const created = await createItem({
           ...payload,
-          ...(referenciaNormalizada
+          ...(referenciaNormalizada && ofereceCustoInicial
             ? {
                 initialCostReference: {
                   unitCost: referenciaNormalizada,
@@ -368,13 +397,159 @@ export function useItemForm({
     handleSubmit,
     structuralLocked,
     structuralLockHint,
+    controlesTravadosPorPerfil,
+    consumoTravadoPorPerfil,
+    ofereceCustoInicial,
     mode,
     item,
     units,
+    readOnly,
   };
 }
 
 export type ItemFormController = ReturnType<typeof useItemForm>;
+
+/** Estoque, lotes, movimentações e fornecedores do item — iguais em edição e em consulta. */
+function AtalhosDoItem({ item }: { item: ItemDTO }) {
+  return (
+    <RelatedLinks
+      links={[
+        // Estoque do item tem tela própria: melhor destino que uma lista
+        // filtrada.
+        { label: "Estoque", to: `/estoque/${item.id}` },
+        { label: "Lotes", to: `/estoque/lotes?itemId=${item.id}` },
+        { label: "Movimentações", to: `/estoque/movimentacoes?itemId=${item.id}` },
+        { label: "Fornecedores do item", to: `/compras/item-fornecedor?itemId=${item.id}` },
+      ]}
+    />
+  );
+}
+
+function StatusDoItem({ item }: { item: ItemDTO }) {
+  return (
+    <FormSection title="Status">
+      <div className="status-line">
+        <span className={item.active ? "badge badge--active" : "badge badge--inactive"}>
+          {item.active ? "Ativo" : "Inativo"}
+        </span>
+        <span className="field__hint">
+          Use "Inativar"/"Reativar" na lista para alterar o status. Itens
+          inativos continuam visíveis no histórico.
+        </span>
+      </div>
+    </FormSection>
+  );
+}
+
+/** Um campo em consulta: o mesmo rótulo do formulário e o valor, sem caixa de edição. */
+function ValorConsultado({ rotulo, valor }: { rotulo: string; valor: string | null }) {
+  return (
+    <>
+      <dt>{rotulo}</dt>
+      <dd>{valor?.trim() ? valor : "—"}</dd>
+    </>
+  );
+}
+
+const simOuNao = (valor: boolean) => (valor ? "Sim" : "Não");
+
+/**
+ * O Item em CONSULTA — MASTER-DATA-EDIT-PERMISSIONS-01.
+ *
+ * Mesmas seções, mesma ordem e mesmos rótulos do formulário, com os valores no
+ * lugar das caixas: quem não edita o Item lê tudo o que o formulário mostraria,
+ * sem campo que aceite digitação e sem "Salvar alterações" que terminaria em
+ * 403. Fornecedores e custo de referência vêm do modal, com as regras deles.
+ */
+function ItemConsultaFields({ item }: { item: ItemDTO }) {
+  return (
+    <div>
+      <AtalhosDoItem item={item} />
+
+      <p className="field__hint">
+        Consulta. Só os perfis {QUEM_EDITA_ITEM} alteram o cadastro do item.
+      </p>
+
+      <FormSection
+        title="Identificação"
+        subtitle="Dados básicos do item usados em compras, estoque e produção."
+      >
+        <dl className="definition-list">
+          <ValorConsultado rotulo="Tipo" valor={ITEM_TYPE_LABELS[item.type]} />
+          <ValorConsultado rotulo="Unidade" valor={`${item.unit.code} — ${item.unit.label}`} />
+          <ValorConsultado rotulo="Nome" valor={item.name} />
+        </dl>
+      </FormSection>
+
+      {item.type !== "FINISHED_PRODUCT" && (
+        <FormSection
+          title="Classificação industrial"
+          subtitle="Fonte, nutriente declarado e pureza padrão usados pela formulação."
+        >
+          <dl className="definition-list">
+            <ValorConsultado rotulo="Fonte" valor={item.sourceName} />
+            <ValorConsultado rotulo="Nutriente declarado" valor={item.declaredNutrient} />
+            <ValorConsultado
+              rotulo="Família"
+              valor={item.family ? ITEM_FAMILY_LABELS[item.family] : "Não informada"}
+            />
+            {/* Pureza sem valor é DESCONHECIDA — nunca 100%. */}
+            <ValorConsultado
+              rotulo="Pureza padrão (%)"
+              valor={
+                item.defaultPurityPercent
+                  ? formatDecimalPtBr(item.defaultPurityPercent, OPCOES_PERCENTUAL_TECNICO)
+                  : "Desconhecida"
+              }
+            />
+            {item.type === "PACKAGING" && (
+              <ValorConsultado
+                rotulo="Subtipo de embalagem"
+                valor={
+                  item.packagingSubtype
+                    ? PACKAGING_SUBTYPE_LABELS[item.packagingSubtype]
+                    : "Não informado"
+                }
+              />
+            )}
+            {item.type === "PACKAGING" && (
+              <ValorConsultado
+                rotulo="Consumido na produção"
+                valor={simOuNao(item.consumedInProduction)}
+              />
+            )}
+          </dl>
+        </FormSection>
+      )}
+
+      <FormSection
+        title="Controles de rastreabilidade"
+        subtitle="Definem como o estoque deste item será acompanhado."
+      >
+        <dl className="definition-list">
+          <ValorConsultado rotulo="Controla lote" valor={simOuNao(item.controlsLot)} />
+          <ValorConsultado rotulo="Controla validade" valor={simOuNao(item.controlsExpiry)} />
+          <ValorConsultado
+            rotulo="Requer liberação da Qualidade"
+            valor={simOuNao(item.requiresQualityRelease)}
+          />
+          <ValorConsultado rotulo="Exige CoA / Laudo" valor={simOuNao(item.requiresCoa)} />
+        </dl>
+      </FormSection>
+
+      <FormSection
+        title="Códigos"
+        subtitle="Identificadores externos para leitura no recebimento."
+      >
+        <dl className="definition-list">
+          <ValorConsultado rotulo="Barcode externo" valor={item.externalBarcode} />
+        </dl>
+      </FormSection>
+
+      <StatusDoItem item={item} />
+    </div>
+  );
+}
 
 export function ItemFormFields({
   form,
@@ -385,10 +560,16 @@ export function ItemFormFields({
   handleSubmit,
   structuralLocked,
   structuralLockHint,
+  controlesTravadosPorPerfil,
+  consumoTravadoPorPerfil,
+  ofereceCustoInicial,
   mode,
   item,
   units,
+  readOnly,
 }: ItemFormController) {
+  if (readOnly && item) return <ItemConsultaFields item={item} />;
+
   /** Liga input, `aria-invalid` e a mensagem, para leitor de tela também. */
   function fieldProps(field: string) {
     const message = fieldErrors[field];
@@ -412,18 +593,7 @@ export function ItemFormFields({
     <form id={ITEM_FORM_ID} onSubmit={handleSubmit}>
       {error && <p className="form-alert" role="alert">{error}</p>}
 
-      {item && (
-        <RelatedLinks
-          links={[
-            // Estoque do item tem tela própria: melhor destino que uma lista
-            // filtrada.
-            { label: "Estoque", to: `/estoque/${item.id}` },
-            { label: "Lotes", to: `/estoque/lotes?itemId=${item.id}` },
-            { label: "Movimentações", to: `/estoque/movimentacoes?itemId=${item.id}` },
-            { label: "Fornecedores do item", to: `/compras/item-fornecedor?itemId=${item.id}` },
-          ]}
-        />
-      )}
+      {item && <AtalhosDoItem item={item} />}
 
       <FormSection
         title="Identificação"
@@ -624,6 +794,7 @@ export function ItemFormFields({
               <ToggleCard
                 id="item-consumed-in-production"
                 checked={form.consumedInProduction}
+                disabled={consumoTravadoPorPerfil}
                 onChange={(checked) =>
                   setForm((prev) => ({ ...prev, consumedInProduction: checked }))
                 }
@@ -631,6 +802,11 @@ export function ItemFormFields({
                 description="Entra no processo junto com cada unidade produzida, como a cápsula vazia: a perda prevista aumenta a necessidade dele. Pote, tampa, rótulo e caixa acompanham a quantidade vendida e ficam desmarcados."
               />
             </div>
+          )}
+          {form.type === "PACKAGING" && consumoTravadoPorPerfil && (
+            <p className="field__hint">
+              Só {QUEM_MARCA_CONSUMO_NA_PRODUCAO} alteram "Consumido na produção".
+            </p>
           )}
         </FormSection>
       )}
@@ -647,7 +823,7 @@ export function ItemFormFields({
           <ToggleCard
             id="item-controls-lot"
             checked={form.controlsLot}
-            disabled={structuralLocked}
+            disabled={structuralLocked || controlesTravadosPorPerfil}
             onChange={(checked) =>
               setForm((prev) => ({ ...prev, controlsLot: checked }))
             }
@@ -657,7 +833,7 @@ export function ItemFormFields({
           <ToggleCard
             id="item-controls-expiry"
             checked={form.controlsExpiry}
-            disabled={structuralLocked}
+            disabled={structuralLocked || controlesTravadosPorPerfil}
             onChange={(checked) =>
               setForm((prev) => ({ ...prev, controlsExpiry: checked }))
             }
@@ -667,6 +843,7 @@ export function ItemFormFields({
           <ToggleCard
             id="item-requires-quality-release"
             checked={form.requiresQualityRelease}
+            disabled={controlesTravadosPorPerfil}
             onChange={(checked) =>
               setForm((prev) => ({ ...prev, requiresQualityRelease: checked }))
             }
@@ -676,11 +853,21 @@ export function ItemFormFields({
           <ToggleCard
             id="item-requires-coa"
             checked={form.requiresCoa}
+            disabled={controlesTravadosPorPerfil}
             onChange={(checked) => setForm((prev) => ({ ...prev, requiresCoa: checked }))}
             label="Exige CoA / Laudo"
             description="Lotes deste item só são liberados com o laudo aprovado pela Qualidade."
           />
         </div>
+        {/* Quem edita o Item sem decidir os controles lê o porquê: na criação
+            o item nasce no padrão do tipo, e depois só a Qualidade muda. */}
+        {controlesTravadosPorPerfil && (
+          <p className="field__hint">
+            {mode === "create"
+              ? `O item nasce com os controles padrão do tipo. Só ${QUEM_ALTERA_CONTROLES_DO_ITEM} alteram os controles de rastreabilidade.`
+              : `Só ${QUEM_ALTERA_CONTROLES_DO_ITEM} alteram os controles de rastreabilidade.`}
+          </p>
+        )}
       </FormSection>
 
       <FormSection
@@ -706,8 +893,10 @@ export function ItemFormFields({
         Referência inicial é opcional e vive só na criação: depois que o item
         existe, alterar a referência é uma vigência nova, com histórico, na
         seção "Custo de referência" da edição. Produto acabado não é comprado.
+        Definir custo é do custeio (Comercial e Administrador): para os outros
+        perfis a seção não aparece — a API recusaria o pedido com 403.
       */}
-      {mode === "create" && form.type !== "FINISHED_PRODUCT" && (
+      {mode === "create" && form.type !== "FINISHED_PRODUCT" && ofereceCustoInicial && (
         <FormSection
           title="Custo de referência"
           subtitle="Opcional. Estimativa usada quando não houver compra real nem oferta válida de fornecedor com prioridade maior."
@@ -748,19 +937,7 @@ export function ItemFormFields({
         </FormSection>
       )}
 
-      {mode === "edit" && item && (
-        <FormSection title="Status">
-          <div className="status-line">
-            <span className={item.active ? "badge badge--active" : "badge badge--inactive"}>
-              {item.active ? "Ativo" : "Inativo"}
-            </span>
-            <span className="field__hint">
-              Use "Inativar"/"Reativar" na lista para alterar o status. Itens
-              inativos continuam visíveis no histórico.
-            </span>
-          </div>
-        </FormSection>
-      )}
+      {mode === "edit" && item && <StatusDoItem item={item} />}
     </form>
   );
 }

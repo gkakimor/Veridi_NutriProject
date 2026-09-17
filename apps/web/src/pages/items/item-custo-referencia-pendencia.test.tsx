@@ -34,7 +34,7 @@ vi.mock("../../lib/units-api", () => ({
   listUnits: vi.fn(async () => UNIDADES),
 }));
 vi.mock("../../components/SupplierItemsSection", () => ({ SupplierItemsSection: () => null }));
-vi.mock("../../app/AuthProvider", () => ({ useAuth: vi.fn() }));
+vi.mock("../../app/AuthProvider", () => ({ useOptionalAuth: () => null, useAuth: vi.fn() }));
 
 import {
   createItemCostReference,

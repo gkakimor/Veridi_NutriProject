@@ -1,5 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
+import { PRODUCT_EDIT_ROLES, PRODUCT_STATUS_CHANGE_ROLES } from "@veridi/shared";
+import { exigirPerfil } from "../../lib/current-user.js";
 import {
   activateProduct,
   createProduct,
@@ -11,6 +13,7 @@ import {
 import {
   CustomerNotFoundError,
   DoseUomNotFoundError,
+  FinishedItemControlsNotEditableHereError,
   FinishedUnitNotFoundError,
   ProductCustomerLockedError,
   DuplicateFinishedItemError,
@@ -18,6 +21,7 @@ import {
   InactiveCustomerError,
   InactiveFinishedItemError,
   InvalidFinishedItemTypeError,
+  InvalidProductStatusTransitionError,
   ProductNotFoundError,
 } from "./products.errors.js";
 import {
@@ -63,6 +67,12 @@ function mapDomainError(
   if (error instanceof ProductCustomerLockedError) {
     return { status: 409, body: { error: "product_customer_locked", message: error.message } };
   }
+  if (error instanceof FinishedItemControlsNotEditableHereError) {
+    return {
+      status: 409,
+      body: { error: "finished_item_controls_not_editable_here", message: error.message },
+    };
+  }
   return null;
 }
 
@@ -70,6 +80,12 @@ function mapDomainError(
  * `GET /products`, `GET /products/:id`, `POST /products`,
  * `PATCH /products/:id`, `POST /products/:id/activate`,
  * `POST /products/:id/deactivate`.
+ *
+ * Consultar é de toda sessão. Criar, editar, inativar e reativar são de
+ * Comercial e Administrador (`PRODUCT_EDIT_ROLES`, `PRODUCT_STATUS_CHANGE_ROLES`),
+ * conferidos antes do corpo e da existência (MASTER-DATA-EDIT-PERMISSIONS-01) —
+ * inclusive a criação direta, que nasce aprovada. Formulação, roteiro,
+ * documentos e controles do PA seguem nas rotas próprias, com gates próprios.
  *
  * Sem exclusão física: produtos inativos permanecem visíveis no histórico.
  */
@@ -94,6 +110,9 @@ export const productsRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/products", async (request, reply) => {
+    const actor = exigirPerfil(request, reply, PRODUCT_EDIT_ROLES);
+    if (!actor) return reply;
+
     const parsed = createProductSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply
@@ -112,6 +131,11 @@ export const productsRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.patch("/products/:id", async (request, reply) => {
+    // Antes do `id` servir para qualquer leitura: sem permissão, produto
+    // existente e inexistente recebem a mesma resposta.
+    const actor = exigirPerfil(request, reply, PRODUCT_EDIT_ROLES);
+    if (!actor) return reply;
+
     const { id } = request.params as { id: string };
     const parsed = updateProductSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -134,6 +158,9 @@ export const productsRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/products/:id/activate", async (request, reply) => {
+    const actor = exigirPerfil(request, reply, PRODUCT_STATUS_CHANGE_ROLES);
+    if (!actor) return reply;
+
     const { id } = request.params as { id: string };
     try {
       return reply.send(await activateProduct(id));
@@ -141,17 +168,30 @@ export const productsRoutes: FastifyPluginAsync = async (app) => {
       if (error instanceof ProductNotFoundError) {
         return reply.status(404).send({ error: "not_found" });
       }
+      if (error instanceof InvalidProductStatusTransitionError) {
+        return reply
+          .status(409)
+          .send({ error: "invalid_status_transition", message: error.message });
+      }
       throw error;
     }
   });
 
   app.post("/products/:id/deactivate", async (request, reply) => {
+    const actor = exigirPerfil(request, reply, PRODUCT_STATUS_CHANGE_ROLES);
+    if (!actor) return reply;
+
     const { id } = request.params as { id: string };
     try {
       return reply.send(await deactivateProduct(id));
     } catch (error) {
       if (error instanceof ProductNotFoundError) {
         return reply.status(404).send({ error: "not_found" });
+      }
+      if (error instanceof InvalidProductStatusTransitionError) {
+        return reply
+          .status(409)
+          .send({ error: "invalid_status_transition", message: error.message });
       }
       throw error;
     }

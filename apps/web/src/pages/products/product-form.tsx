@@ -31,7 +31,13 @@ import { assinaturaDoFormulario } from "../../lib/dirty-fields";
 import { listCustomers } from "../../lib/customers-api";
 import { listUnits } from "../../lib/units-api";
 import { ApiValidationError } from "../../lib/api-errors";
-import { numericInvalidMessage, parsePtBrNumber, toPtBrEditText } from "../../lib/numeric-ptbr";
+import {
+  formatDecimalPtBr,
+  formatIntegerPtBr,
+  numericInvalidMessage,
+  parsePtBrNumber,
+  toPtBrEditText,
+} from "../../lib/numeric-ptbr";
 import type { NumericOptions } from "../../lib/numeric-ptbr";
 import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
 import { DecimalField, IntegerField } from "../../components/NumericField";
@@ -40,6 +46,7 @@ import {
   SELETOR_DE_CLIENTE_SEM_CADASTRO,
   usePodeEditarCliente,
 } from "../customers/customer-permissions";
+import { QUEM_EDITA_PRODUTO, useAutoridadeNosDocumentosDoProduto } from "./product-permissions";
 
 /**
  * O formulário de Produto, uma vez só.
@@ -204,6 +211,7 @@ export function useProductForm({
   onSaved,
   onCreateCustomer,
   customerLock,
+  readOnly = false,
 }: {
   mode: "create" | "edit";
   product: ProductDTO | null;
@@ -221,6 +229,12 @@ export function useProductForm({
    * outro, com a tela dizendo que estava tudo certo.
    */
   customerLock?: ProductCustomerLock | null | undefined;
+  /**
+   * Consulta: o perfil não edita o Produto (MASTER-DATA-EDIT-PERMISSIONS-01).
+   * Os campos viram valores e nada é enviado — a API recusaria com 403. As
+   * seções com regra própria (roteiro, custos, documentos) continuam.
+   */
+  readOnly?: boolean;
 }) {
   /*
    * Quem hospeda decide O QUE "+ Novo cliente" faz; se ele aparece depende
@@ -228,6 +242,7 @@ export function useProductForm({
    * continua escolhendo Cliente existente, só não oferece o cadastro.
    */
   const podeCadastrarCliente = usePodeEditarCliente();
+  const documentos = useAutoridadeNosDocumentosDoProduto();
   const [form, setForm] = useState<ProductFormState>(() => {
     const base = initialState(product);
     return customerLock ? { ...base, customerId: customerLock.id } : base;
@@ -356,6 +371,7 @@ export function useProductForm({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (readOnly) return;
 
     setSaving(true);
     setError(null);
@@ -507,10 +523,287 @@ export function useProductForm({
     onCreateCustomer: podeCadastrarCliente ? onCreateCustomer : undefined,
     podeCadastrarCliente,
     lockedCustomer,
+    documentos,
+    readOnly,
   };
 }
 
 export type ProductFormController = ReturnType<typeof useProductForm>;
+
+/**
+ * A cadeia INTEIRA, na ordem de dependência, com os mesmos rótulos das cinco
+ * telas irmãs — igual em edição e em consulta.
+ */
+function AtalhosDoProduto({ product }: { product: ProductDTO }) {
+  return (
+    <RelatedLinks
+      /* Faltavam CMV e Precificação: quem abria o produto para ver o CMV não
+         achava link nenhum aqui e precisava rolar o formulário inteiro até o
+         resumo de custo lá embaixo. E "Custos" era o único lugar do sistema
+         que chamava a estrutura de custo industrial por outro nome. */
+      links={[
+        { label: "Formulação", to: `/producao/formulacoes/${product.id}` },
+        { label: "Custos industriais", to: `/produtos/${product.id}/custos` },
+        { label: "CMV", to: `/produtos/${product.id}/cmv` },
+        { label: "Precificação", to: `/gestao/precificacao?productId=${product.id}` },
+        { label: "Ordens de produção", to: `/producao/ordens?productId=${product.id}` },
+        ...(product.originProjectId
+          ? [
+              {
+                label: "Projeto de origem",
+                to: `/comercial/projetos/${product.originProjectId}`,
+              },
+            ]
+          : []),
+      ]}
+    />
+  );
+}
+
+/**
+ * O item de produto acabado como FATO, não campo: mudar o controle de um item
+ * que já tem lote e histórico é operação do cadastro de Itens, com as travas
+ * dele. Aqui só se responde "como o estoque deste produto é controlado?".
+ */
+function EstoqueDoProduto({ product }: { product: ProductDTO }) {
+  if (!product.finishedProductItem) {
+    return (
+      <p className="field__hint">
+        Este produto não tem item de produto acabado vinculado. Produtos
+        importados do legado podem estar nessa situação.
+      </p>
+    );
+  }
+  const item = product.finishedProductItem;
+  return (
+    <dl className="definition-list">
+      <dt>Item de produto acabado</dt>
+      <dd>
+        <span className="is-code">{item.code}</span> {item.name}
+      </dd>
+      <dt>Controles de estoque</dt>
+      <dd>
+        {[
+          item.controlsLot ? "controla lote" : null,
+          item.controlsExpiry ? "controla validade" : null,
+          item.requiresQualityRelease ? "exige liberação da Qualidade" : null,
+          item.requiresCoa ? "exige CoA / laudo" : null,
+        ]
+          .filter(Boolean)
+          .join(" · ") || "Sem controles — lote e validade não são acompanhados."}
+      </dd>
+      <dt>Estoque</dt>
+      <dd>
+        <Link to={`/estoque/${item.id}`}>Ver estoque e lotes</Link>
+      </dd>
+    </dl>
+  );
+}
+
+/**
+ * As seções do Produto que NÃO são o cadastro: cada uma tem gravação e regra
+ * próprias, e aparecem iguais para quem edita e para quem consulta — permissão
+ * do cadastro não é permissão da seção.
+ */
+function SecoesDoProduto({
+  product,
+  documentos,
+}: {
+  product: ProductDTO;
+  documentos: ProductFormController["documentos"];
+}) {
+  return (
+    <>
+      {/* Roteiro padrão tem gravação própria (Produção e Administrador):
+          escolher aqui não entra no "Salvar alterações" do produto. */}
+      <ProductDefaultRouteSection productId={product.id} />
+
+      {/* Estrutura de custos é documento versionado: aqui só o resumo e
+          o caminho para a página própria. */}
+      <ProductIndustrialCostSummary productId={product.id} />
+
+      <AttachmentsSection
+        context="products"
+        contextId={product.id}
+        title="Documentos"
+        subtitle="Arte de rótulo e ficha técnica são referência — não travam nenhuma operação."
+        types={PRODUCT_ATTACHMENT_TYPES}
+        canUpload={documentos.anexar}
+        canArchive={documentos.arquivar}
+      />
+
+      <FormSection title="Status">
+        <div className="status-line">
+          <span className={product.active ? "badge badge--active" : "badge badge--inactive"}>
+            {product.active ? "Ativo" : "Inativo"}
+          </span>
+          <span className="field__hint">
+            Use "Inativar"/"Reativar" na lista para alterar o status.
+          </span>
+        </div>
+      </FormSection>
+    </>
+  );
+}
+
+/** Um campo em consulta: o mesmo rótulo do formulário e o valor, sem caixa de edição. */
+function ValorConsultado({
+  rotulo,
+  valor,
+  multilinha = false,
+}: {
+  rotulo: string;
+  valor: string | null;
+  multilinha?: boolean;
+}) {
+  return (
+    <>
+      <dt>{rotulo}</dt>
+      <dd {...(multilinha ? { className: "is-multiline" } : {})}>{valor?.trim() ? valor : "—"}</dd>
+    </>
+  );
+}
+
+/**
+ * O Produto em CONSULTA — MASTER-DATA-EDIT-PERMISSIONS-01.
+ *
+ * Mesmas seções, mesma ordem e mesmos rótulos do formulário, com os valores no
+ * lugar das caixas: quem não edita o Produto lê tudo o que o formulário
+ * mostraria, sem campo que aceite digitação e sem "Salvar alterações" que
+ * terminaria em 403. Roteiro, custos e documentos continuam com as regras
+ * deles.
+ */
+function ProductConsultaFields({
+  product,
+  documentos,
+}: {
+  product: ProductDTO;
+  documentos: ProductFormController["documentos"];
+}) {
+  return (
+    <div>
+      <AtalhosDoProduto product={product} />
+
+      <p className="field__hint">
+        Consulta. Só os perfis {QUEM_EDITA_PRODUTO} alteram o cadastro do produto.
+      </p>
+
+      <FormSection
+        title="Identificação"
+        subtitle="Definição comercial/industrial do produto fabricado pela Veridi."
+      >
+        <dl className="definition-list">
+          <dt>Cliente</dt>
+          <dd>
+            {product.customer ? (
+              <>
+                <span className="is-code">{product.customer.code}</span>{" "}
+                {product.customer.legalName}
+              </>
+            ) : (
+              "—"
+            )}
+          </dd>
+          <ValorConsultado rotulo="Nome" valor={product.name} />
+          <ValorConsultado rotulo="Referência externa" valor={product.externalCode} />
+        </dl>
+      </FormSection>
+
+      <FormSection
+        title="Produto acabado / estoque"
+        subtitle="Como este produto é identificado e controlado no estoque."
+      >
+        <EstoqueDoProduto product={product} />
+      </FormSection>
+
+      <FormSection
+        title="Perfil do produto"
+        subtitle="Forma e apresentação comercial usadas pela operação private label."
+      >
+        <dl className="definition-list">
+          <ValorConsultado
+            rotulo="Forma farmacêutica"
+            valor={product.dosageForm ? DOSAGE_FORM_LABELS[product.dosageForm] : "Não informada"}
+          />
+          <ValorConsultado
+            rotulo="Apresentação"
+            valor={
+              product.presentationType
+                ? PRESENTATION_TYPE_LABELS[product.presentationType]
+                : "Não informada"
+            }
+          />
+        </dl>
+      </FormSection>
+
+      <FormSection
+        title="Dose e apresentação"
+        subtitle="A unidade da dose pode ser diferente da unidade de estoque do produto acabado."
+      >
+        <dl className="definition-list">
+          <ValorConsultado
+            rotulo="Cápsulas por dose"
+            valor={product.capsulesPerDose === null ? null : formatIntegerPtBr(product.capsulesPerDose)}
+          />
+          <ValorConsultado
+            rotulo="Dose"
+            valor={product.doseAmount ? formatDecimalPtBr(product.doseAmount, OPCOES_QUANTIDADE) : null}
+          />
+          <ValorConsultado
+            rotulo="Unidade da dose"
+            valor={product.doseUomCode ?? "Não informada"}
+          />
+          <ValorConsultado
+            rotulo="Doses por embalagem"
+            valor={product.dosesPerPackage === null ? null : formatIntegerPtBr(product.dosesPerPackage)}
+          />
+          <ValorConsultado
+            rotulo="Unidades por caixa"
+            valor={
+              product.unitsPerShippingBox === null
+                ? null
+                : formatIntegerPtBr(product.unitsPerShippingBox)
+            }
+          />
+        </dl>
+      </FormSection>
+
+      <FormSection
+        title="Industrial"
+        subtitle="Referências de fabricação — ainda sem efeito automático em OP ou validade de lote."
+      >
+        <dl className="definition-list">
+          <ValorConsultado
+            rotulo="Público-alvo"
+            valor={
+              product.targetAgeGroup ? TARGET_AGE_GROUP_LABELS[product.targetAgeGroup] : "Não informado"
+            }
+          />
+          <ValorConsultado
+            rotulo="Vida útil (meses)"
+            valor={product.shelfLifeMonths === null ? null : formatIntegerPtBr(product.shelfLifeMonths)}
+          />
+          <ValorConsultado
+            rotulo="Lote mínimo"
+            valor={
+              product.minimumBatchQuantity
+                ? formatDecimalPtBr(product.minimumBatchQuantity, OPCOES_QUANTIDADE)
+                : null
+            }
+          />
+        </dl>
+      </FormSection>
+
+      <FormSection title="Observações">
+        <dl className="definition-list">
+          <ValorConsultado rotulo="Notas internas" valor={product.notes} multilinha />
+        </dl>
+      </FormSection>
+
+      <SecoesDoProduto product={product} documentos={documentos} />
+    </div>
+  );
+}
 
 export function ProductFormFields({
   form,
@@ -526,7 +819,13 @@ export function ProductFormFields({
   podeCadastrarCliente,
   lockedCustomer,
   buscarClientes,
+  documentos,
+  readOnly,
 }: ProductFormController) {
+  if (readOnly && product) {
+    return <ProductConsultaFields product={product} documentos={documentos} />;
+  }
+
   /** Liga input, `aria-invalid` e a mensagem, para leitor de tela também. */
   function fieldProps(field: string) {
     const message = fieldErrors[field];
@@ -550,31 +849,7 @@ export function ProductFormFields({
     <form id={PRODUCT_FORM_ID} onSubmit={handleSubmit}>
       {error && <p className="form-alert" role="alert">{error}</p>}
 
-      {product && (
-        <RelatedLinks
-          /* A cadeia INTEIRA, na ordem de dependência, com os mesmos rótulos
-             das cinco telas irmãs. Faltavam CMV e Precificação: quem abria o
-             produto para ver o CMV não achava link nenhum aqui e precisava
-             rolar o formulário inteiro até o resumo de custo lá embaixo. E
-             "Custos" era o único lugar do sistema que chamava a estrutura de
-             custo industrial por outro nome. */
-          links={[
-            { label: "Formulação", to: `/producao/formulacoes/${product.id}` },
-            { label: "Custos industriais", to: `/produtos/${product.id}/custos` },
-            { label: "CMV", to: `/produtos/${product.id}/cmv` },
-            { label: "Precificação", to: `/gestao/precificacao?productId=${product.id}` },
-            { label: "Ordens de produção", to: `/producao/ordens?productId=${product.id}` },
-            ...(product.originProjectId
-              ? [
-                  {
-                    label: "Projeto de origem",
-                    to: `/comercial/projetos/${product.originProjectId}`,
-                  },
-                ]
-              : []),
-          ]}
-        />
-      )}
+      {product && <AtalhosDoProduto product={product} />}
 
       <FormSection
         title="Identificação"
@@ -734,43 +1009,9 @@ options={customerOptions.map((customer) => ({
               />
             </div>
           </>
-        ) : product?.finishedProductItem ? (
-          <dl className="definition-list">
-            <dt>Item de produto acabado</dt>
-            <dd>
-              <span className="is-code">{product.finishedProductItem.code}</span>{" "}
-              {product.finishedProductItem.name}
-            </dd>
-            {/*
-              Fato, não campo: mudar o controle de um item que já tem lote
-              e histórico é operação do cadastro de Itens, com as travas
-              dele. Aqui só se responde "como o estoque deste produto é
-              controlado?" — pergunta que antes obrigava a sair da tela.
-            */}
-            <dt>Controles de estoque</dt>
-            <dd>
-              {[
-                product.finishedProductItem.controlsLot ? "controla lote" : null,
-                product.finishedProductItem.controlsExpiry ? "controla validade" : null,
-                product.finishedProductItem.requiresQualityRelease
-                  ? "exige liberação da Qualidade"
-                  : null,
-                product.finishedProductItem.requiresCoa ? "exige CoA / laudo" : null,
-              ]
-                .filter(Boolean)
-                .join(" · ") || "Sem controles — lote e validade não são acompanhados."}
-            </dd>
-            <dt>Estoque</dt>
-            <dd>
-              <Link to={`/estoque/${product.finishedProductItem.id}`}>Ver estoque e lotes</Link>
-            </dd>
-          </dl>
-        ) : (
-          <p className="field__hint">
-            Este produto não tem item de produto acabado vinculado. Produtos
-            importados do legado podem estar nessa situação.
-          </p>
-        )}
+        ) : product ? (
+          <EstoqueDoProduto product={product} />
+        ) : null}
       </FormSection>
 
       {/* Perfil industrial (capacidade 33): cadastro puro — nada aqui
@@ -957,36 +1198,7 @@ options={customerOptions.map((customer) => ({
         </div>
       </FormSection>
 
-      {/* Roteiro padrão tem gravação própria: escolher aqui não entra no
-          "Salvar alterações" do produto. */}
-      {mode === "edit" && product && <ProductDefaultRouteSection productId={product.id} />}
-
-      {/* Estrutura de custos é documento versionado: aqui só o resumo e
-          o caminho para a página própria. */}
-      {mode === "edit" && product && <ProductIndustrialCostSummary productId={product.id} />}
-
-      {mode === "edit" && product && (
-        <AttachmentsSection
-          context="products"
-          contextId={product.id}
-          title="Documentos"
-          subtitle="Arte de rótulo e ficha técnica são referência — não travam nenhuma operação."
-          types={PRODUCT_ATTACHMENT_TYPES}
-        />
-      )}
-
-      {mode === "edit" && product && (
-        <FormSection title="Status">
-          <div className="status-line">
-            <span className={product.active ? "badge badge--active" : "badge badge--inactive"}>
-              {product.active ? "Ativo" : "Inativo"}
-            </span>
-            <span className="field__hint">
-              Use "Inativar"/"Reativar" na lista para alterar o status.
-            </span>
-          </div>
-        </FormSection>
-      )}
+      {mode === "edit" && product && <SecoesDoProduto product={product} documentos={documentos} />}
     </form>
   );
 }

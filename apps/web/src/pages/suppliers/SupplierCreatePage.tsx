@@ -3,6 +3,7 @@ import type { SupplierDTO } from "@veridi/shared";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { useContextualCreateTarget } from "../../lib/use-contextual-create";
 import { SUPPLIER_FORM_ID, SupplierFormFields, useSupplierForm } from "./supplier-form";
+import { PEDIR_CADASTRO_DE_FORNECEDOR, usePodeEditarFornecedor } from "./supplier-permissions";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
 
@@ -26,10 +27,15 @@ import { helpTopics } from "../../help/help-content";
  * A trilha permanece canônica nos dois casos — `Cadastros e Configurações › Fornecedores ›
  * Novo fornecedor`. De onde a pessoa veio é caminho de volta, não hierarquia
  * do sistema; misturar as duas coisas ensinaria uma estrutura que não existe.
+ *
+ * Só Compras e Administrador cadastram (MASTER-DATA-EDIT-PERMISSIONS-01). Os
+ * outros perfis não recebem o caminho até aqui; quem chega pelo endereço vê a
+ * recusa e a volta, nunca um formulário que terminaria em 403.
  */
 export function SupplierCreatePage() {
   const navigate = useNavigate();
   const contexto = useContextualCreateTarget("supplier");
+  const podeCadastrar = usePodeEditarFornecedor();
 
   const controller = useSupplierForm({
     mode: "create",
@@ -51,15 +57,38 @@ export function SupplierCreatePage() {
     navigate("/cadastros/fornecedores");
   }
 
+  const trilha = (
+    <PageBreadcrumbs
+      items={[
+        { label: "Cadastros e Configurações" },
+        { label: "Fornecedores", href: "/cadastros/fornecedores" },
+        { label: "Novo fornecedor", current: true },
+      ]}
+    />
+  );
+
+  if (!podeCadastrar) {
+    return (
+      <>
+        {trilha}
+        <div className="page__header">
+          <div>
+            <h1 className="page__title">Novo fornecedor</h1>
+          </div>
+          <button type="button" className="btn btn--ghost" onClick={cancelar}>
+            ← Voltar para {contexto.isContextual ? contexto.originLabel : "Fornecedores"}
+          </button>
+        </div>
+        <p className="form-alert" role="alert">
+          Seu perfil não permite cadastrar fornecedores. {PEDIR_CADASTRO_DE_FORNECEDOR}
+        </p>
+      </>
+    );
+  }
+
   return (
     <>
-      <PageBreadcrumbs
-        items={[
-          { label: "Cadastros e Configurações" },
-          { label: "Fornecedores", href: "/cadastros/fornecedores" },
-          { label: "Novo fornecedor", current: true },
-        ]}
-      />
+      {trilha}
 
       <div className="page__header">
         <div>

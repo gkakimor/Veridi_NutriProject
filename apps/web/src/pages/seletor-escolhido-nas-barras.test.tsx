@@ -19,7 +19,7 @@ import type { ListCustomersParams } from "../lib/customers-api";
  * (primeira página de 20, busca no servidor) intacto.
  */
 
-vi.mock("../app/AuthProvider", () => ({ useAuth: () => ({ user: { id: "u-1", role: "ADMIN" } }) }));
+vi.mock("../app/AuthProvider", () => ({ useOptionalAuth: () => null, useAuth: () => ({ user: { id: "u-1", role: "ADMIN" } }) }));
 vi.mock("../lib/customers-api", () => ({ listCustomers: vi.fn() }));
 vi.mock("../lib/projects-api", () => ({ listProjects: vi.fn(), getProjectVocabulary: vi.fn() }));
 vi.mock("../lib/customer-materials-api", () => ({ listCustomerMaterials: vi.fn() }));
