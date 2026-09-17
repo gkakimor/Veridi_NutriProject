@@ -355,12 +355,12 @@ export const baseHints = {
   "formulacao.base": {
     module: "producao",
     label: "Base da formulação",
-    text: "A quantidade de produto acabado que a receita abaixo produz. No modo Por dose, em que cada linha declara o que entra numa dose, ela não decide composição nenhuma: fica valendo como a quantidade sobre a qual o custo estimado é apresentado, e por isso aparece só como referência. Ela volta a ser editável quando alguma linha é declarada por base fixa, que é quando a base realmente multiplica material.",
+    text: "A quantidade de produto acabado que a receita abaixo produz. No modo Por dose, em que cada linha declara o que entra numa dose, ela não decide composição nenhuma: fica valendo como a quantidade sobre a qual o custo estimado é apresentado, e por isso aparece só como referência. Ela volta a ser editável quando a receita calcula sobre a base fixa, que é quando a base realmente multiplica material.",
   },
   "formulacao.modoCalculo": {
     module: "producao",
     label: "Modo de cálculo",
-    text: "Base fixa: as quantidades declaradas produzem a base informada. Por dose: a quantidade é declarada para UMA dose. Embalagem continua por unidade acabada — não se multiplica por dose. A matemática do modo Por dose: quantidade física por dose = alvo por dose ÷ (pureza ÷ 100); quantidade por cápsula = quantidade física por dose ÷ cápsulas por dose; doses por embalagem = cápsulas por embalagem ÷ cápsulas por dose na cápsula, e conteúdo da embalagem ÷ dose no pó.",
+    text: "Base fixa: as quantidades declaradas produzem a base informada. Por dose: a quantidade é declarada para UMA dose — e cápsula e pó são sempre por dose. Embalagem continua por unidade acabada — não se multiplica por dose. A base de cálculo é definida automaticamente pela configuração da formulação: nenhuma linha a escolhe. A matemática do modo Por dose: quantidade física por dose = alvo por dose ÷ (pureza ÷ 100); quantidade por cápsula = quantidade física por dose ÷ cápsulas por dose; doses por embalagem = cápsulas por embalagem ÷ cápsulas por dose na cápsula, e conteúdo da embalagem ÷ dose no pó.",
   },
   "formulacao.fornecimento": {
     module: "producao",

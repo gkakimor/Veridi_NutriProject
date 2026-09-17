@@ -207,11 +207,11 @@ export interface UpdateFormulationTemplateInput {
   description?: string | null;
 }
 
+/** Linha do Modelo como a tela a envia — sem `basis`: o servidor a deriva, como na Formulação. */
 export interface FormulationTemplateComponentInput {
   itemId: string;
   quantity: string;
   unitCode: string;
-  basis?: FormulationComponentBasis;
   supplyResponsibility?: SupplyResponsibility;
   purityPercentApplied?: string | null;
   overagePercent?: string | null;

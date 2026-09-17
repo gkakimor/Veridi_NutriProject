@@ -84,7 +84,12 @@ const formulationComponentInputSchema = z.object({
   itemId: z.string().trim().min(1, "Item é obrigatório"),
   quantity: quantityDecimalSchema(),
   unitCode: z.string().trim().min(1, "Unidade é obrigatória"),
-  basis: z.enum(["FIXED_BASIS", "PER_DOSE", "PER_FINISHED_UNIT"]).optional(),
+  /*
+   * SEM `basis` (FORMULATION-COMPONENT-BASIS-AUTOMATION-01): a base é derivada
+   * pelo serviço da seção do Item e do modo da receita. Um `basis` no corpo é
+   * descartado aqui (o objeto não é estrito) — cliente antigo continua sendo
+   * aceito, e nenhum consegue gravar embalagem por dose.
+   */
   supplyResponsibility: z.enum(["VERIDI", "CUSTOMER"]).optional(),
   // Pureza: mesma regra do cadastro — 0 < x <= 100, null = desconhecida.
   purityPercentApplied: optionalPurityPercent,

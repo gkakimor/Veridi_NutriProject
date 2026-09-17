@@ -12,7 +12,10 @@ import type { FormulationVersionDTO } from "@veridi/shared";
  * ficavam nulas, e todo o material saía com quantidade zero sem que nada
  * na interface dissesse o que faltava.
  *
- * Quem manda é a base do COMPONENTE.
+ * Quem manda é a base do COMPONENTE. Desde FORMULATION-COMPONENT-BASIS-
+ * AUTOMATION-01 essa base é DERIVADA do modo e da forma: a receita por dose é
+ * a que tem linha por dose, e o arranjo auditado só existe como rascunho
+ * legado — que a tela lê pela base derivada e avisa antes de gravar.
  */
 
 vi.mock("../../lib/formulations-api", () => ({
@@ -94,8 +97,8 @@ function versao(overrides: Partial<FormulationVersionDTO> = {}): FormulationVers
     versionLabel: "V1",
     status: "DRAFT",
     basisQuantity: "1",
-    // O arranjo exato da auditoria.
-    calculationMode: "FIXED_BASIS",
+    // Receita por dose com as doses em branco — a premissa que a auditoria achou faltando.
+    calculationMode: "PER_DOSE",
     dosesPerPackage: null,
     outputItemId: "pa-1",
     outputItemCode: "PA-000005",
@@ -127,9 +130,17 @@ async function abrir(dto: FormulationVersionDTO) {
 }
 
 describe("Doses por embalagem", () => {
-  it("aparece em modo Base fixa quando há componente por dose", async () => {
+  it("aparece na receita por dose, com a linha por dose e as doses em branco", async () => {
     await abrir(versao());
     expect(screen.getByLabelText(/Doses por embalagem/, CAMPO_DO_FORMULARIO)).toBeTruthy();
+  });
+
+  it("rascunho legado em Base fixa com linha por dose: a tela segue a base derivada e avisa antes de gravar", async () => {
+    // O arranjo exato da auditoria, gravado antes da regra.
+    await abrir(versao({ calculationMode: "FIXED_BASIS" }));
+    expect(screen.queryByLabelText(/Doses por embalagem/, CAMPO_DO_FORMULARIO)).toBeNull();
+    expect(screen.getByText("1 linha terá a base de cálculo ajustada ao salvar")).toBeTruthy();
+    expect(screen.getByText(/MP-000003 — Cafeína: gravada como “Por dose”/)).toBeTruthy();
   });
 
   it("explica para que serve no ⓘ, sem frase permanente sob o campo", async () => {
@@ -154,14 +165,20 @@ describe("Doses por embalagem", () => {
   });
 
   it("não aparece quando nenhum componente depende de dose", async () => {
-    await abrir(versao({ components: [componente("FIXED_BASIS")] }));
+    await abrir(versao({ calculationMode: "FIXED_BASIS", components: [componente("FIXED_BASIS")] }));
     expect(screen.queryByLabelText(/Doses por embalagem/, CAMPO_DO_FORMULARIO)).toBeNull();
   });
 
   it("continua visível quando já existe valor gravado, mesmo sem componente por dose", async () => {
     // Campo que some levando o número junto esconde a premissa em vez de
     // simplificar a tela.
-    await abrir(versao({ components: [componente("FIXED_BASIS")], dosesPerPackage: 60 }));
+    await abrir(
+      versao({
+        calculationMode: "FIXED_BASIS",
+        components: [componente("FIXED_BASIS")],
+        dosesPerPackage: 60,
+      }),
+    );
     expect(screen.getByLabelText(/Doses por embalagem/, CAMPO_DO_FORMULARIO)).toBeTruthy();
   });
 

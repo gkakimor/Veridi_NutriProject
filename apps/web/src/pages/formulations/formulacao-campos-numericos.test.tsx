@@ -97,7 +97,8 @@ function versao(overrides: Partial<FormulationVersionDTO> = {}): FormulationVers
     status: "DRAFT",
     // Canônico da API, com ponto — `1.234`-like não pode virar ambíguo na carga.
     basisQuantity: "250.5",
-    calculationMode: "FIXED_BASIS",
+    // A linha é por dose, e é o modo que a faz assim (base derivada).
+    calculationMode: "PER_DOSE",
     dosesPerPackage: 60,
     outputItemId: "pa-1",
     outputItemCode: "PA-000005",
@@ -291,7 +292,9 @@ describe("Formulação — doses por embalagem, inteiro (FORMULATION-DOSES-INPUT
 
   it("apagar é limpar: vai null, nunca zero", async () => {
     const user = userEvent.setup();
-    await abrir(versao({ components: [componente({ basis: "FIXED_BASIS" })] }));
+    await abrir(
+      versao({ calculationMode: "FIXED_BASIS", components: [componente({ basis: "FIXED_BASIS" })] }),
+    );
 
     fireEvent.change(doses(), { target: { value: "" } });
     await salvar(user);

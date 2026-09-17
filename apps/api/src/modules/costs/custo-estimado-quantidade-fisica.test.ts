@@ -94,6 +94,11 @@ interface ComponenteDoCenario {
   itemId: string;
   quantity: string;
   unitCode: string;
+  /**
+   * A base que o CENÁRIO quer. Não vai no corpo: desde FORMULATION-COMPONENT-
+   * BASIS-AUTOMATION-01 a API a deriva do tipo do Item e do modo, e é o modo da
+   * versão (`criarVersao`) que produz a linha por dose.
+   */
   basis?: "FIXED_BASIS" | "PER_DOSE" | "PER_FINISHED_UNIT";
   supplyResponsibility?: "VERIDI" | "CUSTOMER";
   purityPercentApplied?: string;
@@ -140,9 +145,9 @@ async function criarVersao(
     url: `/formulation-versions/${version.id}`,
     payload: {
       basisQuantity: opcoes.basisQuantity ?? BASE,
-      calculationMode: "FIXED_BASIS",
+      calculationMode: componentes.some((c) => c.basis === "PER_DOSE") ? "PER_DOSE" : "FIXED_BASIS",
       dosesPerPackage: opcoes.doses === undefined ? DOSES : opcoes.doses,
-      components: componentes,
+      components: componentes.map(({ basis: _base, ...linha }) => linha),
     },
   });
   expect(atualizada.statusCode, atualizada.body).toBe(200);

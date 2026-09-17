@@ -184,7 +184,9 @@ describe("Formulations — versionamento", () => {
         basisQuantity: "1000",
         components: [
           { itemId: rawMaterial.id, quantity: "500", unitCode: "g" },
-          { itemId: packaging.id, quantity: "1000", unitCode: "un" },
+          // Embalagem conta por unidade acabada — a base é derivada do tipo do
+          // Item (FORMULATION-COMPONENT-BASIS-AUTOMATION-01): 1 por unidade.
+          { itemId: packaging.id, quantity: "1", unitCode: "un" },
         ],
       },
     });

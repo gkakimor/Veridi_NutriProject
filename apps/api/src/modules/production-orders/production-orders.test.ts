@@ -607,7 +607,8 @@ describe("Production Orders — cálculo de Requirements e UOM", () => {
         { itemId: rawG.id, quantity: "500", unitCode: "g" },
         { itemId: rawMg.id, quantity: "250000", unitCode: "mg" },
         { itemId: liquid.id, quantity: "750", unitCode: "mL" },
-        { itemId: packaging.id, quantity: "1000", unitCode: "un" },
+        // Embalagem por unidade acabada (base derivada): 1 × 5.000 planejadas.
+        { itemId: packaging.id, quantity: "1", unitCode: "un" },
       ],
       { basisQuantity: "1000" },
     );

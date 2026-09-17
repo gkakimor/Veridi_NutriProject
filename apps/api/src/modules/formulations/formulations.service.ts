@@ -19,7 +19,7 @@ import type {
   FormulationVersionDTO,
   FormulationVersionListResponse,
 } from "@veridi/shared";
-import { calcularQuantidadeDaDose, capsulasPorEmbalagem } from "@veridi/shared";
+import { baseDoComponente, calcularQuantidadeDaDose, capsulasPorEmbalagem } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { problemasDosComponentes } from "../../lib/formulation-component-issues.js";
 import {
@@ -616,7 +616,12 @@ export async function createNewVersionFrom(
             itemId: component.itemId,
             quantity: component.quantity,
             unitCode: component.unitCode,
-            ...(component.basis !== undefined ? { basis: component.basis } : {}),
+            /*
+             * A BASE nao e copiada: e DERIVADA das premissas da versao nova — as
+             * mesmas da origem — e do tipo do Item (FORMULATION-COMPONENT-BASIS-
+             * AUTOMATION-01). Rascunho nasce coerente; a origem nao e tocada.
+             */
+            basis: baseDoComponente(component.item.type, source),
             // Responsabilidade de fornecimento tambem e congelada aqui:
             // e intencao da versao, nao consulta ao cadastro atual.
             ...(component.supplyResponsibility !== undefined
@@ -704,12 +709,15 @@ export function premissasIniciaisDoProduto(
   return base;
 }
 
-/** Valida um array de componentes recebido — dedupe, tipo, ativo (so para itens NOVOS) e unidade. */
+/**
+ * Valida um array de componentes recebido — dedupe, tipo, ativo (so para itens
+ * NOVOS) e unidade. Devolve os Itens lidos: o TIPO de cada um decide a base.
+ */
 async function validateComponents(
   inputs: FormulationComponentInput[],
   previousItemIds: ReadonlySet<string>,
   units: readonly UnitOfMeasure[],
-): Promise<void> {
+): Promise<Map<string, Item>> {
   const seen = new Set<string>();
   for (const input of inputs) {
     if (seen.has(input.itemId)) {
@@ -719,9 +727,11 @@ async function validateComponents(
     seen.add(input.itemId);
   }
 
+  const itens = new Map<string, Item>();
   for (const input of inputs) {
     const item = await getPrisma().item.findUnique({ where: { id: input.itemId } });
     if (!item) throw new ComponentItemNotFoundError(input.itemId);
+    itens.set(item.id, item);
     if (item.type === "FINISHED_PRODUCT") throw new InvalidComponentItemTypeError(item.code);
 
     // So exige item ativo para uma linha genuinamente NOVA — uma linha ja
@@ -738,6 +748,7 @@ async function validateComponents(
       throw new IncompatibleComponentUnitError(item.code);
     }
   }
+  return itens;
 }
 
 export async function updateFormulationVersion(
@@ -750,13 +761,29 @@ export async function updateFormulationVersion(
   const mexeuNaApresentacao = tocouNaApresentacao(input);
   const units =
     input.components !== undefined || mexeuNaApresentacao ? await getUnits() : ([] as UnitOfMeasure[]);
-  if (input.components !== undefined) {
-    const previousItemIds = new Set(current.components.map((component) => component.itemId));
-    await validateComponents(input.components, previousItemIds, units);
-  }
+  const itensRecebidos =
+    input.components !== undefined
+      ? await validateComponents(
+          input.components,
+          new Set(current.components.map((component) => component.itemId)),
+          units,
+        )
+      : null;
   // Recusa da premissa ANTES da transacao: divisao que nao fecha nao grava
   // metade da apresentacao.
   const apresentacao = mexeuNaApresentacao ? resolverApresentacao(current, input, units) : null;
+
+  /*
+   * A BASE DE CADA LINHA e do sistema (FORMULATION-COMPONENT-BASIS-AUTOMATION-01):
+   * sai do tipo do Item e das premissas com que o rascunho FICA depois desta
+   * gravacao — modo e forma. Nenhum `basis` do payload chega aqui (o schema o
+   * descarta), e trocar o modo sem reenviar as linhas tambem realinha as
+   * gravadas: rascunho por dose nao guarda materia-prima sobre base fixa.
+   */
+  const premissasFinais = {
+    calculationMode: input.calculationMode ?? current.calculationMode,
+    dosageForm: apresentacao ? apresentacao.dosageForm : current.dosageForm,
+  };
 
   await getPrisma().$transaction(async (tx) => {
     await tx.formulationVersion.update({
@@ -780,7 +807,9 @@ export async function updateFormulationVersion(
       },
     });
 
-    if (input.components !== undefined) {
+    if (input.components === undefined) {
+      await realinharBasesGravadas(tx, current.components, premissasFinais);
+    } else {
       await tx.formulationComponent.deleteMany({ where: { formulationVersionId: id } });
       if (input.components.length > 0) {
         await tx.formulationComponent.createMany({
@@ -789,7 +818,7 @@ export async function updateFormulationVersion(
             itemId: component.itemId,
             quantity: component.quantity,
             unitCode: component.unitCode,
-            ...(component.basis !== undefined ? { basis: component.basis } : {}),
+            basis: baseDoComponente(itensRecebidos?.get(component.itemId)?.type, premissasFinais),
             // Responsabilidade de fornecimento tambem e congelada aqui:
             // e intencao da versao, nao consulta ao cadastro atual.
             ...(component.supplyResponsibility !== undefined
@@ -824,6 +853,28 @@ export async function updateFormulationVersion(
   });
 
   return (await getFormulationVersionById(id))!;
+}
+
+/**
+ * As linhas GRAVADAS de um rascunho com a base das premissas finais.
+ *
+ * So o que diverge e escrito, agrupado por base: uma gravacao que nao muda o
+ * modo nao toca em linha nenhuma de rascunho coerente.
+ */
+async function realinharBasesGravadas(
+  tx: Prisma.TransactionClient,
+  componentes: readonly ComponentWithItem[],
+  premissas: Parameters<typeof baseDoComponente>[1],
+): Promise<void> {
+  const porBase = new Map<FormulationComponent["basis"], string[]>();
+  for (const componente of componentes) {
+    const base = baseDoComponente(componente.item.type, premissas);
+    if (base === componente.basis) continue;
+    porBase.set(base, [...(porBase.get(base) ?? []), componente.id]);
+  }
+  for (const [basis, ids] of porBase) {
+    await tx.formulationComponent.updateMany({ where: { id: { in: ids } }, data: { basis } });
+  }
 }
 
 export async function activateFormulationVersion(id: string): Promise<FormulationVersionDTO> {

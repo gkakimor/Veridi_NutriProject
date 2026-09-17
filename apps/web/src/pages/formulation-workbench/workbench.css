@@ -252,13 +252,15 @@
 }
 
 /*
- * EMBALAGEM — o ITEM é o que se procura na linha e leva quase 60% da grade;
- * quantidade e unidade dividem uma célula compacta.
- * 879 · 216 · 204 · 134 · 59 = 1492px.
+ * EMBALAGEM — o ITEM é o que se procura na linha e leva quase dois terços da
+ * grade; quantidade e unidade dividem uma célula compacta. Fornecimento ficou
+ * sozinho na coluna (FORMULATION-COMPONENT-BASIS-AUTOMATION-01): 120px bastam
+ * para "Veridi"/"Cliente", e os 84px que a base ocupava foram para o nome do item.
+ * 950 · 216 · 120 · 134 · 72 = 1492px.
  */
-.table--formulacao-embalagem .col-item { width: 58.037%; }
+.table--formulacao-embalagem .col-item { width: 63.667%; }
 .table--formulacao-embalagem .col-quantidade { width: 14.4772%; text-align: right; }
-.table--formulacao-embalagem .col-regras { width: 13.6729%; }
+.table--formulacao-embalagem .col-regras { width: 8.0429%; }
 .table--formulacao-embalagem .col-fisico { width: 8.9812%; text-align: right; }
 .table--formulacao-embalagem th.col-acoes,
 .table--formulacao-embalagem td.col-acoes { width: 4.8257%; }
@@ -293,24 +295,6 @@
   outline: none;
   border-color: var(--v-green-700);
   box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--v-green-700);
-}
-
-/*
- * BASE E FORNECIMENTO, UM SOBRE O OUTRO.
- *
- * Na receita por base fixa a célula "Base · Fornecimento" recebe DOIS
- * seletores, e cada um tem `width: 100%` da coluna. `.table td` declara
- * `white-space: nowrap`, então os dois ficavam na mesma linha: o de
- * Fornecimento saía ~90px para fora da célula e era pintado por baixo do campo
- * da Reserva — a coluna parecia sobrescrita, e o seletor não recebia clique.
- * Dividir em duas colunas dentro dos mesmos 100px deixaria ~50px para cada
- * seletor. O segundo desce para a linha de baixo: a coluna mantém a largura
- * declarada, nenhuma outra coluna muda, e com um seletor só (Por dose) nada
- * muda na célula.
- */
-.table--formulacao .col-regras__campos select + select {
-  display: block;
-  margin-top: var(--sp-1);
 }
 
 /* Percentual é número: alinha à direita, como as colunas de resultado ao lado. */

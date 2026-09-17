@@ -39,7 +39,11 @@ const componentSchema = z.object({
   itemId: z.string().trim().min(1),
   quantity: decimalString,
   unitCode: z.string().trim().min(1).max(20),
-  basis: z.enum(["FIXED_BASIS", "PER_DOSE", "PER_FINISHED_UNIT"]).optional(),
+  /*
+   * SEM `basis` (FORMULATION-COMPONENT-BASIS-AUTOMATION-01): o serviço a deriva
+   * do tipo do Item e das premissas, como na Formulação; um `basis` no corpo é
+   * descartado aqui.
+   */
   supplyResponsibility: z.enum(["VERIDI", "CUSTOMER"]).optional(),
   /*
    * Pureza: a MESMA regra do componente da Formulação — `0 < x <= 100`, até seis

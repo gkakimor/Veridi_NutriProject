@@ -1,13 +1,6 @@
 import type { ReactNode } from "react";
-import type {
-  FormulationComponentBasis,
-  SecaoDaFormula,
-  SupplyResponsibility,
-  UnitOfMeasureDTO,
-} from "@veridi/shared";
+import type { SecaoDaFormula, SupplyResponsibility, UnitOfMeasureDTO } from "@veridi/shared";
 import {
-  FORMULATION_COMPONENT_BASES,
-  FORMULATION_COMPONENT_BASIS_LABELS,
   ITEM_FAMILY_LABELS,
   PACKAGING_SUBTYPE_LABELS,
   SUPPLY_RESPONSIBILITIES,
@@ -56,8 +49,6 @@ export interface LinhaDaBancadaProps {
   editavel: boolean;
   /** A forma tem cápsula: a coluna "Por cápsula" existe. */
   mostrarPorCapsula: boolean;
-  /** A base da linha volta a ser seletor — a seção já a decide no caso normal. */
-  baseEditavelNaLinha: boolean;
   /** Unidades compatíveis com o Item desta linha. */
   unidades: UnitOfMeasureDTO[];
   /** O que o seletor de item oferece agora — sem os itens de outras linhas. */
@@ -86,7 +77,6 @@ export interface LinhaDaBancadaProps {
   podeDescer: boolean;
   erros: Record<string, string>;
   onCampo: <K extends keyof LinhaDaReceita>(campo: K, valor: LinhaDaReceita[K]) => void;
-  onBase: (basis: FormulationComponentBasis) => void;
   onFornecimento: (responsabilidade: SupplyResponsibility) => void;
   onItem: (itemId: string) => void;
   onMover: (direcao: -1 | 1) => void;
@@ -98,7 +88,6 @@ export function LinhaDaBancada({
   secao,
   editavel,
   mostrarPorCapsula,
-  baseEditavelNaLinha,
   unidades,
   opcoesDeItem,
   onBuscarItem,
@@ -113,7 +102,6 @@ export function LinhaDaBancada({
   podeDescer,
   erros,
   onCampo,
-  onBase,
   onFornecimento,
   onItem,
   onMover,
@@ -375,58 +363,29 @@ export function LinhaDaBancada({
       )}
 
       {/*
-        BASE e FORNECIMENTO dividem a célula, mas não têm o mesmo peso.
+        FORNECIMENTO — a decisão da linha que continua sendo de quem formula.
 
-        A base de cada linha já é decidida pela seção e pelo modo: matéria-prima
-        numa fórmula por dose nasce por dose, embalagem nasce por unidade
-        acabada, e a seção vem do TIPO do Item, que a linha não escolhe. Um
-        seletor repetindo essa escolha em cada linha ocupava a largura de uma
-        coluna inteira para oferecer uma decisão que ninguém toma. Ele volta a
-        ser seletor quando a base multiplica material de verdade (alguma linha
-        por base fixa) ou quando ESTA linha já tem base fora do padrão da seção
-        — linha herdada de cópia antiga continua corrigível. Fora disso a base
-        fica como texto de apoio: a capacidade do domínio continua inteira, o
-        que saiu foi o peso visual.
+        A BASE saiu daqui (FORMULATION-COMPONENT-BASIS-AUTOMATION-01): ela é
+        consequência da seção e do modo da receita, o sistema a define e a
+        grava, e um seletor — ou um texto fixo repetindo o que ninguém decide —
+        só ocupava a linha. Quem precisa conferir a base de uma versão antiga a
+        encontra na ajuda do cálculo do "Por embalagem".
       */}
-      <td
-        className="col-regras"
-        data-label={baseEditavelNaLinha ? "Base · Fornecimento" : "Fornecimento"}
-      >
+      <td className="col-regras" data-label="Fornecimento">
         {editavel ? (
-          <div className="col-regras__campos">
-            {baseEditavelNaLinha && (
-              <select
-                aria-label="Base de cálculo do componente"
-                value={linha.basis}
-                onChange={(event) => onBase(event.target.value as FormulationComponentBasis)}
-              >
-                {FORMULATION_COMPONENT_BASES.map((basis) => (
-                  <option key={basis} value={basis}>
-                    {FORMULATION_COMPONENT_BASIS_LABELS[basis]}
-                  </option>
-                ))}
-              </select>
-            )}
-            <select
-              aria-label="Responsabilidade de fornecimento"
-              value={linha.supplyResponsibility}
-              onChange={(event) => onFornecimento(event.target.value as SupplyResponsibility)}
-            >
-              {SUPPLY_RESPONSIBILITIES.map((responsibility) => (
-                <option key={responsibility} value={responsibility}>
-                  {SUPPLY_RESPONSIBILITY_LABELS[responsibility]}
-                </option>
-              ))}
-            </select>
-            {!baseEditavelNaLinha && (
-              <span className="cell-sub">{FORMULATION_COMPONENT_BASIS_LABELS[linha.basis]}</span>
-            )}
-          </div>
+          <select
+            aria-label="Responsabilidade de fornecimento"
+            value={linha.supplyResponsibility}
+            onChange={(event) => onFornecimento(event.target.value as SupplyResponsibility)}
+          >
+            {SUPPLY_RESPONSIBILITIES.map((responsibility) => (
+              <option key={responsibility} value={responsibility}>
+                {SUPPLY_RESPONSIBILITY_LABELS[responsibility]}
+              </option>
+            ))}
+          </select>
         ) : (
-          <>
-            {SUPPLY_RESPONSIBILITY_LABELS[linha.supplyResponsibility]}
-            <span className="cell-sub">{FORMULATION_COMPONENT_BASIS_LABELS[linha.basis]}</span>
-          </>
+          SUPPLY_RESPONSIBILITY_LABELS[linha.supplyResponsibility]
         )}
       </td>
 

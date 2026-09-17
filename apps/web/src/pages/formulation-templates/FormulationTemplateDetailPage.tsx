@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type {
-  FormulationComponentBasis,
   FormulationTemplateComponentDTO,
   FormulationTemplateDTO,
   FormulationTemplateDiffDTO,
@@ -14,12 +13,14 @@ import type {
 import {
   FORMAS_DA_BANCADA,
   FORMULATION_CALCULATION_MODE_LABELS,
+  FORMULATION_COMPONENT_BASIS_LABELS,
   FORMULATION_TEMPLATE_VERSION_STATUS_LABELS,
   PRESENTATION_TYPES,
   apresentacoesDaForma,
   capsulasPorEmbalagem,
   dosesPorEmbalagemDaApresentacao,
   formaDerivaDoses,
+  receitaPorDose,
   rendimentoEsperado,
   resumirDoses,
   secaoDoItem,
@@ -92,8 +93,10 @@ import {
   CAMPOS_DO_COMPONENTE,
   ROTULO_DA_RESERVA,
   absorverChaves,
+  baseForaDaRegra,
   chaveDeErro,
   comAjustesDaBancada,
+  comBaseDerivada,
   comItemEscolhido,
   errosDaLinha,
   idDoCampo,
@@ -170,7 +173,7 @@ function linhasDaVersao(version: FormulationTemplateVersionDTO): LinhaDaReceita[
 /**
  * A assinatura do rascunho — base, unidade e componentes numa string.
  *
- * Quantidade, base, fornecimento, modo, pureza, reserva, unidade e notas entram
+ * Quantidade, fornecimento, modo, pureza, reserva, unidade e notas entram
  * todos: são digitação que "Salvar rascunho" grava e que sair perde. O que a
  * tela apenas calcula — a prévia da linha, o resumo da receita, a comparação
  * entre versões — fica fora.
@@ -187,7 +190,7 @@ function assinaturaDosComponentes(linhas: LinhaDaReceita[]): string {
         item: linha.itemId,
         quantidade: decimalComparavel(linha.quantity),
         unidade: linha.unitCode,
-        base: linha.basis,
+        // Sem a base: ela é derivada, e o que a pessoa não digita não é pendência.
         fornecimento: linha.supplyResponsibility,
         modo: linha.quantityMode,
         pureza: decimalComparavel(linha.purityPercentApplied),
@@ -535,7 +538,9 @@ export function FormulationTemplateDetailPage() {
           const opcao = itemDaBancada(item);
           catalogo.adicionar(opcao);
           setLinhas((atual) =>
-            atual.map((l) => (l.key === chave ? comItemEscolhido(l, opcao, units) : l)),
+            atual.map((l) =>
+              l.key === chave ? comItemEscolhido(comBaseDerivada(l, porDose), opcao, units) : l,
+            ),
           );
         })
         .catch(() => undefined);
@@ -658,7 +663,6 @@ export function FormulationTemplateDetailPage() {
     () => (template?.activeVersion ? linhasDaVersao(template.activeVersion) : []),
     [template?.activeVersion?.id],
   );
-  const receitaExibida = rascunho ? linhas : linhasDaAtiva;
   const premissasExibidas = rascunho
     ? premissas
     : ativa
@@ -721,24 +725,27 @@ export function FormulationTemplateDetailPage() {
     typeof dosesDerivadas === "number" ? dosesDerivadas : (versaoExibida?.dosesPerPackage ?? null);
   const capsulasNaEmbalagem = capsulasPorEmbalagem(capsulasPorDose, dosesPorEmbalagem);
   const mostrarPorCapsula = forma === "CAPSULE";
-  /* Cápsula e pó calculam por dose: é o que a linha nova assume. */
-  const receitaPorDose = derivaDoses || versaoExibida?.calculationMode === "PER_DOSE";
+  /*
+   * A receita é por dose? — a mesma pergunta da Formulação e do servidor
+   * (FORMULATION-COMPONENT-BASIS-AUTOMATION-01): modo "Por dose", ou forma que
+   * deriva doses (cápsula e pó).
+   */
+  const porDose = receitaPorDose({
+    calculationMode: versaoExibida?.calculationMode,
+    dosageForm: premissasDaTela.dosageForm,
+  });
+  /*
+   * A RECEITA QUE A BANCADA MOSTRA. No rascunho, cada linha com a base DERIVADA —
+   * a que "Salvar rascunho" vai gravar; na versão ativa, a base GRAVADA, que é o
+   * snapshot dela.
+   */
+  const receitaExibida = rascunho
+    ? linhas.map((linha) => comBaseDerivada(linha, porDose))
+    : linhasDaAtiva;
 
   /* As duas seções da bancada, pelo tipo real do Item. */
   const linhasDaComposicao = receitaExibida.filter((linha) => secaoDaLinha(linha) === "COMPOSICAO");
   const linhasDaEmbalagem = receitaExibida.filter((linha) => secaoDaLinha(linha) === "EMBALAGEM");
-
-  /*
-   * A BASE decide material nesta versão?
-   *
-   * Só quando alguma linha é declarada por base fixa — é ela que divide por
-   * `basisQuantity`. Quem decide isso é a FÓRMULA, não o modo da versão. Base
-   * diferente de 1 é número que alguém escolheu e continua à vista.
-   */
-  const baseMultiplicaMaterial =
-    receitaExibida.length === 0 ||
-    receitaExibida.some((linha) => linha.basis === "FIXED_BASIS") ||
-    decimalComparavel(versaoExibida?.basisQuantity ?? "1") !== decimalComparavel("1");
 
   /** Totais técnicos da dose, somados em mg pelo mesmo motor das linhas. */
   const resumoDaDose = resumirDoses(
@@ -873,27 +880,25 @@ export function FormulationTemplateDetailPage() {
   /** A conta do físico por embalagem, ao lado do número que ela produz. */
   function explicacaoDoFisico(linha: LinhaDaReceita, fisico: string | null) {
     if (fisico === null) return null;
+    // Versão ativa gravada com base fora da regra: dito aqui, somente leitura.
+    const baseGravada = rascunho ? null : baseForaDaRegra(linha, porDose);
     return (
       <CalcHint
         label="Quantidade física"
         operandos={operandosDoFisico(linha, baseExibida, dosesPorEmbalagem, units)}
         resultado={`${formatQuantity(fisico)} ${linha.stockUnitCode}`}
-        nota="Calculado pelo mesmo motor da Formulação — a pureza corrige a quantidade física."
+        nota={
+          "Calculado pelo mesmo motor da Formulação — a pureza corrige a quantidade física." +
+          (baseGravada
+            ? ` Base de cálculo gravada nesta versão: ${FORMULATION_COMPONENT_BASIS_LABELS[baseGravada]} — diferente da que a configuração do modelo define hoje.`
+            : "")
+        }
       />
     );
   }
 
-  /** Base canônica da seção — o que a linha nova já escolhe sozinha. */
-  function baseDaSecao(secao: SecaoDaFormula): FormulationComponentBasis {
-    return secao === "COMPOSICAO"
-      ? receitaPorDose
-        ? "PER_DOSE"
-        : "FIXED_BASIS"
-      : "PER_FINISHED_UNIT";
-  }
-
   function adicionarLinha(secao: SecaoDaFormula) {
-    setLinhas((atual) => [...atual, linhaNova(secao, receitaPorDose)]);
+    setLinhas((atual) => [...atual, linhaNova(secao, porDose)]);
   }
 
   function removerLinha(key: string) {
@@ -946,12 +951,6 @@ export function FormulationTemplateDetailPage() {
     );
   }
 
-  function mudarBaseDaLinha(key: string, basis: FormulationComponentBasis) {
-    setLinhas((atual) =>
-      atual.map((linha) => (linha.key === key ? { ...linha, basis } : linha)),
-    );
-  }
-
   function mudarFornecimentoDaLinha(key: string, supplyResponsibility: SupplyResponsibility) {
     setLinhas((atual) =>
       atual.map((linha) => (linha.key === key ? { ...linha, supplyResponsibility } : linha)),
@@ -969,7 +968,9 @@ export function FormulationTemplateDetailPage() {
   function mudarItemDaLinha(key: string, itemId: string) {
     const item = catalogo.itens.find((candidato) => candidato.id === itemId);
     setLinhas((atual) =>
-      atual.map((linha) => (linha.key === key ? comItemEscolhido(linha, item, units) : linha)),
+      atual.map((linha) =>
+        linha.key === key ? comItemEscolhido(comBaseDerivada(linha, porDose), item, units) : linha,
+      ),
     );
   }
 
@@ -982,7 +983,9 @@ export function FormulationTemplateDetailPage() {
     catalogo.mesclar([item]);
     setLinhas((atual) =>
       atual.map((linha) =>
-        linha.key === escolhida.key ? comItemEscolhido(linha, item, units) : linha,
+        linha.key === escolhida.key
+          ? comItemEscolhido(comBaseDerivada(linha, porDose), item, units)
+          : linha,
       ),
     );
   }
@@ -1075,7 +1078,7 @@ export function FormulationTemplateDetailPage() {
               itemId: linha.itemId,
               quantity: exigirDecimal(linha.quantity, "Quantidade", OPCOES_QUANTIDADE),
               unitCode: linha.unitCode,
-              basis: linha.basis,
+              // Sem `basis`: o servidor a deriva da seção e das premissas.
               supplyResponsibility: linha.supplyResponsibility,
               // Vazio = não informado (null), nunca 0% nem 100%.
               purityPercentApplied: exigirDecimalOpcional(
@@ -1132,8 +1135,6 @@ export function FormulationTemplateDetailPage() {
         linhas={linhasDaSecao}
         editavel={comEdicao}
         mostrarPorCapsula={mostrarPorCapsula}
-        baseMultiplicaMaterial={baseMultiplicaMaterial}
-        baseDaSecao={baseDaSecao(secao)}
         unidadesDaLinha={unidadesDaLinha}
         opcoesDeItem={(linha) => opcoesDaLinha(linha).map(opcaoDoItem)}
         onBuscarItem={buscarItens}
@@ -1166,7 +1167,6 @@ export function FormulationTemplateDetailPage() {
         explicacaoDoFisico={explicacaoDoFisico}
         erros={errosDasLinhas}
         onCampo={mudarCampoDaLinha}
-        onBase={mudarBaseDaLinha}
         onFornecimento={mudarFornecimentoDaLinha}
         onItem={mudarItemDaLinha}
         onMover={moverLinha}
