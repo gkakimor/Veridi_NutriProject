@@ -6,6 +6,7 @@ import { ProductInactiveError } from "../../lib/product-active-gate.js";
 import { ProjectNotFoundError } from "../projects/projects.errors.js";
 import {
   InsufficientSampleStockError,
+  InvalidSampleItemTypeError,
   InvalidSampleQuantityError,
   InvalidSampleTransitionError,
   LotNotEligibleForSampleError,
@@ -85,6 +86,9 @@ function mapDomainError(
   }
   if (error instanceof InsufficientSampleStockError) {
     return { status: 400, body: { error: "insufficient_stock", message: error.message } };
+  }
+  if (error instanceof InvalidSampleItemTypeError) {
+    return { status: 400, body: { error: "invalid_item_type", message: error.message } };
   }
   if (error instanceof InvalidSampleQuantityError || error instanceof MissingSampleOutputError) {
     return { status: 400, body: { error: "invalid_quantity", message: error.message } };

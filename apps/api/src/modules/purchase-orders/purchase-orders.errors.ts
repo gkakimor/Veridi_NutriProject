@@ -28,7 +28,7 @@ export class LineItemNotFoundError extends Error {
 
 export class InvalidLineItemTypeError extends Error {
   constructor(id: string) {
-    super(`Item não é matéria-prima nem embalagem (RAW_MATERIAL/PACKAGING): ${id}`);
+    super(`Item não é de um tipo que se compra (matéria-prima, embalagem ou uso e consumo): ${id}`);
     this.name = "InvalidLineItemTypeError";
   }
 }

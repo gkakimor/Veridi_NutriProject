@@ -1,7 +1,11 @@
 import { Prisma } from "@prisma/client";
 import type { CustomerOrder, Item, PurchaseOrder, PurchaseOrderLine, ReceiptLine, Supplier } from "@prisma/client";
 import type { PurchaseOrderDTO, PurchaseOrderLineDTO, PurchaseOrderListResponse } from "@veridi/shared";
-import { PURCHASE_ORDER_CODE_PREFIX, calcularTotaisOrdemCompra } from "@veridi/shared";
+import {
+  PURCHASE_ORDER_CODE_PREFIX,
+  calcularTotaisOrdemCompra,
+  podeSerComprado,
+} from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { precoUnitario } from "../../lib/decimal-serialization.js";
 import type { Pagination } from "../../lib/pagination.js";
@@ -177,13 +181,14 @@ export async function assertSupplierActive(id: string): Promise<Supplier> {
 }
 
 /**
- * Item de linha: precisa existir, ser RAW_MATERIAL/PACKAGING e estar
- * ativo. Exportado pelo mesmo motivo de `assertSupplierActive`.
+ * Item de linha: precisa existir, ser de um tipo COMPRÁVEL
+ * (`ITEM_TYPES_COMPRAVEIS`) e estar ativo. Exportado pelo mesmo motivo de
+ * `assertSupplierActive`.
  */
 export async function assertLineItemValid(id: string): Promise<Item> {
   const item = await getPrisma().item.findUnique({ where: { id } });
   if (!item) throw new LineItemNotFoundError(id);
-  if (item.type !== "RAW_MATERIAL" && item.type !== "PACKAGING") {
+  if (!podeSerComprado(item.type)) {
     throw new InvalidLineItemTypeError(id);
   }
   if (!item.active) throw new InactiveLineItemError(id);

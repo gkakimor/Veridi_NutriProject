@@ -19,7 +19,13 @@ import type {
   FormulationVersionDTO,
   FormulationVersionListResponse,
 } from "@veridi/shared";
-import { baseDoComponente, calcularQuantidadeDaDose, capsulasPorEmbalagem } from "@veridi/shared";
+import {
+  ITEM_TYPE_LABELS,
+  baseDoComponente,
+  calcularQuantidadeDaDose,
+  capsulasPorEmbalagem,
+  podeSerComponente,
+} from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { problemasDosComponentes } from "../../lib/formulation-component-issues.js";
 import {
@@ -732,7 +738,9 @@ async function validateComponents(
     const item = await getPrisma().item.findUnique({ where: { id: input.itemId } });
     if (!item) throw new ComponentItemNotFoundError(input.itemId);
     itens.set(item.id, item);
-    if (item.type === "FINISHED_PRODUCT") throw new InvalidComponentItemTypeError(item.code);
+    // Lista de PERMISSÃO (`ITEM_TYPES_DE_COMPONENTE`): tipo novo fica de fora
+    // até alguém decidir o contrário, em vez de entrar na receita sozinho.
+    if (!podeSerComponente(item.type)) throw new InvalidComponentItemTypeError(item.code);
 
     // So exige item ativo para uma linha genuinamente NOVA — uma linha ja
     // existente antes desta edicao (herdada de copia de versao ACTIVE, por
@@ -910,6 +918,9 @@ export async function activateFormulationVersion(id: string): Promise<Formulatio
     const item = component.item;
     if (!item.active) invalidComponents.push(`${item.code} (inativo)`);
     else if (item.type === "FINISHED_PRODUCT") invalidComponents.push(`${item.code} (produto acabado)`);
+    else if (!podeSerComponente(item.type)) {
+      invalidComponents.push(`${item.code} (${ITEM_TYPE_LABELS[item.type].toLocaleLowerCase("pt-BR")})`);
+    }
     else if (new Prisma.Decimal(component.quantity).lessThanOrEqualTo(0)) {
       invalidComponents.push(`${item.code} (quantidade inválida)`);
     } else if (!isUomCompatible(component.unitCode, item.unitCode, units)) {

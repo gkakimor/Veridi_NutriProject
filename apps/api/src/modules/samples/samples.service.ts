@@ -5,7 +5,12 @@ import type {
   ProjectSampleListResponse,
   SampleConsumptionDTO,
 } from "@veridi/shared";
-import { SAMPLE_CODE_PREFIX, SAMPLE_QR_PREFIX, normalizeLotLookupCode } from "@veridi/shared";
+import {
+  SAMPLE_CODE_PREFIX,
+  SAMPLE_QR_PREFIX,
+  normalizeLotLookupCode,
+  podeEntrarEmAmostra,
+} from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { assertProductsActive } from "../../lib/product-active-gate.js";
 import {
@@ -29,6 +34,7 @@ import {
   MissingSampleOutputError,
   ProjectNotOpenForSamplesError,
   SampleClosedError,
+  InvalidSampleItemTypeError,
   SampleItemNotFoundError,
   SampleLotNotFoundError,
   SampleNotFoundError,
@@ -324,6 +330,8 @@ export async function registerSampleConsumption(
 
     const item = await tx.item.findUnique({ where: { id: input.itemId } });
     if (!item) throw new SampleItemNotFoundError(input.itemId);
+    // Lista de PERMISSÃO — ver `ITEM_TYPES_DA_AMOSTRA` no shared.
+    if (!podeEntrarEmAmostra(item.type)) throw new InvalidSampleItemTypeError(item.code);
 
     const quantity = new Prisma.Decimal(input.quantity);
     if (quantity.lessThanOrEqualTo(0)) throw new InvalidSampleQuantityError();

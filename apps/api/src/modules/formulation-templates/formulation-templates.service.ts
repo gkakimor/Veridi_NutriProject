@@ -30,6 +30,7 @@ import {
   baseDoComponente,
   capsulasPorEmbalagem,
   formaDerivaDoses,
+  podeSerComponente,
   secaoDoItem,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
@@ -388,7 +389,8 @@ async function validateComponents(
   for (const input of inputs) {
     const item = await prisma.item.findUnique({ where: { id: input.itemId } });
     if (!item) throw new ComponentItemNotFoundError(input.itemId);
-    if (item.type === "FINISHED_PRODUCT") throw new InvalidComponentItemTypeError(item.code);
+    // Mesma lista de permissão da Formulação — ver `ITEM_TYPES_DE_COMPONENTE`.
+    if (!podeSerComponente(item.type)) throw new InvalidComponentItemTypeError(item.code);
     // Item inativado depois só bloqueia se for linha genuinamente nova.
     if (!previousItemIds.has(input.itemId) && !item.active) {
       throw new InactiveComponentItemError(item.code);

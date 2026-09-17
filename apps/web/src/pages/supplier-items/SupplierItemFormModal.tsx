@@ -14,9 +14,11 @@ import type {
   UnitOfMeasureDTO,
 } from "@veridi/shared";
 import {
+  ITEM_TYPES_COMPRAVEIS,
   SUPPLIER_ITEM_QUALIFICATION_LABELS,
   hojeComercial,
   motivoDoBloqueioValido,
+  podeSerComprado,
 } from "@veridi/shared";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { FormSection } from "../../components/FormSection";
@@ -309,9 +311,7 @@ export function SupplierItemFormModal({
   const catalogo = mesclarPorId(items, encontrados);
 
   // Produto acabado é produzido, não comprado — fica fora da lista.
-  const purchasableItems = catalogo.filter(
-    (item) => item.type === "RAW_MATERIAL" || item.type === "PACKAGING",
-  );
+  const purchasableItems = catalogo.filter((item) => podeSerComprado(item.type));
   const selectedItem = itemFixo ?? purchasableItems.find((item) => item.id === itemId);
 
   /**
@@ -320,16 +320,17 @@ export function SupplierItemFormModal({
    *
    * O tipo era filtrado só no navegador, e na busca ele PRECISA ir junto:
    * perguntando sem tipo, o servidor devolveria produto acabado e a lista
-   * ofereceria justamente o que este formulário recusa. Duas consultas
-   * porque o filtro do servidor é de um tipo por vez — as mesmas duas que
-   * Formulação e Pedido de Compra já fazem.
+   * ofereceria justamente o que este formulário recusa. Uma consulta por tipo
+   * comprável porque o filtro do servidor é de um tipo por vez — as mesmas
+   * que Pedido de Compra já faz.
    */
   async function buscarItens(termo: string): Promise<EntityOption[]> {
-    const [materiaPrima, embalagem] = await Promise.all([
-      listItems({ type: "RAW_MATERIAL", active: true, search: termo, pageSize: PAGINA_DA_BUSCA }),
-      listItems({ type: "PACKAGING", active: true, search: termo, pageSize: PAGINA_DA_BUSCA }),
-    ]);
-    const achados = [...materiaPrima.items, ...embalagem.items];
+    const paginas = await Promise.all(
+      ITEM_TYPES_COMPRAVEIS.map((type) =>
+        listItems({ type, active: true, search: termo, pageSize: PAGINA_DA_BUSCA }),
+      ),
+    );
+    const achados = paginas.flatMap((pagina) => pagina.items);
     setEncontrados((atual) => mesclarPorId(atual, achados));
     return achados.map(opcaoDoItem);
   }

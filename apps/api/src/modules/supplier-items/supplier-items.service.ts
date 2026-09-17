@@ -19,6 +19,7 @@ import {
   isValidCurrencyCode,
   motivoDoBloqueioValido,
   normalizeCurrencyCode,
+  podeSerComprado,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { ForbiddenError } from "../auth/auth.errors.js";
@@ -539,8 +540,9 @@ export async function createSupplierItem(
   ]);
   if (!item) throw new SupplierItemItemNotFoundError(input.itemId);
   if (!supplier) throw new SupplierItemSupplierNotFoundError(input.supplierId);
-  // Produto acabado é produzido, não comprado de fornecedor.
-  if (item.type !== "RAW_MATERIAL" && item.type !== "PACKAGING") {
+  // Produto acabado é produzido, não comprado de fornecedor. Uso e consumo
+  // se compra como qualquer insumo — `ITEM_TYPES_COMPRAVEIS`.
+  if (!podeSerComprado(item.type)) {
     throw new SupplierItemInvalidItemTypeError();
   }
   exigirPartesAtivas("criar", item, supplier);

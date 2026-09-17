@@ -49,7 +49,8 @@ An item is a controlled material.
 Initial item types:
 - RAW_MATERIAL;
 - PACKAGING;
-- FINISHED_PRODUCT where appropriate.
+- FINISHED_PRODUCT where appropriate;
+- INTERNAL_CONSUMABLE (§113) — bought and stocked, never a recipe component.
 
 Each item has:
 - immutable database ID;
@@ -62,14 +63,16 @@ Each item has:
 Suggested display-code patterns:
 - `MP-000001` raw material;
 - `ME-000001` packaging;
-- `PA-000001` finished product.
+- `PA-000001` finished product;
+- `UC-000001` internal consumable.
 
 Exact prefixes are presentation-level and may evolve.
 
 Inactive items remain historically visible.
 
 Each item also carries `requiresQualityRelease` (boolean, editable, default by
-type — true for RAW_MATERIAL/FINISHED_PRODUCT, false for PACKAGING): decides
+type — true for RAW_MATERIAL/FINISHED_PRODUCT, false for PACKAGING and
+INTERNAL_CONSUMABLE): decides
 whether a lot received for that item starts `AWAITING_RELEASE` or already
 `AVAILABLE`. It is a per-item setting the user can override, never inferred
 permanently from `type` alone.
@@ -7221,3 +7224,31 @@ O recebimento mostra as duas marcas e não impede a entrada. O diálogo de inati
 compra nova, OC confirmada segue recebível, o preferencial cai e nada é excluído.
 
 **Sem migration.** Nenhuma coluna nova: `active` já existe em Item, Fornecedor e na relação.
+## §113 — Uso e consumo: material que se compra e se estoca, e não entra em receita
+
+INTERNAL-CONSUMABLE-ITEM-TYPE-01 (2026-09-17), decisão do PO no handoff.
+
+> **Um quarto tipo de Item.** `INTERNAL_CONSUMABLE`, rótulo "Uso e consumo", código `UC-000001` por sequence própria
+> (`item_code_internal_consumable_seq`). Luva, detergente, filme: a fábrica compra e estoca, e nada disso é ingrediente.
+
+**O que o tipo FAZ.** Compra (linha de Pedido de Compra), relação Item × Fornecedor — vários fornecedores, sem nada de
+especial —, recebimento, Estoque com saldo e inventário, e custo de aquisição.
+
+**O que o tipo NÃO faz.** Formulação, Modelo de Formulação, item de saída de Produto, CMV industrial, Amostra de
+projeto, sugestão de compra da produção e material fornecido pelo cliente.
+
+**Defaults do cadastro.** Os quatro controles nascem `false` (`ITEM_TYPE_DEFAULTS.INTERNAL_CONSUMABLE`); nada disso
+chega ao produto do cliente. Continua sendo default, não regra — a Qualidade pode marcar o que for preciso num
+consumível específico (§100). `packagingSubtype` fica `null` e é recusado no tipo, e "Consumido na produção" não é
+oferecido nem usado: a marca separa cápsula de pote dentro da embalagem, e aqui não há ambiguidade a desfazer.
+
+**Formulário (§109).** Seção própria "Dados de uso e consumo", que diz o alcance do tipo — o tipo não tem campo
+exclusivo, e a diferença dele está no que o sistema faz com o item, não no cadastro. Fonte, nutriente declarado,
+família, pureza padrão, subtipo de embalagem e arquivo do rótulo não aparecem.
+
+**Como as recusas são escritas.** Por lista de PERMISSÃO no shared, nunca por exclusão: `ITEM_TYPES_DE_COMPONENTE`,
+`ITEM_TYPES_COMPRAVEIS`, `ITEM_TYPES_DA_SUGESTAO_DE_COMPRA` e `ITEM_TYPES_DA_AMOSTRA`. Enquanto a Formulação barrava
+"tudo menos produto acabado", um tipo novo entrava na receita sozinho e vazava dali para a OP e o CMV. Um tipo novo
+agora começa de fora de tudo e só entra onde alguém o escrever.
+
+**Migration.** `20260925093034_item_type_internal_consumable` — valor de enum e sequence, nada mais.

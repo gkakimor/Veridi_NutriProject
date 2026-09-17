@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { booleanoDeConsultaSchema } from "../../lib/boolean-schema.js";
+import { itemTypeSchema } from "../items/items.schemas.js";
 import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
 import { INVENTORY_MOVEMENT_TYPES } from "@veridi/shared";
 import { quantityDecimalSchema } from "../../lib/decimal-schema.js";
@@ -24,7 +25,7 @@ const inventoryMovementTypeSchema = z.enum(
 
 export const listInventoryQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
-  type: z.enum(["RAW_MATERIAL", "PACKAGING", "FINISHED_PRODUCT"]).optional(),
+  type: itemTypeSchema.optional(),
   onlyWithStock: booleanoDeConsultaSchema().optional(),
   /**
    * Item inativo COM posição (saldo, reservado ou em compra) aparece sempre;

@@ -1,13 +1,17 @@
 import { z } from "zod";
+import { ITEM_TYPES } from "@veridi/shared";
+import type { ItemType } from "@veridi/shared";
 import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import { optionalEnum, optionalPurityPercent } from "../../lib/industrial-schema.js";
 
-export const itemTypeSchema = z.enum([
-  "RAW_MATERIAL",
-  "PACKAGING",
-  "FINISHED_PRODUCT",
-]);
+/*
+ * Derivado de `ITEM_TYPES`, nunca copiado à mão: a lista à mão calou o tipo
+ * novo em todo filtro que a tinha duplicado, e o sintoma era uma tela sem o
+ * tipo, não um erro. Exportado porque Estoque, Inventário, Relatórios e
+ * Item × Fornecedor precisam do MESMO enum.
+ */
+export const itemTypeSchema = z.enum(ITEM_TYPES as unknown as [ItemType, ...ItemType[]]);
 
 export const itemFamilySchema = optionalEnum([
   "VITAMIN",

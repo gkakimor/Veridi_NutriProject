@@ -52,6 +52,7 @@ interface Props {
 const MARCA_DO_PROBLEMA: Record<FormulationComponentIssueDTO["code"], string> = {
   ITEM_INACTIVE: "Inativo",
   ITEM_IS_FINISHED_PRODUCT: "Produto acabado",
+  ITEM_TYPE_NOT_COMPONENT: "Tipo fora da receita",
   UOM_INCOMPATIBLE: "Unidade incompatível",
   INVALID_QUANTITY: "Quantidade inválida",
 };

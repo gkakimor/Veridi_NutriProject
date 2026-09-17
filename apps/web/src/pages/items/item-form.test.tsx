@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ItemDTO, UnitOfMeasureDTO } from "@veridi/shared";
+import { ITEM_TYPES } from "@veridi/shared";
 
 /**
  * Item de estoque pelas duas portas: a página `/cadastros/itens/novo` e o
@@ -87,6 +88,19 @@ function opcoesDeTipo(): string[] {
   return Array.from(seletor("item-type").options)
     .map((option) => option.value)
     .filter((value) => value !== "");
+}
+
+/**
+ * A criação manual oferece TODOS os tipos menos Produto acabado.
+ *
+ * Contra `ITEM_TYPES`, e não contra uma lista escrita à mão: o que se prova é
+ * que exatamente UM tipo fica de fora, e que é o acabado. Congelar os nomes
+ * fazia um tipo NOVO reprovar aqui sem nada estar errado.
+ */
+function esperarSemProdutoAcabado(): void {
+  const oferecidos = opcoesDeTipo();
+  expect(oferecidos).not.toContain("FINISHED_PRODUCT");
+  expect(oferecidos).toHaveLength(ITEM_TYPES.length - 1);
 }
 
 /** Preenche o mínimo que a API exige. */
@@ -226,7 +240,7 @@ describe("Item — Produto acabado fora da criação manual", () => {
     renderPagina();
     await waitFor(() => expect(listUnits).toHaveBeenCalled());
 
-    expect(opcoesDeTipo()).toEqual(["RAW_MATERIAL", "PACKAGING"]);
+    esperarSemProdutoAcabado();
     expect(screen.queryByRole("option", { name: "Produto acabado" })).toBeNull();
   });
 
@@ -243,7 +257,7 @@ describe("Item — Produto acabado fora da criação manual", () => {
       </MemoryRouter>,
     );
 
-    expect(opcoesDeTipo()).toEqual(["RAW_MATERIAL", "PACKAGING"]);
+    esperarSemProdutoAcabado();
   });
 
   it("na edição o tipo continua inteiro — item existente não perde a identidade", () => {
@@ -298,7 +312,7 @@ describe("Item — tipo pré-escolhido pela URL", () => {
     await waitFor(() => expect(listUnits).toHaveBeenCalled());
 
     expect(seletor("item-type").value).toBe("");
-    expect(opcoesDeTipo()).toEqual(["RAW_MATERIAL", "PACKAGING"]);
+    esperarSemProdutoAcabado();
   });
 });
 

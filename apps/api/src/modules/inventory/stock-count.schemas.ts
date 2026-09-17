@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  ITEM_TYPES,
   LOT_STATUSES,
   STOCK_COUNT_DECISIONS,
   STOCK_COUNT_EXPIRY_FILTERS,
@@ -33,7 +34,7 @@ const semRepeticao = (ids: string[]) => new Set(ids).size === ids.length;
 
 export const stockCountScopeSchema = z
   .object({
-    itemTypes: z.array(z.enum(["RAW_MATERIAL", "PACKAGING", "FINISHED_PRODUCT"])).max(3).optional(),
+    itemTypes: z.array(enumDe(ITEM_TYPES)).max(ITEM_TYPES.length).optional(),
     balance: z.enum(["WITH_BALANCE", "ANY"]),
     owner: z.enum(["ALL", "VERIDI", "CUSTOMER"]).default("ALL"),
     customerId: idSchema.optional(),

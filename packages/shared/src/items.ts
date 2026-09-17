@@ -3,18 +3,24 @@
 import type { CreateItemCostReferenceInput } from "./item-cost-reference.js";
 import type { UserRole } from "./users.js";
 
-export type ItemType = "RAW_MATERIAL" | "PACKAGING" | "FINISHED_PRODUCT";
+export type ItemType =
+  | "RAW_MATERIAL"
+  | "PACKAGING"
+  | "FINISHED_PRODUCT"
+  | "INTERNAL_CONSUMABLE";
 
 export const ITEM_TYPES: readonly ItemType[] = [
   "RAW_MATERIAL",
   "PACKAGING",
   "FINISHED_PRODUCT",
+  "INTERNAL_CONSUMABLE",
 ];
 
 export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   RAW_MATERIAL: "Matéria-prima",
   PACKAGING: "Material de embalagem",
   FINISHED_PRODUCT: "Produto acabado",
+  INTERNAL_CONSUMABLE: "Uso e consumo",
 };
 
 /** Prefixo do código interno exibido ao usuário (ex.: MP-000001). */
@@ -22,7 +28,75 @@ export const ITEM_TYPE_PREFIXES: Record<ItemType, string> = {
   RAW_MATERIAL: "MP",
   PACKAGING: "ME",
   FINISHED_PRODUCT: "PA",
+  INTERNAL_CONSUMABLE: "UC",
 };
+
+/**
+ * O que pode ser COMPONENTE de receita — Formulação de produto e Modelo de
+ * Formulação (INTERNAL-CONSUMABLE-ITEM-TYPE-01).
+ *
+ * Lista de PERMISSÃO, nunca de exclusão. Enquanto a regra era "tudo menos
+ * produto acabado", cada tipo novo entrava sozinho na receita e vazava dali
+ * para a OP e para o CMV industrial — o custo de um material que nunca fez
+ * parte da fórmula. Um tipo novo agora começa de fora e só entra quando
+ * alguém o escrever aqui.
+ */
+export const ITEM_TYPES_DE_COMPONENTE: readonly ItemType[] = ["RAW_MATERIAL", "PACKAGING"];
+
+/** O Item pode ser componente de uma receita? */
+export function podeSerComponente(type: ItemType): boolean {
+  return ITEM_TYPES_DE_COMPONENTE.some((aceito) => aceito === type);
+}
+
+/**
+ * O que se COMPRA: linha de Pedido de Compra e relação Item × Fornecedor.
+ *
+ * Produto acabado é produzido, não comprado. Uso e consumo entra: luva,
+ * detergente e filme são comprados de fornecedor como qualquer insumo, com
+ * preço, homologação e recebimento — só não entram em receita nenhuma.
+ */
+export const ITEM_TYPES_COMPRAVEIS: readonly ItemType[] = [
+  "RAW_MATERIAL",
+  "PACKAGING",
+  "INTERNAL_CONSUMABLE",
+];
+
+/** O Item pode ser comprado (OC e Item × Fornecedor)? */
+export function podeSerComprado(type: ItemType): boolean {
+  return ITEM_TYPES_COMPRAVEIS.some((aceito) => aceito === type);
+}
+
+/**
+ * O que a SUGESTÃO DE COMPRA da produção pode pedir — o recorte do Pedido do
+ * cliente, mais estreito que `ITEM_TYPES_COMPRAVEIS` de propósito.
+ *
+ * A falta vem da necessidade da receita, e uso e consumo não está em receita
+ * nenhuma: a sugestão nunca teria como calcular a quantidade dele. Comprar uso
+ * e consumo continua possível pela OC avulsa, que é onde essa decisão mora.
+ */
+export const ITEM_TYPES_DA_SUGESTAO_DE_COMPRA: readonly ItemType[] = [
+  "RAW_MATERIAL",
+  "PACKAGING",
+];
+
+/**
+ * O que a AMOSTRA de projeto pode consumir do estoque.
+ *
+ * Amostra é material real saindo para o cliente — os mesmos três tipos que já
+ * podiam sair antes de uso e consumo existir. Luva e detergente saem do
+ * estoque por ajuste ou perda, não por consumo de amostra: contá-los na
+ * amostra jogaria consumo interno da fábrica na conta do projeto do cliente.
+ */
+export const ITEM_TYPES_DA_AMOSTRA: readonly ItemType[] = [
+  "RAW_MATERIAL",
+  "PACKAGING",
+  "FINISHED_PRODUCT",
+];
+
+/** O Item pode ser consumido por uma Amostra de projeto? */
+export function podeEntrarEmAmostra(type: ItemType): boolean {
+  return ITEM_TYPES_DA_AMOSTRA.some((aceito) => aceito === type);
+}
 
 /**
  * Os quatro controles de rastreabilidade e qualidade de um Item.
@@ -83,6 +157,19 @@ export const ITEM_TYPE_DEFAULTS: Record<ItemType, ItemQualityControls> = {
     controlsLot: true,
     controlsExpiry: true,
     requiresQualityRelease: true,
+    requiresCoa: false,
+  },
+  /*
+   * Uso e consumo nasce SEM controle nenhum (INTERNAL-CONSUMABLE-ITEM-TYPE-01):
+   * luva, detergente e filme não têm lote rastreado, validade acompanhada nem
+   * liberação da Qualidade — nada deles chega ao produto do cliente. Continua
+   * sendo default, não regra: a Qualidade pode marcar o que for preciso num
+   * consumível específico.
+   */
+  INTERNAL_CONSUMABLE: {
+    controlsLot: false,
+    controlsExpiry: false,
+    requiresQualityRelease: false,
     requiresCoa: false,
   },
 };

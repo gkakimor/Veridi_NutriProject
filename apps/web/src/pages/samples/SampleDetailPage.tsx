@@ -7,7 +7,12 @@ import type {
   ProjectSampleDTO,
   UnitOfMeasureDTO,
 } from "@veridi/shared";
-import { PROJECT_SAMPLE_STATUS_LABELS, SAMPLE_ATTACHMENT_TYPES, ownerLabel } from "@veridi/shared";
+import {
+  PROJECT_SAMPLE_STATUS_LABELS,
+  SAMPLE_ATTACHMENT_TYPES,
+  ownerLabel,
+  podeEntrarEmAmostra,
+} from "@veridi/shared";
 import { AttachmentsSection } from "../../components/AttachmentsSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { FormSection } from "../../components/FormSection";
@@ -56,6 +61,9 @@ function DicaDaColuna({ id }: { id: HelpHintId }) {
  * que conhece o catálogo inteiro — carregar mil registros só para filtrar no
  * navegador deixou de ter propósito.
  */
+/** O tipo do Item sai do estoque como amostra? A mesma lista do servidor. */
+const podeConsumir = (item: ItemDTO) => podeEntrarEmAmostra(item.type);
+
 const PRIMEIRA_PAGINA = 50;
 
 /** Um formato só de rótulo: o da lista inicial e o da busca não podem divergir. */
@@ -123,7 +131,7 @@ export function SampleDetailPage() {
 
   useEffect(() => {
     listItems({ active: true, pageSize: PRIMEIRA_PAGINA })
-      .then((response) => setItems(response.items))
+      .then((response) => setItems(response.items.filter(podeConsumir)))
       .catch(() => setItems([]));
     listUnits()
       .then(setUnits)
@@ -132,10 +140,11 @@ export function SampleDetailPage() {
 
   /**
    * Busca no servidor, com o MESMO filtro de negócio da carga inicial
-   * (`active: true`, sem restrição de tipo — amostra consome o que houver em
-   * estoque). Quem não é elegível continua não sendo: a elegibilidade real do
-   * consumo é do serviço, que recusa acima do disponível e exige lote onde há
-   * controle de lote. Achar não é poder consumir.
+   * (`active: true`, e fora o tipo que não sai como amostra — o recorte de
+   * tipo é aqui porque o servidor filtra um tipo por vez e a amostra aceita
+   * três). Quem não é elegível continua não sendo: a elegibilidade real do
+   * consumo é do serviço, que recusa o tipo, recusa acima do disponível e
+   * exige lote onde há controle de lote. Achar não é poder consumir.
    *
    * O achado entra em `items` porque é de lá que sai o rótulo do campo e a
    * unidade mostrada ao lado da quantidade. A mesclagem é segura para um
@@ -144,12 +153,13 @@ export function SampleDetailPage() {
    */
   async function buscarItens(termo: string): Promise<EntityOption[]> {
     const resposta = await listItems({ active: true, search: termo, pageSize: PRIMEIRA_PAGINA });
+    const elegiveis = resposta.items.filter(podeConsumir);
     setItems((atual) => {
       const conhecidos = new Set(atual.map((item) => item.id));
-      const novos = resposta.items.filter((item) => !conhecidos.has(item.id));
+      const novos = elegiveis.filter((item) => !conhecidos.has(item.id));
       return novos.length === 0 ? atual : [...atual, ...novos];
     });
-    return resposta.items.map(opcaoDoItem);
+    return elegiveis.map(opcaoDoItem);
   }
 
   // Lotes do item escolhido — mesma leitura de estoque do resto do sistema,

@@ -5943,6 +5943,47 @@ timeout/5xx/429/rede, payload parcial e malformado, JSON que não é objeto, tet
 pacotes. **Sem E2E e sem suíte completa** (validação focada, decisão do PO). Nenhum teste toca a internet: o provedor é
 mockado dos dois lados.
 
+## Uso e consumo: o quarto tipo de Item (INTERNAL-CONSUMABLE-ITEM-TYPE-01, 2026-09-17)
+
+**Decisão do PO.** `Item.type` ganha `INTERNAL_CONSUMABLE`, rótulo "Uso e consumo", código `UC-000001` pela sequence
+`item_code_internal_consumable_seq`. É material comprado e estocado que nunca entra em receita: luva, detergente, filme.
+Regra durável em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §113. Na `main`, **fora de PROD** (`release/prod` segue
+`8e824e8f`).
+
+**Migration.** `20260925093034_item_type_internal_consumable`: o valor de enum e a sequence, nada mais. `CREATE
+SEQUENCE` mora na mesma migration porque tipo sem sequence nasceria sem código, e o valor novo é só declarado ali, não
+usado — as duas instruções convivem na transação da migration. Sequence classificada em
+`scripts/maintenance/prod-cleanup-sequences.mjs` (SEQUENCES_DE_NEGOCIO), como o próprio prod-cleanup exige.
+`pnpm validate:migrations:fresh` reconstrói a cadeia (83 migrations, sem drift).
+
+**Entra em.** Pedido de Compra, Item × Fornecedor (vários, sem nada de especial), recebimento, Estoque com saldo e
+inventário, custo de aquisição. As telas de Compras e de Item × Fornecedor deixaram de fazer duas consultas fixas
+(matéria-prima e embalagem) e passaram a percorrer `ITEM_TYPES_COMPRAVEIS`.
+
+**Não entra em.** Formulação, Modelo de Formulação, item de saída de Produto, CMV industrial, Amostra de projeto,
+sugestão de compra da produção e material fornecido pelo cliente. As guardas viraram lista de PERMISSÃO no shared
+(`ITEM_TYPES_DE_COMPONENTE`, `ITEM_TYPES_COMPRAVEIS`, `ITEM_TYPES_DA_SUGESTAO_DE_COMPRA`, `ITEM_TYPES_DA_AMOSTRA`):
+antes a receita barrava só produto acabado, e um tipo novo entraria nela sozinho e vazaria para a OP e o CMV. A recusa
+da Amostra é erro próprio (`invalid_item_type`), não "item não encontrado". Pendência de componente ganhou o código
+`ITEM_TYPE_NOT_COMPONENT`, ao lado de `ITEM_IS_FINISHED_PRODUCT`.
+
+**Cadastro.** Defaults dos quatro controles em `false`; `packagingSubtype` recusado no tipo; "Consumido na produção"
+não é oferecido. O formulário por tipo (§109) ganhou a seção "Dados de uso e consumo", que diz o alcance do tipo — ele
+não tem campo exclusivo, então fica fora de `CAMPOS_PROPRIOS_DO_TIPO` e trocar para ele limpa os campos dos outros
+tipos. Fonte, nutriente declarado, família, pureza, subtipo e arquivo do rótulo não aparecem. Os filtros de tipo da API
+(Itens, Estoque, Inventário, Relatórios, Item × Fornecedor) passaram a derivar de `ITEM_TYPES` em vez de repetir a
+lista à mão, que era o que calava o tipo novo sem erro nenhum.
+
+**Validação.** Focados: `apps/api/src/modules/items/uso-e-consumo.test.ts` (12: código e sequence própria, subtipo
+recusado, filtros de Item/Estoque/material do cliente, fornecedor, Pedido de Compra, e as recusas de Formulação,
+Modelo, Produto e Amostra) e `apps/web/src/pages/items/uso-e-consumo-formulario.test.tsx` (4: o tipo é oferecido, a
+seção própria aparece, nenhum campo dos outros tipos, controles desmarcados e nada escondido no envio). Regressão dos
+módulos tocados: API Itens/Formulação/Modelo/Compras/Fornecedor/Amostra (519) e Estoque/Relatórios/Pedido/Produto/
+Exportações (439); web Itens/Fornecedores/Compras/Amostras/Modelos/Estoque/Relatórios (613); scripts de manutenção (47),
+ordem de migration (22) e shared puro (395). `item-form.test.tsx` deixou de congelar a lista de tipos criáveis e passou
+a provar que exatamente um — Produto acabado — fica de fora. Typecheck shared, API e web. Sem suíte completa, E2E,
+Playwright nem mutação.
+
 ## Item × Fornecedor: cadastro inativo não começa compromisso novo (SUPPLIER-ITEM-INACTIVE-GATE-01, 2026-09-17)
 
 **Decisão do PO** (D4 e D8 de [MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01](discovery/MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01.md),

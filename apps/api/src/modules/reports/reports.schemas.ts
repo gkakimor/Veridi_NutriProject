@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { booleanoDeConsultaSchema } from "../../lib/boolean-schema.js";
+import { itemTypeSchema } from "../items/items.schemas.js";
 import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
 import { diaCivilDeFiltroSchema, recusarPeriodoInvertido } from "../../lib/date-schema.js";
 
@@ -54,7 +55,7 @@ const recusarPeriodoDoRelatorioInvertido = recusarPeriodoInvertido("from", "to")
 export const inventoryPositionQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
   itemId: z.string().trim().min(1).optional(),
-  itemType: z.enum(["RAW_MATERIAL", "PACKAGING", "FINISHED_PRODUCT"]).optional(),
+  itemType: itemTypeSchema.optional(),
   status: z.enum(["AWAITING_RELEASE", "AVAILABLE", "BLOCKED", "EXPIRED"]).optional(),
   location: z.string().trim().min(1).optional(),
   ownerType: z.enum(["VERIDI", "CUSTOMER"]).optional(),
@@ -68,7 +69,7 @@ export const expiryQuerySchema = z
   .object({
     search: z.string().trim().min(1).optional(),
     itemId: z.string().trim().min(1).optional(),
-    itemType: z.enum(["RAW_MATERIAL", "PACKAGING", "FINISHED_PRODUCT"]).optional(),
+    itemType: itemTypeSchema.optional(),
     /** Janelas prontas; `CUSTOM` usa `from`/`to`. */
     window: z.enum(["EXPIRED", "D7", "D30", "D60", "CUSTOM"]).default("D30"),
     onlyWithBalance: booleanoDeConsultaSchema().default(true),

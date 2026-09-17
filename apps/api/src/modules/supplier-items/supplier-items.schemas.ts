@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
+import { itemTypeSchema } from "../items/items.schemas.js";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import { decimalStringSchema } from "../../lib/decimal-schema.js";
 import { optionalNullableDateSchema } from "../../lib/date-schema.js";
@@ -133,7 +134,7 @@ export const listSupplierItemsQuerySchema = z.object({
     .optional()
     .transform((value) => (value === undefined ? undefined : value === "true")),
   itemFamily: z.string().trim().min(1).optional(),
-  itemType: z.enum(["RAW_MATERIAL", "PACKAGING", "FINISHED_PRODUCT"]).optional(),
+  itemType: itemTypeSchema.optional(),
   page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
   pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
 });
