@@ -90,7 +90,9 @@ function versao(overrides: Partial<FormulationVersionDTO> = {}): FormulationVers
     versionLabel: "V1",
     status: "DRAFT",
     basisQuantity: "1",
-    calculationMode: "FIXED_BASIS",
+    // Receita por dose: é o modo que faz a linha ser por dose — a base é
+    // derivada (FORMULATION-COMPONENT-BASIS-AUTOMATION-01).
+    calculationMode: "PER_DOSE",
     dosesPerPackage: 60,
     outputItemId: "pa-1",
     outputItemCode: "PA-000005",

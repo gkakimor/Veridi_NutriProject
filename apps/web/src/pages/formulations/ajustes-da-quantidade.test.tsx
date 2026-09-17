@@ -325,7 +325,7 @@ describe("Coluna Por embalagem — físico e equivalente na mesma célula", () =
       "Pureza (%)",
       "Alvo por dose",
       "Física por dose",
-      "Base · Fornecimento",
+      "Fornecimento",
       "Reserva %",
       "Por embalagem",
     ]);

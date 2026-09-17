@@ -66,7 +66,7 @@ export const formulacaoVersao = {
   ],
   automations: [
     "O sistema converte unidades (1 kg é 1.000 g), aplica a pureza e calcula o físico por dose, por cápsula e por unidade acabada — é ele que a ordem reserva e consome.",
-    "O sistema multiplica componente por dose pelas doses por embalagem; embalagem nunca é multiplicada por dose.",
+    "O sistema define a base das linhas pela configuração: multiplica pelas doses o que é por dose; embalagem, nunca.",
     "O sistema estima o custo com as fontes de hoje e avisa quando há edição pendente. A estimativa não é gravada: vale o cálculo salvo na Estrutura de custos.",
     "O sistema congela a versão dentro de cada Ordem de Produção: ativar outra depois não muda ordem já emitida.",
   ],

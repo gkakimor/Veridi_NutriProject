@@ -6,7 +6,6 @@ import type {
   DosageForm,
   FormulationActivationImpactDTO,
   FormulationCalculationMode,
-  FormulationComponentBasis,
   FormulationCostEstimateDTO,
   FormulationVersionDTO,
   IndustrialMaterialCostSource,
@@ -19,6 +18,7 @@ import {
   COST_QUALITY_LABELS,
   FORMULATION_CALCULATION_MODES,
   FORMULATION_CALCULATION_MODE_LABELS,
+  FORMULATION_COMPONENT_BASIS_LABELS,
   FORMULATION_VERSION_STATUS_LABELS,
   INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS,
   DOSAGE_FORM_LABELS,
@@ -29,10 +29,12 @@ import {
   TARGET_AGE_GROUP_LABELS,
   ajustesAutorizados,
   apresentacoesDaForma,
+  baseDoComponente,
   capsulasPorEmbalagem,
   dosesPorEmbalagemDaApresentacao,
   formaDerivaDoses,
   quantidadeBrutaPlanejada,
+  receitaPorDose,
   rendimentoEsperado,
   resumirDoses,
 } from "@veridi/shared";
@@ -103,8 +105,10 @@ import type { ItemDaBancada } from "../formulation-workbench/catalogo-de-itens";
 import {
   CAMPOS_DO_COMPONENTE,
   absorverChaves,
+  baseForaDaRegra,
   chaveDeErro,
   comAjustesDaBancada,
+  comBaseDerivada,
   comItemEscolhido,
   errosDaLinha,
   idDoCampo,
@@ -206,7 +210,6 @@ function rascunhoDoDTO(dto: FormulationVersionDTO) {
       itemId: component.itemId,
       quantity: component.quantity.trim(),
       unitCode: component.unitCode,
-      basis: component.basis,
       supplyResponsibility: component.supplyResponsibility,
       purityPercentApplied: (component.purityPercentApplied ?? "").trim() || null,
       overagePercent: (component.overagePercent ?? "").trim() || null,
@@ -627,7 +630,9 @@ export function FormulationVersionPage() {
           const opcao = itemDaBancada(item);
           catalogo.adicionar(opcao);
           setComponents((prev) =>
-            prev.map((row) => (row.key === chave ? comItemEscolhido(row, opcao, units) : row)),
+            prev.map((row) =>
+              row.key === chave ? comItemEscolhido(comBaseDerivada(row, porDose), opcao, units) : row,
+            ),
           );
         })
         .catch(() => undefined);
@@ -637,16 +642,6 @@ export function FormulationVersionPage() {
   const isDraft = version?.status === "DRAFT";
   /* Quem pode promover esta formulação a Modelo — a mesma regra de sempre. */
   const podeSalvarComoTemplate = user?.role === "ADMIN" || user?.role === "PRODUCTION";
-
-  /*
-   * Doses por embalagem: quem exige é a base do COMPONENTE.
-   *
-   * O modo da versão continua importando para o default de linha nova, mas
-   * não pode ser o critério de exibição — foi assim que o campo sumiu numa
-   * fórmula que precisava dele.
-   */
-  const dosesObrigatorias =
-    calculationMode === "PER_DOSE" || components.some((row) => row.basis === "PER_DOSE");
 
   /*
    * As premissas da apresentação como estão nos campos — e o que elas fecham.
@@ -689,9 +684,45 @@ export function FormulationVersionPage() {
       ? leituraDasDoses.valor
       : null;
   const dosesInformadas = dosesPorEmbalagem !== null && dosesPorEmbalagem > 0;
+  /*
+   * A receita é por dose? — a pergunta ÚNICA que decide a base de cada linha
+   * (FORMULATION-COMPONENT-BASIS-AUTOMATION-01): modo "Por dose", ou forma que
+   * deriva doses (cápsula e pó). A mesma função o servidor usa ao gravar.
+   */
+  const porDose = receitaPorDose({ calculationMode, dosageForm: premissasDaTela.dosageForm });
+  /*
+   * AS LINHAS COM A BASE QUE A GRAVAÇÃO VAI GRAVAR.
+   *
+   * No rascunho a base não é estado da linha nem escolha de ninguém: sai da
+   * seção e das premissas que estão nos campos — trocar o modo muda a prévia na
+   * hora, e o que a tela calcula é o que "Salvar" grava. Documento fechado é
+   * lido pela base GRAVADA, que é o snapshot dele.
+   */
+  const linhasDaTela = isDraft ? components.map((row) => comBaseDerivada(row, porDose)) : components;
+  /*
+   * RASCUNHO GRAVADO COM BASE FORA DA REGRA — antes dela, ou por fora da tela.
+   *
+   * A comparação é contra as premissas GRAVADAS: é o que o banco tem de
+   * excepcional, e não o efeito de a pessoa estar trocando o modo agora. A
+   * gravação realinha essas linhas; a tela avisa antes, para a mudança não ser
+   * silenciosa, e conta o rascunho como alterado — ativar, que grava antes,
+   * também passa pelo aviso.
+   */
+  const linhasComBaseAjustada =
+    isDraft && version
+      ? version.components.filter(
+          (component) => component.basis !== baseDoComponente(component.itemType, version),
+        )
+      : [];
+  /*
+   * Doses por embalagem: quem exige é a base do COMPONENTE.
+   *
+   * O modo da versão continua importando, mas não pode ser o critério de
+   * exibição — foi assim que o campo sumiu numa fórmula que precisava dele.
+   */
+  const dosesObrigatorias =
+    calculationMode === "PER_DOSE" || linhasDaTela.some((row) => row.basis === "PER_DOSE");
   const mostrarDoses = !derivaDoses && (dosesObrigatorias || dosesPerPackage.trim() !== "");
-  /* Cápsula e pó calculam por dose: é o que a linha nova assume. */
-  const receitaPorDose = calculationMode === "PER_DOSE" || derivaDoses;
   /* Dose e conteúdo do pó são massa: o seletor só oferece unidade de massa. */
   const unidadesDeMassa = units.filter((unit) => unit.dimension === "MASS");
 
@@ -800,7 +831,7 @@ export function FormulationVersionPage() {
    * pureza não se aplica a um pote.
    */
   function handleAddComponent(secao: SecaoDaFormula) {
-    setComponents((prev) => [...prev, linhaNova(secao, receitaPorDose)]);
+    setComponents((prev) => [...prev, linhaNova(secao, porDose)]);
   }
 
   function handleRemoveComponent(key: string) {
@@ -863,10 +894,6 @@ export function FormulationVersionPage() {
     destinos[campo](valor);
   }
 
-  function handleComponentBasisChange(key: string, basis: FormulationComponentBasis) {
-    setComponents((prev) => prev.map((row) => (row.key === key ? { ...row, basis } : row)));
-  }
-
   function handleComponentSupplyChange(key: string, supplyResponsibility: SupplyResponsibility) {
     setComponents((prev) =>
       prev.map((row) => (row.key === key ? { ...row, supplyResponsibility } : row)),
@@ -876,7 +903,9 @@ export function FormulationVersionPage() {
   function handleComponentItemChange(key: string, itemId: string) {
     const item = activeItems.find((option) => option.id === itemId);
     setComponents((prev) =>
-      prev.map((row) => (row.key === key ? comItemEscolhido(row, item, units) : row)),
+      prev.map((row) =>
+        row.key === key ? comItemEscolhido(comBaseDerivada(row, porDose), item, units) : row,
+      ),
     );
   }
 
@@ -891,7 +920,9 @@ export function FormulationVersionPage() {
   function handleComponentItemConsulted(linha: LinhaDaReceita, item: ItemDaBancada) {
     catalogo.mesclar([item]);
     setComponents((prev) =>
-      prev.map((row) => (row.key === linha.key ? comItemEscolhido(row, item, units) : row)),
+      prev.map((row) =>
+        row.key === linha.key ? comItemEscolhido(comBaseDerivada(row, porDose), item, units) : row,
+      ),
     );
   }
 
@@ -922,23 +953,35 @@ export function FormulationVersionPage() {
    */
   function explicacaoDoFisico(linha: LinhaDaReceita, fisico: string | null) {
     if (fisico === null) return null;
+    /*
+     * Versão fechada gravada com base fora da regra: a conta usa a base
+     * GRAVADA, e é aqui — na ajuda do cálculo, somente leitura — que isso se
+     * explica. Linha que segue a regra não ganha jargão.
+     */
+    const baseGravada = isDraft ? null : baseForaDaRegra(linha, porDose);
+    const notaDaBase = baseGravada
+      ? ` Base de cálculo gravada nesta versão: ${FORMULATION_COMPONENT_BASIS_LABELS[baseGravada]} — diferente da que a configuração da formulação define hoje.`
+      : "";
     return (
       <CalcHint
         label="Quantidade física"
         operandos={operandosDoFisico(linha, basisQuantity, dosesPorEmbalagem, units)}
         resultado={`${formatQuantity(fisico)} ${linha.stockUnitCode}`}
         nota={
-          ajustesAutorizados(linha).purity
+          (ajustesAutorizados(linha).purity
             ? "Calculado pelo mesmo motor que a Ordem de Produção e o CMV usam — a pureza corrige a quantidade física."
             : purezaRegistradaSemAplicar(linha)
               ? "Quantidade física informada. A pureza gravada nesta versão ficou como registro, sem corrigir."
-              : "Quantidade física informada."
+              : "Quantidade física informada.") + notaDaBase
         }
       />
     );
   }
 
   function temAlteracaoPendente() {
+    // Base fora da regra num rascunho gravado: salvar vai mudá-la, então o que
+    // está gravado já não é o que a tela mostra.
+    if (linhasComBaseAjustada.length > 0) return true;
     // Rascunho com campo ilegível não serializa — e é alteração pendente por
     // definição: o que está na tela não é o que está gravado.
     try {
@@ -1015,7 +1058,7 @@ export function FormulationVersionPage() {
           itemId: row.itemId,
           quantity: exigirDecimal(row.quantity, doItem("Quantidade"), OPCOES_QUANTIDADE),
           unitCode: row.unitCode,
-          basis: row.basis,
+          // Sem `basis`: a base é do servidor, derivada da seção e do modo.
           supplyResponsibility: row.supplyResponsibility,
           // Campo vazio = fator DESCONHECIDO (null), nunca 100%/0% implícito.
           purityPercentApplied: exigirDecimalOpcional(
@@ -1327,8 +1370,8 @@ export function FormulationVersionPage() {
   }
 
   /* As duas seções da bancada, pelo tipo real do Item. */
-  const linhasDaComposicao = components.filter((row) => secaoDaLinha(row) === "COMPOSICAO");
-  const linhasDaEmbalagem = components.filter((row) => secaoDaLinha(row) === "EMBALAGEM");
+  const linhasDaComposicao = linhasDaTela.filter((row) => secaoDaLinha(row) === "COMPOSICAO");
+  const linhasDaEmbalagem = linhasDaTela.filter((row) => secaoDaLinha(row) === "EMBALAGEM");
   const mostrarPorCapsula = dosageForm === "CAPSULE";
   /*
    * As formas que o seletor oferece: pó e cápsula, o que a Veridi produz.
@@ -1459,7 +1502,7 @@ export function FormulationVersionPage() {
    */
   const baseMultiplicaMaterial =
     components.length === 0 ||
-    components.some((row) => row.basis === "FIXED_BASIS") ||
+    linhasDaTela.some((row) => row.basis === "FIXED_BASIS") ||
     /*
        Base diferente de 1 é número que alguém escolheu — continua à vista e
        editável mesmo sem linha por base fixa. Campo que some levando o número
@@ -1487,15 +1530,6 @@ export function FormulationVersionPage() {
     capsulasPorDose,
     unidadesDoMotor(units),
   );
-
-  /** Base canônica da seção — o que `handleAddComponent` já escolhe sozinho. */
-  function baseDaSecao(secao: SecaoDaFormula): FormulationComponentBasis {
-    return secao === "COMPOSICAO"
-      ? receitaPorDose
-        ? "PER_DOSE"
-        : "FIXED_BASIS"
-      : "PER_FINISHED_UNIT";
-  }
 
   /**
    * As grandezas que a linha exibe.
@@ -1530,8 +1564,6 @@ export function FormulationVersionPage() {
         linhas={secao === "COMPOSICAO" ? linhasDaComposicao : linhasDaEmbalagem}
         editavel={isDraft}
         mostrarPorCapsula={mostrarPorCapsula}
-        baseMultiplicaMaterial={baseMultiplicaMaterial}
-        baseDaSecao={baseDaSecao(secao)}
         unidadesDaLinha={unitOptionsForRow}
         opcoesDeItem={(row) => optionsForRow(row).map(opcaoDoItem)}
         onBuscarItem={buscarItens}
@@ -1561,7 +1593,6 @@ export function FormulationVersionPage() {
         explicacaoDoFisico={explicacaoDoFisico}
         erros={fieldErrors}
         onCampo={handleComponentFieldChange}
-        onBase={handleComponentBasisChange}
         onFornecimento={handleComponentSupplyChange}
         onItem={handleComponentItemChange}
         onMover={handleMoveComponent}
@@ -1677,6 +1708,35 @@ export function FormulationVersionPage() {
                   <Link to={entityHref("item", issue.itemId)}>
                     Abrir o item
                   </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/*
+            Rascunho com linha gravada numa base de cálculo que a configuração
+            não dá (FORMULATION-COMPONENT-BASIS-AUTOMATION-01). A tela já calcula
+            pela base definida; salvar ou ativar a grava. Avisar antes é o que
+            impede a mudança silenciosa de uma receita montada com outra base.
+        */}
+        {linhasComBaseAjustada.length > 0 && (
+          <div className="pendency-panel" role="status">
+            <h4 className="pendency-panel__title">
+              {linhasComBaseAjustada.length === 1
+                ? "1 linha terá a base de cálculo ajustada ao salvar"
+                : `${linhasComBaseAjustada.length} linhas terão a base de cálculo ajustada ao salvar`}
+            </h4>
+            <p className="pendency-panel__sub">
+              A base de cálculo é definida automaticamente pela configuração da formulação. Este
+              rascunho foi gravado com outra base nas linhas abaixo, e as quantidades na tela já
+              seguem a configuração — confira antes de salvar ou ativar.
+            </p>
+            <ul className="pendency-panel__list">
+              {linhasComBaseAjustada.map((component) => (
+                <li key={component.id}>
+                  {component.itemCode} — {component.itemName}: gravada como “
+                  {FORMULATION_COMPONENT_BASIS_LABELS[component.basis]}”
                 </li>
               ))}
             </ul>

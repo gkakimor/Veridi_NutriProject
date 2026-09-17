@@ -1,7 +1,6 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import type {
-  FormulationComponentBasis,
   ResumoDaDose,
   SecaoDaFormula,
   SupplyResponsibility,
@@ -36,10 +35,6 @@ export interface TabelaDaReceitaProps {
   linhas: LinhaDaReceita[];
   editavel: boolean;
   mostrarPorCapsula: boolean;
-  /** A base multiplica material nesta receita? Decide o peso visual da coluna. */
-  baseMultiplicaMaterial: boolean;
-  /** Base canônica da seção — linha fora dela continua com o seletor à vista. */
-  baseDaSecao: FormulationComponentBasis;
   unidadesDaLinha: (linha: LinhaDaReceita) => UnitOfMeasureDTO[];
   opcoesDeItem: (linha: LinhaDaReceita) => EntityOption[];
   onBuscarItem: (linha: LinhaDaReceita, termo: string) => Promise<EntityOption[]>;
@@ -74,7 +69,6 @@ export interface TabelaDaReceitaProps {
     campo: K,
     valor: LinhaDaReceita[K],
   ) => void;
-  onBase: (key: string, basis: FormulationComponentBasis) => void;
   onFornecimento: (key: string, responsabilidade: SupplyResponsibility) => void;
   onItem: (key: string, itemId: string) => void;
   onMover: (key: string, direcao: -1 | 1) => void;
@@ -105,10 +99,10 @@ export interface TabelaDaReceitaProps {
 /**
  * Quantas colunas a tabela da seção tem — só a linha de vazio precisa saber.
  *
- * Composição: ingrediente, fonte, pureza, alvo, física por dose, base,
+ * Composição: ingrediente, fonte, pureza, alvo, física por dose, fornecimento,
  * reserva e por embalagem — mais "por cápsula" quando a forma é cápsula.
- * Embalagem: item, quantidade, base, por embalagem. A coluna de ações só
- * existe quando a receita é editável.
+ * Embalagem: item, quantidade, fornecimento, por embalagem. A coluna de ações
+ * só existe quando a receita é editável.
  */
 export function colunasDaSecao(
   daComposicao: boolean,
@@ -124,8 +118,6 @@ export function TabelaDaReceita({
   linhas,
   editavel,
   mostrarPorCapsula,
-  baseMultiplicaMaterial,
-  baseDaSecao,
   unidadesDaLinha,
   opcoesDeItem,
   onBuscarItem,
@@ -136,7 +128,6 @@ export function TabelaDaReceita({
   explicacaoDoFisico,
   erros,
   onCampo,
-  onBase,
   onFornecimento,
   onItem,
   onMover,
@@ -208,8 +199,7 @@ export function TabelaDaReceita({
                 <th className="col-capsula is-numeric">Por cápsula</th>
               )}
               <th className="col-regras">
-                {baseMultiplicaMaterial ? "Base · Fornecimento" : "Fornecimento"}{" "}
-                <Dica id={dicaDoFornecimento} />
+                Fornecimento <Dica id={dicaDoFornecimento} />
               </th>
               {daComposicao && (
                 <th className="col-reserva is-numeric">
@@ -232,7 +222,6 @@ export function TabelaDaReceita({
                   secao={secao}
                   editavel={editavel}
                   mostrarPorCapsula={mostrarPorCapsula}
-                  baseEditavelNaLinha={baseMultiplicaMaterial || linha.basis !== baseDaSecao}
                   unidades={unidadesDaLinha(linha)}
                   opcoesDeItem={opcoesDeItem(linha)}
                   onBuscarItem={(termo) => onBuscarItem(linha, termo)}
@@ -251,7 +240,6 @@ export function TabelaDaReceita({
                   podeDescer={posicao < linhas.length - 1}
                   erros={erros}
                   onCampo={(campo, valor) => onCampo(linha.key, campo, valor)}
-                  onBase={(basis) => onBase(linha.key, basis)}
                   onFornecimento={(responsabilidade) =>
                     onFornecimento(linha.key, responsabilidade)
                   }

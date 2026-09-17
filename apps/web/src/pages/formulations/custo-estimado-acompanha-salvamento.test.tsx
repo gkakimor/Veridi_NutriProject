@@ -73,7 +73,9 @@ function componente(quantity: string) {
     itemActive: true,
     quantity,
     unitCode: "kg",
-    basis: "PER_BATCH" as const,
+    // A base que a regra dá numa versão Base fixa: base fora da regra num
+    // rascunho é alteração pendente (FORMULATION-COMPONENT-BASIS-AUTOMATION-01).
+    basis: "FIXED_BASIS" as const,
     supplyResponsibility: "VERIDI" as const,
     purityPercentApplied: null,
     overagePercent: null,

@@ -190,6 +190,7 @@ describe("Prévia da quantidade física", () => {
     // resposta plausível e errada — "não precisa de material".
     await abrir(
       versao({
+        calculationMode: "PER_DOSE",
         components: [componente({ basis: "PER_DOSE" })],
         dosesPerPackage: null,
       }),

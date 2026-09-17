@@ -448,18 +448,22 @@ describe("Bancada do Modelo — fornecimento", () => {
 
     await waitFor(() => expect(updateFormulationTemplateVersion).toHaveBeenCalledTimes(1));
     expect(corpoEnviado().components[0]).toMatchObject({ supplyResponsibility: "CUSTOMER" });
+    // A base não vai: o servidor a deriva (FORMULATION-COMPONENT-BASIS-AUTOMATION-01).
+    for (const linha of corpoEnviado().components) expect(linha).not.toHaveProperty("basis");
   });
 
-  it("na base fixa, Base e Fornecimento dividem a mesma célula, a Base primeiro", async () => {
+  it("na base fixa, Fornecimento fica sozinho na célula — nenhuma linha escolhe base", async () => {
     await abrir(
       template(
         versao({
           calculationMode: "FIXED_BASIS",
+          dosageForm: null,
           components: [materiaPrima({ basis: "FIXED_BASIS" }), embalagem()],
         }),
       ),
     );
 
+    expect(screen.queryByRole("combobox", { name: "Base de cálculo do componente" })).toBeNull();
     const fornecimentos = screen.getAllByRole("combobox", {
       name: "Responsabilidade de fornecimento",
     });
@@ -467,13 +471,9 @@ describe("Bancada do Modelo — fornecimento", () => {
     for (const fornecimento of fornecimentos) {
       const celula = fornecimento.closest("td") as HTMLElement;
       expect(celula.classList.contains("col-regras")).toBe(true);
-      // É este par que `workbench.css` empilha (`select + select`), na mesma
-      // folha da Formulação; a guarda da folha está em
+      // A mesma folha da Formulação; a guarda dela está em
       // `formulations/premissas-de-producao.test.tsx`.
-      expect(
-        within(celula).getByRole("combobox", { name: "Base de cálculo do componente" })
-          .nextElementSibling,
-      ).toBe(fornecimento);
+      expect(within(celula).getAllByRole("combobox")).toEqual([fornecimento]);
     }
   });
 });

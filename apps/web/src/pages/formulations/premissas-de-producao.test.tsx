@@ -428,28 +428,40 @@ describe("Refinamento da grade", () => {
     ).toBeTruthy();
   });
 
-  it("com componente por base fixa a base volta a ser campo e o seletor da linha reaparece", async () => {
-    await abrir(
-      versao({ components: [acidoFolico({ basis: "FIXED_BASIS" }), pote()] }),
-    );
+  /** A receita em Base fixa, sem forma: a linha de matéria-prima conta sobre a base. */
+  const versaoEmBaseFixa = () =>
+    versao({
+      calculationMode: "FIXED_BASIS",
+      dosageForm: null,
+      capsulesPerDose: null,
+      capsulesPerPackage: null,
+      dosesPerPackage: null,
+      components: [acidoFolico({ basis: "FIXED_BASIS" }), pote()],
+    });
+
+  it("receita em Base fixa: a base volta a ser campo, e nenhuma linha ganha seletor de base", async () => {
+    await abrir(versaoEmBaseFixa());
 
     expect(document.querySelector("#version-basis")).toBeTruthy();
-    const composicao = secao(/Composição/);
+    // FORMULATION-COMPONENT-BASIS-AUTOMATION-01: a base da linha é do sistema.
+    expect(screen.queryByRole("combobox", { name: "Base de cálculo do componente" })).toBeNull();
     expect(
-      within(composicao).getByRole("combobox", { name: "Base de cálculo do componente" }),
-    ).toBeTruthy();
+      screen.getAllByRole("combobox", { name: "Responsabilidade de fornecimento" }),
+    ).toHaveLength(2);
+    // Nem texto fixo no lugar do seletor: a coluna é só Fornecimento.
+    expect(screen.queryByText("Base da fórmula")).toBeNull();
+    expect(screen.queryByText("Por unidade acabada")).toBeNull();
   });
 
   /*
-   * Em PROD (base fixa) o seletor de Fornecimento saía ~90px da célula e ficava
-   * por baixo do campo da Reserva: `.table td` declara `nowrap`, e os dois
-   * seletores de 100% ficavam na mesma linha. O jsdom não faz layout — a prova
-   * visual é do navegador; aqui fica o contrato que a sustenta.
+   * A base saiu da linha (FORMULATION-COMPONENT-BASIS-AUTOMATION-01): o
+   * Fornecimento fica sozinho na célula, sem a regra que empilhava dois
+   * seletores, e os 84px que a base ocupava na embalagem foram para o nome do
+   * item. O jsdom não faz layout — aqui fica o contrato da folha.
    */
-  it("na base fixa, Base e Fornecimento ficam um sobre o outro na mesma coluna, sem mudar largura nenhuma", async () => {
-    await abrir(versao({ components: [acidoFolico({ basis: "FIXED_BASIS" }), pote()] }));
+  it("Fornecimento fica sozinho na coluna, e a largura liberada na embalagem vai para o item", async () => {
+    await abrir(versaoEmBaseFixa());
 
-    // Composição e embalagem: os dois seletores na MESMA célula, a Base antes.
     const fornecimentos = screen.getAllByRole("combobox", {
       name: "Responsabilidade de fornecimento",
     });
@@ -457,18 +469,13 @@ describe("Refinamento da grade", () => {
     for (const fornecimento of fornecimentos) {
       const celula = fornecimento.closest("td") as HTMLElement;
       expect(celula.classList.contains("col-regras")).toBe(true);
-      expect(
-        within(celula).getByRole("combobox", { name: "Base de cálculo do componente" })
-          .nextElementSibling,
-      ).toBe(fornecimento);
+      expect(celula.getAttribute("data-label")).toBe("Fornecimento");
+      expect(within(celula).getAllByRole("combobox")).toEqual([fornecimento]);
     }
 
     const regras = regrasDaBancada();
-    expect(regras.get(".table--formulacao .col-regras__campos select + select")).toMatch(
-      /display:\s*block/,
-    );
-    // A coluna continua com a largura declarada nas duas seções, e nenhuma
-    // outra coluna pagou a conta: as larguras do PO, uma a uma.
+    expect([...regras.keys()].some((seletor) => seletor.includes("col-regras__campos"))).toBe(false);
+    // As larguras do PO, uma a uma: a composição não mudou.
     const larguras = (secao: string, colunas: string[]) =>
       Object.fromEntries(
         colunas.map((coluna) => [coluna, largura(regras, `.table--formulacao-${secao} .col-${coluna}`)]),
@@ -489,12 +496,19 @@ describe("Refinamento da grade", () => {
     expect(largura(regras, ".table--formulacao-composicao.table--com-capsula .col-item")).toBe(30.2219);
     expect(largura(regras, ".table--formulacao-composicao.table--com-capsula .col-capsula")).toBe(6.4343);
     expect(larguras("embalagem", ["item", "quantidade", "regras", "fisico"])).toEqual({
-      item: 58.037,
+      item: 63.667,
       quantidade: 14.4772,
-      regras: 13.6729,
+      regras: 8.0429,
       fisico: 8.9812,
     });
     expect(largura(regras, ".table--formulacao-embalagem td.col-acoes")).toBe(4.8257);
+    // A soma continua fechando em 99,994% — a última coluna não é zerada.
+    const somaDaEmbalagem =
+      Object.values(larguras("embalagem", ["item", "quantidade", "regras", "fisico"])).reduce(
+        (total, valor) => total + valor,
+        0,
+      ) + largura(regras, ".table--formulacao-embalagem td.col-acoes");
+    expect(somaDaEmbalagem).toBeCloseTo(99.994, 4);
   });
 });
 

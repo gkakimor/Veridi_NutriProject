@@ -8,7 +8,7 @@ import type {
   SupplyResponsibility,
   UnitOfMeasureDTO,
 } from "@veridi/shared";
-import { SECAO_DO_TIPO_DE_ITEM, ajustesAutorizados } from "@veridi/shared";
+import { SECAO_DO_TIPO_DE_ITEM, ajustesAutorizados, baseDaSecao } from "@veridi/shared";
 import { decimalLegivel } from "../../lib/decimal-field";
 import { numericInvalidMessage, parsePtBrNumber, toPtBrEditText } from "../../lib/numeric-ptbr";
 import { OPCOES_PERCENTUAL_TECNICO, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
@@ -20,7 +20,8 @@ import type { ItemDaBancada } from "./catalogo-de-itens";
  * A LINHA DA RECEITA — o contrato que as duas bancadas editam.
  *
  * Formulação de produto e Modelo de Formulação escrevem a MESMA receita: item,
- * quantidade, unidade, base, fornecimento, pureza e reserva. O que difere entre
+ * quantidade, unidade, fornecimento, pureza e reserva — e a base, que a linha
+ * guarda mas não escolhe (`comBaseDerivada`). O que difere entre
  * as telas é o DOCUMENTO em volta (produto, cliente, custo, ciclo de vida), não
  * a linha — e enquanto cada tela tinha a sua estrutura, a mesma regra precisava
  * ser escrita duas vezes e divergia na primeira correção feita de um lado só.
@@ -99,6 +100,34 @@ export function absorverChaves(linhas: { key: string }[]) {
 /** Onde a linha aparece: o tipo real do Item manda; sem item, onde ela nasceu. */
 export function secaoDaLinha(row: Pick<LinhaDaReceita, "itemType" | "secao">): SecaoDaFormula {
   return row.itemType ? (SECAO_DO_TIPO_DE_ITEM[row.itemType] ?? "COMPOSICAO") : row.secao;
+}
+
+/**
+ * A linha com a base que a GRAVAÇÃO vai gravar (FORMULATION-COMPONENT-BASIS-
+ * AUTOMATION-01).
+ *
+ * No rascunho a base não é escolha de ninguém: sai da seção e de a receita ser
+ * por dose, pela mesma função (`baseDaSecao`) que o servidor usa ao gravar. A
+ * tela chama isto a cada render, com as premissas que estão nos campos — trocar
+ * o modo muda a prévia na hora, sem estado de base para ficar para trás.
+ */
+export function comBaseDerivada(row: LinhaDaReceita, porDose: boolean): LinhaDaReceita {
+  const basis = baseDaSecao(secaoDaLinha(row), porDose);
+  return basis === row.basis ? row : { ...row, basis };
+}
+
+/**
+ * A base GRAVADA quando ela não é a que a regra dá — `null` quando segue a regra.
+ *
+ * Só dado anterior à regra chega aqui: versão fechada, que é lida pelo que
+ * gravou, ou rascunho legado, que a próxima gravação realinha. A tela diz isso
+ * na ajuda do cálculo ou num aviso, nunca como coluna.
+ */
+export function baseForaDaRegra(
+  row: Pick<LinhaDaReceita, "basis" | "itemType" | "secao">,
+  porDose: boolean,
+): FormulationComponentBasis | null {
+  return row.basis === baseDaSecao(secaoDaLinha(row), porDose) ? null : row.basis;
 }
 
 /** A configuração de ajustes da linha — a forma que a validação compartilhada lê. */
@@ -261,7 +290,7 @@ export function linhaNova(secao: SecaoDaFormula, receitaPorDose: boolean): Linha
     stockUnitCode: "",
     quantity: "",
     unitCode: "",
-    basis: daComposicao ? (receitaPorDose ? "PER_DOSE" : "FIXED_BASIS") : "PER_FINISHED_UNIT",
+    basis: baseDaSecao(secao, receitaPorDose),
     // Default do domínio: a Veridi fornece, salvo declaração explícita.
     supplyResponsibility: "VERIDI",
     purityPercentApplied: "",
