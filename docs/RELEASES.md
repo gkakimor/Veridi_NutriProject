@@ -12,7 +12,7 @@ conteúdo de backup.
 | `homologacao-inicial-2026-09-14-r2` | `b798e85` | 2026-09-14 | base da carga inicial da Veridi |
 | `homologacao-inicial-2026-09-14-r3` | `2400def` | 2026-09-14 | NAVIGATION-INFORMATION-ARCHITECTURE-01 |
 | `homologacao-veridi-2026-09-16-r1` | `5b7c1a3` | 2026-09-16 | HOMOLOGATION-RELEASE-RAILWAY-01, abaixo |
-| — (sem tag) | `8e824e8f` | 2026-09-17 | PROD-RELEASE-DEPLOY-01, abaixo; R2 ativo em PROD |
+| `prod-2026-09-17` | `8e824e8f` | 2026-09-17 | PROD-RELEASE-DEPLOY-01, abaixo; R2 ativo em PROD |
 
 ## 2026-09-17 — PROD-RELEASE-DEPLOY-01
 
@@ -136,8 +136,18 @@ restore em PROD e SQL destrutivo à mão. Não houve rollback nem incidente. O d
 (`9d477a48`, `5b7c1a3`, já com as variáveis do R2) continua disponível como rollback de código pela janela
 do Railway; ele não desfaz migration, e as duas são aditivas e toleradas pelo código antigo.
 
-Sem tag nesta release: o handoff não pediu uma, e mover `release/prod` foi o único push autorizado sobre o
-ambiente publicado.
+### Fechamento administrativo (PROD-RELEASE-CLOSEOUT-01, 2026-09-17)
+
+A tag ficou para uma rodada própria. Em 18:39Z, com `origin/release/prod` reconferido em `8e824e8f`, saiu a
+tag anotada **`prod-2026-09-17`** ("PROD-RELEASE-DEPLOY-01"), apontando para esse mesmo commit, empurrada
+sozinha (`git push origin refs/tags/prod-2026-09-17`). Nenhum branch se moveu.
+
+Tag não publica: o gatilho do serviço continua sendo um só, `release/prod` (trigger
+`6ef07213-dbfb-4e43-8d5d-20cd230919a3`, lido sem alterar), e a lista de deployments seguiu em 20, com
+`4edfd622` no topo, ao longo de um vigia de 3 minutos depois do push. Nada mudou no Railway nem no banco.
+
+As capturas do smoke (19 PNG, 1,8 MB, com dado real de cliente) foram apagadas depois da conferência, como
+manda a §9 do [`DEPLOY.md`](DEPLOY.md). Os números do smoke continuam registrados aqui.
 
 ## 2026-09-16 — HOMOLOGATION-RELEASE-RAILWAY-01
 
