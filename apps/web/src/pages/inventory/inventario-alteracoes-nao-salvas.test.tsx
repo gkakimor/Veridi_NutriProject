@@ -63,7 +63,7 @@ function montar(entradas: string[], indice?: number) {
   const router = createMemoryRouter(
     createRoutesFromElements(
       <Route element={<Raiz />}>
-        <Route path="/estoque/inventario" element={<StockCountPage />} />
+        <Route path="/estoque/inventario/contagem-rapida" element={<StockCountPage />} />
         <Route path="/estoque" element={<h1>Posição de Estoque</h1>} />
         <Route path="/print/contagem-fisica" element={<h1>Folha de contagem</h1>} />
       </Route>,
@@ -84,9 +84,9 @@ async function escolherItem() {
   await waitFor(() => expect(contagem()).toBeEnabled());
 }
 
-async function abrir(entradas = ["/estoque/inventario"], indice?: number) {
+async function abrir(entradas = ["/estoque/inventario/contagem-rapida"], indice?: number) {
   const router = montar(entradas, indice);
-  await screen.findByRole("heading", { name: "Inventário Físico" });
+  await screen.findByRole("heading", { name: "Contagem rápida" });
   await waitFor(() => expect(document.getElementById("count-item")).toBeInTheDocument());
   return router;
 }
@@ -210,7 +210,7 @@ describe("Inventário Físico — guarda de alterações não salvas", () => {
 
   it("voltar pelo navegador com contagem digitada também pergunta", async () => {
     const user = userEvent.setup();
-    const router = await abrir(["/estoque", "/estoque/inventario"], 1);
+    const router = await abrir(["/estoque", "/estoque/inventario/contagem-rapida"], 1);
 
     await escolherItem();
     fireEvent.change(contagem(), { target: { value: "8" } });

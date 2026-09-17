@@ -63,6 +63,11 @@ const ROTAS_ANTES_DA_MIGRACAO = [
   "/estoque",
   "/estoque/:itemId",
   "/estoque/inventario",
+  // INVENTORY-PHYSICAL-COUNT-01 (Fatia 2A): a lista, o novo, a Contagem rápida, o inventário e a contagem.
+  "/estoque/inventario/novo",
+  "/estoque/inventario/contagem-rapida",
+  "/estoque/inventario/:id",
+  "/estoque/inventario/:id/contagem",
   "/estoque/lotes",
   "/estoque/lotes/:id",
   "/estoque/lotes/:id/etiqueta",

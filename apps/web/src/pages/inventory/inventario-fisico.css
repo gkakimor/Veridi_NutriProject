@@ -1,0 +1,347 @@
+/*
+ * Inventário Físico em sessão — telas da Fatia 2A (INVENTORY-PHYSICAL-COUNT-01).
+ * Só tokens: nenhuma cor crua.
+ */
+
+/* Abas da lista: Inventários · Contagens rápidas. */
+.inv-abas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin: var(--sp-2) 0 var(--sp-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.inv-abas__aba {
+  appearance: none;
+  min-height: 40px;
+  margin-bottom: -1px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font: inherit;
+  font-size: var(--fs-base);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.inv-abas__aba:hover {
+  color: var(--ink);
+}
+
+.inv-abas__aba[aria-selected="true"] {
+  color: var(--v-green-700);
+  font-weight: var(--fw-semibold);
+  border-bottom-color: var(--v-green-700);
+}
+
+.inv-abas__aba:focus-visible,
+.inv-chip:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+
+/* Recorte da contagem: Pendentes · Contadas · Todas. */
+.inv-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.inv-chip {
+  appearance: none;
+  min-height: 36px;
+  padding: var(--sp-1) var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.inv-chip[aria-pressed="true"] {
+  border-color: var(--v-green-700);
+  background: var(--selected-bg);
+  color: var(--ink);
+  font-weight: var(--fw-semibold);
+}
+
+.inv-barra-da-contagem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: var(--sp-3) 0;
+}
+
+.inv-barra-da-contagem .toolbar__search {
+  flex: 1 1 260px;
+}
+
+/* Campo da grade: número à direita, largura de quantidade. */
+.inv-campo-contagem {
+  width: 10rem;
+  max-width: 100%;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.inv-estado {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+.inv-estado--salvo {
+  color: var(--ok-fg);
+}
+
+.inv-estado--nao-enviado {
+  color: var(--warn-fg);
+  font-weight: var(--fw-medium);
+}
+
+.inv-estado--erro {
+  color: var(--err-fg);
+}
+
+/* Conflito com outro operador: a decisão é explícita, na própria posição. */
+.inv-conflito {
+  margin-top: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--warn-fg);
+  border-radius: var(--radius-sm);
+  background: var(--warn-bg);
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  white-space: normal;
+}
+
+.inv-conflito p {
+  margin: 0 0 var(--sp-2);
+}
+
+/* Linha do conflito ocupa a largura da tabela, sem alargar a coluna do campo. */
+.inv-linha-do-conflito td {
+  padding-top: 0;
+}
+
+/*
+ * Cartão sequencial — abaixo de 640px (DU-1). Tabela espremida no celular vira
+ * rolagem lateral e toque errado: aqui é uma posição por vez, campo grande e
+ * alvos de 44–48px.
+ */
+.inv-cartao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.inv-cartao__numero {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.inv-cartao__item {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  overflow-wrap: anywhere;
+}
+
+.inv-cartao__dados {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--sp-1) var(--sp-3);
+  margin: 0;
+  font-size: var(--fs-base);
+}
+
+.inv-cartao__dados dt {
+  color: var(--ink-2);
+}
+
+.inv-cartao__dados dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.inv-cartao__campo label {
+  display: block;
+  margin-bottom: var(--sp-1);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+}
+
+.inv-cartao__campo input {
+  width: 100%;
+  min-height: 48px;
+  font-size: var(--fs-md);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.inv-cartao .btn {
+  min-height: 48px;
+  font-size: var(--fs-md);
+}
+
+.inv-barra-inferior {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--line);
+  background: var(--canvas);
+}
+
+.inv-barra-inferior .btn {
+  min-height: 44px;
+  width: 100%;
+}
+
+.inv-barra-inferior__progresso {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Linha do tempo: só o que foi carimbado de verdade. */
+.inv-linha-do-tempo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inv-linha-do-tempo li {
+  display: grid;
+  grid-template-columns: minmax(0, 13rem) minmax(0, 1fr);
+  gap: var(--sp-3);
+  font-size: var(--fs-sm);
+}
+
+.inv-linha-do-tempo time {
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.inv-lista-simples {
+  margin: var(--sp-2) 0 0;
+  padding-left: var(--sp-5);
+  font-size: var(--fs-sm);
+}
+
+@media (max-width: 639px) {
+  .inv-linha-do-tempo li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+}
+
+/* Ações de cabeçalho de lista: o rótulo do botão não quebra por dentro. */
+.inv-acoes {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  row-gap: var(--sp-2);
+}
+
+.inv-acoes .btn {
+  white-space: nowrap;
+}
+
+/* Campo de contagem fora de `.field`: o mesmo desenho dos campos do sistema. */
+.inv-campo-contagem,
+.inv-cartao__campo input {
+  height: 34px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: var(--fs-base);
+}
+
+.inv-cartao__campo input {
+  height: 48px;
+  font-size: var(--fs-md);
+}
+
+.inv-campo-contagem:focus-visible,
+.inv-cartao__campo input:focus-visible {
+  outline: none;
+  border-color: var(--v-green-700);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--v-green-700);
+}
+
+.inv-contagem-com-unidade {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  white-space: nowrap;
+}
+
+/* Código em cima, nome embaixo: a grade cabe na largura útil sem rolar. */
+.inv-celula-empilhada {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.inv-celula-empilhada small {
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+.inv-codigo-inteiro {
+  white-space: nowrap;
+}
+
+.inv-barra-da-contagem.toolbar {
+  margin: var(--sp-3) 0;
+}
+
+@media (max-width: 639px) {
+  .inv-cabecalho-da-contagem {
+    flex-direction: column;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-3);
+  }
+
+  .inv-cabecalho-da-contagem .doc-title h1 {
+    font-size: var(--fs-lg);
+  }
+
+  .inv-cabecalho-da-contagem .table__actions {
+    justify-content: flex-start;
+  }
+
+  .inv-barra-da-contagem .toolbar__search {
+    flex-basis: 100%;
+  }
+}
+
+.inv-cartao__numero .inv-estado {
+  display: inline;
+}
