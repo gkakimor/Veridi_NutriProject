@@ -1449,9 +1449,12 @@ Old OPs never change because a new formula is activated.
 - A version declares a **calculation mode**: `FIXED_BASIS` (original
   model, still the default) or `PER_DOSE` (industry practice: quantity
   per dose × doses per package). `PER_DOSE` requires `dosesPerPackage`.
-- Each component declares its own **basis** — `FIXED_BASIS`, `PER_DOSE`
+- Each component carries its own **basis** — `FIXED_BASIS`, `PER_DOSE`
   or `PER_FINISHED_UNIT`. Packaging is per finished unit even inside a
-  per-dose formula. There is no formula expression engine.
+  per-dose formula. There is no formula expression engine. Since
+  FORMULATION-COMPONENT-BASIS-AUTOMATION-01 the basis is **derived** by the
+  system from the section and the calculation mode and stored as a technical
+  snapshot — never chosen per line (§106).
 - `purityPercentApplied` and `overagePercent` are **snapshots** on the
   component, re-frozen on the Production Order requirement. Editing
   `Item.defaultPurityPercent` afterwards never rewrites an existing
@@ -6386,10 +6389,10 @@ cápsulas ou cinco gramas.
   Item — um Modelo que muda de resultado conforme o dia em que é aplicado não é
   um modelo.
 - **Composição e embalagem saem do TIPO do Item**, não de uma marcação nova:
-  `SECAO_DO_TIPO_DE_ITEM` em `@veridi/shared` serve as duas telas. A base da
-  linha NOVA sai da seção (embalagem por unidade acabada; composição por dose
-  quando a receita é por dose); linha que já declarou base não é tocada, e
-  `FIXED_BASIS` continua existindo.
+  `SECAO_DO_TIPO_DE_ITEM` em `@veridi/shared` serve as duas telas. A base de
+  toda linha de rascunho sai da seção e do modo (§106): embalagem por unidade
+  acabada; composição por dose quando a receita é por dose, sobre a base quando
+  não é. Versão ativa ou arquivada não é reescrita.
 - **Nada comercial atravessa.** O Modelo não tem custo, preço, margem, markup
   nem fornecedor com preço, e promover uma Formulação a Modelo não leva Produto,
   Cliente, Projeto, Orçamento, Pedido nem faturamento. A perda prevista é
@@ -6859,3 +6862,48 @@ os demais leem o valor gravado ou "Sem custo informado". Em "Receber OC", o camp
 "Usar preço da OC" só aparecem para quem informa; os demais recebem sem eles, leem em "Dados do recebimento" "O custo
 efetivo de aquisição é informado por Compras ou Administrador, no documento do recebimento.", e o envio não leva
 custo. Material do cliente continua sem custo de aquisição Veridi, para todos.
+
+## §106 — Base de cálculo do componente: o sistema deriva, a versão guarda
+
+FORMULATION-COMPONENT-BASIS-AUTOMATION-01 (2026-09-17). Decisão do PO: "Base" não é cadastro do Item nem decisão
+operacional de quem formula, linha a linha. É consequência da seção do componente e do modo da Formulação. Quem
+formula continua decidindo o **Fornecimento** (Veridi ou Cliente).
+
+> **Base do componente é derivada da Formulação e persistida como snapshot técnico.**
+
+**A regra é uma só**, em `@veridi/shared` (`receitaPorDose`, `baseDaSecao`, `baseDoComponente`), usada pela tela e
+pelo servidor:
+
+| Linha (seção pelo tipo real do Item) | Receita por dose | Receita em base fixa |
+|---|---|---|
+| Composição — matéria-prima | `PER_DOSE` | `FIXED_BASIS` |
+| Embalagem | `PER_FINISHED_UNIT` | `PER_FINISHED_UNIT` |
+
+A receita é **por dose** quando o modo é `PER_DOSE` ou quando a forma deriva doses (cápsula e pó): nessas formas a
+dose é a unidade da receita mesmo com o modo "Base fixa". Comprimido, líquido e "outro" seguem o modo.
+
+**O servidor é a autoridade.** `basis` saiu do contrato de gravação da linha, na Formulação e no Modelo; um `basis`
+no corpo é descartado pela validação e nunca gravado — cliente de API não grava embalagem por dose nem matéria-prima
+em base fixa numa receita por dose. Toda gravação que escreve linha de RASCUNHO grava a base derivada:
+
+- salvar o rascunho da Formulação ou do Modelo;
+- trocar modo ou forma sem reenviar as linhas: as gravadas são realinhadas na mesma transação;
+- nova versão a partir de uma ativa ou inativa, nova versão do Modelo, aplicar Modelo e salvar Formulação como
+  Modelo: a cópia deriva a base com as premissas que o destino recebe (as mesmas da origem) em vez de copiá-la.
+
+**Histórico não muda.** Versão `ACTIVE`/`INACTIVE` da Formulação e `ACTIVE`/`ARCHIVED` do Modelo nunca são
+reescritas: a base gravada continua sendo a leitura delas — necessidade da OP, estimativa de custo, CMV, PDF e ficha
+técnica. A matemática do motor não mudou; mudou quem decide o valor de entrada. A barreira de §37 continua lendo a
+base do COMPONENTE: o arranjo auditado (modo base fixa com linha por dose) só existe em dado legado.
+
+**Rascunho legado.** Rascunho gravado antes da regra com base fora dela é lido como está, e gravar o realinha. A tela
+da Formulação avisa antes — "N linha(s) terá(ão) a base de cálculo ajustada ao salvar", com item e base gravada — e
+conta o rascunho como alterado, então ativar, que grava antes, também realinha. Na carga do DEV (a mesma de PROD)
+nenhuma das 1.330 linhas diverge da regra.
+
+**Na tela.** A bancada — Formulação e Modelo — não tem coluna, seletor nem texto fixo de Base; Fornecimento continua. No
+rascunho a prévia usa a base derivada das premissas que estão nos campos: trocar o modo muda a conta na hora. Versão
+fechada com base fora da regra explica a base gravada na ajuda do cálculo do "Por embalagem", somente leitura. A ajuda
+diz: "A base de cálculo é definida automaticamente pela configuração da formulação."
+
+**Sem migration.** A coluna `basis` continua no schema, com o mesmo enum.

@@ -4969,11 +4969,11 @@ INFORMADA, e inventar forma na cópia decidiria pelo usuário o que ele não dec
 partida da linha; salvar congela; aplicar copia o que a matriz declarou. A aplicação **não** relê o cadastro do
 Item. Embalagem não recebe pureza — pote e tampa não têm teor a corrigir.
 
-**Seções no contrato, sem schema novo.** `SECAO_DO_TIPO_DE_ITEM`, `secaoDoItem` e `baseSugeridaDaSecao` moram em
-`packages/shared/src/formulations.ts`, e a Formulação passou a ler a mesma tabela que tinha em casa. A base da
-linha NOVA do Modelo sai da seção (embalagem por unidade acabada; composição por dose quando a receita é por
-dose); linha que já declarou base não é tocada, e `FIXED_BASIS` continua existindo. Isso absorve
-FORMULATION-TEMPLATE-BASIS-EDIT-01.
+**Seções no contrato, sem schema novo.** `SECAO_DO_TIPO_DE_ITEM`, `secaoDoItem` e `baseSugeridaDaSecao` (hoje
+`baseDaSecao`) moram em `packages/shared/src/formulations.ts`, e a Formulação passou a ler a mesma tabela que tinha
+em casa. A base da linha NOVA do Modelo sai da seção (embalagem por unidade acabada; composição por dose quando a
+receita é por dose). Isso absorve FORMULATION-TEMPLATE-BASIS-EDIT-01. Desde FORMULATION-COMPONENT-BASIS-AUTOMATION-01
+a base de toda linha de rascunho é derivada e a linha não tem mais seletor (§106, seção própria abaixo).
 
 **UI mínima, de propósito.** A página do Modelo ganhou forma, apresentação, os campos condicionais de cada
 forma, doses por embalagem como RESULTADO (nunca um segundo campo) e perda prevista — com a pendência, a guarda
@@ -5605,6 +5605,44 @@ mutação nem Railway; 390px provado por estrutura e regra (jsdom não mede).
 
 **Registrado.** ASSISTED-ENTITY-SELECTOR-ROLLOUT-01 (BACKLOG, seção G): Cliente, Fornecedor, Produto, Lote e os demais
 seletores, só depois de validar o piloto.
+
+## Base do componente derivada pelo sistema (FORMULATION-COMPONENT-BASIS-AUTOMATION-01, 2026-09-17)
+
+**Decisão do PO.** A base de cálculo da linha deixou de ser escolha: composição por dose na receita por dose (modo Por
+dose, cápsula ou pó) e sobre a base fixa senão; embalagem sempre por unidade acabada. Fornecimento continua decisão de
+quem formula. A coluna `basis` fica como snapshot técnico. Regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §106. Na
+`main`, fora de PROD (`release/prod` segue `5b7c1a3`). **Sem migration.**
+
+**Dados do DEV, READ ONLY.** 1.330 componentes e nenhum fora da regra: ACTIVE 1.292 (1.215 matérias-primas em base
+fixa, 26 por dose, 51 embalagens por unidade) e DRAFT 38 (três rascunhos: base fixa, cápsula e pó). Modelos: três
+rascunhos sem linhas. Por isso a automação é integral, sem regra de conversão.
+
+**Shared.** `receitaPorDose`, `baseDaSecao` (ex-`baseSugeridaDaSecao`, que a web não usava — as duas telas repetiam a
+regra em casa) e `baseDoComponente` são a autoridade; `basis` saiu de `FormulationComponentInput` e
+`FormulationTemplateComponentInput`.
+
+**API.** `updateFormulationVersion` e `updateFormulationTemplateVersion` gravam a base derivada das premissas finais
+(modo e forma depois da gravação) e, sem linhas no corpo, realinham as gravadas; `createNewVersionFrom`,
+`createTemplateVersionFrom`, `applyTemplateToProduct` e `createTemplateFromFormulation` derivam em vez de copiar. Os
+schemas descartam `basis`. A exigência de doses do Modelo e a guarda de unidade ao aplicar Modelo leem a base derivada.
+Ativa, inativa e arquivada não são tocadas.
+
+**Web.** `LinhaDaBancada` e `TabelaDaReceita` sem Base — a coluna `col-regras` é só Fornecimento, e na embalagem o item
+ganhou os 84 px (950 px, fornecimento 120 px). No rascunho das duas telas, `comBaseDerivada` alimenta prévia, totais da
+dose, doses obrigatórias, campo da base e unidade proposta ao escolher item; o envio não leva `basis`. Na Formulação,
+rascunho com base fora da regra ganha aviso e conta como pendente; versão fechada fora da regra explica a base gravada na
+ajuda do cálculo. Ajuda: dica "Modo de cálculo" e "Como funciona" (no teto editorial, 800 de 800 palavras).
+
+**Validação.** Shared `formulation-secoes` (7). API `base-derivada-do-componente` (6: por dose, base fixa e cápsula,
+embalagem, corpo adulterado, troca de modo ida e volta com a conta, ativa intacta e cópia coerente, rascunho legado lido e
+realinhado ao gravar, Modelo em gravar/trocar/nova versão/aplicar/salvar como Modelo) e 30 arquivos vizinhos (formulações,
+Modelos, custos, OP, CMV, precificação, estoque do cliente) — sete fixtures que gravavam base fora da regra pela API
+passaram ao modo que a produz, e o arranjo legado da auditoria VAL-LEG-01 é reproduzido no banco. Web `linha-da-receita`
+(7), `base-derivada-na-bancada` (5) e 32 arquivos da bancada, do Modelo e da ajuda. Typecheck de shared, API e web. Sem
+suíte completa, E2E, Playwright nem mutação; Railway intocado.
+
+**Antes de publicar.** PROD pode ter rascunho criado depois da carga com base escolhida à mão: a release confere READ ONLY
+(componente × tipo do Item × modo e forma da versão). A tela avisa, e gravar realinha.
 
 ## Próxima prioridade
 
