@@ -5433,6 +5433,41 @@ contra `veridi-homologacao`: upload com `If-None-Match: *` e SHA-256 conferido p
 bytes e SHA-256 iguais, sobrescrita recusada (412) e o objeto de `_smoke/` apagado, com o head confirmando a ausência.
 Typecheck de shared, API e web.
 
+## Bloquear a relação Item × Fornecedor exige motivo (SUPPLIER-QUALITY-REJECTION-REASON-01, 2026-09-16)
+
+**Fecha SUPPLIER-QUALITY-REJECTION-REASON-01**, decisão do PO no handoff sobre a homologação Item × Fornecedor
+([ITEM-SUPPLIER-UX-DISCOVERY-01](discovery/ITEM-SUPPLIER-UX-DISCOVERY-01.md)). Regra durável no §104. Na `main`, fora de
+PROD (`release/prod` segue `5b7c1a3`). **Sem migration**: o motivo reutiliza `note` de
+`supplier_item_qualification_history`, que já existia no evento, no DTO e na tela. Permissões de §101 intocadas.
+
+**API.** No shared, `motivoDoBloqueioValido` (aparado, mínimo 3) e as frases `MOTIVO_DO_BLOQUEIO_*`. No serviço,
+`exigirMotivoDoBloqueio` em `changeQualification` (antes de ler a relação) e em `createSupplierItem` (depois do 403 de
+situação inicial, antes de qualquer leitura): `BLOCKED` sem motivo lança `SupplierItemBlockReasonRequiredError`, 400
+`validation_error` com `message` e `issues` no campo (`note` ou `qualificationNote`), sem gravar nada. O 403 por perfil
+continua antes — a rota escolhe a lista pelo status e deixa o motivo para o serviço. `APPROVED` e `PENDING` sem mudança;
+eventos anteriores intocados. O máximo segue o da observação (1000) em qualquer situação.
+
+**Web.** `SupplierItemDetailModal`: "Bloquear" abre `ConfirmDialog` "Bloquear fornecedor para este item" (Motivo
+obrigatório, "Este motivo ficará registrado no histórico de homologação.", a perda do preferencial quando for o caso,
+Bloquear desabilitado sem motivo válido). O motivo é o mesmo estado da "Observação da decisão": o texto já escrito chega
+ao campo, cancelar o preserva e a guarda de alterações o conta. Homologar e "Voltar para pendente" seguem diretos. O
+histórico ganhou "Motivo / observação" e "Motivo não registrado" no `BLOCKED` sem nota. `SupplierItemFormModal`: com
+Bloqueado, a observação vira "Motivo do bloqueio *" e o envio espera o motivo. Tela geral e cadastro do Item usam o mesmo
+detalhe e o mesmo formulário. Ajuda "Como funciona" de Item × Fornecedor cita o motivo.
+
+**Validação.** API: `supplier-item-block-reason.test.ts` (18 casos: motivo ausente, nulo, vazio, só espaços e curto são
+400 para Qualidade e ADMIN, com situação, preferencial, autoria e eventos intactos; motivo aparado no evento novo, com os
+anteriores iguais e o preferencial derrubado; 3 caracteres bastam; homologar e voltar para pendente sem motivo; Compras,
+Produção, Comercial e Consulta com 403 com e sem motivo; ordem perfil → motivo → existência; criação já bloqueada sem
+motivo 400 sem relação, oferta nem histórico, com motivo 201, de Compras 403; homologada e pendente na criação sem
+motivo; bloqueio legado sem nota legível e sem motivo retroativo) e o módulo de Item × Fornecedor: 4 arquivos e 58
+testes — o caso de 409 do preferencial bloqueado na criação passou a mandar motivo. Web: `motivo-do-bloqueio.test.tsx`
+(13 casos: diálogo e botão, envio aparado com o histórico devolvido, cancelar preservando, recusa do servidor, Homologar e
+Voltar para pendente diretos, quatro perfis sem Bloquear lendo o histórico, "Motivo não registrado", nova relação
+bloqueada pelo ADMIN, tela geral) e o caso novo no cadastro do Item em `fornecedores-do-item.test.tsx`; com os vizinhos
+(Item × Fornecedor, criação no contexto, filtros e listas, polimento, endurecimento e guardas de ajuda), 18 arquivos e
+543 testes. Typecheck de shared, API e web. Sem suíte completa, E2E, Playwright, mutação nem Railway.
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a

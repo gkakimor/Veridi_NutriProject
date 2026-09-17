@@ -47,6 +47,8 @@ sem domínio novo, e dizer o que impede começar.
 - **Desde ITEM-SUPPLIER-UX-01:** a seção Fornecedores do modal do Item administra a relação
   (`FornecedoresDoItemSection`): adicionar fornecedor com o Item fixo, definir o preferencial na linha com confirmação
   e abrir o detalhe por cima do Item (§102). O cadastro do Fornecedor segue só listando (`SupplierItemsSection`).
+- **Desde SUPPLIER-QUALITY-REJECTION-REASON-01:** bloquear a relação exige motivo, gravado na observação do evento de
+  homologação (§104); o diálogo mora no detalhe compartilhado, então vale na tela geral e no cadastro do Item.
 - **Dado real reconferido em 2026-09-16** (`veridi_dev`, só leitura): 721 relações — 603 de matéria-prima, 118 de
   embalagem, nenhuma de produto acabado —, 512 homologadas e 209 pendentes, nenhuma inativa, nenhuma com fornecedor
   inativo, nenhum preferencial; 346 itens com relação, no máximo 9 por item. `ItemType` só tem matéria-prima, embalagem
@@ -188,6 +190,9 @@ SUPPLIER-ITEMS-UX-01 (Fatia 2, D4), quando o PO emitir o handoff.
 - **D2:** tela geral sem mudança.
 - **D4 — Fatia 2:** NÃO IMPLEMENTADO (SUPPLIER-ITEMS-UX-01).
 - **D5:** fora do escopo, nada a implementar.
+- **Motivo do bloqueio** (decisão do PO posterior a D1–D5): SUPPLIER-QUALITY-REJECTION-REASON-01, entregue em
+  2026-09-16, na `main` e fora de PROD (regra no §104). Sem migration. Muda o detalhe também na tela geral; a D2 segue
+  valendo para o resto dela.
 
 ## 17. Histórico de decisões
 
@@ -200,3 +205,9 @@ SUPPLIER-ITEMS-UX-01 (Fatia 2, D4), quando o PO emitir o handoff.
   texto não tinha sido preservado. D1: antes, a seção Fornecedores do Item só listava; agora administra a relação. D2: a
   tela geral permanece. D4: Fornecedor → Itens vai para capability separada. D5: lead time fora do escopo. D1
   implementada em ITEM-SUPPLIER-UX-01; o discovery passa a `IMPLEMENTADO`.
+- **2026-09-16** — motivo do bloqueio decidido pelo PO no handoff de SUPPLIER-QUALITY-REJECTION-REASON-01. Antes: a
+  observação da decisão era opcional em qualquer situação, e um bloqueio podia ficar sem porquê. Agora: bloquear exige
+  motivo em texto livre (sem lista fechada), na observação do evento; homologar e voltar para pendente seguem
+  opcionais; bloqueio antigo sem motivo continua válido, sem backfill. Motivo: a decisão negativa da Qualidade precisa
+  ser explicável depois. A regra vale no detalhe compartilhado, então chega à tela geral e ao cadastro do Item.
+  Implementada na mesma rodada (§104).
