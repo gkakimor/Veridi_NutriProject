@@ -263,19 +263,18 @@ async function main(): Promise<void> {
     await updateFormulationVersion(draftFormula.id, {
       basisQuantity: "1000",
       calculationMode: "FIXED_BASIS",
+      // Sem `basis`: o serviço deriva a base de cada linha da seção e do modo (§106).
       components: [
         {
           itemId: betaAlanina.id,
           quantity: "150",
           unitCode: "kg",
-          basis: "FIXED_BASIS",
           supplyResponsibility: "VERIDI",
         },
         {
           itemId: cafeina.id,
           quantity: "20",
           unitCode: "kg",
-          basis: "FIXED_BASIS",
           supplyResponsibility: "VERIDI",
         },
         {
@@ -283,18 +282,16 @@ async function main(): Promise<void> {
           itemId: aromaCliente.id,
           quantity: "10",
           unitCode: "kg",
-          basis: "FIXED_BASIS",
           supplyResponsibility: "CUSTOMER",
         },
         {
           itemId: pote.id,
           quantity: "1",
           unitCode: "un",
-          basis: "PER_FINISHED_UNIT",
           supplyResponsibility: "VERIDI",
         },
       ],
-    } as never);
+    });
     await activateFormulationVersion(draftFormula.id);
   }
 

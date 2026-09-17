@@ -5641,8 +5641,20 @@ passaram ao modo que a produz, e o arranjo legado da auditoria VAL-LEG-01 é rep
 (7), `base-derivada-na-bancada` (5) e 32 arquivos da bancada, do Modelo e da ajuda. Typecheck de shared, API e web. Sem
 suíte completa, E2E, Playwright nem mutação; Railway intocado.
 
-**Antes de publicar.** PROD pode ter rascunho criado depois da carga com base escolhida à mão: a release confere READ ONLY
-(componente × tipo do Item × modo e forma da versão). A tela avisa, e gravar realinha.
+**Scripts (reconferência, mesmo dia).** A carga de exemplos (`pnpm veridi:examples`, nunca aplicada em PROD) gravava
+`PER_DOSE` fixo na linha do Modelo pelo Prisma: agora usa `baseDoComponente`, importada do fonte do shared. O `db:demo`
+não manda mais `basis`, e o corpo saiu do `as never`. Validação: dry-run da carga contra o DEV (nada escrito), typecheck
+avulso dos scripts (fora do `tsconfig` da API), prova avulsa da detecção do gate com linhas sintéticas e reteste focado da
+capability sobre a `main` — shared `formulation-secoes` (7), API `base-derivada-do-componente` (6, banco de teste
+isolado), web `linha-da-receita`, `base-derivada-na-bancada` e `bancada-do-modelo` (31) — e typecheck da API.
+
+**Antes de publicar.** PROD (`5b7c1a3`) ainda deixa escolher a Base na Formulação e no Modelo. Linha fora da regra criada
+lá pesa de dois jeitos: rascunho é realinhado ao gravar (a Formulação avisa, o Modelo não), e versão fechada é copiada com
+a base derivada por nova versão, aplicar Modelo ou salvar como Modelo — a quantidade passa a significar outra coisa. A
+release roda `scripts/maintenance/prod-component-basis.ts` ([`DEPLOY.md`](DEPLOY.md) §9: READ ONLY, Formulação e Modelo em
+todos os status, comparando com a própria `baseDoComponente`, sai 3 com divergência) e leva qualquer linha fora da regra
+ao PO antes de mover `release/prod`. No DEV, em 2026-09-17: 1.292 linhas ativas e 38 de rascunho, Modelo sem linha, nenhuma
+fora da regra.
 
 ## Próxima prioridade
 
