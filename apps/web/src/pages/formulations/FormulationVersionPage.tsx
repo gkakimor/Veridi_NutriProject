@@ -96,6 +96,7 @@ import {
   itemDaBancada,
   itemElegivelParaSecao,
   opcaoDoItem,
+  tipoDaSecao,
   useCatalogoDeItens,
 } from "../formulation-workbench/catalogo-de-itens";
 import type { ItemDaBancada } from "../formulation-workbench/catalogo-de-itens";
@@ -880,6 +881,21 @@ export function FormulationVersionPage() {
   }
 
   /**
+   * O item escolhido na CONSULTA ASSISTIDA (ASSISTED-ENTITY-SELECTOR-FOUNDATION-01).
+   *
+   * Chega inteiro, e não pelo id: pode vir da terceira página da consulta, fora
+   * do catálogo que o seletor conhece. Entra no catálogo — é dele que a coluna
+   * de unidade e o rótulo do seletor leem — e vai para a linha pelo mesmo
+   * `comItemEscolhido` da escolha no autocomplete.
+   */
+  function handleComponentItemConsulted(linha: LinhaDaReceita, item: ItemDaBancada) {
+    catalogo.mesclar([item]);
+    setComponents((prev) =>
+      prev.map((row) => (row.key === linha.key ? comItemEscolhido(row, item, units) : row)),
+    );
+  }
+
+  /**
    * Campo da linha, já sob o contrato da bancada.
    *
    * Digitar na coluna Pureza é o gesto INTEIRO: não há mais painel para abrir,
@@ -1526,12 +1542,19 @@ export function FormulationVersionPage() {
             ? (row) =>
                 liberarGuarda(() =>
                   origem.goCreate({
-                    route: "/cadastros/itens/novo",
+                    // O tipo da seção chega pré-escolhido — sugestão com os
+                    // defaults do tipo, que o cadastro deixa trocar.
+                    route: `/cadastros/itens/novo?tipo=${tipoDaSecao(secaoDaLinha(row))}`,
                     fieldKey: "itemId",
                     entityType: "item",
                     context: { rowKey: row.key },
                   }),
                 )
+            : undefined
+        }
+        consultaDeItem={
+          isDraft
+            ? { origem: "Formulação", onEscolher: handleComponentItemConsulted }
             : undefined
         }
         valoresDaLinha={valoresDaLinha}

@@ -224,7 +224,8 @@ arises — none exist yet.
 
 Searchable entity fields (`SearchableEntitySelect`) offer **"+ Novo X" as the
 first item in the list**, always — with results, without results, and before
-the user types anything. It used to sit at the bottom whenever the search
+the user types anything. The one thing that comes before it is **"Consultar X"**,
+on the fields that opt into the assisted consultation (next section). It used to sit at the bottom whenever the search
 matched something, so that creating a duplicate would not be the easiest
 thing to click; with ten results it fell below the fold of the popover and
 people concluded creation was not available.
@@ -260,6 +261,55 @@ Do not offer it where the domain would reject the result: an item with no
 balance in a stock count, an item with no stock in a sample consumption, a
 product in a field that already has a create-product mode beside it, or a
 toolbar filter (creating there yields a filter with zero results).
+
+### Assisted consultation from a search field (ASSISTED-ENTITY-SELECTOR-FOUNDATION-01)
+
+Typing in the field stays the fast path: type, see, pick. People who do not
+realize that typing is enough — or who need a bigger list, to compare and pick
+calmly — get **"Consultar X"** ("Consultar itens") at the top of the list,
+before "+ Novo X". Never "Pesquisar": the field itself is already the search.
+
+- **Opt-in per field.** `SearchableEntitySelect` takes `onConsult` +
+  `consultLabel`; without them the list, the indexes and the keyboard are
+  exactly as before. With them, Enter on an empty result opens the
+  consultation instead of creating: the short list found nothing, but the
+  catalog was not looked at yet — creating a duplicate stays a deliberate
+  gesture (arrow or click).
+- **Over the screen, never a route.** `EntityConsultationDialog`
+  (`components/`) is a `FullWorkspaceModal` rendered inside the host screen —
+  not in a portal on `body`, because the modal follows the sidebar width
+  through `--sidebar-current-w`, which only exists inside `.shell`. The origin
+  stays mounted: typed data, unsaved changes and scroll are untouched. The
+  breadcrumb is the origin ("Formulação / Consulta de itens"); focus opens in
+  the search box (`initialFocus`) with the typed term, cursor at the end.
+- **The field's scope, visible and enforced.** The consultation asks the
+  server with the SAME filter as the field (type, only active) and says it
+  above the table ("Mostrando só o que este campo aceita: Tipo: Matéria-prima ·
+  Situação: somente ativos"). A record the field would refuse for another
+  reason (already on another line) shows up disabled, with the reason — never
+  silently missing, which reads as "does not exist" and leads to a duplicate.
+- **Server pagination from the lists.** `useListQuery` + `useFilteredPage` +
+  `ListStatusRow`: 20 per page, new term goes back to page 1, loading, empty
+  and failure (with "Tentar de novo") are three different sentences.
+- **Selecionar returns to the field.** The record goes straight back to the
+  field that opened it and the consultation closes; nothing navigates or
+  reloads. The accessible name starts with the visible word ("Selecionar
+  MP-000030 · …"). The focus the dialog gives back to the field does not reopen
+  the popover. Escape closes only the consultation.
+- **"+ Novo X" inside it is the same contextual creation** as the field's —
+  canonical create page, draft snapshot, back with the new record selected by
+  id — and only for profiles that can create. The consultation does not open a
+  parallel form.
+- **390px.** Rows become cards (`.table--consulta`): code and name on top;
+  type, unit and status with the column name; "Selecionar" full width, 44px
+  high. No horizontal scroll.
+
+Pilot: Item on the formulation workbench (`pages/items/ItemConsultationDialog.tsx`,
+hosted by `TabelaDaReceita` — Formulação and Modelo, raw material and packaging).
+One item type per field: a field that accepts several types needs an additive
+API filter before it gets the consultation, because merging pages of two types
+in the browser breaks paging and the count. Rollout to other selectors is
+ASSISTED-ENTITY-SELECTOR-ROLLOUT-01 (`BACKLOG.md`, section G).
 
 ### Table columns
 

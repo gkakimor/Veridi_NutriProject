@@ -50,6 +50,8 @@ export function SearchableEntitySelect({
   canCreate = false,
   createLabel = "Cadastrar novo",
   onCreateNew,
+  consultLabel = "Consultar",
+  onConsult,
   onSearch,
   "aria-invalid": ariaInvalid,
   "aria-describedby": ariaDescribedBy,
@@ -82,6 +84,19 @@ export function SearchableEntitySelect({
   createLabel?: string;
   onCreateNew?: (typed: string) => void;
   /**
+   * CONSULTA ASSISTIDA (ASSISTED-ENTITY-SELECTOR-FOUNDATION-01): uma ação a
+   * mais no topo da lista, para quem não percebe que basta digitar ou quer ver
+   * uma lista maior, comparar e escolher com calma.
+   *
+   * Ausente = o seletor de sempre. Presente, o autocomplete continua sendo o
+   * caminho rápido — digitar, ver, escolher —, e "Consultar" entrega o texto
+   * já digitado a quem abre a consulta, que devolve o escolhido por `onChange`.
+   * O rótulo diz O QUE se consulta ("Consultar itens"): "Pesquisar" competiria
+   * com o próprio campo, que já é a pesquisa.
+   */
+  consultLabel?: string;
+  onConsult?: (typed: string) => void;
+  /**
    * Busca no SERVIDOR. Ausente, o campo filtra a lista de `options`.
    *
    * Existe porque filtrar no navegador só enxerga o que foi carregado, e
@@ -113,6 +128,13 @@ export function SearchableEntitySelect({
   const input = useRef<HTMLInputElement>(null);
   /** Enquanto o cadastro no contexto está aberto, o popover não volta. */
   const creating = useRef(false);
+  /**
+   * A consulta assistida devolve o foco ao campo quando fecha — escolhendo ou
+   * desistindo. Esse foco é da consulta, não da pessoa, e reabrir a lista ali
+   * deixaria um popover por cima da tela que acabou de receber a escolha. Vale
+   * UMA vez: o próximo foco já é gesto de quem usa o campo.
+   */
+  const focoDaConsulta = useRef(false);
   /**
    * A lista atual já foi navegada por seta?
    *
@@ -291,6 +313,15 @@ export function SearchableEntitySelect({
   // DOM — e o leitor de tela ficaria mudo no meio da lista.
   const visible = useMemo(() => filtered.slice(0, 50), [filtered]);
   const canOfferCreate = canCreate && Boolean(onCreateNew);
+  /*
+   * "Consultar" encabeça a lista, antes até do cadastro: é a saída para quem
+   * não achou, e a lista curta do autocomplete não é o catálogo. Existindo,
+   * ocupa o índice 0 e desloca todo o resto em um — sem ela, nenhum índice
+   * muda, e os seletores que não a pedem continuam exatamente como eram.
+   */
+  const canOfferConsult = Boolean(onConsult);
+  const consultIndex = canOfferConsult ? 0 : -1;
+  const deslocamento = canOfferConsult ? 1 : 0;
   /**
    * O texto digitado é o nome ou o código de um registro que já está na
    * lista?
@@ -336,10 +367,12 @@ export function SearchableEntitySelect({
    * deliberados.
    */
   const criarPrimeiro = canOfferCreate && !casaExato;
-  const createIndex = canOfferCreate ? (criarPrimeiro ? 0 : visible.length) : -1;
-  /** Deslocamento dos resultados: encabeçando, o cadastro ocupa o índice 0. */
-  const primeiroResultado = criarPrimeiro ? 1 : 0;
-  const navigableCount = visible.length + (canOfferCreate ? 1 : 0);
+  const createIndex = canOfferCreate
+    ? deslocamento + (criarPrimeiro ? 0 : visible.length)
+    : -1;
+  /** Deslocamento dos resultados: encabeçando, a consulta e o cadastro vêm antes. */
+  const primeiroResultado = deslocamento + (criarPrimeiro ? 1 : 0);
+  const navigableCount = deslocamento + visible.length + (canOfferCreate ? 1 : 0);
   /** Opção sob o índice navegável — `null` quando o índice é o cadastro. */
   const opcaoNoIndice = (indice: number) => visible[indice - primeiroResultado] ?? null;
   /*
@@ -349,8 +382,18 @@ export function SearchableEntitySelect({
    * resultado nenhum — nome que ainda não existe — a única ação possível é
    * cadastrar, e é nela que o Enter tem que cair: caso contrário quem digita
    * um fornecedor novo aperta Enter e não acontece nada.
+   *
+   * Com a consulta assistida no campo, o Enter sem resultado cai NELA, e não no
+   * cadastro: a lista curta não achou, mas o catálogo ainda não foi olhado — e
+   * a consulta abre com o termo, mostra o catálogo e oferece o mesmo cadastro
+   * logo ali. Criar duplicado continua exigindo um gesto deliberado.
    */
-  const indiceInicial = visible.length > 0 ? primeiroResultado : Math.max(createIndex, 0);
+  const indiceInicial =
+    visible.length > 0
+      ? primeiroResultado
+      : canOfferConsult
+        ? consultIndex
+        : Math.max(createIndex, 0);
 
   // Depois de `indiceInicial` existir: a lista reposiciona o item ativo a
   // cada busca nova e a cada abertura.
@@ -387,6 +430,23 @@ export function SearchableEntitySelect({
     onCreateNew(digitado);
   }
 
+  /**
+   * Entrega para a consulta assistida, com o texto digitado.
+   *
+   * Mesmo cuidado do cadastro: a lista some antes de a consulta abrir, e a
+   * busca sai do campo — escolhendo lá, o campo mostra o escolhido; desistindo,
+   * fica vazio, que é a verdade. O termo vai inteiro para a consulta, que abre
+   * já procurando por ele: ninguém digita duas vezes.
+   */
+  function startConsult() {
+    if (!onConsult) return;
+    focoDaConsulta.current = true;
+    setOpen(false);
+    const digitado = query.trim();
+    setQuery("");
+    onConsult(digitado);
+  }
+
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
@@ -416,6 +476,11 @@ export function SearchableEntitySelect({
     }
     if (event.key === "Enter") {
       if (!open) return;
+      if (consultIndex >= 0 && activeIndex === consultIndex) {
+        event.preventDefault();
+        startConsult();
+        return;
+      }
       if (createIndex >= 0 && activeIndex === createIndex) {
         event.preventDefault();
         startCreate();
@@ -437,13 +502,46 @@ export function SearchableEntitySelect({
   }
 
   const createOptionId = `${listId}-create`;
+  const consultOptionId = `${listId}-consult`;
   const activeId = !open
     ? undefined
-    : createIndex >= 0 && activeIndex === createIndex
-      ? createOptionId
-      : opcaoNoIndice(activeIndex)
-        ? `${listId}-${opcaoNoIndice(activeIndex)!.id}`
-        : undefined;
+    : consultIndex >= 0 && activeIndex === consultIndex
+      ? consultOptionId
+      : createIndex >= 0 && activeIndex === createIndex
+        ? createOptionId
+        : opcaoNoIndice(activeIndex)
+          ? `${listId}-${opcaoNoIndice(activeIndex)!.id}`
+          : undefined;
+
+  const itemConsultar = canOfferConsult ? (
+    <li
+      id={consultOptionId}
+      role="option"
+      aria-selected={activeIndex === consultIndex}
+      className={
+        activeIndex === consultIndex
+          ? "entity-select__option entity-select__consult is-active"
+          : "entity-select__option entity-select__consult"
+      }
+      onMouseDown={(event) => {
+        // `mousedown` antes do blur fechar a lista.
+        event.preventDefault();
+        startConsult();
+      }}
+      onMouseEnter={() => setActiveIndex(consultIndex)}
+    >
+      <svg
+        className="entity-select__consult-icon"
+        viewBox="0 0 16 16"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <circle cx="6.5" cy="6.5" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
+        <path d="m10 10 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+      {consultLabel}
+    </li>
+  ) : null;
 
   const itemCadastrar =
     createIndex >= 0 ? (
@@ -489,10 +587,16 @@ export function SearchableEntitySelect({
         onFocus={() => {
           // Foco devolvido pelo cadastro no contexto não reabre a lista.
           if (creating.current) return;
+          // Nem o que a consulta assistida devolve ao fechar — uma vez só.
+          if (focoDaConsulta.current) {
+            focoDaConsulta.current = false;
+            return;
+          }
           setOpen(true);
         }}
         onChange={(event) => {
           creating.current = false;
+          focoDaConsulta.current = false;
           setQuery(event.target.value);
           setOpen(true);
           navigated.current = false;
@@ -541,6 +645,7 @@ export function SearchableEntitySelect({
           >
             {/* Filho de `listbox` que não é opção precisa dizer que não é —
                 senão o leitor de tela conta aviso e ação como resultado. */}
+            {itemConsultar}
             {criarPrimeiro && itemCadastrar}
 
             {/*

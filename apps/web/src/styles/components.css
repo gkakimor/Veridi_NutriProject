@@ -1891,6 +1891,104 @@ body:has(.confirm-dialog) .entity-select__list {
   color: var(--ink-2);
 }
 
+/* ---------------- Consulta assistida ---------------- */
+
+.consulta-assistida {
+  display: grid;
+  gap: var(--sp-4);
+}
+
+/* O recorte do campo, à vista: por que o produto acabado não aparece. */
+.consulta-assistida__recorte {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.consulta-assistida__barra {
+  margin-bottom: 0;
+}
+
+/* O nome e o que a busca também enxerga (fonte, nutriente, código legado)
+   quebram linha; o motivo de não escolher fica junto do botão, sem espremer a
+   coluna de ação. */
+.table--consulta td.col-flex,
+.table--consulta td.col-flex .cell-sub {
+  white-space: normal;
+}
+
+/*
+ * 390px: cada registro vira um cartão, sem rolagem horizontal. Código e nome
+ * no alto, tipo, unidade e situação na linha de baixo — cada um com o nome da
+ * coluna, porque o cabeçalho sai da vista —, e "Selecionar" na largura toda,
+ * alvo de dedo. Os títulos saem da vista, não da leitura: o `thead` fica para o
+ * leitor de tela.
+ */
+@media (max-width: 640px) {
+  .table--consulta thead {
+    display: block;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .table--consulta,
+  .table--consulta tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .table--consulta tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--sp-1) var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .table--consulta td {
+    padding: 0;
+    border-bottom: 0;
+  }
+
+  .table--consulta td.col-flex {
+    flex: 1 1 60%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .table--consulta td.col-tight:not(.is-code):not(.col-acao)::before {
+    content: attr(data-label) ": ";
+    color: var(--ink-3);
+    font-size: var(--fs-xs);
+  }
+
+  .table--consulta td.col-acao {
+    flex: 1 1 100%;
+    margin-top: var(--sp-2);
+    white-space: normal;
+  }
+
+  .table--consulta td.col-acao .btn {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .table--consulta td.col-acao .cell-sub {
+    max-width: none;
+    white-space: normal;
+  }
+
+  .table--consulta td.table__empty {
+    flex: 1 1 100%;
+  }
+}
+
 /* Legenda curta de colunas — explica sem ocupar a tabela. */
 .stock-legend {
   display: flex;
@@ -2605,6 +2703,28 @@ body:has(.confirm-dialog) .entity-select__list {
 /* Lista sem nenhum resultado: a divisa separaria a ação do nada. */
 .entity-select__create:last-child {
   border-bottom: none;
+}
+
+/*
+ * Consulta assistida (ASSISTED-ENTITY-SELECTOR-FOUNDATION-01): encabeça a lista,
+ * antes do cadastro. Mesma divisa e mesmo peso de AÇÃO do "+ Novo" — não é um
+ * resultado da busca, e não pode ser lida como um.
+ */
+.entity-select__consult {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  color: var(--v-green-700);
+  font-weight: var(--fw-medium);
+}
+
+.entity-select__consult:last-child {
+  border-bottom: none;
+}
+
+.entity-select__consult-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
 }
 
 /* Sugestão de preço da linha do orçamento — informa, nunca aplica sozinha. */
