@@ -1,4 +1,3 @@
-import { formatDecimalPtBr } from "../lib/numeric-ptbr";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AttachmentDTO, AttachmentType } from "@veridi/shared";
 import { ATTACHMENT_TYPE_LABELS, MAX_ATTACHMENT_SIZE_BYTES } from "@veridi/shared";
@@ -11,13 +10,8 @@ import {
   uploadAttachment,
 } from "../lib/attachments-api";
 import { formatDateTime } from "../lib/dates";
+import { formatFileSize } from "../lib/file-size";
 import { TableEmptyRow } from "./TableEmptyRow";
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${formatDecimalPtBr((bytes / (1024 * 1024)).toFixed(1), { scale: 1, minFractionDigits: 1 })} MB`;
-}
 
 /**
  * Bloco de documentos reutilizado por Lote, Recebimento e Produto.
@@ -155,7 +149,7 @@ export function AttachmentsSection({
               <tr key={attachment.id}>
                 <td>{attachment.originalFileName}</td>
                 <td>{ATTACHMENT_TYPE_LABELS[attachment.documentType]}</td>
-                <td>{formatSize(attachment.sizeBytes)}</td>
+                <td>{formatFileSize(attachment.sizeBytes)}</td>
                 <td>{formatDateTime(attachment.uploadedAt)}</td>
                 <td>{attachment.uploadedByName}</td>
                 <td>

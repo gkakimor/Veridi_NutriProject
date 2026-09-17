@@ -1,8 +1,10 @@
 import { useCallback } from "react";
 import type { ItemDTO, UnitOfMeasureDTO } from "@veridi/shared";
+import { isLabelItem } from "@veridi/shared";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { FornecedoresDoItemSection } from "../supplier-items/FornecedoresDoItem";
 import { ItemCostReferenceSection } from "../../components/ItemCostReferenceSection";
+import { ItemLabelFileSection } from "../../components/ItemLabelFileSection";
 import { formatDate } from "../../lib/dates";
 import { ITEM_FORM_ID, ItemFormFields, useItemForm } from "./item-form";
 
@@ -140,6 +142,12 @@ export function ItemFormModal({
       {mode === "edit" && item && item.type !== "FINISHED_PRODUCT" && (
         <ItemCostReferenceSection itemId={item.id} />
       )}
+
+      {/* Arquivo versionado só existe para Rótulo — embalagem com subtipo
+          Rótulo, pelo cadastro GRAVADO, nunca pelo nome (LABEL-ATTACHMENTS-01).
+          Os demais itens não mostram nada. Permissão própria: aparece também
+          em consulta. */}
+      {mode === "edit" && item && isLabelItem(item) && <ItemLabelFileSection itemId={item.id} />}
     </FullWorkspaceModal>
   );
 }
