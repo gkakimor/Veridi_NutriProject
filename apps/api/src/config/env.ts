@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { resolveStorageConfig } from "./storage-config.js";
 
 /**
  * Configuracao da API.
@@ -29,6 +30,30 @@ const envSchema = z.object({
    */
   VERIDI_UPLOAD_DIR: z.string().min(1).default("../../.local-data/uploads"),
   /**
+   * Onde nasce o arquivo NOVO do Item Rótulo (LABEL-ATTACHMENTS-01): `LOCAL_FS`
+   * grava dentro de `VERIDI_UPLOAD_DIR`; `R2` grava no bucket privado da
+   * Cloudflare pela API compatível com S3. Cada versão guarda o provedor em que
+   * nasceu, então trocar esta variável não move nem esconde o que já foi gravado.
+   *
+   * Os anexos genéricos (`Attachment`) continuam em `VERIDI_UPLOAD_DIR`.
+   */
+  VERIDI_STORAGE_PROVIDER: z
+    .enum(["LOCAL_FS", "R2"], {
+      errorMap: () => ({ message: "use LOCAL_FS ou R2" }),
+    })
+    .default("LOCAL_FS"),
+  /**
+   * Cloudflare R2 — `https://<conta>.r2.cloudflarestorage.com`. Credencial
+   * nunca vai para o Git, para o banco, para log nem para o navegador: o
+   * download passa pela API autenticada.
+   */
+  VERIDI_R2_ENDPOINT: z.string().trim().optional(),
+  VERIDI_R2_BUCKET: z.string().trim().optional(),
+  /** O R2 ignora a região; o SDK exige uma. Vazia = `auto`. */
+  VERIDI_R2_REGION: z.string().trim().optional(),
+  VERIDI_R2_ACCESS_KEY_ID: z.string().trim().optional(),
+  VERIDI_R2_SECRET_ACCESS_KEY: z.string().trim().optional(),
+  /**
    * Build do frontend servido pela própria API (implantação de origem única).
    * Vazio = não serve nada: em desenvolvimento o Vite continua na porta dele.
    *
@@ -50,6 +75,14 @@ if (!parsed.success) {
 
 const data = parsed.data;
 
+const storage = resolveStorageConfig(data);
+if (!storage.ok) {
+  // Só nomes de variável: valor de credencial nunca chega a mensagem nem a log.
+  throw new Error(
+    `Configuracao de ambiente invalida:\n${storage.problems.map((problem) => `  - ${problem}`).join("\n")}`,
+  );
+}
+
 /**
  * Endereço efetivo de escuta.
  *
@@ -65,4 +98,6 @@ export const env = {
   ...data,
   API_PORT: data.PORT ?? data.API_PORT,
   API_HOST: host,
+  /** Provedor do arquivo novo e, quando completo, o acesso ao R2. */
+  storage: storage.config,
 };

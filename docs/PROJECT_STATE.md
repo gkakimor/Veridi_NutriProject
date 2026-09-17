@@ -5388,6 +5388,51 @@ script, 27 de 27 derrubadas, com restauração conferida pelo hash do diff. Type
 visual local em 1440 e 390 (Vite do worktree contra a API do dev, sessão de 30 min revogada, POST do preferencial
 respondido pelo script e demais escritas bloqueadas): 48 de 48, console limpo. Sem suíte completa, E2E nem Railway.
 
+## Arquivo versionado do Item Rótulo e storage R2 (LABEL-ATTACHMENTS-01, 2026-09-16)
+
+**Fecha LABEL-ATTACHMENTS-01**, decisões do PO no handoff sobre o
+[LABEL-ATTACHMENTS-ARCHITECTURE-DISCOVERY-01](discovery/LABEL-ATTACHMENTS-ARCHITECTURE-DISCOVERY-01.md) — decidido no
+chat e persistido nesta rodada. Regra durável no §103. Na `main`, fora de PROD (`release/prod` segue `5b7c1a3`).
+**Migration aditiva** `20260925093033_item_label_file_versions` (tabela e enum novos, sem backfill). **Railway não foi
+tocado**: o R2 está pronto e desligado.
+
+**Storage.** `apps/api/src/lib/storage/`: `StorageAdapter` (`putObject`, `getObject` em streaming, `headObject`,
+`deleteObject` só para compensação) com `LOCAL_FS` (`VERIDI_UPLOAD_DIR`, `wx` + fsync, chave validada por segmento) e
+`R2` (`@aws-sdk/client-s3`, bucket no caminho, `If-None-Match: *` e `ChecksumSHA256`). `VERIDI_STORAGE_PROVIDER`
+(padrão `LOCAL_FS`) e `VERIDI_R2_*` validados na subida: pela metade derruba a API citando só nomes. Cada versão guarda o
+provedor em que nasceu. `pnpm storage:r2:smoke` prova o bucket real com credencial fora do Git. Anexos genéricos
+(`Attachment`, `file-storage.ts`) sem mudança.
+
+**API.** `ItemLabelFileVersion` (`itemId`, `versionNumber`, `storageProvider`, `storageKey`, `originalFileName`,
+`mimeType`, `sizeBytes`, `sha256`, `note`, `restoredFromVersion*`, `createdBy*`, `voided*`, `voidReason`) com CHECKs de
+número, tamanho, anulação e restauração. `GET /items/:id/label-file` (toda sessão), `POST …/versions` (multipart,
+25 MB, extensão × tipo × assinatura), `GET …/versions/:versionId/download` (streaming), `POST …/void` (motivo) e
+`POST …/restore` (versão nova com o objeto da origem). Perfis e códigos no §103.
+
+**Web.** `components/ItemLabelFileSection.tsx` no `ItemFormModal`, só para Item Rótulo gravado, em edição e em
+consulta: versão atual com "Visualizar/baixar", "Sem arquivo vigente", "Adicionar nova versão", histórico em cinco
+colunas (Vigente/Histórica/Anulada, restaurada da Vn, motivo da anulação), Restaurar e Anular com confirmação — cada
+ação pela lista do shared. `formatFileSize` saiu do `AttachmentsSection` para `lib/file-size.ts`.
+
+**Validação.** API: 7 arquivos e 140 testes — storage (LOCAL_FS em pasta temporária, R2 com cliente falso e o
+`S3Client` real contra emulador S3 local, configuração sem valor em mensagem), assinatura, validação do arquivo e a rota
+inteira (tipos, 25 MB exato e +1, assinatura, não Rótulo e nome enganoso, inativo, V1–V3, concorrência, anular,
+restaurar anulada, vigente recusada, objeto ausente, integridade, compensação com FK real, storage fora, perfis nos seis,
+403 antes da existência, 401 sem sessão); com os vizinhos (config, lib, itens, anexos, qualidade, permissões do Produto,
+guarda de paginação, test-support), 42 arquivos e 2.395 testes. Web: 2 arquivos e 30 testes (seção e visibilidade no
+modal); com os vizinhos (itens, produtos, recebimento, endurecimentos, criação no contexto, guardas numéricas e de
+vazio), 22 arquivos e 218 testes. Estáticos da raiz (FK × migration, ordem e prefixo da cadeia): 4 arquivos e 32
+testes. Mutação por script: 10 de 10 derrubadas (assinatura,
+compensação, vigente restaurável, anulada vigente, inativo recebendo, R2 sem `If-None-Match`, LOCAL_FS sobrescrevendo,
+download sem `nosniff`, Anular para todos, seção em qualquer embalagem), arquivos restaurados pelo hash. Smoke em
+navegador contra API e Vite do worktree e banco isolado: 33 verificações (envio PDF e PNG, download com bytes e
+cabeçalhos, 401 sem sessão, anular, restaurar anulada, recusa de assinatura, Pote chamado "Rótulo" sem seção, VIEWER e
+COMMERCIAL por perfil, histórico sem rolagem lateral a 1440px, navegador sem nenhuma chamada fora da API). **Smoke no R2
+real, uma vez** (`pnpm storage:r2:smoke`, credencial injetada pelo PO fora do Git, nenhum valor lido nem impresso),
+contra `veridi-homologacao`: upload com `If-None-Match: *` e SHA-256 conferido pelo R2, head com o tamanho, download com
+bytes e SHA-256 iguais, sobrescrita recusada (412) e o objeto de `_smoke/` apagado, com o head confirmando a ausência.
+Typecheck de shared, API e web.
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a

@@ -215,6 +215,13 @@ enum AttachmentType {
   OTHER
 }
 
+/// Onde mora um objeto gravado (LABEL-ATTACHMENTS-01). LOCAL_FS = diretorio
+/// `VERIDI_UPLOAD_DIR`; R2 = bucket privado da Cloudflare pela API S3.
+enum StorageProvider {
+  LOCAL_FS
+  R2
+}
+
 /// Estado de uma parte/fracao da producao. Simples de proposito.
 enum ProductionPartStatus {
   PENDING
@@ -406,6 +413,8 @@ model User {
   recipeWeighings            RecipeWeighing[]
   uploadedAttachments        Attachment[]                       @relation("AttachmentUploadedBy")
   archivedAttachments        Attachment[]                       @relation("AttachmentArchivedBy")
+  createdLabelFileVersions   ItemLabelFileVersion[]             @relation("ItemLabelFileVersionCreatedBy")
+  voidedLabelFileVersions    ItemLabelFileVersion[]             @relation("ItemLabelFileVersionVoidedBy")
   reviewedCoaLots            Lot[]                              @relation("CoaReviewedBy")
   responsibleProjects        Project[]                          @relation("ProjectResponsible")
   createdProjects            Project[]                          @relation("ProjectCreatedBy")
@@ -660,6 +669,67 @@ model Attachment {
   @@index([projectSampleId])
   @@index([documentType])
   @@map("attachments")
+}
+
+/// Versao do arquivo de um Item Rotulo (type = PACKAGING, packagingSubtype =
+/// LABEL) — LABEL-ATTACHMENTS-01.
+///
+/// Versao e imutavel: enviar arquivo novo cria a versao seguinte, e nada
+/// sobrescreve bytes nem linha. A vigente NAO e coluna: e a de maior
+/// `versionNumber` sem `voidedAt`. Anular preenche os campos `voided*` (com
+/// motivo) e nunca apaga o objeto do storage. Restaurar cria versao NOVA
+/// apontando para o MESMO objeto da versao de origem — o objeto e imutavel e
+/// nenhuma regra de negocio o apaga, entao duas versoes podem dividi-lo.
+///
+/// Nao e `Attachment` nem `AttachmentType.LABEL_ART` do Produto: tabela
+/// propria, sem contexto polimorfico.
+model ItemLabelFileVersion {
+  id String @id @default(uuid())
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  /// V1, V2... sequencial por Item — nao e sequence global.
+  versionNumber Int
+
+  /// Provedor em que o objeto nasceu. Leitura vai sempre a ele, mesmo depois
+  /// de `VERIDI_STORAGE_PROVIDER` mudar.
+  storageProvider StorageProvider
+  /// Chave gerada pelo servidor (`items/<itemId>/labels/<uuid>.<ext>`). Nome
+  /// enviado pelo usuario nunca vira chave.
+  storageKey      String
+
+  /// Nome enviado, so para exibicao/download.
+  originalFileName String
+  /// Tipo conferido por extensao, tipo declarado E assinatura do conteudo.
+  mimeType         String
+  sizeBytes        Int
+  /// SHA-256 do conteudo — o R2 confere na gravacao; integridade/auditoria.
+  sha256           String
+
+  note String?
+
+  /// Restauracao: a versao de origem. Numero gravado junto — o rotulo
+  /// "restaurada da V2" e historico e nao depende de join.
+  restoredFromVersionId     String?
+  restoredFromVersion       ItemLabelFileVersion?  @relation("ItemLabelFileVersionRestoredFrom", fields: [restoredFromVersionId], references: [id], onDelete: Restrict)
+  restoredFromVersionNumber Int?
+  restorations              ItemLabelFileVersion[] @relation("ItemLabelFileVersionRestoredFrom")
+
+  createdAt             DateTime @default(now())
+  createdByUserId       String
+  createdByUser         User     @relation("ItemLabelFileVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdByNameSnapshot String
+
+  voidedAt             DateTime?
+  voidedByUserId       String?
+  voidedByUser         User?     @relation("ItemLabelFileVersionVoidedBy", fields: [voidedByUserId], references: [id], onDelete: Restrict)
+  voidedByNameSnapshot String?
+  voidReason           String?
+
+  @@unique([itemId, versionNumber])
+  @@index([restoredFromVersionId])
+  @@map("item_label_file_versions")
 }
 
 /// Projeto private label — o funil comercial ANTES do produto existir.
@@ -2144,6 +2214,7 @@ model Item {
   billingLines                   BillingLine[]
   stockCountPositions            StockCountPosition[]
   stockCountFindings             StockCountFinding[]
+  labelFileVersions              ItemLabelFileVersion[]
 
   @@index([type])
   @@index([active])

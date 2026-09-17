@@ -6695,3 +6695,52 @@ consulta e filas de Compras e da Qualidade, sem mudança (D2) — inclusive o
 "Marcar como preferencial" do detalhe dela, que segue sem confirmação. Fornecedor →
 Itens segue só leitura, em capability separada (D4, SUPPLIER-ITEMS-UX-01). Lead time
 de fornecedor não entra (D5). Sem migration.
+
+## §103 — Arquivo do Item Rótulo: versão nova nunca apaga a anterior
+
+LABEL-ATTACHMENTS-01, 2026-09-16, decisões do PO no handoff
+([discovery](discovery/LABEL-ATTACHMENTS-ARCHITECTURE-DISCOVERY-01.md)).
+
+**Rótulo é tipo e subtipo, nunca nome.** O arquivo existe para o Item de embalagem com subtipo Rótulo (`type =
+PACKAGING`, `packagingSubtype = LABEL`, `isLabelItem` no shared). Uma embalagem chamada "Rótulo" com outro subtipo não
+tem arquivo, e nenhum outro Item ganha arquivo genérico. É o arquivo da arte que vai para a gráfica — não é o
+documento `LABEL_ART` do Produto, que continua como está.
+
+**Versões imutáveis.** Cada envio cria a versão seguinte do Item (V1, V2, V3…). Nada sobrescreve bytes nem linha: o
+objeto é gravado sob chave nova e o storage recusa chave ocupada. A **versão vigente** não é coluna: é a de maior número
+que não foi anulada; sem nenhuma assim, "Sem arquivo vigente". Situação na tela: Vigente, Histórica ou Anulada.
+
+**Envio.** Só Item Rótulo **ativo** recebe versão (409 `item_not_label` e `item_inactive`); inativo guarda o histórico
+e o download. PDF, PNG ou JPEG até **25 MB** (413 acima). Extensão do nome, tipo declarado pelo navegador e assinatura
+do conteúdo têm de concordar — um PNG chamado `.pdf` é recusado (400 `file_signature_mismatch`). O nome enviado é só
+metadado: a chave é `items/<itemId>/labels/<uuid>.<ext>`, sem nome de arquivo, cliente ou produto. Observação opcional,
+até 500 caracteres.
+
+**Atomicidade.** O objeto é gravado primeiro e a versão depois, numa transação que trava o Item — dois envios
+simultâneos saem V4 e V5. Storage fora: nenhuma versão (503). Banco falhou depois do objeto: o objeto é removido, a
+única exclusão física que existe, e só quando o banco não confirma a versão.
+
+**Anular** exige motivo, registra quem e quando (da sessão) e não apaga o objeto: a versão sai de vigência, continua
+no histórico e continua baixável. Anular de novo é 409. Não depende de o Item estar ativo.
+
+**Restaurar** cria uma versão NOVA no topo com o mesmo arquivo da escolhida ("V4 restaurada da V2"); a de origem não
+muda — anulada continua anulada. Restaurar a vigente é 409 `version_is_current`. O objeto precisa existir no storage,
+ou nada é criado (409 `storage_object_missing`). Não existe desanular nem excluir versão.
+
+**Download** passa pela API autenticada, em streaming, com o tipo gravado, tamanho, `Content-Disposition` inline com o
+nome enviado (ASCII e UTF-8), `nosniff` e sem cache compartilhado. O navegador nunca recebe endereço do bucket,
+credencial ou URL assinada. Objeto ausente é 404 `storage_object_missing`; objeto de tamanho diferente do registrado
+não é servido (500 `storage_integrity_error`).
+
+**Perfis** (`@veridi/shared`, a mesma lista na API e na tela; 403 antes do corpo e antes de conferir o Item):
+
+- consultar e baixar: toda sessão;
+- enviar nova versão (`ITEM_LABEL_FILE_UPLOAD_ROLES`) e restaurar (`ITEM_LABEL_FILE_RESTORE_ROLES`): Compras,
+  Qualidade, Comercial e Administrador — lista própria da seção: a Produção edita o Item e não envia arte, o Comercial
+  não edita o Item e envia;
+- anular (`ITEM_LABEL_FILE_VOID_ROLES`): Qualidade e Administrador, a mesma autoridade de arquivar anexo.
+
+**Armazenamento.** Uma abstração só (`StorageAdapter`): `LOCAL_FS` em `VERIDI_UPLOAD_DIR` e Cloudflare R2 (bucket
+privado, API S3). O provedor do arquivo novo é `VERIDI_STORAGE_PROVIDER`; cada versão guarda o provedor em que nasceu e é
+lida dele, então trocar a variável não move nem esconde o que já existe. Os anexos genéricos (`Attachment`) seguem em
+`file-storage.ts`, sem mudança (ATTACHMENTS-R2-MIGRATION-01).

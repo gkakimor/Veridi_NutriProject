@@ -40,6 +40,7 @@ zero BLOCKER. O MVP foi entregue; o que está aqui é evolução do produto.
 | 9e | P1 | ~~**MASTER-DATA-EDIT-PERMISSIONS-01**~~ — quem cria, edita, inativa e reativa Item, Fornecedor e Produto | **FECHADO em 2026-09-16, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · DE1–DE12 do PO ([discovery](discovery/MASTER-DATA-EDIT-PERMISSIONS-DISCOVERY-01.md)): Item com Compras, Qualidade, Produção e ADMIN, os quatro controles só Qualidade e ADMIN pela mudança de valor, "Consumido na produção" só Produção e ADMIN, custo de referência inicial só Comercial e ADMIN (recusado, nunca ignorado), inativar Compras/Qualidade/ADMIN e reativar Qualidade/ADMIN · Fornecedor com Compras e ADMIN · Produto com Comercial e ADMIN, inclusive a criação direta aprovada, e "Exige CoA" só para o PA que nasce junto · 403 antes do corpo e da existência (`exigirPerfil` compartilhado), 409 de situação · consulta no mesmo modal, criação contextual e "Nova relação" por perfil · **sem migration** | Publicação quando o PO decidir (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §100, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
 | 9f | P1 | ~~**ITEM-SUPPLIER-QUALIFICATION-PERMISSION-01**~~ — a relação Item × Fornecedor criada por Compras nasce pendente | **FECHADO em 2026-09-16, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · D3 do PO ([discovery](discovery/ITEM-SUPPLIER-UX-DISCOVERY-01.md), persistido nesta rodada): Compras cria a relação, os dados comerciais e a primeira oferta e administra o preferencial quando elegível, mas pedir `APPROVED` ou `BLOCKED` na criação é 403 com o motivo, sem gravar nada · homologar e bloquear, também na criação, só Qualidade e ADMIN (`SUPPLIER_ITEM_QUALIFICATION_ROLES`, a mesma lista da rota de homologação) · voltar para pendente com Compras, Qualidade e ADMIN · ADMIN mantém a criação com situação explícita · "Situação inicial: Pendente" na tela de Compras · **sem migration** | Publicação quando o PO decidir (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §101, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
 | 9g | P1 | ~~**ITEM-SUPPLIER-UX-01**~~ — fornecedores administráveis no cadastro do Item (Fatia 1) | **FECHADO em 2026-09-16, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · D1–D5 do PO ([discovery](discovery/ITEM-SUPPLIER-UX-DISCOVERY-01.md) `IMPLEMENTADO`): a seção Fornecedores do Item lista as relações reais e administra — Compras e ADMIN adicionam fornecedor com o Item fixo (Compras cria `PENDING`) e definem o preferencial com confirmação e troca atômica da API; Qualidade e ADMIN homologam e bloqueiam no detalhe aberto por cima do Item; os demais consultam · duplicidade leva à relação existente · tela geral mantida (D2) · Fornecedor → Itens para SUPPLIER-ITEMS-UX-01 (D4) · sem lead time (D5) · Escape da confirmação não fecha mais o modal de baixo · **sem migration e sem API nova** | Publicação quando o PO decidir (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §102, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
+| 9h | P1 | ~~**LABEL-ATTACHMENTS-01**~~ — arquivo versionado do Item Rótulo, com storage `LOCAL_FS` e Cloudflare R2 | **FECHADO em 2026-09-16, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · decisões do PO no handoff ([discovery](discovery/LABEL-ATTACHMENTS-ARCHITECTURE-DISCOVERY-01.md), persistido nesta rodada): Rótulo por tipo e subtipo; versões imutáveis com vigente derivada; PDF/PNG/JPEG até 25 MB por extensão, tipo e assinatura; anular com motivo sem apagar bytes; restaurar como versão nova; download autenticado em streaming; enviar e restaurar Compras, Qualidade, Comercial e ADMIN, anular Qualidade e ADMIN · `StorageAdapter` com `LOCAL_FS` e `R2` · **migration aditiva** `20260925093033` · **Railway não tocado**: R2 pronto e desligado | Publicação quando o PO decidir; ativação do R2 em STORAGE-R2-ACTIVATION-01 (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §103, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
 | 10 | P2 | **Estabilização final ampla do produto** | Sem ID e sem escopo | Abrir ID e escopo quando 4–8 fecharem | WAVE 4, permissões e WAVE 5 |
 | 11 | — | **DEMO-DATASET-01** — ambiente DEMO com massa fictícia determinística | **AGUARDANDO DEFINIÇÃO DO PO** | Massa fictícia determinística + reset protegido para um futuro ambiente Railway DEMO, e o fluxo `main` → `release/demo` → aprovação → o MESMO SHA em `release/prod`. Nada criado: sem ambiente, sem `release/demo` | PO |
 
@@ -56,6 +57,9 @@ watchlist (E). A estabilização final (10) é o lugar natural para varrê-los.
 | **MASTER-DATA-STRUCTURAL-LOCKS-01** — travas estruturais do cadastro mestre além de `operationallyUsed` | Registrado em 2026-09-16 (MASTER-DATA-EDIT-PERMISSIONS-01); pergunta de produto antes de construir | G |
 | **MASTER-DATA-STATUS-HISTORY-01** — motivo e histórico de Inativar/Reativar de Item, Fornecedor e Produto (P2) | Futuro, registrado em 2026-09-16 (MASTER-DATA-EDIT-PERMISSIONS-01); exigiria migration | G |
 | **SUPPLIER-ITEMS-UX-01** — Fornecedor → Itens fornecidos administrável no cadastro do Fornecedor (Fatia 2) | D4 do PO em 2026-09-16: capability separada, não implementar agora. A Fatia 1 (Item) fechou em ITEM-SUPPLIER-UX-01. Espera o handoff do PO | G |
+| **STORAGE-R2-ACTIVATION-01** — ligar o Cloudflare R2 no Railway para o arquivo do Item Rótulo (P1) | Registrado em 2026-09-16 (LABEL-ATTACHMENTS-01). Configurar secrets e rodar o smoke real exigem autorização explícita do PO; nada foi feito no Railway | G |
+| **ATTACHMENTS-R2-MIGRATION-01** — anexos genéricos (`Attachment`) no adaptador de storage e no R2 (P2) | Futuro, registrado em 2026-09-16 (LABEL-ATTACHMENTS-01); avaliar se ainda faz sentido | G |
+| **LABEL-FILE-SUBTYPE-CHANGE-01** — Item Rótulo com versões pode trocar de subtipo e a seção some (LOW) | Registrado em 2026-09-16 (LABEL-ATTACHMENTS-01), sem posição: é pergunta de cadastro mestre | G |
 | **OPS-BACKUP-01** — backup agendado de PROD (HIGH) | Snapshot do Railway recusado e PITR desligado; o backup lógico JSON é restaurável e provado. Rotina agendada é decisão de infraestrutura | A |
 | COST-VAR-02 — variação de CMV e proteção de margem | Bloqueado: sete decisões do PO e dado real em produção | [`archive/COST-VAR-01…`](archive/COST-VAR-01_AUDITORIA_VARIACAO_CMV.md) |
 | #8E, #8F, #8G · PLAN-DATE-01 · UX-HELP-03 | Melhorias aguardando autorização | B, E |
@@ -317,7 +321,9 @@ Veridi, quebrar em requirements independentes:
 - códigos de motivo de perda/rendimento;
 - conteúdo, formato e dimensões da etiqueta e impressora;
 - validade por classe/tipo de Item;
-- storage definitivo de arquivos/anexos em produção.
+- storage definitivo de arquivos/anexos em produção — Cloudflare R2 aprovado pelo PO em 2026-09-16 e pronto no
+  código para o arquivo do Item Rótulo (§103); ligar no Railway é STORAGE-R2-ACTIVATION-01 e levar os anexos
+  genéricos é ATTACHMENTS-R2-MIGRATION-01 (seção G).
 
 ### 11. Material do cliente — lote do fabricante e validade por configuração do Item — MEDIUM
 
@@ -798,6 +804,33 @@ para Compras › Item × Fornecedor. A Fatia 1 fechou em ITEM-SUPPLIER-UX-01 (§
 passa a ser o de Item. Sem migration. Para decidir junto: levar à tela geral a confirmação da troca de preferencial que o
 cadastro do Item já pede (hoje o "Marcar como preferencial" do detalhe na tela geral troca direto, D2; a E2E
 `oferta-de-fornecedor-vira-custo` passa por ele).
+
+### STORAGE-R2-ACTIVATION-01 — ligar o Cloudflare R2 no Railway — P1 · AGUARDANDO O PO
+
+Registrado em 2026-09-16 por LABEL-ATTACHMENTS-01, **sem nada feito no Railway**. O código está pronto e desligado: sem
+variáveis, o arquivo do Item Rótulo vai para o volume (`LOCAL_FS`). Ligar = cadastrar `VERIDI_STORAGE_PROVIDER=R2`,
+`VERIDI_R2_ENDPOINT`, `VERIDI_R2_BUCKET`, `VERIDI_R2_REGION=auto`, `VERIDI_R2_ACCESS_KEY_ID` e
+`VERIDI_R2_SECRET_ACCESS_KEY` no serviço, e provar antes com `pnpm storage:r2:smoke` na mesma credencial
+([`DEPLOY.md`](DEPLOY.md) §6.1). Infra já pronta pelo PO: bucket privado `veridi-homologacao` e token S3 restrito a
+ele; o smoke real com essa credencial, injetada fora do Git, passou em 2026-09-16 (upload, head, download com bytes
+iguais, sobrescrita recusada, objeto apagado). Decidir também se PROD usa o mesmo bucket de homologação ou um próprio —
+o bucket mora só na variável.
+
+### ATTACHMENTS-R2-MIGRATION-01 — anexos genéricos no adaptador de storage — P2 · FUTURO
+
+Registrado em 2026-09-16 por LABEL-ATTACHMENTS-01, **sem posição**. `Attachment` (lote, recebimento, produto, projeto,
+amostra) segue em `lib/file-storage.ts`, no volume: 10 MB, extensão × MIME sem assinatura, download lido inteiro em
+memória. A pergunta: vale levar esses anexos ao `StorageAdapter` (provedor por linha, streaming, assinatura) e ao R2, e
+como mover os arquivos que já estão no volume sem perder nenhum — cópia verificada por hash antes de trocar o provedor
+de cada linha. Exigiria migration (provedor por anexo).
+
+### LABEL-FILE-SUBTYPE-CHANGE-01 — Item Rótulo com versões que troca de subtipo — LOW · sem posição
+
+Visto em 2026-09-16 por LABEL-ATTACHMENTS-01. `packagingSubtype` não é campo estrutural: um Item Rótulo com arquivo
+pode virar Pote pela edição. As versões ficam no banco e no storage, mas a seção some da tela e não aceita versão nova
+(409 `item_not_label`); voltar o subtipo para Rótulo devolve o histórico intacto. Nada se perde, mas o histórico fica
+fora de vista. A pergunta, de cadastro mestre (vizinha de MASTER-DATA-STRUCTURAL-LOCKS-01): travar a troca de subtipo
+quando houver versão, ou mostrar o histórico em consulta mesmo fora do subtipo.
 
 ---
 

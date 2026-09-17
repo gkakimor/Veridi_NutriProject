@@ -35,6 +35,7 @@
     "veridi:data:seed": "dotenv -e .env -- tsx scripts/veridi-data/seed.ts",
     "db:demo": "pnpm --filter @veridi/api db:demo",
     "validate:migrations:fresh": "dotenv -e .env -- node scripts/validate-migrations-fresh.mjs",
+    "storage:r2:smoke": "dotenv -e .env -- tsx scripts/storage-r2-smoke.ts",
     "e2e:baseline:rebuild": "dotenv -e .env -- node scripts/e2e-baseline-rebuild.mjs",
     "e2e:run": "dotenv -e .env -- node scripts/e2e-run.mjs"
   },
