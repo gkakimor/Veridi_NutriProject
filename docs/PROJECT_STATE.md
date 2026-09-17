@@ -5344,12 +5344,12 @@ Comercial e Consulta sem nenhuma escrita; Administrador cria homologada com pref
 módulos de Item × Fornecedor, Fornecedor, sourcing e seleção de custo: 8 arquivos e 104 testes. Web:
 `situacao-da-relacao-por-perfil.test.tsx` (15 casos: seletor por perfil nos seis, Compras sem pedir situação, rascunho
 retomado, Administrador com o contrato da API, detalhe por perfil) e os vizinhos que exercem formulário, detalhe, página
-e guardas de fonte: 23 arquivos e 521 testes. Mutação por script, 15 de 15 derrubadas (API 9: gate fora, só
+e guardas de fonte: 23 arquivos e 522 testes, repetidos sobre o merge. Mutação por script, 15 de 15 derrubadas (API 9: gate fora, só
 Homologado, depois da existência, rebaixa em silêncio, rota com a lista comercial, Compras sem voltar para pendente,
 Qualidade criando, preferencial sem a regra, histórico com a origem errada; shared 1: Compras na lista, com build antes e
 depois; web 5: todo perfil decide, pedido com os campos, seletor para todos, detalhe pela lista comercial, voltar para
-pendente só de quem decide), com restauração conferida pelo hash do diff. Typecheck de shared, API e web. Sem suíte
-completa, smoke, E2E nem Railway.
+pendente só de quem decide), com restauração conferida pelo hash do diff. Typecheck de shared, API e web sobre o merge.
+Sem suíte completa, smoke, E2E nem Railway.
 
 ## Próxima prioridade
 
