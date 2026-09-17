@@ -10,6 +10,8 @@ import { formatQuantity } from "../lib/quantity";
 
 interface AdjustStockDialogProps {
   itemId: string;
+  /** §107: item inativo não recebe entrada manual — a API recusa, e a tela não oferece. */
+  itemActive: boolean;
   unitCode: string;
   controlsLot: boolean;
   lots: InventoryLotBreakdownDTO[];
@@ -31,6 +33,7 @@ const TYPE_OPTIONS: { value: AdjustmentType; label: string }[] = [
  */
 export function AdjustStockDialog({
   itemId,
+  itemActive,
   unitCode,
   controlsLot,
   lots,
@@ -38,7 +41,7 @@ export function AdjustStockDialog({
   onAdjusted,
 }: AdjustStockDialogProps) {
   const [lotId, setLotId] = useState(lots[0]?.lotId ?? "");
-  const [type, setType] = useState<AdjustmentType>("ADJUSTMENT_IN");
+  const [type, setType] = useState<AdjustmentType>(itemActive ? "ADJUSTMENT_IN" : "ADJUSTMENT_OUT");
   const [quantity, setQuantity] = useState("");
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
@@ -102,11 +105,18 @@ export function AdjustStockDialog({
               onChange={(event) => setType(event.target.value as AdjustmentType)}
             >
               {TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
+                <option
+                  key={option.value}
+                  value={option.value}
+                  disabled={!itemActive && option.value === "ADJUSTMENT_IN"}
+                >
                   {option.label}
                 </option>
               ))}
             </select>
+            {!itemActive && (
+              <p className="field__hint">Item inativo: sem entrada manual. Sobra física entra pela contagem.</p>
+            )}
           </div>
 
           <div className="field">

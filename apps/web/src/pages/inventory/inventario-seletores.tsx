@@ -58,8 +58,9 @@ export function LinhaDeMarcacao({
   );
 }
 
+/** A busca acha inativo; a marca vem do `active` do servidor (§107). */
 function opcaoDoItem(item: ItemDTO): EntityOption {
-  return { id: item.id, code: item.code, name: item.name, hint: item.unitCode };
+  return { id: item.id, code: item.code, name: item.name, hint: item.active ? item.unitCode : `${item.unitCode} · Item inativo` };
 }
 
 /** Catálogo de itens com busca no servidor; guarda o item inteiro para saber se ele controla lote. */

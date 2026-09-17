@@ -43,9 +43,12 @@ function DicaDoCampo({ id }: { id: HelpHintId }) {
  */
 const PRIMEIRA_PAGINA = 50;
 
-/** Um formato só de rótulo: o da lista inicial e o da busca não podem divergir. */
+/**
+ * Um formato só de rótulo: o da lista inicial e o da busca não podem divergir.
+ * A marca de inativo vem do `active` que o servidor devolveu (§107).
+ */
 function opcaoDoItem(item: ItemDTO): EntityOption {
-  return { id: item.id, code: item.code, name: item.name };
+  return { id: item.id, code: item.code, name: item.name, ...(item.active ? {} : { hint: "Item inativo" }) };
 }
 
 /** "LT-000118 está no INV-000014" — a posição retida, sem saldo nenhum. */
@@ -116,9 +119,14 @@ export function StockCountPage() {
   }, []);
 
   /**
-   * Busca no servidor, com o MESMO filtro de negócio da carga inicial
-   * (`active: true`). Item inativo não é contável e continua fora — o que
-   * muda é só quem consegue ser encontrado, nunca quem é elegível.
+   * Busca no servidor, ativos e inativos (§107). Item inativo com saldo é
+   * contável, como no Inventário Físico, e a busca que pedia `active: true`
+   * o escondia embora a API aceitasse a contagem. Quem é elegível não se
+   * decide aqui: é a prévia do item escolhido, que só traz posição de inativo
+   * com saldo — a mesma regra do escopo de um inventário.
+   *
+   * A carga inicial segue só com ativos: é a lista antes de digitar, e o
+   * inativo aparece quando procurado, marcado.
    *
    * O resultado entra no catálogo da tela porque tudo o que vem depois da
    * escolha é lido daqui: o rótulo do campo, `controlsLot` (que decide se a
@@ -127,7 +135,7 @@ export function StockCountPage() {
    * que fazer com ele.
    */
   async function buscarItens(termo: string): Promise<EntityOption[]> {
-    const resposta = await listItems({ active: true, search: termo, pageSize: PRIMEIRA_PAGINA });
+    const resposta = await listItems({ search: termo, pageSize: PRIMEIRA_PAGINA });
     setItems((atual) => {
       const conhecidos = new Set(atual.map((item) => item.id));
       const novos = resposta.items.filter((item) => !conhecidos.has(item.id));
@@ -318,6 +326,9 @@ export function StockCountPage() {
               options={items.map(opcaoDoItem)}
               onSearch={buscarItens}
             />
+            {selectedItem && !selectedItem.active && (
+              <span className="field__hint">Item inativo: entra na contagem só a posição com saldo.</span>
+            )}
           </div>
 
           {controlaLote && (
@@ -363,7 +374,11 @@ export function StockCountPage() {
             </div>
           )}
           {semPosicao && (
-            <p className="field__hint field--full">Nenhuma posição deste item para contar.</p>
+            <p className="field__hint field--full">
+              {selectedItem && !selectedItem.active
+                ? "Item inativo sem saldo: nenhuma posição para contar."
+                : "Nenhuma posição deste item para contar."}
+            </p>
           )}
 
           {!retidaDoItem && (

@@ -5656,6 +5656,39 @@ todos os status, comparando com a própria `baseDoComponente`, sai 3 com diverg�
 ao PO antes de mover `release/prod`. No DEV, em 2026-09-17: 1.292 linhas ativas e 38 de rascunho, Modelo sem linha, nenhuma
 fora da regra.
 
+## Item inativo no estoque físico (INVENTORY-INACTIVE-ITEM-VISIBILITY-01, 2026-09-17)
+
+**Decisão do PO** (D1–D3 de [MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01](discovery/MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01.md),
+Fatia 1): item inativo não some do estoque físico. Regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §107. Na `main`, fora
+de PROD (`release/prod` segue `5b7c1a3`). **Sem migration**; perfis e autoridade das ações intocados.
+
+**API.** `listInventory` perdeu o `active: true` fixo que tinha desde a criação do módulo: resume todo item do recorte de
+tipo e busca e mantém o inativo com posição (saldo, reservado ou em compra > 0); `includeInactiveWithoutPosition`
+(`booleanoDeConsultaSchema`) traz também o sem posição; `onlyWithStock` e a ordem (posição primeiro) inalterados. O CSV lê
+o mesmo schema e o mesmo serviço e ganhou "Item ativo". `InventoryItemSummaryDTO.itemActive`, que o detalhe herda.
+`createInventoryAdjustment` recusa `ADJUSTMENT_IN` de inativo (`InactiveItemAdjustmentInError`, 400 `inactive_item`)
+antes da transação; saída e perda seguem; a Contagem rápida e o encerramento do Inventário gravam o próprio movimento e
+não passam por essa recusa.
+
+**Web.** Estoque com "Incluir inativos sem saldo" (levado ao CSV) e a marca "Item inativo" na linha; detalhe com a marca
+ao lado do tipo; `AdjustStockDialog` recebe `itemActive` e, para inativo, desabilita "Ajuste de entrada", abre em saída e
+explica. Contagem rápida: a busca deixou de pedir `active: true` (a primeira página segue só com ativos), o inativo vem
+marcado, a prévia decide a posição, e sem posição a tela diz "Item inativo sem saldo: nenhuma posição para contar."; os
+seletores do Inventário marcam o inativo no complemento da opção.
+
+**Validação.** API `estoque-item-inativo` (16: inativo com saldo, só reservado — reserva de Pedido sem saldo — e só em
+compra aparecem; sem posição fica fora e entra com o filtro; `onlyWithStock`; CSV igual à lista em quatro recortes, com a
+situação; 400 fora de `"true"`/`"false"`; detalhe; Contagem rápida com sobra; saída, perda e recusa da entrada; ativo com
+entrada) e os vizinhos — módulo de estoque inteiro, exportações, guardas de booleano e de paginação, validade em uso e
+consumo extra: 19 arquivos, 1.597 testes, em banco de teste exclusivo. Uma execução teve uma queda em
+`stock-count-telas-2b` (W12 do BACKLOG) e a repetição passou inteira. Mutação por script (extra): as quatro regras
+derrubaram o teste novo. Web `estoque-item-inativo` (6) e os vizinhos — pasta do Inventário, busca no servidor,
+endurecimento operacional, listas, ajuda e guardas de código: 21 arquivos, 318 testes; `catalogo-busca-no-servidor`
+deixou de afirmar a busca só de ativos. Typecheck de shared, API e web. Sem suíte completa, E2E nem Playwright; Railway
+intocado.
+
+**Registrado.** Fatias 2–4 e a opcional do discovery, em "Abertos fora da fila" do [`BACKLOG.md`](BACKLOG.md).
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a

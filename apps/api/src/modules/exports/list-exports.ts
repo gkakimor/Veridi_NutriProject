@@ -306,6 +306,8 @@ const inventoryExport = defineCsvExport({
     { header: "Item", value: (row: InventoryItemSummaryDTO) => csvCode(row.itemCode) },
     { header: "Descrição", value: (row: InventoryItemSummaryDTO) => csvText(row.itemName) },
     { header: "Tipo", value: (row: InventoryItemSummaryDTO) => ITEM_TYPE_LABELS[row.itemType] },
+    // §107: o CSV traz o inativo com posição, como a tela — e diz que é inativo, como a tela.
+    { header: "Item ativo", value: (row: InventoryItemSummaryDTO) => csvBoolean(row.itemActive) },
     { header: "Unidade", value: (row: InventoryItemSummaryDTO) => csvText(row.unitCode) },
     { header: "On Hand", value: (row: InventoryItemSummaryDTO) => csvDecimal(row.onHand) },
     { header: "Reservado", value: (row: InventoryItemSummaryDTO) => csvDecimal(row.reserved) },

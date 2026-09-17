@@ -217,12 +217,11 @@ describe("Contagem Física — busca de item no servidor", () => {
     expect(chamadas[0]).toEqual({ active: true, pageSize: 50 });
   });
 
-  it("digitar busca no servidor com o mesmo filtro de negócio da carga inicial", async () => {
+  it("digitar busca no servidor ativos e inativos — a carga inicial segue só com ativos (§107)", async () => {
     const campo = await abrir();
     fireEvent.change(campo, { target: { value: "Beta-Alanina" } });
     await waitFor(() => expect(buscasPor("Beta-Alanina").length).toBe(1));
     expect(buscasPor("Beta-Alanina")[0]).toEqual({
-      active: true,
       search: "Beta-Alanina",
       pageSize: 50,
     });
@@ -243,11 +242,16 @@ describe("Contagem Física — busca de item no servidor", () => {
     );
   });
 
-  it("item inativo não é contável e continua fora do resultado", async () => {
+  /*
+   * Era "item inativo não é contável e continua fora do resultado": a tela
+   * pedia `active: true` e escondia o inativo que a API aceitava contar. Pela
+   * §107 inativo com saldo é contável, e quem decide a posição é a prévia.
+   */
+  it("item inativo aparece na busca, marcado, e o ativo não leva a marca", async () => {
     const campo = await abrir();
     fireEvent.change(campo, { target: { value: "Beta-Alanina" } });
-    await screen.findByRole("option", { name: /MP-002500/ });
-    expect(screen.queryByRole("option", { name: /MP-002501/ })).toBeNull();
+    expect(await screen.findByRole("option", { name: /^MP-002501/ })).toHaveTextContent("Item inativo");
+    expect(screen.getByRole("option", { name: /^MP-002500/ })).not.toHaveTextContent("Item inativo");
   });
 
   it("enquanto a busca está no ar, a lista não diz que nada foi encontrado", async () => {

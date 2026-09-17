@@ -41,6 +41,7 @@ function linhaEstoque(overrides: Partial<InventoryItemSummaryDTO> = {}): Invento
     itemType: "RAW_MATERIAL",
     unitCode: "kg",
     controlsLot: true,
+    itemActive: true,
     onHand: "5",
     reserved: "0",
     available: "0",
