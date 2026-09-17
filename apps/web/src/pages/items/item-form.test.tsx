@@ -18,8 +18,8 @@ vi.mock("../../lib/items-api", () => ({
 }));
 vi.mock("../../lib/units-api", () => ({ listUnits: vi.fn() }));
 // Só aparece na edição e bate na API por conta própria.
-vi.mock("../../components/SupplierItemsSection", () => ({
-  SupplierItemsSection: () => null,
+vi.mock("../supplier-items/FornecedoresDoItem", () => ({
+  FornecedoresDoItemSection: () => null,
 }));
 
 import { createItem } from "../../lib/items-api";

@@ -117,6 +117,14 @@ export function FullWorkspaceModal({
       if (event.key === "Escape") {
         // Só o modal do topo responde. Um Escape fecha uma camada.
         if (pilha[pilha.length - 1] !== identidade.current) return;
+        /*
+         * Confirmação aberta (`alertdialog` modal) é a camada de cima, e o
+         * Escape é dela: cancela a pergunta. Ela também ouve o `document`, mas
+         * depois deste modal — e o modal fechava junto. Quem desistia de trocar
+         * o preferencial dentro do cadastro do Item perdia o Item aberto
+         * (ITEM-SUPPLIER-UX-01).
+         */
+        if (document.querySelector('[role="alertdialog"][aria-modal="true"]')) return;
         fechar.current();
         return;
       }

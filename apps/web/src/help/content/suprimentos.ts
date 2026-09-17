@@ -235,6 +235,7 @@ export const suprimentosTopics = {
       "A unidade do preço precisa ser compatível com a unidade de estoque do item — R$/g e R$/kg conversam, R$/g e R$/un não.",
       "Falta de homologação não trava compra: item sem fornecedor cadastrado continua mostrando a falta, e ordem de compra manual continua possível para emergência, amostra ou fornecedor novo.",
       "A sugestão de compra só oferece relações aprovadas e ativas, e nunca escolhe sozinha entre vários aprovados quando não há preferencial.",
+      "A mesma relação também se administra de dentro do cadastro do item, na seção Fornecedores: adicionar fornecedor com o item já escolhido, definir o preferencial e abrir o detalhe. Esta tela continua sendo a visão de todos os itens e as filas de Compras e da Qualidade.",
     ],
   },
 

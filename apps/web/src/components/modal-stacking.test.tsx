@@ -2,6 +2,7 @@ import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { FullWorkspaceModal } from "./FullWorkspaceModal";
 
 /**
@@ -95,6 +96,59 @@ describe("modal sobre modal", () => {
     expect(dialogos).toHaveLength(2);
     expect(dialogos[0]).toHaveAccessibleName("Nova relação");
     expect(dialogos[1]).toHaveAccessibleName("Novo item de estoque");
+  });
+
+  /*
+   * A confirmação dentro do modal — trocar o preferencial no cadastro do Item
+   * (ITEM-SUPPLIER-UX-01) — também é uma camada. As duas ouvem o `document`, e
+   * o modal ouvia primeiro: o Escape que cancelava a pergunta fechava o Item.
+   */
+  it("Escape numa confirmação aberta dentro do modal cancela só a confirmação", async () => {
+    const user = userEvent.setup();
+    const fecharModal = vi.fn();
+    const cancelar = vi.fn();
+
+    function ModalComConfirmacao() {
+      const [perguntando, setPerguntando] = useState(false);
+      return (
+        <FullWorkspaceModal
+          open
+          onClose={fecharModal}
+          crumb="Cadastros"
+          crumbActive="Editar"
+          title="Cafeína"
+          footer={null}
+        >
+          <button type="button" onClick={() => setPerguntando(true)}>
+            Definir como preferencial
+          </button>
+          <ConfirmDialog
+            open={perguntando}
+            title="Definir SWEETMIX como fornecedor preferencial deste item?"
+            message={<p>Hoje este item não tem fornecedor preferencial.</p>}
+            onCancel={() => {
+              cancelar();
+              setPerguntando(false);
+            }}
+            onConfirm={() => setPerguntando(false)}
+          />
+        </FullWorkspaceModal>
+      );
+    }
+
+    render(<ModalComConfirmacao />);
+    await user.click(screen.getByRole("button", { name: "Definir como preferencial" }));
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(cancelar).toHaveBeenCalledTimes(1);
+    expect(fecharModal).not.toHaveBeenCalled();
+
+    // Sem pergunta aberta, o Escape volta a ser do modal.
+    await user.keyboard("{Escape}");
+    expect(fecharModal).toHaveBeenCalledTimes(1);
   });
 
   it("fechar a camada de cima não devolve a rolagem do fundo", async () => {

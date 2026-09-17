@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import type { ItemDTO, UnitOfMeasureDTO } from "@veridi/shared";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
-import { SupplierItemsSection } from "../../components/SupplierItemsSection";
+import { FornecedoresDoItemSection } from "../supplier-items/FornecedoresDoItem";
 import { ItemCostReferenceSection } from "../../components/ItemCostReferenceSection";
 import { formatDate } from "../../lib/dates";
 import { ITEM_FORM_ID, ItemFormFields, useItemForm } from "./item-form";
@@ -126,8 +126,10 @@ export function ItemFormModal({
       <ItemFormFields {...controller} />
 
       {/* Fornecedores existem depois que o item existe — o modal de criacao
-          continua enxuto. */}
-      {mode === "edit" && item && <SupplierItemsSection scope="item" id={item.id} />}
+          continua enxuto. A seção tem permissão própria (ITEM-SUPPLIER-UX-01) e
+          aparece também em consulta: quem só consulta o Item vê os fornecedores
+          e abre o detalhe da relação. */}
+      {mode === "edit" && item && <FornecedoresDoItemSection item={item} />}
 
       {/* Custo de referência vem DEPOIS dos fornecedores de propósito: a
           referência manual é a última fonte da seleção automática, e a

@@ -43,6 +43,8 @@ import {
 import { DecimalField, MoneyField } from "../../components/NumericField";
 import { formatQuantity } from "../../lib/quantity";
 import { TableEmptyRow } from "../../components/TableEmptyRow";
+import { ConfirmarPreferencialDialog, preferencialDepoisDe } from "./preferencial";
+import type { PreferencialDoItem } from "./preferencial";
 
 /**
  * Detalhe da relação: dados comerciais, homologação com histórico e as
@@ -53,9 +55,17 @@ import { TableEmptyRow } from "../../components/TableEmptyRow";
  */
 export function SupplierItemDetailModal({
   supplierItemId,
+  preferencialDoItem,
   onClose,
 }: {
   supplierItemId: string;
+  /**
+   * O preferencial que o item tem hoje, quando quem abre sabe (o cadastro do
+   * Item, ITEM-SUPPLIER-UX-01). Informado — mesmo `null`, "nenhum" —, marcar
+   * esta relação como preferencial pede confirmação dizendo quem ela substitui.
+   * Ausente, a tela geral segue como era.
+   */
+  preferencialDoItem?: PreferencialDoItem | null;
   onClose: () => void;
 }) {
   const { user } = useAuth();
@@ -71,6 +81,13 @@ export function SupplierItemDetailModal({
   /** O que a última ação confirmou — uma frase, substituída pela próxima. */
   const [feito, setFeito] = useState<{ acao: string; texto: string } | null>(null);
   const [confirmarInativacao, setConfirmarInativacao] = useState(false);
+  const confirmaPreferencial = preferencialDoItem !== undefined;
+  const [confirmarPreferencial, setConfirmarPreferencial] = useState(false);
+  /* O preferencial do item acompanha o que ESTE detalhe grava: marcar esta relação
+     tira o anterior; remover, bloquear ou inativar esta relação zera se era ela. */
+  const [preferencialConhecido, setPreferencialConhecido] = useState<PreferencialDoItem | null>(
+    preferencialDoItem ?? null,
+  );
 
   const [supplierItemCode, setSupplierItemCode] = useState("");
   const [commercialNotes, setCommercialNotes] = useState("");
@@ -102,6 +119,7 @@ export function SupplierItemDetailModal({
     getSupplierItem(supplierItemId)
       .then((result) => {
         setSupplierItem(result);
+        setPreferencialConhecido((atual) => preferencialDepoisDe(atual, result));
         setSupplierItemCode(result.supplierItemCode ?? "");
         setCommercialNotes(result.commercialNotes ?? "");
         setPriceUomCode((current) => current || result.itemUnitCode);
@@ -130,6 +148,7 @@ export function SupplierItemDetailModal({
     try {
       const updated = await action();
       setSupplierItem(updated);
+      setPreferencialConhecido((atual) => preferencialDepoisDe(atual, updated));
       onDone?.();
       // Só com a resposta do servidor em mãos: falha nunca vira "salvos".
       if (retorno?.sucesso) setFeito({ acao: retorno.acao, texto: retorno.sucesso });
@@ -335,11 +354,16 @@ export function SupplierItemDetailModal({
                     (!supplierItem.preferred &&
                       (supplierItem.qualificationStatus !== "APPROVED" || !supplierItem.active))
                   }
-                  onClick={() =>
+                  onClick={() => {
+                    // Marcar, vindo do Item, confirma dizendo quem sai; remover segue direto.
+                    if (confirmaPreferencial && !supplierItem.preferred) {
+                      setConfirmarPreferencial(true);
+                      return;
+                    }
                     void run(() =>
                       setSupplierItemPreferred(supplierItem.id, !supplierItem.preferred),
-                    )
-                  }
+                    );
+                  }}
                 >
                   {supplierItem.preferred ? "Remover preferencial" : "Marcar como preferencial"}
                 </button>
@@ -740,6 +764,20 @@ export function SupplierItemDetailModal({
         onConfirm={() => {
           setConfirmarInativacao(false);
           void run(() => updateSupplierItem(supplierItem.id, { active: false }));
+        }}
+      />
+
+      <ConfirmarPreferencialDialog
+        candidato={
+          confirmarPreferencial
+            ? { id: supplierItem.id, supplierName: supplierItem.supplierName }
+            : null
+        }
+        atual={preferencialConhecido}
+        onCancel={() => setConfirmarPreferencial(false)}
+        onConfirm={() => {
+          setConfirmarPreferencial(false);
+          void run(() => setSupplierItemPreferred(supplierItem.id, true));
         }}
       />
     </FullWorkspaceModal>

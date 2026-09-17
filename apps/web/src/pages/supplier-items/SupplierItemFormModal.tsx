@@ -9,6 +9,7 @@ import type { FormEvent } from "react";
 import type {
   ItemDTO,
   SupplierDTO,
+  SupplierItemDTO,
   SupplierItemDetailDTO,
   UnitOfMeasureDTO,
 } from "@veridi/shared";
@@ -18,9 +19,9 @@ import { FormSection } from "../../components/FormSection";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { getItem, listItems } from "../../lib/items-api";
-import { createSupplierItem } from "../../lib/supplier-items-api";
+import { createSupplierItem, listSupplierItems } from "../../lib/supplier-items-api";
 import { listSuppliers } from "../../lib/suppliers-api";
-import { apiErrorMessage } from "../../lib/api-errors";
+import { AlreadyExistsApiError, apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal } from "../../lib/decimal-field";
 import {
   CASAS_PRECO_UNITARIO,
@@ -37,6 +38,7 @@ import {
   usePodeEditarFornecedor,
 } from "../suppliers/supplier-permissions";
 import { QUEM_HOMOLOGA_A_RELACAO, usePodeDecidirHomologacao } from "./supplier-item-permissions";
+import { ConfirmarPreferencialDialog, preferencialEntre } from "./preferencial";
 
 /**
  * O que a relação leva junto ao sair para cadastrar item ou fornecedor.
@@ -92,6 +94,28 @@ function mesclarPorId<T extends { id: string }>(atual: T[], novos: T[]): T[] {
 }
 
 /**
+ * Com o Item fixo, o cadastro de fornecedor novo não sai daqui: sair desmonta o
+ * cadastro do Item inteiro, e na volta não haveria Item aberto para receber o
+ * fornecedor. A busca vazia diz onde cadastrar.
+ */
+const FORNECEDOR_NOVO_FORA_DO_ITEM = {
+  emptyMessage:
+    "Nenhum fornecedor ativo encontrado. Fornecedor novo se cadastra em Cadastros › Fornecedores.",
+  noOptionsMessage:
+    "Nenhum fornecedor ativo disponível. Fornecedor novo se cadastra em Cadastros › Fornecedores.",
+} as const;
+
+/** A relação do par, se o servidor tiver uma — a recusa 409 não traz o id. */
+async function relacaoDoPar(itemId: string, supplierId: string): Promise<SupplierItemDTO | null> {
+  try {
+    const { supplierItems } = await listSupplierItems({ itemId, supplierId, pageSize: 1 });
+    return supplierItems[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Nova relação item × fornecedor.
  *
  * A grade da lista mostra homologação, preferencial, preço e pedido mínimo.
@@ -103,15 +127,30 @@ function mesclarPorId<T extends { id: string }>(atual: T[], novos: T[]): T[] {
  * Os quatro campos cabem aqui agora. Continuam OPCIONAIS: uma relação sem
  * oferta é registro legítimo, e é melhor dizer "sem oferta cadastrada" do
  * que fingir completude.
+ *
+ * Com `itemFixo`, é o "Adicionar fornecedor" do cadastro do Item
+ * (ITEM-SUPPLIER-UX-01): o Item vem escolhido e não se troca, as mesmas regras
+ * de situação inicial e oferta valem, e o fornecedor que o item já tem leva à
+ * relação existente em vez de a uma recusa.
  */
 export function SupplierItemFormModal({
-  items,
+  items = [],
   suppliers,
+  itemFixo,
+  relacoesDoItem = [],
+  onOpenExisting,
   onClose,
   onSaved,
 }: {
-  items: ItemDTO[];
+  /** Primeira página do seletor de Item — sem uso com `itemFixo`. */
+  items?: ItemDTO[];
   suppliers: SupplierDTO[];
+  /** O Item de onde a relação nasce: sem seletor de Item, sem trocá-lo. */
+  itemFixo?: ItemDTO;
+  /** As relações que o `itemFixo` já tem: duplicidade e preferencial atual. */
+  relacoesDoItem?: readonly SupplierItemDTO[];
+  /** "Abrir relação existente" — quem hospeda abre o detalhe sem perder o contexto. */
+  onOpenExisting?: (supplierItemId: string) => void;
   onClose: () => void;
   onSaved: (created: SupplierItemDetailDTO) => void;
 }) {
@@ -122,7 +161,7 @@ export function SupplierItemFormModal({
   /* Situação inicial diferente de Pendente, e o preferencial que depende dela,
      só para quem decide a homologação (ITEM-SUPPLIER-QUALIFICATION-PERMISSION-01). */
   const podeDecidirHomologacao = usePodeDecidirHomologacao();
-  const [itemId, setItemId] = useState("");
+  const [itemId, setItemId] = useState(itemFixo?.id ?? "");
   const [supplierId, setSupplierId] = useState("");
   const [supplierItemCode, setSupplierItemCode] = useState("");
   const [commercialNotes, setCommercialNotes] = useState("");
@@ -134,9 +173,11 @@ export function SupplierItemFormModal({
   const [preferred, setPreferred] = useState(false);
 
   const [unitPrice, setUnitPrice] = useState("");
-  const [priceUomCode, setPriceUomCode] = useState("");
+  /* Com o Item fixo a unidade dele já é a sugestão da abertura — pelo efeito, ela
+     chegaria depois da linha de base, e abrir o formulário já pediria descarte. */
+  const [priceUomCode, setPriceUomCode] = useState(itemFixo?.unitCode ?? "");
   const [minimumOrderQuantity, setMinimumOrderQuantity] = useState("");
-  const [minimumOrderUomCode, setMinimumOrderUomCode] = useState("");
+  const [minimumOrderUomCode, setMinimumOrderUomCode] = useState(itemFixo?.unitCode ?? "");
   /** Sugestão visível e editável — nunca um "hoje" assumido pelo servidor. */
   const [effectiveAt, setEffectiveAt] = useState(hojeComercial());
   const [validUntil, setValidUntil] = useState("");
@@ -145,6 +186,10 @@ export function SupplierItemFormModal({
   const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** A relação do par que o servidor recusou com 409 — criada depois da lista do Item. */
+  const [existenteNoServidor, setExistenteNoServidor] = useState<SupplierItemDTO | null>(null);
+  /** O preferencial pede confirmação antes do envio, com o Item fixo (ITEM-SUPPLIER-UX-01). */
+  const [confirmandoPreferencial, setConfirmandoPreferencial] = useState(false);
 
   /**
    * A relação como ela está na tela, em forma comparável.
@@ -153,7 +198,7 @@ export function SupplierItemFormModal({
    * de" nasce com o dia de hoje: é sugestão visível, e abrir a tela não pode
    * virar pergunta de descarte na saída.
    */
-  const assinaturaAtual = assinaturaDoDocumento({
+  const camposComparaveis = {
     itemId: textoComparavel(itemId),
     supplierId: textoComparavel(supplierId),
     supplierItemCode: textoComparavel(supplierItemCode),
@@ -168,7 +213,11 @@ export function SupplierItemFormModal({
     effectiveAt: textoComparavel(effectiveAt),
     validUntil: textoComparavel(validUntil),
     offerNotes: textoComparavel(offerNotes),
-  });
+  };
+  const assinaturaAtual = assinaturaDoDocumento(camposComparaveis);
+  /* Só o fornecedor escolhido não é trabalho a perder: quem escolheu um que o
+     item já tem vai para a relação existente sem pergunta de descarte. */
+  const assinaturaSemFornecedor = assinaturaDoDocumento({ ...camposComparaveis, supplierId: null });
 
   const baseline = useRef<string | null>(null);
   if (baseline.current === null) baseline.current = assinaturaAtual;
@@ -203,6 +252,8 @@ export function SupplierItemFormModal({
    * não há o que guardar aqui.
    */
   const origem = useContextualCreateOrigin<RascunhoRelacao>({
+    // Com o Item fixo nada sai para cadastrar, e nada volta para retomar aqui.
+    enabled: !itemFixo,
     collectDraft: () => ({
       itemId,
       supplierId,
@@ -220,7 +271,7 @@ export function SupplierItemFormModal({
       offerNotes,
     }),
     restoreDraft: (draft) => {
-      setItemId(draft.itemId ?? "");
+      setItemId(itemFixo?.id ?? draft.itemId ?? "");
       setSupplierId(draft.supplierId ?? "");
       setSupplierItemCode(draft.supplierItemCode ?? "");
       setCommercialNotes(draft.commercialNotes ?? "");
@@ -238,8 +289,9 @@ export function SupplierItemFormModal({
     // Pelo id: os dois campos são de entidade, e o texto digitado na busca
     // escolheria o registro errado.
     onCreated: (result, record) => {
-      if (record.entityType === "item") setItemId(result.entityId);
-      else setSupplierId(result.entityId);
+      if (record.entityType === "item") {
+        if (!itemFixo) setItemId(result.entityId);
+      } else setSupplierId(result.entityId);
     },
   });
 
@@ -256,7 +308,7 @@ export function SupplierItemFormModal({
   const purchasableItems = catalogo.filter(
     (item) => item.type === "RAW_MATERIAL" || item.type === "PACKAGING",
   );
-  const selectedItem = purchasableItems.find((item) => item.id === itemId);
+  const selectedItem = itemFixo ?? purchasableItems.find((item) => item.id === itemId);
 
   /**
    * Busca no servidor, com os MESMOS filtros de negócio da lista de hoje:
@@ -288,7 +340,7 @@ export function SupplierItemFormModal({
    */
   const rotuloPedido = useRef("");
   useEffect(() => {
-    if (!itemId || rotuloPedido.current === itemId) return;
+    if (itemFixo || !itemId || rotuloPedido.current === itemId) return;
     if (catalogo.some((item) => item.id === itemId)) return;
     rotuloPedido.current = itemId;
     void getItem(itemId)
@@ -362,8 +414,39 @@ export function SupplierItemFormModal({
     if (!podeSerPreferencial && preferred) setPreferred(false);
   }, [podeSerPreferencial, preferred]);
 
-  async function handleSubmit(event: FormEvent) {
+  /**
+   * O fornecedor que o Item fixo já tem: pela lista do cadastro do Item ou pela
+   * recusa do servidor, quando a relação nasceu depois dela. Não há segunda
+   * relação do mesmo par — a tela leva à que existe, em vez de ao 409.
+   */
+  const relacaoExistente =
+    itemFixo && supplierId
+      ? (relacoesDoItem.find((relacao) => relacao.supplierId === supplierId) ??
+        (existenteNoServidor?.supplierId === supplierId ? existenteNoServidor : null))
+      : null;
+
+  const fornecedorEscolhido = catalogoDeFornecedores.find((supplier) => supplier.id === supplierId);
+  const preferencialAtual = itemFixo ? preferencialEntre(relacoesDoItem) : null;
+
+  function abrirRelacaoExistente(id: string) {
+    const abrir = () => liberarGuarda(() => onOpenExisting?.(id));
+    if (assinaturaSemFornecedor === baseline.current) abrir();
+    else confirmarDescarte(abrir);
+  }
+
+  function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (relacaoExistente) return;
+    /* Com o Item fixo o preferencial de hoje é conhecido, e trocá-lo se confirma
+       antes — como na linha da seção. Sem o Item fixo, a tela geral segue como era. */
+    if (itemFixo && podeDecidirHomologacao && preferred) {
+      setConfirmandoPreferencial(true);
+      return;
+    }
+    void criar();
+  }
+
+  async function criar() {
     setSaving(true);
     setError(null);
     try {
@@ -409,6 +492,13 @@ export function SupplierItemFormModal({
       baseline.current = assinaturaAtual;
       liberarGuarda(() => onSaved(created));
     } catch (err) {
+      if (itemFixo && err instanceof AlreadyExistsApiError) {
+        const existente = await relacaoDoPar(itemFixo.id, supplierId);
+        if (existente) {
+          setExistenteNoServidor(existente);
+          return;
+        }
+      }
       setError(apiErrorMessage(err, "Falha ao criar a relação"));
     } finally {
       setSaving(false);
@@ -424,9 +514,10 @@ export function SupplierItemFormModal({
     <FullWorkspaceModal
       open
       onClose={fechar}
-      crumb="Compras / Item × Fornecedor"
-      crumbActive="Nova"
-      title="Nova relação item × fornecedor"
+      crumb={itemFixo ? `Cadastros / Itens de estoque / ${itemFixo.code}` : "Compras / Item × Fornecedor"}
+      crumbActive={itemFixo ? "Adicionar fornecedor" : "Nova"}
+      title={itemFixo ? "Adicionar fornecedor ao item" : "Nova relação item × fornecedor"}
+      {...(itemFixo ? { codeChip: itemFixo.code } : {})}
       footer={
         <>
           <span className="modal-fullscreen__foot-meta">{resumo}</span>
@@ -438,9 +529,21 @@ export function SupplierItemFormModal({
               type="submit"
               form="supplier-item-form"
               className="btn btn--accent"
-              disabled={saving || !itemId || !supplierId || (preencheuOferta && !effectiveAt)}
+              disabled={
+                saving ||
+                !itemId ||
+                !supplierId ||
+                relacaoExistente !== null ||
+                (preencheuOferta && !effectiveAt)
+              }
             >
-              {saving ? "Criando…" : "Criar relação"}
+              {itemFixo
+                ? saving
+                  ? "Adicionando…"
+                  : "Adicionar fornecedor"
+                : saving
+                  ? "Criando…"
+                  : "Criar relação"}
             </button>
           </div>
         </>
@@ -450,6 +553,16 @@ export function SupplierItemFormModal({
         {error && <p className="form-alert" role="alert">{error}</p>}
 
         <FormSection title="Relação">
+          {/* O Item de onde a relação nasce é dito, não oferecido: não há o que trocar. */}
+          {itemFixo && (
+            <dl className="definition-list">
+              <dt>Item</dt>
+              <dd>
+                <span className="code">{itemFixo.code}</span> {itemFixo.name} ({itemFixo.unitCode})
+              </dd>
+            </dl>
+          )}
+
           <div className="field-grid-2">
             {/*
                 Catálogo de matéria-prima passa de mil itens: rolar um
@@ -457,32 +570,34 @@ export function SupplierItemFormModal({
                 ainda vinha truncada. Mesmo componente que o Projeto usa
                 para cliente.
             */}
-            <div className="field">
-              <label htmlFor="supplier-item-item">
-                Item <span className="req">*</span>
-              </label>
-              <SearchableEntitySelect
-                id="supplier-item-item"
-                value={itemId}
-                onChange={setItemId}
-                required
-                placeholder="Digite código ou nome do item…"
-                options={purchasableItems.map(opcaoDoItem)}
-                onSearch={buscarItens}
-                canCreate={podeCadastrarItem}
-                {...(podeCadastrarItem ? {} : SELETOR_DE_ITEM_SEM_CADASTRO)}
-                createLabel="Novo item de estoque"
-                onCreateNew={() =>
-                  liberarGuarda(() =>
-                    origem.goCreate({
-                      route: "/cadastros/itens/novo",
-                      fieldKey: "itemId",
-                      entityType: "item",
-                    }),
-                  )
-                }
-              />
-            </div>
+            {!itemFixo && (
+              <div className="field">
+                <label htmlFor="supplier-item-item">
+                  Item <span className="req">*</span>
+                </label>
+                <SearchableEntitySelect
+                  id="supplier-item-item"
+                  value={itemId}
+                  onChange={setItemId}
+                  required
+                  placeholder="Digite código ou nome do item…"
+                  options={purchasableItems.map(opcaoDoItem)}
+                  onSearch={buscarItens}
+                  canCreate={podeCadastrarItem}
+                  {...(podeCadastrarItem ? {} : SELETOR_DE_ITEM_SEM_CADASTRO)}
+                  createLabel="Novo item de estoque"
+                  onCreateNew={() =>
+                    liberarGuarda(() =>
+                      origem.goCreate({
+                        route: "/cadastros/itens/novo",
+                        fieldKey: "itemId",
+                        entityType: "item",
+                      }),
+                    )
+                  }
+                />
+              </div>
+            )}
 
             <div className="field">
               <label htmlFor="supplier-item-supplier">
@@ -496,8 +611,12 @@ export function SupplierItemFormModal({
                 placeholder="Digite código ou nome do fornecedor…"
                 options={catalogoDeFornecedores.map(opcaoDoFornecedor)}
                 onSearch={buscarFornecedores}
-                canCreate={podeCadastrarFornecedor}
-                {...(podeCadastrarFornecedor ? {} : SELETOR_DE_FORNECEDOR_SEM_CADASTRO)}
+                canCreate={!itemFixo && podeCadastrarFornecedor}
+                {...(!podeCadastrarFornecedor
+                  ? SELETOR_DE_FORNECEDOR_SEM_CADASTRO
+                  : itemFixo
+                    ? FORNECEDOR_NOVO_FORA_DO_ITEM
+                    : {})}
                 createLabel="Novo fornecedor"
                 onCreateNew={() =>
                   liberarGuarda(() =>
@@ -509,6 +628,26 @@ export function SupplierItemFormModal({
                   )
                 }
               />
+              {relacaoExistente && (
+                <div className="callout" role="status">
+                  <p>
+                    {`${relacaoExistente.supplierName} já está cadastrado para este item${
+                      relacaoExistente.active ? "" : " (relação inativa)"
+                    }. Cada fornecedor tem uma relação só com o item.`}
+                  </p>
+                  {onOpenExisting && (
+                    <div className="line-actions">
+                      <button
+                        type="button"
+                        className="btn btn--secondary btn--sm"
+                        onClick={() => abrirRelacaoExistente(relacaoExistente.id)}
+                      >
+                        Abrir relação existente
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="field">
@@ -587,9 +726,11 @@ export function SupplierItemFormModal({
                   Fornecedor preferencial deste item
                 </label>
                 <span className="field__hint">
-                  {podeSerPreferencial
-                    ? "Um por item. Se já houver outro preferencial, ele deixa de ser."
-                    : "Só um fornecedor homologado pode ser preferencial."}
+                  {!podeSerPreferencial
+                    ? "Só um fornecedor homologado pode ser preferencial."
+                    : preferencialAtual
+                      ? `Um por item. Hoje é ${preferencialAtual.supplierName}, que deixa de ser.`
+                      : "Um por item. Se já houver outro preferencial, ele deixa de ser."}
                 </span>
               </div>
             </div>
@@ -723,6 +864,20 @@ export function SupplierItemFormModal({
           </div>
         </FormSection>
       </form>
+
+      <ConfirmarPreferencialDialog
+        candidato={
+          confirmandoPreferencial
+            ? { id: supplierId, supplierName: fornecedorEscolhido?.legalName ?? "o fornecedor escolhido" }
+            : null
+        }
+        atual={preferencialAtual}
+        onCancel={() => setConfirmandoPreferencial(false)}
+        onConfirm={() => {
+          setConfirmandoPreferencial(false);
+          void criar();
+        }}
+      />
     </FullWorkspaceModal>
   );
 }

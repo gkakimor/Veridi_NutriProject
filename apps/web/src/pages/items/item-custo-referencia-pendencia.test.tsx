@@ -33,7 +33,7 @@ vi.mock("../../lib/items-api", () => ({
 vi.mock("../../lib/units-api", () => ({
   listUnits: vi.fn(async () => UNIDADES),
 }));
-vi.mock("../../components/SupplierItemsSection", () => ({ SupplierItemsSection: () => null }));
+vi.mock("../supplier-items/FornecedoresDoItem", () => ({ FornecedoresDoItemSection: () => null }));
 vi.mock("../../app/AuthProvider", () => ({ useOptionalAuth: () => null, useAuth: vi.fn() }));
 
 import {

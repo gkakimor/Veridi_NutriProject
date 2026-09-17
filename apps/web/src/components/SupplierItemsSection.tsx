@@ -10,37 +10,30 @@ import { listSupplierItems } from "../lib/supplier-items-api";
 import { TableEmptyRow } from "./TableEmptyRow";
 
 /**
- * Bloco read-only reutilizado pelo cadastro de Item ("quem fornece isto")
- * e pelo de Fornecedor ("o que ele fornece").
+ * Bloco read-only do cadastro de Fornecedor ("o que ele fornece").
  *
  * Só leitura: cadastrar relação, homologar e registrar preço acontecem em
- * Compras → Item × Fornecedor, com os papéis certos. Preço mostrado é a
- * oferta VIGENTE; referência histórica sem vigência aparece marcada como
- * tal, nunca como preço atual.
+ * Compras → Item × Fornecedor, com os papéis certos — a visão Fornecedor → Itens
+ * administrável é capability separada. Do lado do Item, a seção administrável é
+ * `FornecedoresDoItemSection` (ITEM-SUPPLIER-UX-01). Preço mostrado é a oferta
+ * VIGENTE; referência histórica sem vigência aparece marcada como tal, nunca
+ * como preço atual.
  */
-export function SupplierItemsSection({
-  scope,
-  id,
-}: {
-  scope: "item" | "supplier";
-  id: string;
-}) {
+export function SupplierItemsSection({ id }: { scope: "supplier"; id: string }) {
   const [rows, setRows] = useState<SupplierItemDTO[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    listSupplierItems({ ...(scope === "item" ? { itemId: id } : { supplierId: id }), pageSize: 100 })
+    listSupplierItems({ supplierId: id, pageSize: 100 })
       .then((result) => setRows(result.supplierItems))
       .catch((err: unknown) =>
         setError(err instanceof Error ? err.message : "Falha ao carregar as relações"),
       );
-  }, [scope, id]);
-
-  const isItemScope = scope === "item";
+  }, [id]);
 
   return (
     <FormSection
-      title={isItemScope ? "Fornecedores" : "Itens fornecidos"}
+      title="Itens fornecidos"
       subtitle="Homologação é por item. Preço é referência comercial do fornecedor — o custo real vem do recebimento."
     >
       {error && <p className="form-alert" role="alert">{error}</p>}
@@ -49,7 +42,7 @@ export function SupplierItemsSection({
         <table className="table">
           <thead>
             <tr>
-              <th>{isItemScope ? "Fornecedor" : "Item"}</th>
+              <th>Item</th>
               <th>Código no fornecedor</th>
               <th>Homologação</th>
               <th>Preferencial</th>
@@ -63,13 +56,7 @@ export function SupplierItemsSection({
               return (
                 <tr key={row.id}>
                   <td>
-                    {isItemScope ? (
-                      row.supplierName
-                    ) : (
-                      <>
-                        <span className="code">{row.itemCode}</span> {row.itemName}
-                      </>
-                    )}
+                    <span className="code">{row.itemCode}</span> {row.itemName}
                   </td>
                   <td className="is-code">{row.supplierItemCode ?? "—"}</td>
                   <td>{SUPPLIER_ITEM_QUALIFICATION_LABELS[row.qualificationStatus]}</td>
@@ -97,9 +84,7 @@ export function SupplierItemsSection({
 
             {rows.length === 0 && (
               <TableEmptyRow colSpan={6}>
-                {isItemScope
-                  ? "Nenhum fornecedor cadastrado para este item."
-                  : "Nenhum item cadastrado para este fornecedor."}{" "}
+                Nenhum item cadastrado para este fornecedor.{" "}
                 <Link to="/compras/item-fornecedor">Vincular em Compras → Item × Fornecedor</Link>
               </TableEmptyRow>
             )}
