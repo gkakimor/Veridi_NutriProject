@@ -1,6 +1,21 @@
 import { createRequire } from "node:module";
 import { writeFileSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
+import {
+  ALVOS,
+  CASCADES_EM_CICLO_DOCUMENTADAS,
+  CONTADORES,
+  PRESERVAR,
+  TABELAS_SEM_MODEL,
+  calcularOrdem,
+  cascatasDocumentadasAusentes,
+  conferirClassificacao,
+  conferirTabelas,
+  propDoModel,
+  removerNaOrdem,
+} from "./prod-cleanup-models.mjs";
+import { SEQUENCES_DE_NEGOCIO, SEQUENCES_PRESERVADAS, conferirSequences } from "./prod-cleanup-sequences.mjs";
+import { SQL_CONFERIR_SOMENTE_LEITURA, urlSomenteLeitura } from "./prod-cleanup-somente-leitura.mjs";
 
 const require = createRequire(process.cwd() + "/apps/api/package.json");
 const { PrismaClient, Prisma } = require("@prisma/client");
@@ -18,8 +33,11 @@ const { PrismaClient, Prisma } = require("@prisma/client");
  * a resposta é "Failed to fetch: error decoding response body".
  *
  * Regras não negociáveis:
- *  - Preserva as contas de login (User), as sessões (UserSession) e o
- *    catálogo de unidades de medida (UnitOfMeasure, dado de referência).
+ *  - Preserva as contas de login (User), as sessões (UserSession), as
+ *    preferências de tela (UserPreference), o catálogo de unidades de medida
+ *    (UnitOfMeasure, dado de referência) e o calendário produtivo
+ *    (ProductionCalendar e as jornadas e exceções dele, configuração do
+ *    ambiente).
  *  - Sequence só é reiniciada com `--reset-sequences`. Sem a flag a numeração
  *    continua de onde parou: sequence avançada não é sujeira. Reiniciar é
  *    decisão do PO para uma rodada ("zerar keys", FAST-DEVELOPMENT-RESET-02),
@@ -27,10 +45,29 @@ const { PrismaClient, Prisma } = require("@prisma/client");
  *    MESMA transação.
  *  - `user_code_seq` nunca é reiniciada: os usuários ficam, e o próximo USR-
  *    colidiria com um existente.
- *  - Aborta se algum model do schema, ou alguma sequence do banco, estiver sem
- *    classificação — tabela órfã é decisão de gente, não do script.
+ *  - Sem `--apply`, a sessão é SOMENTE LEITURA (`default_transaction_read_only`,
+ *    conferido antes de qualquer leitura): o banco recusa toda escrita do
+ *    dry-run, inclusive `ALTER SEQUENCE`.
+ *  - Aborta, até em dry-run, antes de contar qualquer tabela, se a
+ *    classificação não cobre o banco: model sem lista, em duas listas,
+ *    repetido ou sem model; tabela do `public` sem model ou model sem tabela;
+ *    relação ou sequence fora do `public`; sequence sem lista, nas duas,
+ *    repetida ou fantasma (classificada e ausente do banco — renomeada ou
+ *    apagada); coluna serial/identity/`nextval`; sequence presa a coluna;
+ *    trigger ou rule de usuário. Tabela órfã é decisão de gente, não do
+ *    script. As listas moram em `prod-cleanup-models.mjs` e
+ *    `prod-cleanup-sequences.mjs`, e a suíte de scripts reprova o model do
+ *    schema e a sequence de migration que ficarem fora delas.
  *  - Aborta se uma tabela preservada apontar para uma tabela a esvaziar: o
  *    DELETE travaria no meio, ou levaria a linha preservada junto.
+ *  - A ordem de remoção vem das FKs reais. CASCADE que fecha ciclo com
+ *    RESTRICT/NO ACTION não ordena: o pai sai antes e leva o filho, e a
+ *    remoção conta o que o CASCADE levou. Só vale para o CASCADE listado em
+ *    `CASCADES_EM_CICLO_DOCUMENTADAS`: CASCADE em ciclo fora da lista, item da
+ *    lista ausente do banco e ciclo só de RESTRICT/NO ACTION abortam.
+ *  - Limpa o BANCO, não o object storage. A linha de `ItemLabelFileVersion` e
+ *    a de `Attachment` saem; o objeto no R2 (ou no disco local) e o arquivo no
+ *    volume ficam. Apagar objeto de storage é outra responsabilidade.
  *  - `--apply` exige ambiente `production` e `--confirmar-projeto` igual ao
  *    RAILWAY_PROJECT_ID que o CLI injeta: o banco é provado pelo Railway, não
  *    pelo nome de uma variável local.
@@ -46,180 +83,20 @@ const ARQUIVO_PLANO = valorDe("--plano");
 const PROJETO_CONFIRMADO = valorDe("--confirmar-projeto");
 const ARQUIVO_BACKUP = valorDe("--backup");
 
-const url = process.env.DATABASE_PUBLIC_URL ?? process.env.DATABASE_URL;
-if (!url) throw new Error("Sem DATABASE_URL/DATABASE_PUBLIC_URL no ambiente");
+const urlDoAmbiente = process.env.DATABASE_PUBLIC_URL ?? process.env.DATABASE_URL;
+if (!urlDoAmbiente) throw new Error("Sem DATABASE_URL/DATABASE_PUBLIC_URL no ambiente");
+const url = APLICAR ? urlDoAmbiente : urlSomenteLeitura(urlDoAmbiente);
 const prisma = new PrismaClient({ datasources: { db: { url } } });
-
-/**
- * Tabelas a esvaziar. É um CONJUNTO, não uma ordem: a ordem de remoção é
- * calculada em `calcularOrdem()` a partir das FKs REAIS do banco.
- *
- * Confiar no schema Prisma aqui seria errado — o Prisma documenta várias
- * dessas relações como opcionais (o que sugeriria SET NULL), mas a migration
- * criou `ON DELETE RESTRICT` no Postgres. Foi exatamente isso que derrubou a
- * primeira tentativa em `lots_productionOrderId_fkey`. A fonte da verdade é
- * o `pg_constraint`, não o `schema.prisma`.
- */
-const ALVOS = [
-  // Razão de estoque e anexos: folhas puras. Vão primeiro para a contagem
-  // sair honesta — se fossem depois, o CASCADE dos pais levaria as linhas
-  // embora e o relatório diria "0 removidos".
-  "InventoryMovement",
-  "Attachment",
-
-  // Faturamento e expedição
-  "BillingLine",
-  "Billing",
-  "ShipmentLine",
-  "Shipment",
-
-  // Reservas do pedido de venda
-  "CustomerOrderReservationLine",
-  "CustomerOrderReservation",
-
-  // Produção (pesagens, snapshots, saídas, consumos, reservas, ordens)
-  "RecipeWeighing",
-  "ProductionOrderCostSnapshot",
-  "ProductionOutput",
-  "ProductionConsumption",
-  "MaterialReservationLine",
-  "MaterialReservation",
-  "ProductionOrderPart",
-  "ProductionOrderRequirement",
-  "ProductionOrder",
-
-  // Documentação controlada (R.PRO.002, R.COQ.003). Nasce pela tela da
-  // Qualidade e é opcional na liberação da OP: configuração de negócio, não
-  // dado de referência sem o qual a instalação não existe.
-  "ControlledDocumentRevision",
-
-  // Pedidos de venda e entregas programadas
-  "CustomerOrderDeliveryLine",
-  "CustomerOrderDelivery",
-  "CustomerOrderLine",
-  "CustomerOrder",
-
-  // Orçamentos
-  "QuoteLine",
-  "QuoteVersion",
-
-  // Precificação
-  "PricingTier",
-  "PricingVersion",
-
-  // Custo industrial
-  "IndustrialCostCalculation",
-  "IndustrialCostResourceUsage",
-  "IndustrialCostLine",
-  "IndustrialCostVersion",
-
-  // Projetos e amostras
-  "SampleConsumption",
-  "ProjectSample",
-  "ProjectProduct",
-  "ProjectStatusHistory",
-  "Project",
-
-  // Formulação
-  "FormulationComponent",
-  "FormulationVersion",
-
-  // Recebimento e compras
-  "ReceiptLine",
-  "Receipt",
-  "PurchaseOrderLine",
-  "PurchaseOrder",
-
-  // Relação item x fornecedor
-  "SupplierItemOffer",
-  "SupplierItemQualificationHistory",
-  "SupplierItem",
-
-  // Estoque físico
-  "Lot",
-
-  // Cadastros de produto
-  "Product",
-
-  // Templates (antes de Item e IndustrialResource: apontam para eles)
-  "FormulationTemplateComponent",
-  "FormulationTemplateVersion",
-  "FormulationTemplate",
-  "IndustrialCostTemplateResourceUsage",
-  "IndustrialCostTemplateAdditionalCost",
-  "IndustrialCostTemplateVersion",
-  "IndustrialCostTemplate",
-  "PricingPolicyTemplateTier",
-  "PricingPolicyTemplateVersion",
-  "PricingPolicyTemplate",
-
-  // Cadastros base
-  "ItemCostReference",
-  "Item",
-  "Supplier",
-  "Customer",
-  "IndustrialResourceRate",
-  "IndustrialResource",
-];
-
-/** Contas de login e dado de referência do sistema. */
-const PRESERVAR = ["User", "UserSession", "UnitOfMeasure"];
-
-/**
- * Contadores que não são sequence do Postgres e fazem o mesmo papel.
- * `ProductionOrderNumberCounter` é a numeração oficial anual da OP (001/26):
- * esvaziado só com `--reset-sequences`; sem a flag, preservado.
- */
-const CONTADORES = ["ProductionOrderNumberCounter"];
-
-/** Nunca reiniciada, com ou sem a flag. */
-const SEQUENCES_PRESERVADAS = ["user_code_seq"];
-
-/** Numeração de negócio. Reiniciadas só com `--reset-sequences`. */
-const SEQUENCES_DE_NEGOCIO = [
-  "billing_code_seq",
-  "customer_code_seq",
-  "customer_order_code_seq",
-  "formulation_template_code_seq",
-  "industrial_cost_calculation_code_seq",
-  "industrial_cost_code_seq",
-  "industrial_cost_template_code_seq",
-  "industrial_resource_code_seq",
-  "item_code_finished_product_seq",
-  "item_code_packaging_seq",
-  "item_code_raw_material_seq",
-  "lot_code_seq",
-  "pricing_policy_template_code_seq",
-  "pricing_version_code_seq",
-  "product_code_seq",
-  "production_order_code_seq",
-  "project_code_seq",
-  "project_sample_code_seq",
-  "purchase_order_code_seq",
-  "quote_code_seq",
-  "receipt_code_seq",
-  "shipment_code_seq",
-  "supplier_code_seq",
-];
 
 /** O que esta execução esvazia e o que ela mantém. */
 const ESVAZIAR = RESETAR_SEQUENCES ? [...ALVOS, ...CONTADORES] : ALVOS;
 const MANTER = RESETAR_SEQUENCES ? PRESERVAR : [...PRESERVAR, ...CONTADORES];
-
-const propDoModel = (nome) => nome.charAt(0).toLowerCase() + nome.slice(1);
 
 /** Nome do model -> nome real da tabela (@@map). */
 const tabelaDoModel = new Map(
   Prisma.dmmf.datamodel.models.map((m) => [m.name, m.dbName ?? m.name]),
 );
 const modelDaTabela = new Map([...tabelaDoModel].map(([m, t]) => [t, m]));
-
-/** Nenhum model do schema pode ficar sem classificação. */
-function validarCobertura() {
-  const todos = Prisma.dmmf.datamodel.models.map((m) => m.name);
-  const classificados = new Set([...ALVOS, ...PRESERVAR, ...CONTADORES]);
-  return todos.filter((m) => !classificados.has(m));
-}
 
 /** Host sem credencial e sem porta: o bastante para reconhecer, pouco para conectar. */
 function mascararDestino(bruta) {
@@ -246,53 +123,6 @@ function lerFks() {
     JOIN pg_namespace n ON n.oid = src.relnamespace
     WHERE c.contype = 'f' AND n.nspname = 'public'
   `);
-}
-
-/**
- * Ordem de remoção calculada a partir das FKs REAIS (`pg_constraint`).
- *
- * Aresta `filho -> pai` significa "filho sai antes do pai". Entram no grafo
- * RESTRICT/NO ACTION (que travam de verdade) e também CASCADE — CASCADE não
- * travaria, mas se o pai fosse primeiro o banco levaria o filho junto e a
- * contagem informada viraria mentira. SET NULL não impõe ordem.
- */
-function calcularOrdem(fks, alvoTabelas) {
-  // `libera`: ao remover o filho, o pai fica um pré-requisito mais perto de
-  // poder sair. `pendentes[pai]` = quantos filhos ainda precisam sair antes.
-  const libera = new Map([...alvoTabelas].map((t) => [t, new Set()]));
-  const pendentes = new Map([...alvoTabelas].map((t) => [t, 0]));
-
-  for (const fk of fks) {
-    if (!alvoTabelas.has(fk.src) || !alvoTabelas.has(fk.tgt)) continue;
-    if (fk.src === fk.tgt) continue; // auto-referência: some no mesmo DELETE
-    if (!["r", "a", "c"].includes(fk.acao)) continue; // 'n' = SET NULL não ordena
-    if (libera.get(fk.src).has(fk.tgt)) continue; // aresta repetida
-    libera.get(fk.src).add(fk.tgt);
-    pendentes.set(fk.tgt, pendentes.get(fk.tgt) + 1);
-  }
-
-  // Kahn, com desempate alfabético para a ordem ser reproduzível.
-  // Sai primeiro quem ninguém referencia (folha), por último a raiz.
-  const ordem = [];
-  const prontos = [...alvoTabelas].filter((t) => pendentes.get(t) === 0).sort();
-  while (prontos.length) {
-    const t = prontos.shift();
-    ordem.push(t);
-    for (const pai of [...libera.get(t)].sort()) {
-      pendentes.set(pai, pendentes.get(pai) - 1);
-      if (pendentes.get(pai) === 0) {
-        prontos.push(pai);
-        prontos.sort();
-      }
-    }
-  }
-
-  if (ordem.length !== alvoTabelas.size) {
-    const presas = [...alvoTabelas].filter((t) => !ordem.includes(t));
-    throw new Error(`Ciclo de FK impede ordenar: ${presas.join(", ")}`);
-  }
-
-  return ordem.map((t) => modelDaTabela.get(t));
 }
 
 /** Pastas de migration do repositório — o que o client local sabe descrever. */
@@ -348,21 +178,87 @@ const lerUsuarios = () =>
     orderBy: { code: "asc" },
   });
 
-/** `ultimo` nulo = a sequence ainda não entregou valor: o próximo é o início. */
+/**
+ * Sequences de TODOS os schemas — a de fora do `public` aborta.
+ * `ultimo` nulo = a sequence ainda não entregou valor: o próximo é o início.
+ */
 const lerSequences = () =>
   prisma.$queryRawUnsafe(
-    `SELECT sequencename AS nome, last_value::text AS ultimo
-     FROM pg_sequences WHERE schemaname = 'public' ORDER BY sequencename`,
+    `SELECT schemaname AS schema, sequencename AS nome, last_value::text AS ultimo
+     FROM pg_sequences ORDER BY schemaname, sequencename`,
   );
 
-/** Colunas que se numeram sozinhas (serial/identity) — além das sequences de código. */
+/** Colunas que se numeram sozinhas (serial/identity/`nextval`). Nenhuma é esperada. */
 const lerColunasNumeradas = () =>
   prisma.$queryRawUnsafe(`
     SELECT table_name AS tabela, column_name AS coluna
     FROM information_schema.columns
-    WHERE table_schema = 'public' AND (is_identity = 'YES' OR column_default LIKE 'nextval(%')
+    WHERE table_schema = 'public' AND (is_identity = 'YES' OR column_default LIKE '%nextval(%')
     ORDER BY table_name, column_name
   `);
+
+/** Sequence presa a coluna: serial e `OWNED BY` (dependência `a`), identity (`i`). */
+const lerSequencesComDono = () =>
+  prisma.$queryRawUnsafe(`
+    SELECT s.relname AS nome, t.relname AS tabela
+    FROM pg_depend d
+    JOIN pg_class s ON s.oid = d.objid AND s.relkind = 'S'
+    JOIN pg_class t ON t.oid = d.refobjid
+    WHERE d.classid = 'pg_class'::regclass AND d.refclassid = 'pg_class'::regclass AND d.deptype IN ('a', 'i')
+    ORDER BY s.relname
+  `);
+
+/** Tabelas comuns e particionadas do `public`. */
+const lerTabelas = () =>
+  prisma.$queryRawUnsafe(`
+    SELECT c.relname AS nome
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')
+    ORDER BY c.relname
+  `);
+
+/** Tabela, view ou tabela externa em schema de usuário que não é o `public`. */
+const lerForaDoPublic = () =>
+  prisma.$queryRawUnsafe(`
+    SELECT n.nspname AS schema, c.relname AS nome
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f')
+      AND n.nspname NOT IN ('public', 'pg_catalog', 'information_schema')
+      AND n.nspname NOT LIKE 'pg\\_toast%' AND n.nspname NOT LIKE 'pg\\_temp\\_%'
+    ORDER BY n.nspname, c.relname
+  `);
+
+/** Trigger criado por gente (as FKs viram trigger interno, que não conta). */
+const lerGatilhos = () =>
+  prisma.$queryRawUnsafe(`
+    SELECT c.relname AS tabela, t.tgname AS nome
+    FROM pg_trigger t
+    JOIN pg_class c ON c.oid = t.tgrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE NOT t.tgisinternal AND n.nspname = 'public'
+    ORDER BY c.relname, t.tgname
+  `);
+
+/** Rule de usuário (`_RETURN` é a de toda view). */
+const lerRegras = () =>
+  prisma.$queryRawUnsafe(`
+    SELECT c.relname AS tabela, r.rulename AS nome
+    FROM pg_rewrite r
+    JOIN pg_class c ON c.oid = r.ev_class
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE r.rulename <> '_RETURN' AND n.nspname = 'public'
+    ORDER BY c.relname, r.rulename
+  `);
+
+/** Lança com todos os defeitos de uma conferência, ou não faz nada. */
+function abortarSeDefeito(titulo, conferencia) {
+  const defeitos = Object.entries(conferencia).filter(([, lista]) => lista.length);
+  if (defeitos.length) {
+    throw new Error(
+      `${titulo}: ${defeitos.map(([defeito, lista]) => `${defeito}: ${lista.join(", ")}`).join(" · ")}`,
+    );
+  }
+}
 
 const NOME_ACAO = { a: "NO ACTION", r: "RESTRICT", c: "CASCADE", n: "SET NULL", d: "SET DEFAULT" };
 
@@ -374,13 +270,22 @@ async function main() {
       : "Sequences: preservadas (sem --reset-sequences)",
   );
 
-  const semClassificacao = validarCobertura();
-  if (semClassificacao.length) {
-    throw new Error(
-      `Models sem classificação (não apago às cegas): ${semClassificacao.join(", ")}`,
-    );
+  if (!APLICAR) {
+    const [sessao] = await prisma.$queryRawUnsafe(SQL_CONFERIR_SOMENTE_LEITURA);
+    if (sessao?.somenteLeitura !== "on") {
+      throw new Error("Dry-run recusado: a sessão não ficou somente leitura (default_transaction_read_only).");
+    }
+    console.log("Sessão: SOMENTE LEITURA (default_transaction_read_only=on) — o banco recusa qualquer escrita.");
   }
-  console.log(`Cobertura: todos os ${Prisma.dmmf.datamodel.models.length} models classificados.`);
+
+  abortarSeDefeito(
+    "Classificação de models com defeito (não apago às cegas)",
+    conferirClassificacao(Prisma.dmmf.datamodel.models.map((m) => m.name)),
+  );
+  console.log(
+    `Cobertura: todos os ${Prisma.dmmf.datamodel.models.length} models classificados ` +
+      `(${ALVOS.length} alvos, ${PRESERVAR.length} preservados, ${CONTADORES.length} contador).`,
+  );
 
   // ---- Identificação ----
   const id = await identificar();
@@ -400,19 +305,34 @@ async function main() {
 
   // ---- Sequences ----
   const sequences = await lerSequences();
-  const nomesSequences = sequences.map((s) => s.nome);
-  const seqSemClasse = nomesSequences.filter(
-    (n) => !SEQUENCES_PRESERVADAS.includes(n) && !SEQUENCES_DE_NEGOCIO.includes(n),
+  const colunasNumeradas = await lerColunasNumeradas();
+  const sequencesComDono = await lerSequencesComDono();
+  abortarSeDefeito(
+    "Sequences com classificação insegura (não reinicio às cegas)",
+    conferirSequences({
+      sequences,
+      colunasNumeradas: colunasNumeradas.map((c) => `${c.tabela}.${c.coluna}`),
+      sequencesComDono: sequencesComDono.map((s) => `${s.nome} (${s.tabela})`),
+    }),
   );
-  if (seqSemClasse.length) {
-    throw new Error(`Sequences sem classificação (não reinicio às cegas): ${seqSemClasse.join(", ")}`);
-  }
-  const seqAusentes = [...SEQUENCES_PRESERVADAS, ...SEQUENCES_DE_NEGOCIO].filter(
-    (n) => !nomesSequences.includes(n),
+  // Sem fantasma: toda sequence de negócio existe no banco.
+  const aReiniciar = RESETAR_SEQUENCES ? SEQUENCES_DE_NEGOCIO : [];
+
+  // ---- Tabelas: nada no banco fora da classificação ----
+  const tabelas = await lerTabelas();
+  const foraDoPublic = await lerForaDoPublic();
+  const gatilhos = await lerGatilhos();
+  const regras = await lerRegras();
+  abortarSeDefeito(
+    "Banco com o que a classificação não cobre (não apago às cegas)",
+    conferirTabelas({
+      tabelas: tabelas.map((t) => t.nome),
+      tabelaDoModel,
+      foraDoPublic: foraDoPublic.map((r) => `${r.schema}.${r.nome}`),
+      gatilhos: gatilhos.map((g) => `${g.tabela}.${g.nome}`),
+      regras: regras.map((r) => `${r.tabela}.${r.nome}`),
+    }),
   );
-  const aReiniciar = RESETAR_SEQUENCES
-    ? SEQUENCES_DE_NEGOCIO.filter((n) => nomesSequences.includes(n))
-    : [];
 
   // ---- FKs ----
   const fks = await lerFks();
@@ -426,11 +346,32 @@ async function main() {
         .join(", ")}`,
     );
   }
-  const ORDEM_REMOCAO = calcularOrdem(fks, alvoTabelas);
+  const { ordem, cascatasEmCiclo } = calcularOrdem(fks, alvoTabelas);
+  const documentadasAusentes = cascatasDocumentadasAusentes(cascatasEmCiclo);
+  if (documentadasAusentes.length) {
+    throw new Error(
+      `CASCADE documentado que o banco não tem em ciclo (documentação velha ou banco diferente): ${documentadasAusentes
+        .map((d) => `${d.filha}.${d.nome} -> ${d.pai}`)
+        .join(", ")}`,
+    );
+  }
+  const ORDEM_REMOCAO = ordem.map((t) => modelDaTabela.get(t));
+  /** Model pai -> models filhos que o CASCADE em ciclo leva junto com ele. */
+  const levaJunto = new Map();
+  for (const fk of cascatasEmCiclo) {
+    const pai = modelDaTabela.get(fk.tgt);
+    levaJunto.set(pai, new Set([...(levaJunto.get(pai) ?? []), modelDaTabela.get(fk.src)]));
+  }
+  const levadoPor = (filho) =>
+    [...levaJunto]
+      .filter(([, filhos]) => filhos.has(filho))
+      .map(([pai]) => pai)
+      .join(", ");
   const internas = fks.filter((f) => alvoTabelas.has(f.src) && alvoTabelas.has(f.tgt));
   const porAcao = {};
   for (const f of internas) porAcao[NOME_ACAO[f.acao] ?? f.acao] = (porAcao[NOME_ACAO[f.acao] ?? f.acao] ?? 0) + 1;
   const paraPreservadas = fks.filter((f) => alvoTabelas.has(f.src) && manterTabelas.has(f.tgt));
+  const anulaEntreAlvos = internas.filter((f) => f.acao === "n" || f.acao === "d");
 
   // ---- Contagens ----
   const plano = [];
@@ -445,7 +386,6 @@ async function main() {
     preservado.push({ model, linhas: await prisma[propDoModel(model)].count() });
   }
   const usuariosAntes = await lerUsuarios();
-  const colunasNumeradas = await lerColunasNumeradas();
 
   // ---- Backup cobre o que vai sair? ----
   let resumoBackup = "não conferido (dry-run sem --backup)";
@@ -466,12 +406,33 @@ async function main() {
     resumoBackup = `${ARQUIVO_BACKUP} (${backup.geradoEm}) cobre as ${plano.length} tabelas, contagem idêntica`;
   }
   const anexos = await prisma.attachment.aggregate({ _count: { _all: true }, _sum: { sizeBytes: true } });
+  const rotulos = await prisma.itemLabelFileVersion.aggregate({ _count: { _all: true }, _sum: { sizeBytes: true } });
 
   // ---- Plano ----
   const L = [];
   L.push("PLANO DE LIMPEZA — banco de produção Veridi");
   L.push(`gerado em: ${new Date().toISOString()}`);
   L.push(`modo: ${APLICAR ? "APLICAR" : "dry-run"} · sequences: ${RESETAR_SEQUENCES ? "reiniciar" : "preservar"}`);
+  L.push(`sessão: ${APLICAR ? "leitura e escrita (--apply)" : "SOMENTE LEITURA (default_transaction_read_only=on, conferida)"}`);
+  L.push("");
+  L.push("CONFERÊNCIAS (fail closed: qualquer defeito aborta antes de contar):");
+  L.push(
+    `  models            ${Prisma.dmmf.datamodel.models.length} no schema = ${ALVOS.length} alvos + ` +
+      `${PRESERVAR.length} preservados + ${CONTADORES.length} contador; nenhum sem lista, em duas ou sem model`,
+  );
+  L.push(
+    `  tabelas           ${tabelas.length} no public = ${tabelaDoModel.size} de model + ${
+      tabelas.length - tabelaDoModel.size
+    } do Prisma (${TABELAS_SEM_MODEL.join(", ")}); fora do public 0; triggers 0; rules 0`,
+  );
+  L.push(
+    `  sequences         ${sequences.length} no banco = ${SEQUENCES_PRESERVADAS.length} preservada + ` +
+      `${SEQUENCES_DE_NEGOCIO.length} de negócio; sem lista 0, nas duas 0, fantasma 0; serial/identity/nextval 0; com dono 0`,
+  );
+  L.push(
+    `  CASCADE em ciclo  ${cascatasEmCiclo.length} no banco, ${CASCADES_EM_CICLO_DOCUMENTADAS.length} documentado(s); ` +
+      "nenhum fora da lista, nenhum da lista ausente",
+  );
   L.push("");
   L.push("IDENTIFICAÇÃO:");
   L.push(`  railway projeto   ${id.projeto} (${id.projetoId})`);
@@ -498,13 +459,26 @@ async function main() {
   L.push("");
   L.push(`REMOVER (${ORDEM_REMOCAO.length} tabelas, na ordem das FKs reais):`);
   for (const [i, p] of plano.entries()) {
-    L.push(`  ${String(i + 1).padStart(2, "0")}. ${p.model.padEnd(38)} ${p.linhas}`);
+    const pais = levadoPor(p.model);
+    L.push(
+      `  ${String(i + 1).padStart(2, "0")}. ${p.model.padEnd(38)} ${p.linhas}${pais ? `  (sai pelo CASCADE de ${pais})` : ""}`,
+    );
   }
   L.push("");
   L.push(`TOTAL A REMOVER: ${totalPrevisto} linhas`);
   L.push(`BACKUP: ${resumoBackup}`);
+  L.push("");
+  L.push("OBJECT STORAGE — fora desta ferramenta (ela limpa o BANCO, não apaga objeto):");
   L.push(
-    `ANEXOS: ${anexos._count._all} registro(s), ${anexos._sum.sizeBytes ?? 0} bytes — o arquivo no volume da app não é tocado por este script`,
+    `  ItemLabelFileVersion  ${rotulos._count._all} versão(ões), ${rotulos._sum.sizeBytes ?? 0} bytes — ` +
+      "a linha sai do banco; o objeto no R2 (ou no disco local) NÃO é apagado",
+  );
+  L.push(
+    `  Attachment            ${anexos._count._all} registro(s), ${anexos._sum.sizeBytes ?? 0} bytes — ` +
+      "a linha sai do banco; o arquivo no volume da app NÃO é apagado",
+  );
+  L.push(
+    "  Depois do --apply esses objetos ficam sem linha que os referencie. Limpar o storage é outra responsabilidade, com rodada própria.",
   );
   L.push("");
   L.push(`SEQUENCES (${sequences.length}):`);
@@ -516,7 +490,6 @@ async function main() {
         : "preservar";
     L.push(`  ${s.nome.padEnd(40)} último ${String(s.ultimo ?? "—").padStart(8)}  ${acao}`);
   }
-  if (seqAusentes.length) L.push(`  ausentes no banco (classificadas, sem efeito): ${seqAusentes.join(", ")}`);
   L.push(
     `CONTADORES: ${CONTADORES.join(", ")} — ${RESETAR_SEQUENCES ? "esvaziado (numeração da OP recomeça)" : "preservado"}`,
   );
@@ -530,12 +503,27 @@ async function main() {
   L.push(
     `  entre tabelas a esvaziar: ${internas.length} (${Object.entries(porAcao)
       .map(([k, v]) => `${k} ${v}`)
-      .join(", ")}) — ordem calculada, sem ciclo`,
+      .join(", ")}) — ordem calculada, ${
+      cascatasEmCiclo.length ? `${cascatasEmCiclo.length} CASCADE em ciclo` : "sem ciclo"
+    }`,
+  );
+  for (const fk of cascatasEmCiclo) {
+    const documentada = CASCADES_EM_CICLO_DOCUMENTADAS.find((d) => d.nome === fk.nome);
+    L.push(
+      `  CASCADE em ciclo, documentado, não ordena: ${fk.src}.${fk.nome} -> ${fk.tgt} — ` +
+        `${modelDaTabela.get(fk.tgt)} sai antes e leva ${modelDaTabela.get(fk.src)} junto; a remoção conta o que o CASCADE levou`,
+    );
+    L.push(`    motivo: ${documentada.motivo}`);
+  }
+  L.push("  demais CASCADE entre tabelas a esvaziar: filha sai antes da pai — o CASCADE não acha linha e não apaga nada");
+  L.push(
+    `  SET NULL entre tabelas a esvaziar: ${anulaEntreAlvos.length} — se a pai sai antes, o banco anula a coluna ` +
+      "de uma linha que sai depois, na mesma transação",
   );
   L.push(`  de tabela a esvaziar para preservada: ${paraPreservadas.length} (não travam: a preservada é a pai)`);
   L.push("  de tabela preservada para tabela a esvaziar: 0");
   L.push("");
-  L.push("NÃO TOCA: _prisma_migrations, users, user_sessions, units_of_measure.");
+  L.push(`NÃO TOCA: ${TABELAS_SEM_MODEL.join(", ")}, ${[...manterTabelas].join(", ")}.`);
 
   const texto = L.join("\n");
   console.log("\n" + texto);
@@ -555,12 +543,11 @@ async function main() {
   console.log("\n=== EXECUTANDO (uma transação) ===");
   const removidos = await prisma.$transaction(
     async (tx) => {
-      const resultado = [];
-      for (const model of ORDEM_REMOCAO) {
-        const { count } = await tx[propDoModel(model)].deleteMany({});
-        resultado.push({ model, removidos: count });
-        console.log(`  ${model.padEnd(38)} ${count}`);
-      }
+      const resultado = await removerNaOrdem(tx, ORDEM_REMOCAO, levaJunto, (r) =>
+        console.log(
+          `  ${r.model.padEnd(38)} ${r.removidos}${r.peloCascade ? `  (${r.peloCascade} pelo CASCADE de ${levadoPor(r.model)})` : ""}`,
+        ),
+      );
       // ALTER SEQUENCE é transacional desde o PostgreSQL 10: se qualquer
       // DELETE acima falhar, a numeração volta junto. O nome vem da lista
       // explícita e conferida contra `pg_sequences` — nada de fora chega aqui.

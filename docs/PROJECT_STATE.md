@@ -5854,6 +5854,32 @@ saneado, com as sequences provando o código consumido. Sem suíte completa, E2E
 **Registrado.** Onda A em PROD, Ondas B e C e ITEM-NAME-STANDARDIZATION-01 (índice ainda bloqueado), em "Abertos fora da
 fila" do [`BACKLOG.md`](BACKLOG.md).
 
+## Limpeza do banco classifica tudo e falha fechado (PROD-CLEANUP-MODEL-CLASSIFICATION-01, 2026-09-17)
+
+**Decisão do PO.** `scripts/maintenance/prod-cleanup.mjs` esvazia, com o negócio, a contagem física (contagem, posição,
+registro e achado), o perfil de produção (versão, etapa e recurso da etapa), o roteiro e a agenda da OP, o histórico de
+situação do Cliente e a versão do arquivo de rótulo. Preserva `UserPreference` e o calendário produtivo (calendário,
+jornadas e exceções): configuração do ambiente. Sequences: `user_code_seq` preservada, as outras 25 são de negócio. É
+pré-requisito de toda sequence nova, Uso e consumo inclusive: model e sequence novos entram nas listas no mesmo commit.
+
+**Ferramenta.** 82 models em exatamente uma lista (74 alvos, 7 preservados, o contador anual da OP só com
+`--reset-sequences`). Aborta, até em dry-run, antes de contar: model sem lista ou em duas, tabela sem model, model sem
+tabela, relação ou sequence fora do `public`, sequence sem lista, nas duas ou fantasma, coluna serial/identity/`nextval`,
+sequence presa a coluna, trigger ou rule de usuário, e CASCADE em ciclo fora de `CASCADES_EM_CICLO_DOCUMENTADAS` (hoje só
+o da contagem física) ou documentado que o banco não tem. O dry-run roda em sessão somente leitura conferida. A linha do
+rótulo sai do banco; o objeto no R2 não é apagado — storage é outra rodada. Detalhe em [`DEPLOY.md`](DEPLOY.md). **Sem
+migration.** PROD e Railway intocados; nenhuma limpeza real.
+
+**DEV.** Um dry-run contra o `veridi_dev` (`--reset-sequences` e `--backup` de um JSON lógico lido em sessão somente
+leitura e apagado depois) chegou ao fim: 83 tabelas, 26 sequences, 171 FKs entre alvos e 69 de alvo para preservada
+(nenhuma de preservada para alvo), 1 CASCADE em ciclo documentado; removeria 5.775 linhas de 75 tabelas e preservaria 71.
+Retrato antes/depois: INSERT, UPDATE e DELETE 0, `relfilenode` igual nas 83 tabelas, contagem igual (5.928 linhas) e as
+26 sequences iguais.
+
+**Validação.** `prod-cleanup-models.test.ts` (15), `prod-cleanup-sequences.test.ts` (7) e `prod-cleanup-dry-run.test.ts`
+(3, o script real contra o banco de teste), em banco de teste exclusivo; typecheck avulso dos três. Sem suíte completa,
+E2E, Playwright nem mutação.
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a

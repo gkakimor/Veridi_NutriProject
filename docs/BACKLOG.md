@@ -451,6 +451,19 @@ CHECKs, depois de a jornada semanal estar em produção e o backup lógico
 conferido. Sem impacto funcional até lá — o risco é alguém ler a coluna velha
 achando que ela é a jornada.
 
+### 17. FK-ORDER-DOCUMENTED-CYCLE-01 — `fk-order.mjs` acusa o ciclo que a limpeza atravessa — LOW
+
+O diagnóstico somente leitura `scripts/maintenance/fk-order.mjs` trata o ciclo
+da contagem física (`stock_count_positions.validEntryId` NO ACTION ×
+`stock_count_entries.positionId` CASCADE, desde a migration
+`20260925093026`) como anel sem saída: imprime "CICLO DE FK" e sai com código 1
+contra qualquer banco migrado (conferido em 2026-09-17 no banco de teste).
+`prod-cleanup.mjs` atravessa esse ciclo pelo CASCADE listado em
+`CASCADES_EM_CICLO_DOCUMENTADAS` (PROD-CLEANUP-MODEL-CLASSIFICATION-01), e a
+ordem dele é a que vale. Correção: o diagnóstico reusar `calcularOrdem()` de
+`prod-cleanup-models.mjs`, em vez de manter um segundo cálculo. Sem impacto na
+limpeza — o risco é quem roda o diagnóstico ler o código 1 como bloqueio.
+
 ---
 
 ## E. Watchlist — observado, sem ação conhecida

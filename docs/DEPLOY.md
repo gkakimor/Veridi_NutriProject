@@ -250,7 +250,7 @@ conferência.
 | Script | O que faz | Trava |
 |---|---|---|
 | `scripts/maintenance/prod-sessions-revoke.mjs` | marca `revokedAt` nas sessões vigentes; não apaga linha | sem `--confirmar` só lista o que faria |
-| `scripts/maintenance/prod-cleanup.mjs` | **apaga os dados de negócio** de produção, preservando usuários, sessões e unidades de medida | ver abaixo |
+| `scripts/maintenance/prod-cleanup.mjs` | **apaga os dados de negócio** de produção, preservando usuários, sessões, preferências de tela, unidades de medida e o calendário produtivo | ver abaixo |
 
 **`prod-cleanup.mjs` é destrutivo e não é rotina.** Foi usado uma vez, na
 limpeza de 2026-09-11, antes da carga inicial. Hoje a produção contém a carga
@@ -259,4 +259,48 @@ histórico. Sem `--apply` ele só faz dry-run. O `--apply` exige ambiente
 `production`, `--confirmar-projeto=<RAILWAY_PROJECT_ID>` igual ao que o CLI
 injeta e `--backup=<arquivo>` gerado por `prod-backup-json.mjs` com a mesma
 contagem de cada tabela. Só com decisão explícita do PO, registrada antes.
+
+Sem `--apply` a conexão é SOMENTE LEITURA: o script acrescenta
+`options=-c default_transaction_read_only=on` à URL e confere
+`transaction_read_only` antes de ler qualquer coisa — o próprio banco recusa
+INSERT, UPDATE, DELETE, TRUNCATE e `ALTER SEQUENCE` vindos do dry-run.
+
+Todo model do schema e toda sequence do banco precisam de classificação
+explícita no script, e o banco não pode ter nada fora dela — sem isso ele
+aborta, até em dry-run, antes de contar qualquer tabela. Os models ficam em
+`scripts/maintenance/prod-cleanup-models.mjs`, em exatamente uma de três
+listas: alvos, preservados (usuários, sessões, preferências de tela, unidades
+de medida e o calendário produtivo com jornadas e exceções — configuração do
+ambiente, não transação) e o contador anual da OP, esvaziado só com
+`--reset-sequences`. Contagem física, perfil de produção, roteiro e agenda da
+OP, histórico de situação do Cliente e versão do arquivo de rótulo são alvos
+(PROD-CLEANUP-MODEL-CLASSIFICATION-01). As sequences ficam em
+`scripts/maintenance/prod-cleanup-sequences.mjs`: `user_code_seq` é
+preservada; as 25 de numeração de negócio só reiniciam com
+`--reset-sequences`. Abortam também: tabela do `public` sem model ou model sem
+tabela, relação ou sequence fora do `public`, sequence nas duas listas ou
+fantasma (classificada e ausente do banco — apagada ou renomeada), coluna
+serial/identity/`nextval`, sequence presa a coluna, trigger ou rule de usuário.
+
+Migration que cria model ou sequence (a de Uso e consumo, por exemplo) põe o
+nome na lista no mesmo commit. A suíte de scripts protege as paridades
+(`prod-cleanup-models.test.ts` contra o `schema.prisma` e as FKs das
+migrations, `prod-cleanup-sequences.test.ts` contra as migrations) e roda o
+script de verdade em dry-run contra o banco de teste
+(`prod-cleanup-dry-run.test.ts`).
+
+A ordem de remoção sai das FKs reais. A contagem física tem um ciclo: a posição
+aponta para o registro que vale (NO ACTION) e o registro aponta para a posição
+(CASCADE). O CASCADE que fecha ciclo não ordena — a posição sai antes e leva os
+registros na mesma instrução —, o plano marca a tabela que sai pelo CASCADE e a
+execução conta o que ele levou. O script só atravessa o CASCADE listado em
+`CASCADES_EM_CICLO_DOCUMENTADAS`: CASCADE em ciclo fora da lista, item da lista
+que o banco não tem mais, filha do ciclo referenciada por outra tabela e ciclo
+só de RESTRICT/NO ACTION abortam. Todo outro CASCADE entre alvos é neutralizado
+pela ordem — a filha sai antes e ele não acha linha.
+
+O script limpa o banco, não o object storage. A linha de `ItemLabelFileVersion`
+e a de `Attachment` saem; o objeto no R2 (ou no disco local) e o arquivo no
+volume ficam, e o plano diz isso. Apagar objeto de storage é outra
+responsabilidade, com rodada própria.
 
