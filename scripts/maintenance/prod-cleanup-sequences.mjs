@@ -15,7 +15,7 @@ export const SEQUENCES_PRESERVADAS = ["user_code_seq"];
 /**
  * Numeração de negócio. Reiniciadas só com `--reset-sequences` — seguro porque
  * a tabela dona do código é esvaziada na mesma transação: sequence que entra
- * aqui pede o model dela entre os ALVOS de `prod-cleanup.mjs`.
+ * aqui pede o model dela entre os ALVOS de `prod-cleanup-models.mjs`.
  */
 export const SEQUENCES_DE_NEGOCIO = [
   "billing_code_seq",
