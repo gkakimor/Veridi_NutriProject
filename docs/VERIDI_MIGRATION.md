@@ -121,6 +121,36 @@ converter R$/kg em R$/un exigiria um peso por unidade que ninguém tem.
 
 Depois de editar overrides, rode `plan` de novo.
 
+### Duplicatas de Item absorvidas
+
+Item de matéria-prima ou embalagem que o PO decidiu absorver num canônico (§110) mora em
+`scripts/veridi-import/item-duplicate-decisions.ts`, versionado — não é override local. Com `--devolucao`, a carga:
+
+- nunca cria o Item absorvido e consome o código do ERP dele, para os seguintes nascerem com o código da base saneada
+  (`ITEM_DUPLICATE_ABSORBED`, INFO);
+- resolve o código da planilha absorvido para o canônico na fórmula e na oferta (CHAVE_ITEM do 07);
+- reprova o plano se a base ainda tem o absorvido (`ITEM_DUPLICATE_ABSORBED_CONFLICT`) ou se o canônico não vem na
+  carga ou tem outro código nesta base (`ITEM_DUPLICATE_CANONICAL_UNRESOLVED`);
+- deixa o saldo legado do código absorvido fora do template de abertura, apontando o canônico
+  (`STOCK_LEGACY_CODE_ABSORBED`, REVIEW).
+
+O `import-plan.json` guarda a impressão das decisões (`duplicateDecisions`) e o APPLY recusa se ela mudou. Sem pacote, o
+caminho de desenvolvimento ignora a decisão.
+
+O banco já carregado sai da duplicata pela ferramenta de manutenção, no Bash (no PowerShell 5.1 as flags se perdem):
+
+```bash
+pnpm exec dotenv -e .env -- tsx scripts/maintenance/item-duplicate-sanitization.ts plan --onda=A --plano=<plano.json>
+pnpm exec dotenv -e .env -- node scripts/maintenance/prod-backup-json.mjs <backup.json>
+pnpm exec dotenv -e .env -- node scripts/maintenance/restore-json-backup-check.mjs <backup.json>
+pnpm exec dotenv -e .env -- tsx scripts/maintenance/item-duplicate-sanitization.ts apply --onda=A --plano=<plano.json> --backup=<backup.json> --confirmar-banco=<banco>
+pnpm exec dotenv -e .env -- tsx scripts/maintenance/item-duplicate-sanitization.ts verify --onda=A --plano=<plano.json>
+```
+
+PLAN sai 2 com grupo em ABORTAR, e o APPLY recusa plano assim. O APPLY também recusa backup sem os registros que muda ou
+com contagem diferente da atual, banco diferente do confirmado e banco que não seja local — a execução em PROD é rodada
+própria, com conferência READ ONLY e aprovação do PO. PLAN e VERIFY só leem.
+
 ## 7. Apply
 
 ```
