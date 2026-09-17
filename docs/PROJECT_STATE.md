@@ -5780,6 +5780,44 @@ Mutação por script (extra): guardas da lib desligadas derrubaram os 10 casos d
 desligados derrubaram 24 casos Web, e os arquivos voltaram idênticos. Typecheck de shared, API e web. Sem suíte completa,
 E2E nem Playwright; Railway intocado.
 
+## Cadastro do Item por tipo e arquivo do Rótulo na criação (ITEM-FORM-BY-TYPE-01, 2026-09-17)
+
+**Decisões do PO no handoff**, regra durável no §109 (ponte no §103). Na `main`, fora de PROD (`release/prod` segue
+`5b7c1a3`). **Sem API, shared nem migration**; R2 e Railway não tocados. `INTERNAL_CONSUMABLE` fora: nenhum tipo novo.
+
+**Formulário.** `useItemForm`/`ItemFormFields` seguem como fundação única da página `/cadastros/itens/novo` e do modal.
+A seção própria vem de `Item.type`: matéria-prima com "Classificação industrial" (fonte, família, nutriente, pureza);
+embalagem com "Dados da embalagem" (subtipo e "Consumido na produção", travado por perfil como antes); sem tipo, nenhuma.
+`CAMPOS_PROPRIOS_DO_TIPO` diz o que é de cada tipo: a troca na criação limpa os campos dos outros tipos, e um quarto tipo
+entra ali e numa seção. O envio só leva os campos do tipo — na edição a classificação escondida não viaja e o gravado
+fica. A consulta (`ItemConsultaFields`) segue as mesmas seções.
+
+**Arquivo do Rótulo na criação.** Embalagem com subtipo Rótulo mostra "Arquivo do rótulo" logo depois dos dados da
+embalagem: o `File` fica no estado do formulário, validado na escolha e de novo antes de criar
+(`lib/arquivo-do-rotulo.ts`, que agora serve também à `ItemLabelFileSection`: validação e autoridade por perfil). "Criar
+item" cria, recebe o id e envia pela rota oficial (`uploadItemLabelFileVersion`), e só então navega. Subtipo que deixa
+de ser Rótulo descarta o arquivo com aviso; quem não envia (Produção) lê a quem pedir.
+
+**Falha depois de criar.** `criadoSemArquivo` no controller: o formulário sai de cena (nada de `<form>` nem "Criar
+item"; o submit também recusa), aviso "Item criado, mas o arquivo do rótulo não pôde ser enviado." com o motivo, o Item
+criado e a `ItemLabelFileSection` dele com `abrirNovaVersao` (envio aberto) e `onVersaoEnviada` (o aviso sai quando a
+nova tentativa sobe). Página e modal trocam o rodapé por "Concluir", que faz o mesmo destino da criação completa — lista
+ou origem contextual; o "← Voltar para" sai. A guarda de alterações considera o cadastro gravado. No modal de edição a
+seção do arquivo subiu para logo depois do cadastro. A ajuda do Item ganhou o passo "Dados do tipo" e a nota do arquivo.
+
+**Validação.** Web: `pages/items/item-formulario-por-tipo.test.tsx` (43: seções por tipo, os nove subtipos não Rótulo,
+nem pelo nome, ordem e formatos do arquivo, PDF/PNG/JPG/JPEG guardados sem envio, recusa por tipo e tamanho antes de
+criar, Rótulo sem arquivo, criar → id → enviar → navegar com promessas adiadas, falha sem recriar, reenvio pela seção e
+Concluir, contextual com arquivo e com falha, modal, trocas de tipo e subtipo sem valor escondido no envio, Produção sem
+campo, edição que não apaga a classificação antiga, consulta, guarda depois de criar);
+`item-arquivo-do-rotulo-visibilidade.test.tsx` (a regra "criação não mostra a seção" virou: não mostra a do Item
+gravado, e a embalagem Rótulo já mostra o arquivo no formulário) e `item-form.test.tsx` (troca de tipo não manda a marca
+de consumo). Conjunto focado de 17 arquivos e 464 testes (itens, seção do arquivo, aria-invalid, criação no contexto,
+consulta assistida, ajuda, rotas, fornecedores do item), antes e depois do rebase sobre PRODUCT-INACTIVE-COMMERCIAL-GATE-01
+(com o `dist` do shared reconstruído); typecheck do web. Sem suíte completa, E2E, Playwright nem
+mutação; 390px por estrutura e CSS (grids de uma coluna até 720px, campo de arquivo a 100%, nome longo quebra na
+`definition-list`, rodapé com "Concluir" curto).
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a

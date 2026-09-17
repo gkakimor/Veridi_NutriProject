@@ -56,8 +56,20 @@ export function ItemFormModal({
     [controller.confirmarSaida, onClose],
   );
 
-  const rodapeDeEdicao =
-    mode === "create" ? (
+  /*
+   * Criou e o arquivo do Rótulo não subiu (ITEM-FORM-BY-TYPE-01): nada de
+   * "Criar item" de novo. Concluir — também pelo ✕ e pelo Esc — devolve o Item
+   * criado a quem abriu, como numa criação completa.
+   */
+  const criadoSemArquivo = controller.criadoSemArquivo !== null;
+
+  const rodapeDeEdicao = criadoSemArquivo ? (
+    <div className="modal-fullscreen__actions">
+      <button type="button" className="btn btn--accent" onClick={controller.concluirCriacao}>
+        Concluir
+      </button>
+    </div>
+  ) : mode === "create" ? (
       <>
         <span className="modal-fullscreen__foot-meta">
           O item será criado como <b>Ativo</b>.
@@ -113,12 +125,16 @@ export function ItemFormModal({
     rodapeDeEdicao
   );
 
-  const codeChip = mode === "create" ? "Código gerado ao salvar" : item?.code;
+  const codeChip = controller.criadoSemArquivo
+    ? controller.criadoSemArquivo.item.code
+    : mode === "create"
+      ? "Código gerado ao salvar"
+      : item?.code;
 
   return (
     <FullWorkspaceModal
       open
-      onClose={fechar}
+      onClose={criadoSemArquivo ? controller.concluirCriacao : fechar}
       crumb="Cadastros / Itens de estoque"
       crumbActive={mode === "create" ? "Novo" : consulta ? "Consulta" : "Editar"}
       title={mode === "create" ? "Novo item de estoque" : item?.name}
@@ -126,6 +142,14 @@ export function ItemFormModal({
       footer={footer}
     >
       <ItemFormFields {...controller} />
+
+      {/* Arquivo versionado só existe para Rótulo — embalagem com subtipo
+          Rótulo, pelo cadastro GRAVADO, nunca pelo nome (LABEL-ATTACHMENTS-01).
+          Os demais itens não mostram nada. Permissão própria: aparece também
+          em consulta. Vem logo depois do cadastro, antes de fornecedores e
+          custo, para não ficar escondido no fim (ITEM-FORM-BY-TYPE-01). Na
+          criação quem cuida do arquivo é o próprio formulário. */}
+      {mode === "edit" && item && isLabelItem(item) && <ItemLabelFileSection itemId={item.id} />}
 
       {/* Fornecedores existem depois que o item existe — o modal de criacao
           continua enxuto. A seção tem permissão própria (ITEM-SUPPLIER-UX-01) e
@@ -142,12 +166,6 @@ export function ItemFormModal({
       {mode === "edit" && item && item.type !== "FINISHED_PRODUCT" && (
         <ItemCostReferenceSection itemId={item.id} />
       )}
-
-      {/* Arquivo versionado só existe para Rótulo — embalagem com subtipo
-          Rótulo, pelo cadastro GRAVADO, nunca pelo nome (LABEL-ATTACHMENTS-01).
-          Os demais itens não mostram nada. Permissão própria: aparece também
-          em consulta. */}
-      {mode === "edit" && item && isLabelItem(item) && <ItemLabelFileSection itemId={item.id} />}
     </FullWorkspaceModal>
   );
 }

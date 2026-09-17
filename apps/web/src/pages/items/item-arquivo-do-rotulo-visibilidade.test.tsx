@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { ItemDTO, UnitOfMeasureDTO } from "@veridi/shared";
 
@@ -8,8 +8,11 @@ import type { ItemDTO, UnitOfMeasureDTO } from "@veridi/shared";
  *
  * Só no Item gravado como embalagem com subtipo Rótulo — pelo tipo e pelo
  * subtipo, nunca pelo nome —, na edição e também em consulta (a seção tem
- * permissão própria). Nenhum outro Item ganha arquivo genérico, e a criação
- * não mostra a seção: o Item ainda não existe.
+ * permissão própria). Nenhum outro Item ganha arquivo genérico.
+ *
+ * Na criação a seção do Item gravado não aparece — o Item ainda não existe —,
+ * mas desde ITEM-FORM-BY-TYPE-01 a embalagem Rótulo já escolhe o arquivo no
+ * próprio formulário, enviado depois de criar (`item-formulario-por-tipo`).
  */
 
 vi.mock("../../lib/items-api", () => ({ createItem: vi.fn(), updateItem: vi.fn() }));
@@ -99,8 +102,19 @@ describe("Item — seção Arquivo do rótulo", () => {
     expect(screen.queryByText(SECAO)).not.toBeInTheDocument();
   });
 
-  it("criação não mostra a seção: o Item ainda não existe", () => {
+  it("criação não mostra a seção do Item gravado: o Item ainda não existe", () => {
     abrir({ mode: "create", item: null });
+    expect(screen.queryByText(SECAO)).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Arquivo do rótulo" })).not.toBeInTheDocument();
+  });
+
+  it("criação de embalagem Rótulo já mostra o arquivo do rótulo, no próprio formulário", () => {
+    abrir({ mode: "create", item: null });
+    fireEvent.change(document.getElementById("item-type")!, { target: { value: "PACKAGING" } });
+    fireEvent.change(document.getElementById("item-packaging-subtype")!, { target: { value: "LABEL" } });
+
+    expect(screen.getByRole("heading", { name: "Arquivo do rótulo" })).toBeInTheDocument();
+    // O formulário guarda o arquivo até o Item existir; a seção do gravado segue fora.
     expect(screen.queryByText(SECAO)).not.toBeInTheDocument();
   });
 });

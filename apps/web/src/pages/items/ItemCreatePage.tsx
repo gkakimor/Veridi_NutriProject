@@ -82,6 +82,14 @@ export function ItemCreatePage() {
     navigate("/cadastros/itens");
   }
 
+  /*
+   * Criou e o arquivo do Rótulo não subiu (ITEM-FORM-BY-TYPE-01): a tela deixa
+   * de ser criação. Nada de Cancelar nem de "Voltar para" sem o item — o Item
+   * existe —, e o único caminho é Concluir, para o mesmo destino de uma
+   * criação completa.
+   */
+  const criadoSemArquivo = controller.criadoSemArquivo !== null;
+
   const trilha = (
     <PageBreadcrumbs
       items={[
@@ -126,7 +134,7 @@ export function ItemCreatePage() {
           Só aparece em criação contextual, e diz PARA ONDE volta. "Voltar"
           sozinho não informa nada a quem saiu do meio de um documento.
         */}
-        {contexto.isContextual && (
+        {contexto.isContextual && !criadoSemArquivo && (
           <button type="button" className="btn btn--ghost" onClick={cancelar}>
             ← Voltar para {contexto.originLabel}
           </button>
@@ -141,17 +149,25 @@ export function ItemCreatePage() {
 
       <div className="doc-actions">
         <div className="doc-actions__primary">
-          <button type="button" className="btn btn--ghost" onClick={cancelar}>
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            form={ITEM_FORM_ID}
-            className="btn btn--accent"
-            disabled={controller.saving}
-          >
-            {controller.saving ? "Criando…" : "Criar item"}
-          </button>
+          {criadoSemArquivo ? (
+            <button type="button" className="btn btn--accent" onClick={controller.concluirCriacao}>
+              Concluir
+            </button>
+          ) : (
+            <>
+              <button type="button" className="btn btn--ghost" onClick={cancelar}>
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                form={ITEM_FORM_ID}
+                className="btn btn--accent"
+                disabled={controller.saving}
+              >
+                {controller.saving ? "Criando…" : "Criar item"}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </>

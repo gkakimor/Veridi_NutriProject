@@ -6794,6 +6794,9 @@ privado, API S3). O provedor do arquivo novo é `VERIDI_STORAGE_PROVIDER`; cada 
 lida dele, então trocar a variável não move nem esconde o que já existe. Os anexos genéricos (`Attachment`) seguem em
 `file-storage.ts`, sem mudança (ATTACHMENTS-R2-MIGRATION-01).
 
+**Na criação do Item** (ITEM-FORM-BY-TYPE-01, §109) o arquivo pode ser escolhido antes de salvar: fica na tela até o
+Item existir e sobe por esta mesma rota, com as mesmas regras, como V1.
+
 ## §104 — Item × Fornecedor: bloquear a relação exige motivo
 
 SUPPLIER-QUALITY-REJECTION-REASON-01, 2026-09-16, decisão do PO no handoff
@@ -6999,3 +7002,54 @@ sem desabilitar nada: Orçamento (enviar; registrar o aceite; aprovar o projeto 
 fecha também na recusa, para o alerta aparecer. O cadastro do Produto avisa o PA inativo.
 
 **Sem migration.** Perfis e autoridade das ações inalterados.
+
+## §109 — Cadastro do Item: o Tipo decide o formulário, e o Rótulo recebe o arquivo já na criação
+
+ITEM-FORM-BY-TYPE-01 (2026-09-17), decisões do PO no handoff.
+
+> **O formulário mostra só o que é do Tipo.** A autoridade é `Item.type` — nunca a Família, que é classificação da
+> matéria-prima, nem o nome.
+
+**Campos comuns** a todo tipo manual: Tipo, Unidade, Nome, controles de rastreabilidade (com os padrões do tipo e as
+travas do §100), barcode externo e, na criação, o custo de referência inicial para quem define custo.
+
+**Seção própria de cada tipo.**
+
+| Tipo | Seção | Campos |
+|---|---|---|
+| Matéria-prima | Classificação industrial | Fonte, Família, Nutriente declarado, Pureza padrão (%) — pureza vazia é DESCONHECIDA, nunca 100% |
+| Material de embalagem | Dados da embalagem | Subtipo de embalagem, Consumido na produção (Produção e Administrador, §100) |
+| Embalagem com subtipo Rótulo | Arquivo do rótulo, logo depois dos dados da embalagem | O arquivo da arte (§103) |
+
+Embalagem não mostra Fonte, Nutriente declarado, Pureza nem Família; matéria-prima não mostra Subtipo nem arquivo.
+Nenhum outro subtipo (Pote, Tampa, Dosador, Selo, Caixa, Sachê/Pouch, Cartucho, Frasco, Outro) mostra arquivo — nem
+pelo nome. Sem tipo escolhido não há seção própria. A consulta segue as mesmas seções.
+
+**O envio carrega só o que a tela mostra.** Na criação, trocar de tipo devolve ao vazio os campos do tipo que saiu —
+matéria-prima → embalagem limpa fonte, nutriente, família e pureza; embalagem → matéria-prima limpa subtipo, marca de
+consumo e o arquivo escolhido —, com os controles no padrão do tipo novo. Na edição nada some do registro: a
+classificação que o tipo não mostra não viaja, e o gravado fica como está (Item com histórico tem o tipo travado, §100).
+
+**Arquivo do Rótulo na criação.**
+
+- **Opcional.** O Rótulo nasce com ou sem arquivo; nem a tela nem a API exigem.
+- **Fica na tela até o Item existir.** Escolher não envia nada. PDF, PNG ou JPEG até 25 MB, recusados na tela antes de
+  criar — arquivo recusado não deixa criar.
+- **Criar, receber o id, enviar, e só então seguir.** "Criar item" cria o Item, envia o arquivo como V1 pela rota do
+  §103 e só depois faz a navegação normal (lista, ou a origem da criação contextual).
+- **Trocar o subtipo para fora de Rótulo descarta o arquivo escolhido**, e a tela avisa; voltar a Rótulo não o traz de
+  volta. Arquivo escondido nunca é enviado.
+- **Quem não envia arquivo de rótulo** (`ITEM_LABEL_FILE_UPLOAD_ROLES`; a Produção cria o Item e não envia arte) vê a
+  quem pedir, sem campo.
+
+**Envio que falha depois de criar.** O Item existe e **não é criado de novo**. A tela deixa de ser criação — sem
+formulário, sem "Criar item", sem Cancelar — e diz "Item criado, mas o arquivo do rótulo não pôde ser enviado.", com o
+motivo. Mostra o Item criado e a seção "Arquivo do rótulo" dele, com o envio já aberto para tentar de novo; "Concluir"
+faz a navegação normal, inclusive devolvendo o Item à origem na criação contextual. Sair dali não pede confirmação pelo
+cadastro, que já é registro — só por arquivo escolhido na nova tentativa e ainda não enviado, como na seção de sempre.
+
+**Edição e consulta** mantêm o §103: o Item Rótulo gravado mostra a seção com histórico, download, restauração e
+anulação, pelas listas de sempre; a seção vem logo depois do cadastro, antes de fornecedores e custo.
+
+**Sem API alterada e sem migration.** Nenhum tipo novo nesta regra: um quarto tipo ganha a sua seção e os seus campos
+próprios no formulário.

@@ -2,6 +2,8 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import type { ItemDTO, ItemType, UnitOfMeasureDTO } from "@veridi/shared";
 import {
+  ITEM_LABEL_FILE_ACCEPT,
+  ITEM_LABEL_FILE_UPLOAD_ROLES,
   ITEM_TYPE_DEFAULTS,
   ITEM_TYPE_LABELS,
   ITEM_TYPES,
@@ -11,10 +13,18 @@ import {
   PACKAGING_SUBTYPE_LABELS,
 } from "@veridi/shared";
 import { createItem, updateItem } from "../../lib/items-api";
+import { uploadItemLabelFileVersion } from "../../lib/item-label-files-api";
 import { useCallback, useRef } from "react";
 import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import { assinaturaDoFormulario } from "../../lib/dirty-fields";
-import { ApiValidationError } from "../../lib/api-errors";
+import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
+import {
+  LIMITE_DO_ARQUIVO_DO_ROTULO_EM_MB,
+  problemaDoArquivoDoRotulo,
+  useAutoridadeNoArquivoDoRotulo,
+} from "../../lib/arquivo-do-rotulo";
+import { formatFileSize } from "../../lib/file-size";
+import { perfisPorExtenso } from "../../lib/perfis";
 import {
   formatDecimalPtBr,
   numericInvalidMessage,
@@ -30,6 +40,7 @@ import {
 import { MoneyField, PercentField } from "../../components/NumericField";
 import { RelatedLinks } from "../../components/RelatedLinks";
 import { FormSection } from "../../components/FormSection";
+import { ItemLabelFileSection } from "../../components/ItemLabelFileSection";
 import { ToggleCard } from "../../components/ToggleCard";
 import {
   QUEM_ALTERA_CONTROLES_DO_ITEM,
@@ -112,6 +123,36 @@ interface FormState {
   /** Só na criação. Vazio = sem referência; o item continua válido. */
   initialCostReference: string;
   initialCostReferenceNote: string;
+}
+
+/**
+ * Os campos que pertencem a um tipo só — ITEM-FORM-BY-TYPE-01.
+ *
+ * O Tipo decide o formulário, nunca a Família: a matéria-prima tem a
+ * classificação que a formulação lê; a embalagem, o subtipo e a marca de
+ * consumo. Na criação, trocar de tipo devolve ao vazio os campos dos outros
+ * tipos — dado que a tela escondeu não pode seguir no envio. Um tipo novo
+ * ganha aqui os seus campos e, no formulário, a sua seção.
+ */
+const CAMPOS_PROPRIOS_DO_TIPO: Partial<Record<ItemType, Partial<FormState>>> = {
+  RAW_MATERIAL: { sourceName: "", declaredNutrient: "", family: "", defaultPurityPercent: "" },
+  PACKAGING: { packagingSubtype: "", consumedInProduction: false },
+};
+
+/** Os campos dos OUTROS tipos, vazios — o que a troca para `tipo` limpa. */
+function camposDosOutrosTipos(tipo: ItemType): Partial<FormState> {
+  return Object.entries(CAMPOS_PROPRIOS_DO_TIPO)
+    .filter(([dono]) => dono !== tipo)
+    .reduce<Partial<FormState>>((vazios, [, campos]) => ({ ...vazios, ...campos }), {});
+}
+
+/** O Item foi criado e o arquivo do Rótulo escolhido na criação não subiu. */
+export interface ItemCriadoSemArquivo {
+  item: ItemDTO;
+  /** Por que o envio caiu, na língua da API. */
+  motivo: string;
+  /** Uma nova tentativa, pela seção do Item criado, já enviou o arquivo. */
+  reenviado: boolean;
 }
 
 function initialState(item: ItemDTO | null, initialType: ItemType | null): FormState {
@@ -206,6 +247,26 @@ export function useItemForm({
 
   const structuralLocked = mode === "edit" && (item?.operationallyUsed ?? false);
 
+  /*
+   * Arquivo do Rótulo escolhido na criação (ITEM-FORM-BY-TYPE-01). Fica só na
+   * tela: o envio precisa do id, e o id só existe depois de criar. Nada sobe
+   * antes do Item existir, e nada sobe se o subtipo deixou de ser Rótulo. O
+   * envio é o da seção do Item gravado — mesma rota, mesmas regras.
+   */
+  const autoridadeNoArquivo = useAutoridadeNoArquivoDoRotulo();
+  const [arquivoDoRotulo, setArquivoDoRotulo] = useState<File | null>(null);
+  const [erroDoArquivoDoRotulo, setErroDoArquivoDoRotulo] = useState<string | null>(null);
+  const [arquivoDoRotuloDescartado, setArquivoDoRotuloDescartado] = useState(false);
+  /**
+   * Criou e o arquivo não subiu. Daqui em diante a tela não cria mais nada:
+   * mostra o Item criado e a seção oficial do arquivo para tentar de novo.
+   */
+  const [criadoSemArquivo, setCriadoSemArquivo] = useState<ItemCriadoSemArquivo | null>(null);
+
+  /** Embalagem com subtipo Rótulo, pelo tipo e pelo subtipo — nunca pelo nome. */
+  const rotuloNaCriacao =
+    mode === "create" && form.type === "PACKAGING" && form.packagingSubtype === "LABEL";
+
   /**
    * O cadastro como ele está na tela, em forma comparável.
    *
@@ -223,6 +284,10 @@ export function useItemForm({
    */
   const baseline = useRef(assinaturaAtual);
 
+  /*
+   * Arquivo do Rótulo escolhido não precisa entrar aqui: ele só existe com o
+   * subtipo Rótulo, e a criação sempre abre sem subtipo — já está sujo.
+   */
   const { confirmarDescarte, liberarGuarda } = useUnsavedChangesGuard({
     isDirty: baseline.current !== assinaturaAtual,
     substantivo: "item",
@@ -248,22 +313,64 @@ export function useItemForm({
     "Este campo não pode ser alterado porque o item já possui histórico operacional.";
 
   function handleTypeChange(nextType: ItemType) {
-    setForm((prev) => {
-      if (mode === "edit") return { ...prev, type: nextType };
-      const defaults = ITEM_TYPE_DEFAULTS[nextType];
-      return {
-        ...prev,
-        type: nextType,
-        controlsLot: defaults.controlsLot,
-        controlsExpiry: defaults.controlsExpiry,
-        requiresQualityRelease: defaults.requiresQualityRelease,
-      };
-    });
+    if (mode === "edit") {
+      /*
+       * Na edição nada some do registro: o que o tipo novo não mostra fica como
+       * está gravado — a API só recebe os campos que a tela mostra. Item com
+       * histórico nem chega aqui: o tipo trava.
+       */
+      setForm((prev) => ({ ...prev, type: nextType }));
+      return;
+    }
+    const defaults = ITEM_TYPE_DEFAULTS[nextType];
+    setForm((prev) => ({
+      ...prev,
+      type: nextType,
+      controlsLot: defaults.controlsLot,
+      controlsExpiry: defaults.controlsExpiry,
+      requiresQualityRelease: defaults.requiresQualityRelease,
+      ...camposDosOutrosTipos(nextType),
+    }));
+    if (nextType !== "PACKAGING") descartarArquivoDoRotulo(false);
+  }
+
+  /**
+   * Tira o arquivo escolhido na criação. `avisar` quando a pessoa não pediu —
+   * o subtipo mudou e o arquivo saiu junto com a seção.
+   */
+  function descartarArquivoDoRotulo(avisar: boolean) {
+    setArquivoDoRotuloDescartado(avisar && arquivoDoRotulo !== null);
+    setArquivoDoRotulo(null);
+    setErroDoArquivoDoRotulo(null);
+  }
+
+  function handlePackagingSubtypeChange(nextSubtype: string) {
+    setForm((prev) => ({ ...prev, packagingSubtype: nextSubtype }));
+    // Arquivo escondido não viaja: deixou de ser Rótulo, o arquivo escolhido sai.
+    if (nextSubtype !== "LABEL") descartarArquivoDoRotulo(true);
+    else setArquivoDoRotuloDescartado(false);
+  }
+
+  /** Recusa na hora o que a API recusaria, e guarda o arquivo para depois de criar. */
+  function escolherArquivoDoRotulo(arquivo: File | null) {
+    setArquivoDoRotuloDescartado(false);
+    setArquivoDoRotulo(arquivo);
+    setErroDoArquivoDoRotulo(arquivo ? problemaDoArquivoDoRotulo(arquivo) : null);
+  }
+
+  /** Sai do Item criado sem o arquivo para o mesmo destino de uma criação completa. */
+  function concluirCriacao() {
+    if (criadoSemArquivo) onSaved(criadoSemArquivo.item);
+  }
+
+  function registrarReenvioDoArquivo() {
+    setCriadoSemArquivo((atual) => (atual ? { ...atual, reenviado: true } : atual));
   }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (readOnly) return;
+    // Item já criado nunca é criado de novo, nem por um Enter perdido.
+    if (readOnly || criadoSemArquivo) return;
     if (!form.type) {
       setError("Selecione o tipo do item.");
       return;
@@ -273,12 +380,19 @@ export function useItemForm({
     setError(null);
     setFieldErrors({});
 
+    const materiaPrima = form.type === "RAW_MATERIAL";
+    const embalagem = form.type === "PACKAGING";
+
     /*
      * Pureza passa pelo parser central — mesma leitura da vírgula em toda a
      * web. Vazio continua sendo vazio (no edit é o que limpa o campo); o que
-     * o parser não consegue ler para aqui, com o nome do campo.
+     * o parser não consegue ler para aqui, com o nome do campo. Só a
+     * matéria-prima tem pureza: em outro tipo o campo nem está na tela.
      */
-    const pureza = parsePtBrNumber(form.defaultPurityPercent, OPCOES_PERCENTUAL_TECNICO);
+    const pureza = parsePtBrNumber(
+      materiaPrima ? form.defaultPurityPercent : "",
+      OPCOES_PERCENTUAL_TECNICO,
+    );
     if (pureza.tipo === "invalido") {
       setFieldErrors({
         defaultPurityPercent: numericInvalidMessage(
@@ -310,6 +424,21 @@ export function useItemForm({
     }
     const referenciaNormalizada = referencia.tipo === "valido" ? referencia.valor : "";
 
+    /*
+     * O arquivo do Rótulo é conferido ANTES de criar: recusado depois, o Item
+     * já existiria sem o arquivo que a pessoa escolheu. Quem não envia arquivo
+     * de rótulo nem recebe o campo — e aqui o arquivo também não passa.
+     */
+    const arquivoParaEnviar =
+      rotuloNaCriacao && autoridadeNoArquivo.enviar ? arquivoDoRotulo : null;
+    const problemaDoArquivo = arquivoParaEnviar ? problemaDoArquivoDoRotulo(arquivoParaEnviar) : null;
+    if (problemaDoArquivo) {
+      setErroDoArquivoDoRotulo(problemaDoArquivo);
+      setError("Corrija os campos destacados.");
+      setSaving(false);
+      return;
+    }
+
     const trimmedBarcode = form.externalBarcode.trim();
     const payload = {
       type: form.type,
@@ -319,25 +448,30 @@ export function useItemForm({
       controlsExpiry: form.controlsExpiry,
       requiresQualityRelease: form.requiresQualityRelease,
       requiresCoa: form.requiresCoa,
-      // No edit sempre envia (mesmo vazio) para permitir limpar; no create
-      // só quando preenchido. Vazio vira null — nunca um default silencioso.
-      ...(mode === "edit" || form.sourceName.trim()
+      /*
+       * Só viaja o que a tela mostra para o tipo (ITEM-FORM-BY-TYPE-01). Na
+       * matéria-prima o edit sempre envia (mesmo vazio) para permitir limpar;
+       * o create só quando preenchido. Vazio vira null — nunca um default
+       * silencioso. Nos outros tipos a classificação nem viaja: na criação
+       * está vazia, e na edição o gravado fica como está.
+       */
+      ...(materiaPrima && (mode === "edit" || form.sourceName.trim())
         ? { sourceName: form.sourceName.trim() }
         : {}),
-      ...(mode === "edit" || form.declaredNutrient.trim()
+      ...(materiaPrima && (mode === "edit" || form.declaredNutrient.trim())
         ? { declaredNutrient: form.declaredNutrient.trim() }
         : {}),
-      ...(mode === "edit" || form.family ? { family: form.family } : {}),
-      ...(mode === "edit" || form.defaultPurityPercent.trim()
+      ...(materiaPrima && (mode === "edit" || form.family) ? { family: form.family } : {}),
+      ...(materiaPrima && (mode === "edit" || form.defaultPurityPercent.trim())
         ? { defaultPurityPercent: purezaNormalizada }
         : {}),
-      ...(mode === "edit" || form.packagingSubtype
-        ? { packagingSubtype: form.type === "PACKAGING" ? form.packagingSubtype : "" }
+      ...(mode === "edit" || (embalagem && form.packagingSubtype)
+        ? { packagingSubtype: embalagem ? form.packagingSubtype : "" }
         : {}),
       // A marca só é oferecida na embalagem, onde a ambiguidade existe; trocar
       // o tipo depois de marcá-la não pode deixar a marca para trás.
-      ...(mode === "edit" || form.consumedInProduction
-        ? { consumedInProduction: form.type === "PACKAGING" && form.consumedInProduction }
+      ...(mode === "edit" || (embalagem && form.consumedInProduction)
+        ? { consumedInProduction: embalagem && form.consumedInProduction }
         : {}),
       // No edit sempre envia a chave (mesmo vazia) para permitir limpar um
       // barcode existente; no create so envia quando preenchido.
@@ -362,6 +496,26 @@ export function useItemForm({
               }
             : {}),
         });
+        if (arquivoParaEnviar) {
+          try {
+            await uploadItemLabelFileVersion(created.id, arquivoParaEnviar);
+          } catch (err) {
+            /*
+             * O Item EXISTE. Nada de "falha ao criar", nada de criar de novo: a
+             * tela deixa de ser criação, e o arquivo segue pela seção oficial
+             * do Item criado. O que estava na tela virou registro — sair não
+             * perde nada.
+             */
+            baseline.current = assinaturaAtual;
+            setArquivoDoRotulo(null);
+            setCriadoSemArquivo({
+              item: created,
+              motivo: apiErrorMessage(err, "Falha ao enviar o arquivo."),
+              reenviado: false,
+            });
+            return;
+          }
+        }
         concluir(() => onSaved(created));
       } else if (item) {
         await updateItem(item.id, payload);
@@ -394,12 +548,23 @@ export function useItemForm({
     error,
     fieldErrors,
     handleTypeChange,
+    handlePackagingSubtypeChange,
     handleSubmit,
     structuralLocked,
     structuralLockHint,
     controlesTravadosPorPerfil,
     consumoTravadoPorPerfil,
     ofereceCustoInicial,
+    rotuloNaCriacao,
+    podeEnviarArquivoDoRotulo: autoridadeNoArquivo.enviar,
+    arquivoDoRotulo,
+    erroDoArquivoDoRotulo,
+    arquivoDoRotuloDescartado,
+    escolherArquivoDoRotulo,
+    removerArquivoDoRotulo: () => descartarArquivoDoRotulo(false),
+    criadoSemArquivo,
+    concluirCriacao,
+    registrarReenvioDoArquivo,
     mode,
     item,
     units,
@@ -453,6 +618,55 @@ function ValorConsultado({ rotulo, valor }: { rotulo: string; valor: string | nu
 
 const simOuNao = (valor: boolean) => (valor ? "Sim" : "Não");
 
+const SUBTITULO_DOS_DADOS_DA_EMBALAGEM =
+  "Subtipo da embalagem e se ela é consumida no processo de produção.";
+
+/**
+ * O Item foi criado e o arquivo do Rótulo não subiu — ITEM-FORM-BY-TYPE-01.
+ *
+ * A tela deixa de ser criação: sem formulário e sem "Criar item" que
+ * duplicaria o cadastro. Fica o Item criado e a seção oficial do arquivo, já
+ * aberta para tentar de novo. Quem hospeda troca o rodapé por "Concluir".
+ */
+function ItemCriadoSemArquivoDoRotulo({
+  criado,
+  onReenviado,
+}: {
+  criado: ItemCriadoSemArquivo;
+  onReenviado: () => void;
+}) {
+  const { item, motivo, reenviado } = criado;
+  return (
+    <div>
+      {!reenviado && (
+        <>
+          <p className="form-alert" role="alert">
+            Item criado, mas o arquivo do rótulo não pôde ser enviado. {motivo}
+          </p>
+          <p className="field__hint">
+            Tente de novo em "Arquivo do rótulo", abaixo, ou conclua e envie depois pelo cadastro
+            do item.
+          </p>
+        </>
+      )}
+
+      <FormSection title="Item criado" subtitle="O cadastro já existe e não precisa ser criado de novo.">
+        <dl className="definition-list">
+          <ValorConsultado rotulo="Código" valor={item.code} />
+          <ValorConsultado rotulo="Nome" valor={item.name} />
+          <ValorConsultado rotulo="Tipo" valor={ITEM_TYPE_LABELS[item.type]} />
+          <ValorConsultado
+            rotulo="Subtipo de embalagem"
+            valor={item.packagingSubtype ? PACKAGING_SUBTYPE_LABELS[item.packagingSubtype] : null}
+          />
+        </dl>
+      </FormSection>
+
+      <ItemLabelFileSection itemId={item.id} abrirNovaVersao onVersaoEnviada={onReenviado} />
+    </div>
+  );
+}
+
 /**
  * O Item em CONSULTA — MASTER-DATA-EDIT-PERMISSIONS-01.
  *
@@ -481,7 +695,8 @@ function ItemConsultaFields({ item }: { item: ItemDTO }) {
         </dl>
       </FormSection>
 
-      {item.type !== "FINISHED_PRODUCT" && (
+      {/* A mesma seção por tipo do formulário (ITEM-FORM-BY-TYPE-01). */}
+      {item.type === "RAW_MATERIAL" && (
         <FormSection
           title="Classificação industrial"
           subtitle="Fonte, nutriente declarado e pureza padrão usados pela formulação."
@@ -502,22 +717,25 @@ function ItemConsultaFields({ item }: { item: ItemDTO }) {
                   : "Desconhecida"
               }
             />
-            {item.type === "PACKAGING" && (
-              <ValorConsultado
-                rotulo="Subtipo de embalagem"
-                valor={
-                  item.packagingSubtype
-                    ? PACKAGING_SUBTYPE_LABELS[item.packagingSubtype]
-                    : "Não informado"
-                }
-              />
-            )}
-            {item.type === "PACKAGING" && (
-              <ValorConsultado
-                rotulo="Consumido na produção"
-                valor={simOuNao(item.consumedInProduction)}
-              />
-            )}
+          </dl>
+        </FormSection>
+      )}
+
+      {item.type === "PACKAGING" && (
+        <FormSection title="Dados da embalagem" subtitle={SUBTITULO_DOS_DADOS_DA_EMBALAGEM}>
+          <dl className="definition-list">
+            <ValorConsultado
+              rotulo="Subtipo de embalagem"
+              valor={
+                item.packagingSubtype
+                  ? PACKAGING_SUBTYPE_LABELS[item.packagingSubtype]
+                  : "Não informado"
+              }
+            />
+            <ValorConsultado
+              rotulo="Consumido na produção"
+              valor={simOuNao(item.consumedInProduction)}
+            />
           </dl>
         </FormSection>
       )}
@@ -557,18 +775,33 @@ export function ItemFormFields({
   error,
   fieldErrors,
   handleTypeChange,
+  handlePackagingSubtypeChange,
   handleSubmit,
   structuralLocked,
   structuralLockHint,
   controlesTravadosPorPerfil,
   consumoTravadoPorPerfil,
   ofereceCustoInicial,
+  rotuloNaCriacao,
+  podeEnviarArquivoDoRotulo,
+  arquivoDoRotulo,
+  erroDoArquivoDoRotulo,
+  arquivoDoRotuloDescartado,
+  escolherArquivoDoRotulo,
+  removerArquivoDoRotulo,
+  criadoSemArquivo,
+  registrarReenvioDoArquivo,
   mode,
   item,
   units,
   readOnly,
 }: ItemFormController) {
   if (readOnly && item) return <ItemConsultaFields item={item} />;
+  if (criadoSemArquivo) {
+    return (
+      <ItemCriadoSemArquivoDoRotulo criado={criadoSemArquivo} onReenviado={registrarReenvioDoArquivo} />
+    );
+  }
 
   /** Liga input, `aria-invalid` e a mensagem, para leitor de tela também. */
   function fieldProps(field: string) {
@@ -683,17 +916,20 @@ export function ItemFormFields({
       </FormSection>
 
       {/*
-        Classificação industrial (capacidade 33) — insumo das capacidades
-        de formulação e custeio. Tudo opcional.
+        A seção própria do tipo (ITEM-FORM-BY-TYPE-01): quem decide é o Tipo,
+        nunca a Família. Sem tipo escolhido — ou Produto acabado, na edição —
+        não há seção própria. Um tipo novo ganha a sua aqui, com os campos
+        dele em `CAMPOS_PROPRIOS_DO_TIPO`.
 
-        Some no produto acabado: fonte, nutriente declarado e pureza padrão
-        descrevem um item ENQUANTO COMPONENTE de uma receita — a pureza é o
-        que corrige a quantidade da linha. Produto acabado nunca é
-        componente de formulação nenhuma, então esses campos não teriam
-        onde ser lidos. Oferecê-los convida a preencher um dado que o
-        sistema inteiro ignora.
+        Classificação industrial (capacidade 33) — insumo das capacidades de
+        formulação e custeio, tudo opcional — é da matéria-prima: fonte,
+        nutriente declarado e pureza padrão descrevem um item ENQUANTO
+        COMPONENTE ativo de uma receita, e a pureza é o que corrige a
+        quantidade da linha. Na embalagem e no produto acabado esses campos
+        não teriam onde ser lidos; oferecê-los convida a preencher um dado que
+        o sistema inteiro ignora.
       */}
-      {form.type !== "FINISHED_PRODUCT" && (
+      {form.type === "RAW_MATERIAL" && (
         <FormSection
           title="Classificação industrial"
           subtitle="Fonte, nutriente declarado e pureza padrão usados pela formulação."
@@ -761,26 +997,33 @@ export function ItemFormFields({
               </p>
               {fieldError("defaultPurityPercent")}
             </div>
+          </div>
+        </FormSection>
+      )}
 
-            {form.type === "PACKAGING" && (
-              <div className="field">
-                <label htmlFor="item-packaging-subtype">Subtipo de embalagem</label>
-                <select
-                  id="item-packaging-subtype"
-                  value={form.packagingSubtype}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, packagingSubtype: event.target.value }))
-                  }
-                >
-                  <option value="">Não informado</option>
-                  {PACKAGING_SUBTYPES.map((subtype) => (
-                    <option key={subtype} value={subtype}>
-                      {PACKAGING_SUBTYPE_LABELS[subtype]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+      {form.type === "PACKAGING" && (
+        <FormSection title="Dados da embalagem" subtitle={SUBTITULO_DOS_DADOS_DA_EMBALAGEM}>
+          <div className="field-grid-2">
+            <div className="field">
+              <label htmlFor="item-packaging-subtype">Subtipo de embalagem</label>
+              <select
+                id="item-packaging-subtype"
+                value={form.packagingSubtype}
+                onChange={(event) => handlePackagingSubtypeChange(event.target.value)}
+              >
+                <option value="">Não informado</option>
+                {PACKAGING_SUBTYPES.map((subtype) => (
+                  <option key={subtype} value={subtype}>
+                    {PACKAGING_SUBTYPE_LABELS[subtype]}
+                  </option>
+                ))}
+              </select>
+              {arquivoDoRotuloDescartado && (
+                <p className="field__hint" role="status">
+                  O arquivo do rótulo escolhido foi descartado: o subtipo deixou de ser Rótulo.
+                </p>
+              )}
+            </div>
           </div>
 
           {/*
@@ -789,24 +1032,83 @@ export function ItemFormFields({
             matéria-prima a marca seria ruído — a base declarada na receita já
             faz o ingrediente acompanhar a produção.
           */}
-          {form.type === "PACKAGING" && (
-            <div className="toggle-row">
-              <ToggleCard
-                id="item-consumed-in-production"
-                checked={form.consumedInProduction}
-                disabled={consumoTravadoPorPerfil}
-                onChange={(checked) =>
-                  setForm((prev) => ({ ...prev, consumedInProduction: checked }))
-                }
-                label="Consumido na produção"
-                description="Entra no processo junto com cada unidade produzida, como a cápsula vazia: a perda prevista aumenta a necessidade dele. Pote, tampa, rótulo e caixa acompanham a quantidade vendida e ficam desmarcados."
-              />
-            </div>
-          )}
-          {form.type === "PACKAGING" && consumoTravadoPorPerfil && (
+          <div className="toggle-row">
+            <ToggleCard
+              id="item-consumed-in-production"
+              checked={form.consumedInProduction}
+              disabled={consumoTravadoPorPerfil}
+              onChange={(checked) =>
+                setForm((prev) => ({ ...prev, consumedInProduction: checked }))
+              }
+              label="Consumido na produção"
+              description="Entra no processo junto com cada unidade produzida, como a cápsula vazia: a perda prevista aumenta a necessidade dele. Pote, tampa, rótulo e caixa acompanham a quantidade vendida e ficam desmarcados."
+            />
+          </div>
+          {consumoTravadoPorPerfil && (
             <p className="field__hint">
               Só {QUEM_MARCA_CONSUMO_NA_PRODUCAO} alteram "Consumido na produção".
             </p>
+          )}
+        </FormSection>
+      )}
+
+      {/*
+        Arquivo do rótulo já na criação (ITEM-FORM-BY-TYPE-01), logo depois dos
+        dados da embalagem — só embalagem com subtipo Rótulo, nunca pelo nome.
+        O arquivo fica na tela até o Item existir: "Criar item" cria e só então
+        envia, pela mesma rota da seção do Item gravado. Opcional. Na edição
+        quem mostra o arquivo é a seção do Item gravado, com o histórico.
+      */}
+      {rotuloNaCriacao && (
+        <FormSection
+          title="Arquivo do rótulo"
+          subtitle="Anexe a arte ou documento correspondente a este rótulo."
+        >
+          {!podeEnviarArquivoDoRotulo ? (
+            <p className="field__hint">
+              Para anexar o arquivo, solicite a{" "}
+              {perfisPorExtenso(ITEM_LABEL_FILE_UPLOAD_ROLES, "ou")} depois de criar o item.
+            </p>
+          ) : arquivoDoRotulo ? (
+            <div className="field">
+              <dl className="definition-list" aria-label="Arquivo do rótulo escolhido">
+                <dt>Arquivo escolhido</dt>
+                <dd>
+                  {arquivoDoRotulo.name} · {formatFileSize(arquivoDoRotulo.size)}
+                </dd>
+              </dl>
+              {erroDoArquivoDoRotulo ? (
+                <p className="field__error" role="alert">
+                  {erroDoArquivoDoRotulo}
+                </p>
+              ) : (
+                <p className="field__hint">Vai como V1, logo depois de criar o item.</p>
+              )}
+              <div>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  onClick={removerArquivoDoRotulo}
+                >
+                  Remover arquivo
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="field">
+              <label htmlFor="item-label-file">Arquivo (será a V1)</label>
+              <input
+                id="item-label-file"
+                type="file"
+                accept={ITEM_LABEL_FILE_ACCEPT}
+                aria-describedby="item-label-file-hint"
+                onChange={(event) => escolherArquivoDoRotulo(event.target.files?.[0] ?? null)}
+              />
+              <p id="item-label-file-hint" className="field__hint">
+                PDF, PNG ou JPEG · até {LIMITE_DO_ARQUIVO_DO_ROTULO_EM_MB} MB. Opcional: o arquivo é
+                enviado logo depois de criar o item.
+              </p>
+            </div>
           )}
         </FormSection>
       )}
