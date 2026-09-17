@@ -83,6 +83,7 @@ import {
   itemDaBancada,
   itemElegivelParaSecao,
   opcaoDoItem,
+  tipoDaSecao,
   useCatalogoDeItens,
 } from "../formulation-workbench/catalogo-de-itens";
 import { PendenciasDoModelo } from "./PendenciasDoModelo";
@@ -972,6 +973,20 @@ export function FormulationTemplateDetailPage() {
     );
   }
 
+  /**
+   * O item escolhido na CONSULTA ASSISTIDA — inteiro, porque pode vir de fora
+   * do catálogo que o seletor conhece. Mesmo caminho da Formulação: entra no
+   * catálogo e vai para a linha por `comItemEscolhido`.
+   */
+  function escolherItemConsultado(escolhida: LinhaDaReceita, item: ItemDaBancada) {
+    catalogo.mesclar([item]);
+    setLinhas((atual) =>
+      atual.map((linha) =>
+        linha.key === escolhida.key ? comItemEscolhido(linha, item, units) : linha,
+      ),
+    );
+  }
+
   /* Unidade gravada que a lista não oferece: legado, e prende o salvar. */
   const temUnidadeInvalida = linhas.some(
     (linha) => unidadeLegadaDaLinha(linha, unidadesDaLinha(linha)) !== null,
@@ -1127,13 +1142,19 @@ export function FormulationTemplateDetailPage() {
             ? (linha) =>
                 liberarGuarda(() =>
                   origem.goCreate({
-                    route: "/cadastros/itens/novo",
+                    // O tipo da seção chega pré-escolhido, como na Formulação.
+                    route: `/cadastros/itens/novo?tipo=${tipoDaSecao(secao)}`,
                     fieldKey: "itemId",
                     entityType: "item",
                     // Qual linha pediu — o item volta para ela.
                     context: { rowKey: linha.key },
                   }),
                 )
+            : undefined
+        }
+        consultaDeItem={
+          comEdicao
+            ? { origem: "Modelo de formulação", onEscolher: escolherItemConsultado }
             : undefined
         }
         erroDoItem={(linha) =>

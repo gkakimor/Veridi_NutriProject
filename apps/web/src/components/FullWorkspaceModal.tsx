@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef } from "react";
 import { useInertBackground } from "./useInertBackground";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { CodeChip } from "./CodeChip";
 
 interface FullWorkspaceModalProps {
@@ -14,6 +14,18 @@ interface FullWorkspaceModalProps {
   footer: ReactNode;
   children: ReactNode;
   closeLabel?: string;
+  /**
+   * O que o ✕ avisa ao passar o mouse. O padrão fala de cadastro; uma
+   * consulta não tem o que salvar, e o aviso de "sem salvar" ali seria falso.
+   */
+  closeHint?: string;
+  /**
+   * Quem recebe o foco ao abrir. Ausente, o primeiro controle do diálogo — que
+   * é o ✕ do cabeçalho. A consulta assistida abre para DIGITAR: o foco no ✕
+   * obrigaria a pessoa a caçar o campo de busca antes de refinar o que já
+   * trouxe do seletor.
+   */
+  initialFocus?: RefObject<HTMLElement | null>;
 }
 
 /**
@@ -63,6 +75,8 @@ export function FullWorkspaceModal({
   footer,
   children,
   closeLabel = "Fechar",
+  closeHint = "Fecha sem salvar as alterações",
+  initialFocus,
 }: FullWorkspaceModalProps) {
   const dialog = useRef<HTMLDivElement>(null);
   /**
@@ -152,7 +166,7 @@ export function FullWorkspaceModal({
       }
     }
 
-    const initial = focusable()[0];
+    const initial = initialFocus?.current ?? focusable()[0];
     (initial ?? dialog.current)?.focus();
 
     const eu = identidade.current;
@@ -207,7 +221,7 @@ export function FullWorkspaceModal({
             type="button"
             className="modal-fullscreen__close"
             onClick={onClose}
-            title="Fecha sem salvar as alterações"
+            title={closeHint}
           >
             <span aria-hidden="true">✕</span> {closeLabel}
           </button>

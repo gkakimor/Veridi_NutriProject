@@ -19,6 +19,7 @@ import { EntityLink } from "../../components/EntityLink";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { SELETOR_DE_ITEM_SEM_CADASTRO } from "../items/item-permissions";
+import { CONSULTAR_ITENS } from "../items/ItemConsultationDialog";
 import { decimalLegivel } from "../../lib/decimal-field";
 import { decimalDaApiComparavel } from "../../lib/dirty-fields";
 import { formatPercentPtBr } from "../../lib/numeric-ptbr";
@@ -65,6 +66,11 @@ export interface LinhaDaBancadaProps {
   /** Ausente = a tela não oferece cadastrar item daqui. */
   onCriarItem?: (() => void) | undefined;
   /**
+   * "Consultar itens" no seletor, com o que já foi digitado
+   * (ASSISTED-ENTITY-SELECTOR-FOUNDATION-01). Ausente = só o autocomplete.
+   */
+  onConsultarItem?: ((termo: string) => void) | undefined;
+  /**
    * O que falta no ITEM desta linha, quando a tela prende o salvar por isso.
    * Ausente = nada a dizer; a coluna não inventa recusa.
    */
@@ -97,6 +103,7 @@ export function LinhaDaBancada({
   opcoesDeItem,
   onBuscarItem,
   onCriarItem,
+  onConsultarItem,
   erroDoItem,
   fisicoExibido,
   equivalenteExibido,
@@ -167,6 +174,11 @@ export function LinhaDaBancada({
             /* Sair para cadastrar o item NÃO é descartar: o rascunho vai
                junto e volta aplicado na linha. */
             onCreateNew={onCriarItem ?? (() => undefined)}
+            /* A consulta assistida por cima da bancada: o autocomplete segue
+               sendo o caminho rápido, e esta é a ação a mais. */
+            {...(onConsultarItem
+              ? { consultLabel: CONSULTAR_ITENS, onConsult: onConsultarItem }
+              : {})}
             {...(erroDoItem
               ? { "aria-invalid": true as const, "aria-describedby": idDoErroDoItem }
               : {})}

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { ReactNode } from "react";
 import type {
   FormulationComponentBasis,
@@ -12,9 +13,12 @@ import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { FormSection } from "../../components/FormSection";
 import { TableEmptyRow } from "../../components/TableEmptyRow";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
+import { ItemConsultationDialog } from "../items/ItemConsultationDialog";
 import { Dica } from "./dicas";
 import type { HelpHintId } from "../../help/help-content";
 import { LinhaDaBancada } from "./LinhaDaBancada";
+import type { ItemDaBancada } from "./catalogo-de-itens";
+import { itemDaBancada, tipoDaSecao } from "./catalogo-de-itens";
 import type { LinhaDaReceita } from "./linha-da-receita";
 
 /**
@@ -40,6 +44,22 @@ export interface TabelaDaReceitaProps {
   opcoesDeItem: (linha: LinhaDaReceita) => EntityOption[];
   onBuscarItem: (linha: LinhaDaReceita, termo: string) => Promise<EntityOption[]>;
   onCriarItem?: ((linha: LinhaDaReceita) => void) | undefined;
+  /**
+   * CONSULTA ASSISTIDA do Item da linha (ASSISTED-ENTITY-SELECTOR-FOUNDATION-01).
+   *
+   * Ausente = só o autocomplete. Presente, o seletor oferece "Consultar itens",
+   * e a consulta abre por cima da tela com o MESMO recorte do seletor: o tipo
+   * da seção, só ativos e fora o que outra linha já usa. "+ Novo item de
+   * estoque" dentro dela é `onCriarItem` — a criação no contexto de sempre.
+   */
+  consultaDeItem?:
+    | {
+        /** A tela de origem, para a trilha da consulta: "Formulação". */
+        origem: string;
+        /** O item escolhido na consulta — a página o põe no catálogo e na linha. */
+        onEscolher: (linha: LinhaDaReceita, item: ItemDaBancada) => void;
+      }
+    | undefined;
   /** O que falta no Item da linha, quando a tela prende o salvar por isso. */
   erroDoItem?: ((linha: LinhaDaReceita) => string | undefined) | undefined;
   valoresDaLinha: (linha: LinhaDaReceita) => {
@@ -110,6 +130,7 @@ export function TabelaDaReceita({
   opcoesDeItem,
   onBuscarItem,
   onCriarItem,
+  consultaDeItem,
   erroDoItem,
   valoresDaLinha,
   explicacaoDoFisico,
@@ -125,6 +146,20 @@ export function TabelaDaReceita({
   dicaDoFornecimento = "formulacao.fornecimento",
 }: TabelaDaReceitaProps) {
   const daComposicao = secao === "COMPOSICAO";
+  /** A consulta aberta: qual linha pediu e o que estava digitado no seletor dela. */
+  const [consulta, setConsulta] = useState<{ chave: string; termo: string } | null>(null);
+  const linhaConsultada =
+    consulta === null ? null : (linhas.find((linha) => linha.key === consulta.chave) ?? null);
+
+  /*
+   * O que outra linha já usa, como o seletor: aparece na consulta, mas não se
+   * escolhe. Some da lista sem aviso seria o mesmo "não existe" que leva a
+   * cadastrar de novo. As linhas desta seção bastam — a seção sai do tipo do
+   * Item, e um item deste tipo não mora na outra.
+   */
+  function usadoPorOutraLinha(linha: LinhaDaReceita, itemId: string): boolean {
+    return linhas.some((outra) => outra.key !== linha.key && outra.itemId === itemId);
+  }
   return (
     <FormSection
       title={daComposicao ? "Composição — matérias-primas" : "Embalagem"}
@@ -202,6 +237,11 @@ export function TabelaDaReceita({
                   opcoesDeItem={opcoesDeItem(linha)}
                   onBuscarItem={(termo) => onBuscarItem(linha, termo)}
                   onCriarItem={onCriarItem ? () => onCriarItem(linha) : undefined}
+                  onConsultarItem={
+                    consultaDeItem
+                      ? (termo) => setConsulta({ chave: linha.key, termo })
+                      : undefined
+                  }
                   erroDoItem={erroDoItem ? erroDoItem(linha) : undefined}
                   fisicoExibido={valores.fisicoExibido}
                   equivalenteExibido={valores.equivalenteExibido}
@@ -290,6 +330,51 @@ export function TabelaDaReceita({
             {daComposicao ? "+ Adicionar matéria-prima" : "+ Adicionar embalagem"}
           </button>
         </div>
+      )}
+
+      {/*
+        A consulta mora AQUI, dentro da tela — nunca num portal no `body`: o
+        modal de workspace acompanha a largura da sidebar por uma variável que
+        só existe dentro do `.shell`, e fora dele a consulta cobriria a sidebar
+        recolhida e sairia deslocada no celular.
+      */}
+      {consultaDeItem && linhaConsultada && consulta && (
+        <ItemConsultationDialog
+          type={tipoDaSecao(secao)}
+          initialTerm={consulta.termo}
+          crumb={consultaDeItem.origem}
+          unavailableReason={(item) =>
+            usadoPorOutraLinha(linhaConsultada, item.id)
+              ? "Já está em outra linha desta receita."
+              : null
+          }
+          onSelect={(item) => {
+            setConsulta(null);
+            /*
+             * O mesmo item de volta não é troca: reescolher reaplicaria a
+             * pureza do cadastro por cima da que a linha declarou.
+             */
+            if (item.id === linhaConsultada.itemId) return;
+            consultaDeItem.onEscolher(linhaConsultada, itemDaBancada(item));
+          }}
+          onClose={() => setConsulta(null)}
+          create={
+            onCriarItem
+              ? {
+                  label: "Novo item de estoque",
+                  onCreate: () => {
+                    setConsulta(null);
+                    onCriarItem(linhaConsultada);
+                  },
+                }
+              : undefined
+          }
+          footerNote={
+            daComposicao
+              ? "Selecionar põe a matéria-prima nesta linha da receita."
+              : "Selecionar põe a embalagem nesta linha da receita."
+          }
+        />
       )}
     </FormSection>
   );

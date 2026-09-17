@@ -189,14 +189,22 @@ function opcoes(): HTMLElement[] {
   return within(lista).getAllByRole("option");
 }
 
-/** Digita no campo e aciona o "+ Novo …", que encabeça a lista. */
+/**
+ * Digita no campo e aciona o "+ Novo …".
+ *
+ * Pelo NOME, não pela posição: o cadastro encabeça a lista, mas no campo que
+ * oferece a consulta assistida (a bancada) "Consultar itens" vem antes dele
+ * (ASSISTED-ENTITY-SELECTOR-FOUNDATION-01).
+ */
 async function acionarCadastro(
   user: ReturnType<typeof userEvent.setup>,
   alvo: HTMLElement,
   termo: string,
 ) {
   await user.type(alvo, termo);
-  await user.click(opcoes()[0]!);
+  const cadastro = opcoes().find((opcao) => opcao.textContent?.startsWith("+ "));
+  if (!cadastro) throw new Error("A lista não oferece o cadastro no contexto.");
+  await user.click(cadastro);
 }
 
 /** O token que a tela de cadastro recebeu na URL. */
