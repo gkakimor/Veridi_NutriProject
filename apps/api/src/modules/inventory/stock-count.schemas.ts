@@ -7,8 +7,10 @@ import {
   STOCK_COUNT_MODES,
   STOCK_COUNT_STATUSES,
 } from "@veridi/shared";
+import { diaCivilDeFiltroSchema, recusarPeriodoInvertido } from "../../lib/date-schema.js";
 import { optionalQuantityDecimalSchema, quantityDecimalSchema } from "../../lib/decimal-schema.js";
 import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
+import { listaDeStatusSchema } from "../../lib/status-list-schema.js";
 
 /** Enum de uma lista canônica do shared — nunca uma cópia à mão. */
 function enumDe<T extends string>(valores: readonly T[]) {
@@ -52,12 +54,25 @@ export const startStockCountSchema = previewStockCountSchema.extend({
   expectedPositionKeys: z.array(z.string().min(1)).max(STOCK_COUNT_MAX_POSITIONS).optional(),
 });
 
-export const listStockCountsQuerySchema = z.object({
-  status: enumDe(STOCK_COUNT_STATUSES).optional(),
-  kind: enumDe(STOCK_COUNT_KINDS).optional(),
-  page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
-  pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
-});
+/*
+ * Lista dos inventários (Fatia 2A, só acréscimos): `status` aceita vários
+ * separados por vírgula — "Em aberto" é `IN_PROGRESS,IN_REVIEW` —, com o
+ * contrato das outras listas (`listaDeStatusSchema`); `search` procura no
+ * código `INV-` e na descrição; `mode` separa cega de com saldo; o período é o
+ * dia de início, em dia civil, e invertido é recusa.
+ */
+export const listStockCountsQuerySchema = z
+  .object({
+    status: listaDeStatusSchema(enumDe(STOCK_COUNT_STATUSES)).optional(),
+    kind: enumDe(STOCK_COUNT_KINDS).optional(),
+    mode: enumDe(STOCK_COUNT_MODES).optional(),
+    search: z.string().trim().min(1).max(200).optional(),
+    dateFrom: diaCivilDeFiltroSchema,
+    dateTo: diaCivilDeFiltroSchema,
+    page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
+    pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
+  })
+  .superRefine(recusarPeriodoInvertido("dateFrom", "dateTo"));
 
 export const stockCountDetailQuerySchema = z.object({
   view: z.enum(["review", "counting"]).default("review"),

@@ -1,5 +1,7 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import type { ZodError } from "zod";
+import { STOCK_COUNT_WRITE_ROLES } from "@veridi/shared";
+import type { StockCountErrorBody, StockCountErrorCode } from "@veridi/shared";
 import { requireRole } from "../../lib/current-user.js";
 import { ForbiddenError } from "../auth/auth.errors.js";
 import {
@@ -66,16 +68,14 @@ import {
   startStockCount,
 } from "./stock-count.service.js";
 
-/**
- * Quem inicia, conta, revisa, encerra e cancela inventário: os papéis de
- * escrita de estoque (decisão D4 do PO). Contar e aprovar podem ser a mesma
- * pessoa — cada passo grava usuário e nome, e a leitura sinaliza.
- *
- * Consultar é de qualquer sessão autenticada, como o resto do estoque.
+/*
+ * Quem inicia, conta, revisa, encerra e cancela inventário é
+ * `STOCK_COUNT_WRITE_ROLES` (`@veridi/shared`, decisão D4 do PO) — a mesma
+ * lista que a tela usa para não oferecer a ação. Consultar é de qualquer sessão
+ * autenticada, como o resto do estoque.
  */
-const STOCK_COUNT_WRITE_ROLES = ["ADMIN", "PRODUCTION", "QUALITY"] as const;
 
-type Resposta = { status: number; body: Record<string, unknown> };
+type Resposta = { status: number; body: StockCountErrorBody };
 
 function formatZodError(error: ZodError) {
   return error.issues.map((issue) => ({
@@ -90,7 +90,10 @@ function erroDeValidacao(reply: FastifyReply, error: ZodError) {
 
 /** Erros do Inventário Físico em HTTP. Também serve à Contagem rápida (`POST /stock-counts`). */
 export function mapStockCountError(error: unknown): Resposta | null {
-  const corpo = (codigo: string, extra: Record<string, unknown> = {}) => ({
+  const corpo = (
+    codigo: StockCountErrorCode,
+    extra: Omit<Partial<StockCountErrorBody>, "error" | "message"> = {},
+  ): StockCountErrorBody => ({
     error: codigo,
     message: (error as Error).message,
     ...extra,
@@ -214,6 +217,13 @@ export const stockCountRoutes: FastifyPluginAsync = async (app) => {
     }),
   );
 
+  /*
+   * Adicionar e retirar posição respondem a leitura de QUEM CONTA. Numa
+   * contagem cega em revisão, a leitura de revisão já revela — e devolvia o
+   * saldo de referência da posição recém-adicionada a quem ainda vai contá-la
+   * (INVENTORY-PHYSICAL-COUNT-01, Fatia 2A). Na contagem com saldo as duas
+   * leituras são a mesma; quem revisa relê o detalhe.
+   */
   app.post(
     "/stock-counts/:id/positions",
     comErrosDeDominio(async (request, reply) => {
@@ -222,7 +232,7 @@ export const stockCountRoutes: FastifyPluginAsync = async (app) => {
       const parsed = addStockCountPositionSchema.safeParse(request.body);
       if (!parsed.success) return erroDeValidacao(reply, parsed.error);
       const positionId = await addStockCountPosition(id, parsed.data, actor);
-      return reply.status(201).send(await getStockCountPosition(id, positionId, "review"));
+      return reply.status(201).send(await getStockCountPosition(id, positionId, "counting"));
     }),
   );
 
@@ -234,7 +244,7 @@ export const stockCountRoutes: FastifyPluginAsync = async (app) => {
       const parsed = removeStockCountPositionSchema.safeParse(request.body);
       if (!parsed.success) return erroDeValidacao(reply, parsed.error);
       await removeStockCountPosition(id, positionId, parsed.data.reason, actor);
-      return reply.send(await getStockCountPosition(id, positionId, "review"));
+      return reply.send(await getStockCountPosition(id, positionId, "counting"));
     }),
   );
 
@@ -258,7 +268,12 @@ export const stockCountRoutes: FastifyPluginAsync = async (app) => {
       } catch (error) {
         if (!(error instanceof StockCountEntryConflictError)) throw error;
         const position = await getStockCountPosition(id, positionId, "counting");
-        return reply.status(409).send({ error: "stock_count_entry_conflict", message: error.message, position });
+        const corpo: StockCountErrorBody = {
+          error: "stock_count_entry_conflict",
+          message: error.message,
+          ...(position ? { position } : {}),
+        };
+        return reply.status(409).send(corpo);
       }
     }),
   );

@@ -47,6 +47,8 @@ const FAMILIAS: Familia[] = [
   { nome: "Produto Acabado", rota: "/finished-goods", de: "dateFrom", ate: "dateTo", csv: true },
   // QUOTES-HUB-01: data do orçamento, sem CSV.
   { nome: "Orçamentos", rota: "/quote-versions", de: "dateFrom", ate: "dateTo" },
+  // INVENTORY-PHYSICAL-COUNT-01 (Fatia 2A): dia de início do inventário, sem CSV.
+  { nome: "Inventários", rota: "/stock-counts", de: "dateFrom", ate: "dateTo" },
   // Listas com o par só na API.
   { nome: "Projetos (entrada)", rota: "/projects", de: "entryFrom", ate: "entryTo", csv: true },
   { nome: "Amostras (produção)", rota: "/project-samples", de: "producedFrom", ate: "producedTo", csv: true },

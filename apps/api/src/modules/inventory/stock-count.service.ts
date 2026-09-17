@@ -9,7 +9,11 @@ import type {
   StockCountPosition,
   User,
 } from "@prisma/client";
-import { STOCK_COUNT_CODE_PREFIX, STOCK_COUNT_MAX_POSITIONS } from "@veridi/shared";
+import {
+  STOCK_COUNT_CODE_PREFIX,
+  STOCK_COUNT_MAX_POSITIONS,
+  intervaloDeDiasComerciais,
+} from "@veridi/shared";
 import type {
   StockCountCloseIssue,
   StockCountCloseIssueDTO,
@@ -38,6 +42,7 @@ import {
 } from "../../lib/inventory-ledger.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
+import { statusDoWhere } from "../../lib/status-list-schema.js";
 import { CountBelowReservedError, MissingCountReasonError } from "./inventory.errors.js";
 import type { StockCountInput } from "./inventory.schemas.js";
 import { getMovementById, lockStockScope, resolveItemAndLot } from "./inventory.service.js";
@@ -365,6 +370,7 @@ async function avaliarEscopo(prisma: PrismaOuTx, pedido: PreviewStockCountQuery)
 
   const retiradasNoPreview = new Set(pedido.excludedPositionKeys ?? []);
   const semRetiradas = todas.filter((candidata) => !retiradasNoPreview.has(candidata.positionKey));
+  const retiradas = todas.filter((candidata) => retiradasNoPreview.has(candidata.positionKey));
   const retidas = await retencoes(
     prisma,
     semRetiradas.map((candidata) => candidata.positionKey),
@@ -372,11 +378,12 @@ async function avaliarEscopo(prisma: PrismaOuTx, pedido: PreviewStockCountQuery)
   const chavesRetidas = new Set(retidas.map((retida) => retida.positionKey));
   const candidatas = semRetiradas.filter((candidata) => !chavesRetidas.has(candidata.positionKey));
   candidatas.sort(ordemDePercurso);
+  retiradas.sort(ordemDePercurso);
 
   if (candidatas.length > STOCK_COUNT_MAX_POSITIONS) {
     throw new StockCountScopeTooLargeError(candidatas.length, STOCK_COUNT_MAX_POSITIONS);
   }
-  return { candidatas, retidas, excluidas: todas.length - semRetiradas.length };
+  return { candidatas, retidas, retiradas, excluidas: retiradas.length };
 }
 
 function linhaDoPreview(
@@ -411,12 +418,18 @@ function linhaDoPreview(
 /** Preview sem estado: nada é gravado até iniciar. */
 export async function previewStockCount(pedido: PreviewStockCountQuery): Promise<StockCountPreviewDTO> {
   const agora = new Date();
-  const { candidatas, retidas, excluidas } = await avaliarEscopo(getPrisma(), pedido);
+  const { candidatas, retidas, retiradas, excluidas } = await avaliarEscopo(getPrisma(), pedido);
   return {
     positions: candidatas.map((candidata, indice) => linhaDoPreview(candidata, indice + 1, pedido.mode, agora)),
     itemCount: new Set(candidatas.map((candidata) => candidata.item.id)).size,
     heldByOpenCounts: retidas,
     excludedCount: excluidas,
+    // A retirada continua no escopo e volta com os dados da linha, para a tela
+    // oferecer "Recolocar" — e com o saldo escondido na contagem cega, como as outras.
+    excludedPositions: retiradas.map((candidata) => {
+      const { sequence: _foraDoPercurso, ...linha } = linhaDoPreview(candidata, 0, pedido.mode, agora);
+      return linha;
+    }),
     maxPositions: STOCK_COUNT_MAX_POSITIONS,
   };
 }
@@ -1305,9 +1318,29 @@ async function contadoresPorSessao(prisma: PrismaOuTx, ids: readonly string[]): 
 
 export async function listStockCounts(query: ListStockCountsQuery): Promise<StockCountListResponse> {
   const prisma = getPrisma();
+  const status = statusDoWhere(query.status);
+  // O dia de início é o do documento no fuso da operação: fim exclusivo, nunca `lte` 23:59.
+  const periodo = intervaloDeDiasComerciais(query.dateFrom, query.dateTo);
   const where: Prisma.StockCountWhereInput = {
-    ...(query.status ? { status: query.status } : {}),
+    ...(status ? { status } : {}),
     ...(query.kind ? { kind: query.kind } : {}),
+    ...(query.mode ? { mode: query.mode } : {}),
+    ...(periodo.inicio || periodo.fimExclusivo
+      ? {
+          createdAt: {
+            ...(periodo.inicio ? { gte: periodo.inicio } : {}),
+            ...(periodo.fimExclusivo ? { lt: periodo.fimExclusivo } : {}),
+          },
+        }
+      : {}),
+    ...(query.search
+      ? {
+          OR: [
+            { code: { contains: query.search, mode: "insensitive" as const } },
+            { description: { contains: query.search, mode: "insensitive" as const } },
+          ],
+        }
+      : {}),
   };
   const [sessoes, total] = await Promise.all([
     prisma.stockCount.findMany({ where, orderBy: [{ createdAt: "desc" }, { code: "desc" }], ...pageArgs(query) }),
