@@ -21,6 +21,7 @@ export * from "./users.js";
 export * from "./user-preferences.js";
 export * from "./controlled-documents.js";
 export * from "./attachments.js";
+export * from "./item-label-files.js";
 export * from "./projects.js";
 export * from "./payment.js";
 export * from "./samples.js";

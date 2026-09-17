@@ -28,6 +28,7 @@ import { controlledDocumentsRoutes } from "./modules/controlled-documents/contro
 import { healthRoutes } from "./modules/health/health.routes.js";
 import { itemsRoutes } from "./modules/items/items.routes.js";
 import { itemCostReferencesRoutes } from "./modules/items/item-cost-references.routes.js";
+import { itemLabelFilesRoutes } from "./modules/items/item-label-files.routes.js";
 import { unitsRoutes } from "./modules/units/units.routes.js";
 import { suppliersRoutes } from "./modules/suppliers/suppliers.routes.js";
 import { customersRoutes } from "./modules/customers/customers.routes.js";
@@ -84,7 +85,8 @@ export function buildApp() {
   });
 
   // Upload de documentos (laudo/CoA, NF, arte) — limite de 10 MB por
-  // arquivo, validado de novo no service.
+  // arquivo, validado de novo no service. O arquivo do Item Rótulo pede 25 MB
+  // na própria rota (`item-label-files.routes.ts`).
   app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
 
   // Autenticacao global: toda rota operacional exige sessao valida. Health e
@@ -110,6 +112,7 @@ export function buildApp() {
   app.register(costPricingTemplatesRoutes);
   app.register(itemsRoutes);
   app.register(itemCostReferencesRoutes);
+  app.register(itemLabelFilesRoutes);
   app.register(unitsRoutes);
   app.register(suppliersRoutes);
   app.register(customersRoutes);
