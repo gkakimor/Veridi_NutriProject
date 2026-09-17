@@ -348,10 +348,11 @@ describe("Item — consumo na produção", () => {
     fireEvent.click(screen.getByRole("button", { name: "Criar item" }));
 
     await waitFor(() => expect(createItem).toHaveBeenCalled());
-    expect(vi.mocked(createItem).mock.calls[0]![0]).toMatchObject({
-      type: "RAW_MATERIAL",
-      consumedInProduction: false,
-    });
+    const enviado = vi.mocked(createItem).mock.calls[0]![0];
+    expect(enviado).toMatchObject({ type: "RAW_MATERIAL" });
+    // ITEM-FORM-BY-TYPE-01: trocar de tipo limpa a marca, e campo de outro tipo
+    // nem viaja. Ausente, a API grava `false`.
+    expect(enviado).not.toHaveProperty("consumedInProduction");
   });
 });
 

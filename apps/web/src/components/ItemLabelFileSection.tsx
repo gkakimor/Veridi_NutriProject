@@ -1,21 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import type { ItemLabelFileResponse, ItemLabelFileVersionDTO, UserRole } from "@veridi/shared";
+import type { ItemLabelFileResponse, ItemLabelFileVersionDTO } from "@veridi/shared";
 import {
   ITEM_LABEL_FILE_ACCEPT,
-  ITEM_LABEL_FILE_MAX_SIZE_BYTES,
   ITEM_LABEL_FILE_NOTE_MAX_LENGTH,
-  ITEM_LABEL_FILE_RESTORE_ROLES,
   ITEM_LABEL_FILE_TYPE_LABELS,
   ITEM_LABEL_FILE_UPLOAD_ROLES,
   ITEM_LABEL_FILE_VERSION_STATUS_LABELS,
   ITEM_LABEL_FILE_VOID_REASON_MAX_LENGTH,
-  ITEM_LABEL_FILE_VOID_ROLES,
-  itemLabelFileMimeTypeByExtension,
 } from "@veridi/shared";
-import { useOptionalAuth } from "../app/AuthProvider";
 import { useUnsavedChangesGuard } from "../app/use-unsaved-changes-guard";
 import { apiErrorMessage } from "../lib/api-errors";
+import {
+  LIMITE_DO_ARQUIVO_DO_ROTULO_EM_MB as LIMITE_EM_MB,
+  problemaDoArquivoDoRotulo,
+  useAutoridadeNoArquivoDoRotulo,
+} from "../lib/arquivo-do-rotulo";
 import { formatDateTime } from "../lib/dates";
 import { formatFileSize } from "../lib/file-size";
 import {
@@ -25,51 +25,16 @@ import {
   uploadItemLabelFileVersion,
   voidItemLabelFileVersion,
 } from "../lib/item-label-files-api";
-import { perfilPermite, perfisPorExtenso } from "../lib/perfis";
+import { perfisPorExtenso } from "../lib/perfis";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FormSection } from "./FormSection";
 import { TableEmptyRow } from "./TableEmptyRow";
-
-const LIMITE_EM_MB = Math.round(ITEM_LABEL_FILE_MAX_SIZE_BYTES / (1024 * 1024));
 
 const CLASSE_DA_SITUACAO: Record<ItemLabelFileVersionDTO["status"], string> = {
   CURRENT: "badge badge--active",
   HISTORICAL: "badge badge--inactive",
   VOIDED: "badge badge--err",
 };
-
-interface AutoridadeNoArquivo {
-  enviar: boolean;
-  restaurar: boolean;
-  anular: boolean;
-}
-
-/**
- * A MESMA lista que a API aplica decide o que a tela oferece. Fora do
- * `AuthProvider` (teste de tela isolado) não há sessão para julgar, e a tela
- * oferece tudo — o mesmo acordo do cadastro do Item; a recusa, se vier, é da API.
- */
-function useAutoridadeNoArquivo(): AutoridadeNoArquivo {
-  const sessao = useOptionalAuth();
-  if (sessao === null) return { enviar: true, restaurar: true, anular: true };
-  const role: UserRole | undefined = sessao.user?.role;
-  return {
-    enviar: perfilPermite(ITEM_LABEL_FILE_UPLOAD_ROLES, role),
-    restaurar: perfilPermite(ITEM_LABEL_FILE_RESTORE_ROLES, role),
-    anular: perfilPermite(ITEM_LABEL_FILE_VOID_ROLES, role),
-  };
-}
-
-/** Recusa na tela antes de mandar: o que a API recusaria pelo nome ou pelo tamanho. */
-function problemaDoArquivo(arquivo: File | null): string | null {
-  if (!arquivo) return "Escolha o arquivo do rótulo.";
-  if (!itemLabelFileMimeTypeByExtension(arquivo.name)) {
-    return "Tipo de arquivo não aceito. Envie PDF, PNG ou JPEG.";
-  }
-  if (arquivo.size === 0) return "O arquivo escolhido está vazio.";
-  if (arquivo.size > ITEM_LABEL_FILE_MAX_SIZE_BYTES) return `Arquivo acima do limite de ${LIMITE_EM_MB} MB.`;
-  return null;
-}
 
 function rotuloDaVersao(versao: ItemLabelFileVersionDTO): string {
   return `V${versao.versionNumber}`;
@@ -84,16 +49,29 @@ function rotuloDaVersao(versao: ItemLabelFileVersionDTO): string {
  * nova com o arquivo de uma antiga. A seção tem permissão própria e aparece
  * também em consulta — quem não edita o Item pode enviar arte, e quem só
  * consulta baixa o arquivo.
+ *
+ * `abrirNovaVersao` abre o envio já aberto — o caminho de quem acabou de criar
+ * o Item e viu o arquivo escolhido na criação não chegar
+ * (ITEM-FORM-BY-TYPE-01). `onVersaoEnviada` avisa quem hospeda que um envio
+ * deu certo.
  */
-export function ItemLabelFileSection({ itemId }: { itemId: string }) {
-  const autoridade = useAutoridadeNoArquivo();
+export function ItemLabelFileSection({
+  itemId,
+  abrirNovaVersao = false,
+  onVersaoEnviada,
+}: {
+  itemId: string;
+  abrirNovaVersao?: boolean;
+  onVersaoEnviada?: () => void;
+}) {
+  const autoridade = useAutoridadeNoArquivoDoRotulo();
 
   const [data, setData] = useState<ItemLabelFileResponse | null>(null);
   const [erroCarga, setErroCarga] = useState<string | null>(null);
   const [erroAcao, setErroAcao] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
 
-  const [adicionando, setAdicionando] = useState(false);
+  const [adicionando, setAdicionando] = useState(abrirNovaVersao && autoridade.enviar);
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [nota, setNota] = useState("");
   const [erroArquivo, setErroArquivo] = useState<string | null>(null);
@@ -138,7 +116,7 @@ export function ItemLabelFileSection({ itemId }: { itemId: string }) {
 
   async function enviar(event: FormEvent) {
     event.preventDefault();
-    const problema = problemaDoArquivo(arquivo);
+    const problema = arquivo ? problemaDoArquivoDoRotulo(arquivo) : "Escolha o arquivo do rótulo.";
     if (problema || !arquivo) {
       setErroArquivo(problema);
       return;
@@ -154,6 +132,7 @@ export function ItemLabelFileSection({ itemId }: { itemId: string }) {
       setAviso(
         resposta.current ? `${rotuloDaVersao(resposta.current)} enviada e vigente.` : "Nova versão enviada.",
       );
+      onVersaoEnviada?.();
     } catch (err) {
       setErroArquivo(apiErrorMessage(err, "Falha ao enviar o arquivo."));
     } finally {
