@@ -5582,8 +5582,8 @@ só quando o perfil cria e cartões empilhados abaixo de 640px. `FullWorkspaceMo
 (padrões inalterados).
 
 **Piloto.** `pages/items/ItemConsultationDialog.tsx`: um tipo por campo e só ativos, perguntados ao `GET /items` que já
-existia; colunas Código, Nome (nutriente, fonte e código legado, que a busca também enxerga), Tipo, Unidade e Situação;
-segunda trava de tipo e situação na tela. A bancada hospeda em `TabelaDaReceita` — Formulação e Modelo, matéria-prima e
+existia; colunas por tipo desde ASSISTED-ENTITY-MULTISELECT-01 (seção própria abaixo); segunda trava de tipo e situação
+na tela. A bancada hospeda em `TabelaDaReceita` — Formulação e Modelo, matéria-prima e
 embalagem, sem duplicar código: o tipo vem da seção, o item de outra linha aparece desabilitado ("Já está em outra linha
 desta receita."), selecionar põe o item na linha pelo mesmo `comItemEscolhido` (entra no catálogo da tela, sem recarregar
 nem perder pendência) e reescolher o item da própria linha fecha sem reaplicar a pureza do cadastro. "+ Novo item de
@@ -5688,6 +5688,57 @@ deixou de afirmar a busca só de ativos. Typecheck de shared, API e web. Sem su�
 intocado.
 
 **Registrado.** Fatias 2–4 e a opcional do discovery, em "Abertos fora da fila" do [`BACKLOG.md`](BACKLOG.md).
+
+## Consulta assistida com seleção múltipla e colunas do contexto (ASSISTED-ENTITY-MULTISELECT-01, 2026-09-17)
+
+**Decisão do PO.** A consulta assistida opera em seleção ÚNICA (o campo da linha, como era) ou MÚLTIPLA, limitada e
+explícita, na ação da seção que monta lista. Adendo da mesma rodada: a consulta mostra os dados técnicos do cadastro que
+distinguem registros parecidos, por entidade; a bancada continua compacta. Padrão em [`UI_BRAND.md`](UI_BRAND.md)
+("Assisted consultation: single or multiple selection"). Na `main`, fora de PROD (`release/prod` segue `5b7c1a3`).
+**Sem API alterada e sem migration.**
+
+**Fundação.** `EntityConsultationDialog` ganhou `selectionMode: "single" | "multiple"` (única é o padrão, intacta):
+múltipla tem caixa por registro (`BulkSelectionCheckbox`, que ganhou `describedBy`), marcação por `recordKey` com o
+registro inteiro — atravessa busca nova, busca limpa, página e recarga —, teto de 10 (`CONSULTA_MULTIPLA_MAXIMO`;
+`maxSelection` só baixa), caixas travadas no teto com "Você pode adicionar até 10 itens por vez.", rodapé "N itens
+selecionados" + "Cancelar" + "Adicionar N itens", uma confirmação só (`onSelectMany`, na ordem marcada), motivo da linha
+recusada ligado à caixa e, no lugar do "+ Novo", `createHint` ("Para cadastrar um novo item, use o cadastro
+individual."). Colunas ganharam os papéis `detail` e `status`: o cartão de 390px lê caixa, código e nome, técnica,
+situação e o resto, sem largura mínima.
+
+**Colunas por entidade.** `ItemConsultationDialog` escolhe pelo tipo: matéria-prima com Fonte / Função (fonte; família ·
+nutriente) e "Pureza cadastrada" ("Não informada" sem valor, nunca 0%); embalagem com Subtipo e sem pureza; a coluna Tipo
+saiu (o recorte já diz). `pages/industrial-resources/IndustrialResourceConsultationDialog.tsx` (nova): Tipo com potência
+do equipamento, Capacidade ("Não cadastrada"; "—" na energia), Unidade de uso e Situação, sem tarifa. A bancada não mudou
+(a pureza do cadastro segue como "Cadastro: X%" só quando diverge da aplicada).
+
+**Formulação e Modelo.** `TabelaDaReceita` ganhou "+ Adicionar matérias-primas" / "+ Adicionar embalagens" ao lado do
+botão de linha em branco; `consultaDeItem` passou a exigir `onEscolherVarios` e `jaAdicionado`. As duas páginas criam as
+linhas por `linhasDosItensEscolhidos` (`linha-da-receita.ts`): `linhaNova` + `comItemEscolhido` por item — base derivada
+(§106), Veridi fornece, unidade e pureza do cadastro — e segunda trava contra item presente, repetido, inativo ou de outra
+seção. O item marcado entra no catálogo da tela; a receita fica com alteração pendente.
+
+**Recursos Industriais.** Piloto no Modelo de Estrutura de Custo: "+ Adicionar recursos" abre a consulta no universo da
+linha (todos os tipos, inativos incluídos, como o seletor) e cria uma linha por recurso com os defaults de "+ Adicionar
+recurso" (uso por lote em branco, hora, 1 recurso) — sem default novo. `useRecursosDoSeletor` ganhou `guardarEscolhidos`,
+que nomeia pelo id o recurso trazido da consulta sem GET extra. Fora: a etapa do Roteiro de Produção aceita mão de obra E
+equipamento, e o servidor filtra um tipo por consulta (precisa de `types=` na API, não ampliado); a Estrutura de Custos
+grava cada uso pela API, com o uso obrigatório.
+
+**Validação.** Web: `components/consulta-assistida-multipla.test.tsx` (14: única intacta; marca e desmarca; 3+2+1 em
+três buscas e busca limpa; páginas, falha e recarga; teto e 11ª recusada; teto menor e teto acima de 10; lote uma vez;
+Cancelar e Escape; motivo ligado à caixa; sem "+ Novo"; Escape só na camada de cima com foco na ação; colunas; regra de
+390px), `pages/formulations/consulta-multipla-bancada.test.tsx` (12: recorte e colunas da matéria-prima, pureza ausente,
+três "L-TRIPTOFANO" distintos, duas linhas com pureza, mg, Veridi e pendência, presente travado, Cancelar, linha em
+seleção única, dica por perfil, embalagem com Subtipo e duas "Tampa 38 mm", duas linhas de embalagem, Modelo em base
+fixa), `pages/cost-templates/consulta-multipla-recursos.test.tsx` (5) e `linha-da-receita.test.ts` (+4). Conjunto focado
+de 66 arquivos e 961 testes (bancada, Modelo, Estrutura, seleção em massa, busca no servidor, Itens, Recursos, ajuda e
+guardas de CSS) antes e depois do rebase; typecheck do web. A ajuda da Formulação cita a ação múltipla no lugar da base
+da linha (teto editorial de 800 palavras mantido). Sem suíte completa, E2E, Playwright, mutação nem Railway; 390px
+provado por estrutura e regra (jsdom não mede).
+
+**Registrado.** COST-TEMPLATE-RESOURCE-LINE-WITHOUT-USAGE-01 (BACKLOG, seção G): linha de recurso sem uso por lote não
+vai no "Salvar rascunho" e a tela só diz "Alterações não salvas" — anterior a esta rodada, mais visível com o lote.
 
 ## Próxima prioridade
 
