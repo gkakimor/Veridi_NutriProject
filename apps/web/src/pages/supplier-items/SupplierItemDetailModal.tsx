@@ -47,6 +47,11 @@ import { formatQuantity } from "../../lib/quantity";
 import { TableEmptyRow } from "../../components/TableEmptyRow";
 import { ConfirmarPreferencialDialog, preferencialDepoisDe } from "./preferencial";
 import type { PreferencialDoItem } from "./preferencial";
+import {
+  ROTULO_DA_PARTE_INATIVA,
+  avisoDaParteInativa,
+  parteInativaDaRelacao,
+} from "./parte-inativa";
 
 /**
  * Detalhe da relação: dados comerciais, homologação com histórico e as
@@ -218,6 +223,13 @@ export function SupplierItemDetailModal({
     );
   }
 
+  /*
+   * Item ou fornecedor inativo: nada desaparece, mas nenhum compromisso novo
+   * começa aqui (SUPPLIER-ITEM-INACTIVE-GATE-01). A MESMA condição da API — a
+   * tela não esconde a recusa, ela diz o que reativar antes de a pessoa tentar.
+   */
+  const parteInativa = parteInativaDaRelacao(supplierItem);
+
   return (
     <FullWorkspaceModal
       open
@@ -243,12 +255,26 @@ export function SupplierItemDetailModal({
           <dd>
             <EntityLink kind="item" id={supplierItem.itemId} code={supplierItem.itemCode} name={supplierItem.itemName} /> (
             {supplierItem.itemUnitCode})
+            {/* A situação do CADASTRO, ao lado do nome dele — não se confunde
+                com a situação da relação, logo abaixo. */}
+            {!supplierItem.itemActive && (
+              <>
+                {" "}
+                <span className="badge badge--inactive">{ROTULO_DA_PARTE_INATIVA.item}</span>
+              </>
+            )}
           </dd>
           <dt>Código legado do item</dt>
           <dd className="is-code">{supplierItem.itemExternalCode ?? "—"}</dd>
           <dt>Fornecedor</dt>
           <dd>
             <EntityLink kind="supplier" id={supplierItem.supplierId} code={supplierItem.supplierCode} name={supplierItem.supplierName} />
+            {!supplierItem.supplierActive && (
+              <>
+                {" "}
+                <span className="badge badge--inactive">{ROTULO_DA_PARTE_INATIVA.supplier}</span>
+              </>
+            )}
           </dd>
           <dt>Homologação</dt>
           <dd>
@@ -290,6 +316,14 @@ export function SupplierItemDetailModal({
             )}
           </dd>
         </dl>
+
+        {/* O que a parte inativa impede — e o que ela não impede. Uma explicação
+            só, em vez de quatro botões desabilitados sem motivo à vista. */}
+        {parteInativa && (
+          <div className="callout">
+            <p>{avisoDaParteInativa(parteInativa)}</p>
+          </div>
+        )}
 
         {/* Não é erro nem oferta inválida: é uma escolha que ainda não foi
             feita, e é literalmente o que `.callout` existe para dizer. */}
@@ -356,7 +390,9 @@ export function SupplierItemDetailModal({
                   disabled={
                     saving ||
                     (!supplierItem.preferred &&
-                      (supplierItem.qualificationStatus !== "APPROVED" || !supplierItem.active))
+                      (supplierItem.qualificationStatus !== "APPROVED" ||
+                        !supplierItem.active ||
+                        parteInativa !== null))
                   }
                   onClick={() => {
                     // Marcar, vindo do Item, confirma dizendo quem sai; remover segue direto.
@@ -400,7 +436,8 @@ export function SupplierItemDetailModal({
                 <button
                   type="button"
                   className={supplierItem.active ? "btn btn--danger btn--sm" : "btn btn--ghost btn--sm"}
-                  disabled={saving}
+                  /* Reativar é compromisso novo; inativar é o contrário dele. */
+                  disabled={saving || (!supplierItem.active && parteInativa !== null)}
                   onClick={() => {
                     if (supplierItem.active) {
                       setConfirmarInativacao(true);
@@ -439,7 +476,13 @@ export function SupplierItemDetailModal({
               <button
                 type="button"
                 className="btn btn--accent btn--sm"
-                disabled={saving || supplierItem.qualificationStatus === "APPROVED"}
+                /* Homologar libera comprar: parte inativa não homologa. Bloquear
+                   e voltar para pendente seguem, ao lado, habilitados. */
+                disabled={
+                  saving ||
+                  supplierItem.qualificationStatus === "APPROVED" ||
+                  parteInativa !== null
+                }
                 onClick={() =>
                   void run(
                     () =>
@@ -697,7 +740,11 @@ export function SupplierItemDetailModal({
               <button
                 type="button"
                 className="btn btn--accent btn--sm"
-                disabled={saving || !price.trim() || !priceUomCode || !effectiveAt}
+                /* Oferta nova é condição comercial nova — o histórico de preço
+                   já registrado continua à vista, e imutável. */
+                disabled={
+                  saving || !price.trim() || !priceUomCode || !effectiveAt || parteInativa !== null
+                }
                 onClick={() =>
                   void run(
                     () =>

@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import type { Supplier } from "@prisma/client";
+import type { Supplier, User } from "@prisma/client";
 import type { SupplierDTO, SupplierListResponse } from "@veridi/shared";
 import { SUPPLIER_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
@@ -189,9 +189,12 @@ export async function updateSupplier(
 }
 
 /**
- * Inativar e reativar: a gravação só acontece se o Fornecedor estiver na
- * situação de partida, e a condição mora no próprio UPDATE — dois pedidos
- * concorrentes não partem da mesma situação, e o segundo cai no 409.
+ * Troca de situação: a gravação só acontece se o Fornecedor estiver na situação
+ * de partida, e a condição mora no próprio UPDATE — dois pedidos concorrentes
+ * não partem da mesma situação, e o segundo cai no 409.
+ *
+ * Reativar passa por aqui; inativar tem caminho próprio, porque limpa o
+ * preferencial das relações na mesma transação.
  */
 async function mudarSituacaoDoFornecedor(id: string, active: boolean): Promise<SupplierDTO> {
   const prisma = getPrisma();
@@ -210,6 +213,38 @@ export async function activateSupplier(id: string): Promise<SupplierDTO> {
   return mudarSituacaoDoFornecedor(id, true);
 }
 
-export async function deactivateSupplier(id: string): Promise<SupplierDTO> {
-  return mudarSituacaoDoFornecedor(id, false);
+/**
+ * Inativar o Fornecedor tira dele o preferencial de todo item —
+ * SUPPLIER-ITEM-INACTIVE-GATE-01, `PRODUCT_RULES.md` §112 (decisão D8 do PO).
+ *
+ * Preferencial é "de quem se compra este item": fornecedor inativo não pode
+ * responder isso, e o motor de custo já o ignorava — o item ficava apontando
+ * para um fornecedor que ninguém pode escolher. Só o preferencial cai: as
+ * relações, as ofertas e o histórico de homologação ficam inteiros, e reativar o
+ * fornecedor NÃO devolve o preferencial, que é decisão de Compras.
+ *
+ * Na mesma transação da inativação: um preferencial que sobrevive à queda da
+ * gravação seguinte é exatamente o estado que esta regra existe para não deixar.
+ */
+export async function deactivateSupplier(
+  id: string,
+  actor: Pick<User, "id" | "name">,
+): Promise<SupplierDTO> {
+  const prisma = getPrisma();
+  const supplier = await prisma.$transaction(async (tx) => {
+    const { count } = await tx.supplier.updateMany({
+      where: { id, active: true },
+      data: { active: false },
+    });
+    if (count === 0) {
+      await requireSupplier(id);
+      throw new InvalidSupplierStatusTransitionError(false);
+    }
+    await tx.supplierItem.updateMany({
+      where: { supplierId: id, preferred: true },
+      data: { preferred: false, updatedByUserId: actor.id, updatedByNameSnapshot: actor.name },
+    });
+    return tx.supplier.findUniqueOrThrow({ where: { id } });
+  });
+  return toSupplierDTO(supplier);
 }

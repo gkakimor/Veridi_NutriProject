@@ -150,6 +150,7 @@ function relacao(supplier: SupplierDTO, overrides: Partial<SupplierItemDTO> = {}
     itemUnitCode: "kg",
     itemType: "RAW_MATERIAL",
     itemFamily: null,
+    itemActive: true,
     supplierId: supplier.id,
     supplierCode: supplier.code,
     supplierName: supplier.legalName,

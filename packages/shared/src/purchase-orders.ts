@@ -125,6 +125,15 @@ export interface PurchaseOrderLineDTO {
   itemCode: string;
   itemName: string;
   unitCode: string;
+  /**
+   * Situação ATUAL do cadastro do item, não a do momento da compra.
+   *
+   * O código e o nome da linha são snapshot; a situação é lida agora, para a
+   * tela marcar "Item inativo" no que já está comprometido — e para a marca não
+   * sair da AUSÊNCIA do item na primeira página do catálogo, que dizia "inativo"
+   * de item ativo (SUPPLIER-ITEM-INACTIVE-GATE-01, `PRODUCT_RULES.md` §112).
+   */
+  itemActive: boolean;
   /** Decimal como string — nunca usar float JS como fonte de precisão. */
   orderedQuantity: string;
   unitPrice: string | null;
@@ -143,6 +152,13 @@ export interface PurchaseOrderDTO {
   supplierCode: string;
   supplierName: string;
   supplierCnpj: string | null;
+  /**
+   * Situação ATUAL do cadastro do fornecedor — o par de `itemActive` na linha.
+   *
+   * Receber uma OC confirmada antes da inativação continua permitido: o
+   * compromisso foi assumido antes. A marca diz o que mudou desde então.
+   */
+  supplierActive: boolean;
   orderDate: string;
   expectedDeliveryDate: string | null;
   status: PurchaseOrderStatus;

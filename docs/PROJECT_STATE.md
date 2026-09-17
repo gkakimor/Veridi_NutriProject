@@ -5943,6 +5943,38 @@ timeout/5xx/429/rede, payload parcial e malformado, JSON que não é objeto, tet
 pacotes. **Sem E2E e sem suíte completa** (validação focada, decisão do PO). Nenhum teste toca a internet: o provedor é
 mockado dos dois lados.
 
+## Item × Fornecedor: cadastro inativo não começa compromisso novo (SUPPLIER-ITEM-INACTIVE-GATE-01, 2026-09-17)
+
+**Decisão do PO** (D4 e D8 de [MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01](discovery/MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01.md),
+Fatia 3): item ou fornecedor inativo sai de compromisso NOVO na relação, sem apagar histórico; inativar o Fornecedor limpa
+o preferencial dele; OC confirmada antes da inativação continua sendo recebida. Regra em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §112. Na `main`, fora de PROD (`release/prod` segue `8e824e8f`). **Sem migration**;
+perfis intocados.
+
+**API.** `exigirPartesAtivas` em `supplier-items.service.ts` recusa com 400 `inactive_reference` criar, reativar a relação
+(só na transição real para ativa), homologar (`APPROVED`), marcar preferencial e registrar oferta — inclusive a
+`initialOffer` da criação. `InactiveSupplierItemPartyError` passou a receber o ato, e a frase diz o que reativar e para
+quê; a recusa vem antes da elegibilidade do preferencial. Seguem liberados bloquear, voltar para pendente, inativar a
+relação, remover o preferencial, editar dados comerciais e ler ofertas e histórico. `deactivateSupplier(id, actor)` zera
+`preferred` das relações do fornecedor na mesma transação da inativação (relação, ofertas e histórico intactos; reativar
+não devolve). `SupplierItemDTO.itemActive` novo; `PurchaseOrderDTO.supplierActive` e `PurchaseOrderLineDTO.itemActive`
+leem a situação de agora — receber OC confirmada segue liberado.
+
+**Web.** `parte-inativa.ts` repete a condição da API: o detalhe marca item e fornecedor inativos, explica o que volta com
+a reativação e desabilita só Homologar, Marcar como preferencial, Registrar preço e Reativar relação; a grade e a seção
+do Item marcam a relação e não oferecem o preferencial (`podeSerPreferencial` olha as duas partes). Receber OC mostra
+"Fornecedor inativo" e "Item inativo" sem barrar. A OC parou de marcar "inativo" por AUSÊNCIA do cadastro na primeira
+página do catálogo — a marca é a do servidor. O diálogo de inativar o Fornecedor deixou de prometer que o recebimento
+para, e diz que o preferencial cai.
+
+**Validação.** API: `supplier-items/supplier-item-inactive-gate` (7 casos: criar com item e com fornecedor inativo; as
+quatro portas recusando por item e por fornecedor; bloquear, pendente e inativar seguindo com histórico e ofertas à
+vista; inativação do fornecedor limpando o preferencial e reativação não devolvendo; OC confirmada recebida com as duas
+marcas). Pastas tocadas — Item × Fornecedor, Fornecedor, OC e Recebimento: 15 arquivos, 204 testes, em banco de teste
+exclusivo. Web: `supplier-items/relacao-com-parte-inativa` (9) e `receiving/recebimento-de-cadastro-inativo` (2);
+vizinhos das telas tocadas: 33 arquivos, 346 testes; 9 fixtures tipadas ganharam os campos novos. Typecheck de shared,
+API e web. Sem suíte completa, E2E, Playwright nem mutação; PROD e Railway intocados.
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a

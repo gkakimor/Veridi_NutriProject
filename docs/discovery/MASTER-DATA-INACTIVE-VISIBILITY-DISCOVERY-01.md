@@ -4,8 +4,8 @@
 
 `EM_ANALISE` — **D1–D3 decididas pelo PO e implementadas** na Fatia 1 (INVENTORY-INACTIVE-ITEM-VISIBILITY-01,
 2026-09-17, [`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §107); **D6–D7 decididas e implementadas** na Fatia 2
-(PRODUCT-INACTIVE-COMMERCIAL-GATE-01, 2026-09-17, §108). **D4, D5, D8 e D9 têm recomendação e esperam o handoff** de cada
-fatia.
+(PRODUCT-INACTIVE-COMMERCIAL-GATE-01, 2026-09-17, §108); **D4 e D8 decididas e implementadas** na Fatia 3
+(SUPPLIER-ITEM-INACTIVE-GATE-01, 2026-09-17, §112). **D5 e D9 têm recomendação e esperam o handoff** de cada fatia.
 
 Discovery READ ONLY de 2026-09-17 sobre `a6fcbdd` (deltas `a2bce62` e `0fc49e4` conferidos), entregue só no chat e
 persistido na implementação da Fatia 1, a partir do resumo da sessão. As linhas de código citadas são as da época; a
@@ -93,16 +93,16 @@ Uma regra por lugar (D1–D9), em quatro fatias e uma opcional, sem migration.
 | D1 | Estoque, inativo COM posição (saldo, reservado ou em compra > 0): aparece por padrão, marcado "Item inativo" | **Decidida** (handoff da Fatia 1) |
 | D2 | Estoque, inativo SEM posição: fora por padrão; filtro "Incluir inativos sem saldo"; CSV igual à tela | **Decidida** (handoff da Fatia 1) |
 | D3 | Físico: Contagem rápida sim; saída e perda sim; entrada manual (`ADJUSTMENT_IN`) não — sobra entra pela contagem | **Decidida** (handoff da Fatia 1) |
-| D4 | Receber OC já confirmada com item/fornecedor inativo: sim, com marca; corrigir o texto do "Inativar" | Recomendada |
+| D4 | Receber OC já confirmada com item/fornecedor inativo: sim, com marca; corrigir o texto do "Inativar" | **Decidida** (handoff da Fatia 3) |
 | D5 | OP nova com componente inativo: recusar no planejar nomeando o item; OP planejada/liberada segue | Recomendada |
 | D6 | Produto inativo não inicia compromisso novo: recusar vincular, linha nova, enviar, aceitar, aprovar, gerar Pedido e criar Amostra; rascunho abre com aviso; versão nova e duplicar copiam a linha e não enviam nem aceitam até regularizar; OP planejada não libera; nada é cancelado; custos, preço, CMV e roteiro sem bloqueio | **Decidida** (handoff da Fatia 2) |
 | D7 | Produto × PA sem cascata (perfis diferentes no §100); PA existente e inativo com recusa própria, nunca "sem produto acabado"; cadastro do Produto avisa o PA inativo | **Decidida** (handoff da Fatia 2) |
-| D8 | Relação com item/fornecedor inativo: recusar reativar, homologar, preferencial e oferta; inativar fornecedor limpa o preferencial dele | Recomendada |
+| D8 | Relação com item/fornecedor inativo: recusar reativar, homologar, preferencial e oferta; inativar fornecedor limpa o preferencial dele | **Decidida** (handoff da Fatia 3) |
 | D9 | R-18 abre em "Todos", com a situação | Recomendada |
 
 ## 12. Pendências PO
 
-D4, D5, D8 e D9, uma fatia por vez.
+D5 e D9, uma fatia por vez.
 
 ## 13. Escopo recomendado
 
@@ -121,7 +121,8 @@ cancelar documento aberto por causa de inativação.
 
 ## 15. Próxima capability
 
-A próxima fatia que o PO emitir (3 ou 4). Nenhuma depende da outra.
+A próxima fatia que o PO emitir: 4 (PRODUCTION-INACTIVE-COMPONENT-GATE-01, D5) ou a opcional
+(INACTIVE-MARKERS-REPORTS-01, D9). Nenhuma depende da outra.
 
 ## 16. Implementação
 
@@ -150,7 +151,23 @@ Amostra nova aceitava produto inativo (porta trazida pelo handoff):
   `productActive`/`finishedItemActive`, `ProductFinishedItemSummary.active`); Web sem o inativo em escolha nova (vincular,
   linha nova, amostra), marcas no registro salvo, aviso do passo recusado e aviso de PA inativo no cadastro do Produto.
 
-Fatias 3–4 e a opcional: NÃO IMPLEMENTADO.
+**Fatia 3 — IMPLEMENTADA em 2026-09-17** (SUPPLIER-ITEM-INACTIVE-GATE-01, na `main` e fora de PROD, sem migration, §112).
+F4 e F5 reconferidos na `main` (`ad341350`) antes de agir — confirmados; F6 entrou junto, porque a marca falsa da OC e a marca
+verdadeira do recebimento são a mesma informação:
+
+- `exigirPartesAtivas` em `supplier-items.service.ts`: 400 `inactive_reference` em criar, reativar a relação, homologar,
+  preferencial e oferta, com a frase nomeando a parte e o ato (`InactiveSupplierItemPartyError` passou a receber o ato);
+  bloquear, voltar para pendente, inativar a relação, remover o preferencial e editar dados comerciais seguem, e a recusa
+  vem ANTES da elegibilidade do preferencial;
+- `deactivateSupplier` limpa `preferred` das relações do fornecedor na mesma transação da inativação, sem tocar em relação,
+  oferta nem histórico; reativar não devolve a escolha; inativar Item não mexe em preferencial;
+- receber OC confirmada segue liberado (D4), com `PurchaseOrderDTO.supplierActive` e `PurchaseOrderLineDTO.itemActive` lidos
+  agora — o que também corrige F6: a OC marcava "inativo" pela ausência do cadastro na primeira página do catálogo;
+- `SupplierItemDTO.itemActive` (o `supplierActive` já existia); detalhe com marcas, aviso do que volta com a reativação e
+  só os botões que a API recusaria desabilitados; grade e seção do Item marcam a relação e não oferecem o preferencial;
+  recebimento mostra as duas marcas sem barrar; o diálogo de inativar o Fornecedor deixou de prometer que o recebimento para.
+
+Fatia 4 e a opcional: NÃO IMPLEMENTADO.
 
 ## 17. Histórico de decisões
 
@@ -158,3 +175,6 @@ Fatias 3–4 e a opcional: NÃO IMPLEMENTADO.
   mesmo dia; documento persistido nessa implementação.
 - 2026-09-17 — D6–D7 decididas pelo PO no handoff da Fatia 2 (PRODUCT-INACTIVE-COMMERCIAL-GATE-01) e implementadas no mesmo
   dia; o handoff acrescentou a Amostra nova às portas da D6 e a revalidação de Produto e PA na liberação da OP.
+- 2026-09-17 — D4 e D8 decididas pelo PO no handoff da Fatia 3 (SUPPLIER-ITEM-INACTIVE-GATE-01) e implementadas no mesmo dia;
+  o handoff confirmou que inativação posterior não bloqueia recebimento já comprometido, e a fatia trouxe junto a marca
+  verdadeira da OC (F6).

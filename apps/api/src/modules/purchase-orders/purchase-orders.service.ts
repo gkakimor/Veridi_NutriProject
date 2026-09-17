@@ -38,7 +38,15 @@ const CODE_SEQUENCE = "purchase_order_code_seq";
  */
 const SYSTEM_ACTOR = "Ambiente local";
 
-type LineWithReceipts = PurchaseOrderLine & { receiptLines: ReceiptLine[] };
+/**
+ * A linha carrega a situação ATUAL do cadastro do item, não a do momento da
+ * compra: `itemCode`/`itemName` são snapshot, `item.active` é a leitura de
+ * agora, para a tela marcar "Item inativo" no compromisso já assumido.
+ */
+type LineWithReceipts = PurchaseOrderLine & {
+  receiptLines: ReceiptLine[];
+  item: { active: boolean };
+};
 type ReceiptWithLines = {
   id: string;
   code: string;
@@ -47,6 +55,7 @@ type ReceiptWithLines = {
   lines: { receivedQuantity: Prisma.Decimal; lotId: string | null }[];
 };
 type PurchaseOrderWithLines = PurchaseOrder & {
+  supplier: { active: boolean };
   lines: LineWithReceipts[];
   customerOrder: CustomerOrder | null;
   receipts: ReceiptWithLines[];
@@ -54,7 +63,10 @@ type PurchaseOrderWithLines = PurchaseOrder & {
 
 /** Include padrao para carregar uma OC com o suficiente para o DTO (linhas + recebido). */
 const purchaseOrderInclude = {
-  lines: { include: { receiptLines: true } },
+  // Situação do cadastro do fornecedor e de cada item: a marca de inativo sai
+  // daqui, e não da ausência do registro na primeira página do catálogo.
+  supplier: { select: { active: true } },
+  lines: { include: { receiptLines: true, item: { select: { active: true } } } },
   customerOrder: true,
   // O que de fato chegou contra o que foi pedido: a OC sem os recebimentos
   // obriga a sair para a lista geral e procurar pelo codigo da ordem.
@@ -88,6 +100,7 @@ function toLineDTO(line: LineWithReceipts): PurchaseOrderLineDTO {
     itemCode: line.itemCode,
     itemName: line.itemName,
     unitCode: line.unitCode,
+    itemActive: line.item.active,
     orderedQuantity: line.orderedQuantity.toString(),
     // PRECO UNITARIO: as 8 casas que `purchase_order_lines.unitPrice` guarda
     // desde o PREC-MIG-P. O DTO devolve o scale da coluna, nem mais nem menos
@@ -119,6 +132,7 @@ function toPurchaseOrderDTO(po: PurchaseOrderWithLines): PurchaseOrderDTO {
     supplierCode: po.supplierCode,
     supplierName: po.supplierName,
     supplierCnpj: po.supplierCnpj,
+    supplierActive: po.supplier.active,
     orderDate: po.orderDate.toISOString(),
     expectedDeliveryDate: po.expectedDeliveryDate ? po.expectedDeliveryDate.toISOString() : null,
     status: po.status,

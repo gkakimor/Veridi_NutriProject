@@ -27,6 +27,7 @@ import { useInitialFilters } from "../../lib/filter-params";
 import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
 import { SupplierItemFormModal } from "./SupplierItemFormModal";
 import { SupplierItemDetailModal } from "./SupplierItemDetailModal";
+import { ROTULO_DA_PARTE_INATIVA } from "./parte-inativa";
 import { EntityLink } from "../../components/EntityLink";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
@@ -409,10 +410,29 @@ export function SupplierItemsPage() {
                   if (event.key === "Enter") setDetailId(row.id);
                 }}
               >
+                {/* Três situações distintas: o item, o fornecedor e a relação
+                    (última coluna). A relação de cadastro inativo continua
+                    listada — e marcada (SUPPLIER-ITEM-INACTIVE-GATE-01). */}
                 <td className="col-flex">
                   <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
+                  {!row.itemActive && (
+                    <>
+                      {" "}
+                      <span className="badge badge--inactive">{ROTULO_DA_PARTE_INATIVA.item}</span>
+                    </>
+                  )}
                 </td>
-                <td className="col-flex">{row.supplierName}</td>
+                <td className="col-flex">
+                  {row.supplierName}
+                  {!row.supplierActive && (
+                    <>
+                      {" "}
+                      <span className="badge badge--inactive">
+                        {ROTULO_DA_PARTE_INATIVA.supplier}
+                      </span>
+                    </>
+                  )}
+                </td>
                 <td className="col-tight is-code">{row.supplierItemCode ?? "—"}</td>
                 <td className="col-tight">
                   <span className={qualificationBadgeClass(row.qualificationStatus)}>

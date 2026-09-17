@@ -48,6 +48,14 @@ interface LineDraft {
   itemCode: string;
   itemName: string;
   unitCode: string;
+  /**
+   * Situação atual do cadastro do item, vinda do DTO da OC.
+   *
+   * O recebimento de OC confirmada NÃO é barrado por inativação posterior — o
+   * compromisso foi assumido antes (SUPPLIER-ITEM-INACTIVE-GATE-01, decisão D4
+   * do PO). A tela diz o que mudou desde então, e não impede.
+   */
+  itemActive: boolean;
   orderedQuantity: string;
   receivedQuantity: string;
   openQuantity: string;
@@ -192,6 +200,7 @@ export function ReceivePurchaseOrderPage() {
           itemCode: line.itemCode,
           itemName: line.itemName,
           unitCode: line.unitCode,
+          itemActive: line.itemActive,
           orderedQuantity: line.orderedQuantity,
           receivedQuantity: line.receivedQuantity,
           openQuantity: line.openQuantity,
@@ -455,6 +464,11 @@ export function ReceivePurchaseOrderPage() {
           <div className="doc-title">
             <h1>{po.code}</h1>
             <span className="field-readonly-value">{po.supplierName}</span>
+            {/* Inativado DEPOIS da confirmação: o recebimento segue, e a marca
+                diz por que este fornecedor não aparece mais em compra nova. */}
+            {!po.supplierActive && (
+              <span className="badge badge--inactive">Fornecedor inativo</span>
+            )}
           </div>
         </div>
       </div>
@@ -523,6 +537,13 @@ export function ReceivePurchaseOrderPage() {
               title={`${line.itemCode} — ${line.itemName}`}
               subtitle={`Pedido: ${formatQuantity(line.orderedQuantity)} ${line.unitCode}  ·  Recebido: ${formatQuantity(line.receivedQuantity)} ${line.unitCode}  ·  Aberto: ${formatQuantity(line.openQuantity)} ${line.unitCode}`}
             >
+              {!line.itemActive && (
+                <p className="field__hint">
+                  Item inativo — o recebimento desta OC continua: a compra foi
+                  confirmada antes da inativação. O item volta a entrar em compra nova
+                  quando for reativado.
+                </p>
+              )}
               <div className="field-grid-2">
                 <div className="field">
                   <label htmlFor={`receive-now-${line.purchaseOrderLineId}`}>

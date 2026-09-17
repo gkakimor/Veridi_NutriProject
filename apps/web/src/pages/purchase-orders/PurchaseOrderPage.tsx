@@ -125,6 +125,15 @@ interface LineRow {
   itemCode: string;
   itemName: string;
   unitCode: string;
+  /**
+   * Situação ATUAL do cadastro do item, vinda do DTO.
+   *
+   * Antes a tela deduzia "inativo" da AUSÊNCIA do item na primeira página do
+   * catálogo (50 por tipo): item ativo fora dessa página aparecia marcado como
+   * inativo na OC salva. Agora a marca é a resposta do servidor
+   * (SUPPLIER-ITEM-INACTIVE-GATE-01).
+   */
+  itemActive: boolean;
   orderedQuantity: string;
   unitPrice: string;
   receivedQuantity: string;
@@ -207,6 +216,7 @@ function lineFromDTO(line: PurchaseOrderDTO["lines"][number]): LineRow {
     itemCode: line.itemCode,
     itemName: line.itemName,
     unitCode: line.unitCode,
+    itemActive: line.itemActive,
     // Texto dos campos, em português: é o que a linha edita e o que a leitura lê.
     orderedQuantity: toPtBrEditText(line.orderedQuantity, OPCOES_QUANTIDADE),
     unitPrice: toPtBrEditText(line.unitPrice, OPCOES_PRECO_UNITARIO),
@@ -440,7 +450,9 @@ export function PurchaseOrderPage() {
         code: purchaseOrder.supplierCode,
         legalName: purchaseOrder.supplierName,
         tradeName: null,
-        active: false,
+        // A situação é a do servidor: fora da primeira página do catálogo não
+        // significa inativo.
+        active: purchaseOrder.supplierActive,
       },
     ];
   }, [activeSuppliers, purchaseOrder]);
@@ -451,7 +463,13 @@ export function PurchaseOrderPage() {
     if (row.itemId && !base.some((item) => item.id === row.itemId)) {
       return [
         ...base,
-        { id: row.itemId, code: row.itemCode, name: row.itemName, unitCode: row.unitCode, active: false },
+        {
+          id: row.itemId,
+          code: row.itemCode,
+          name: row.itemName,
+          unitCode: row.unitCode,
+          active: row.itemActive,
+        },
       ];
     }
     return base;
@@ -484,6 +502,7 @@ export function PurchaseOrderPage() {
                   itemCode: item.code,
                   itemName: item.name,
                   unitCode: item.unitCode,
+                  itemActive: item.active,
                   orderedQuantity: toPtBrEditText(shortageQuantity, OPCOES_QUANTIDADE),
                   unitPrice: "",
                   receivedQuantity: "0",
@@ -582,6 +601,8 @@ export function PurchaseOrderPage() {
         itemCode: "",
         itemName: "",
         unitCode: "",
+        // Linha em branco: o item que ela vai receber vem do catálogo de ativos.
+        itemActive: true,
         orderedQuantity: "",
         unitPrice: "",
         receivedQuantity: "0",
@@ -605,6 +626,7 @@ export function PurchaseOrderPage() {
               itemCode: item?.code ?? "",
               itemName: item?.name ?? "",
               unitCode: item?.unitCode ?? "",
+              itemActive: item?.active ?? true,
             }
           : line,
       ),
