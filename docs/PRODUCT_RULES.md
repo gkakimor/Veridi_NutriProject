@@ -6744,3 +6744,37 @@ não é servido (500 `storage_integrity_error`).
 privado, API S3). O provedor do arquivo novo é `VERIDI_STORAGE_PROVIDER`; cada versão guarda o provedor em que nasceu e é
 lida dele, então trocar a variável não move nem esconde o que já existe. Os anexos genéricos (`Attachment`) seguem em
 `file-storage.ts`, sem mudança (ATTACHMENTS-R2-MIGRATION-01).
+
+## §104 — Item × Fornecedor: bloquear a relação exige motivo
+
+SUPPLIER-QUALITY-REJECTION-REASON-01, 2026-09-16, decisão do PO no handoff
+([discovery](discovery/ITEM-SUPPLIER-UX-DISCOVERY-01.md)).
+
+**Bloquear é decisão com motivo.** Colocar a relação Item × Fornecedor em `BLOCKED` exige um motivo em texto livre —
+documentação insuficiente, laudo reprovado, fornecedor não homologado, especificação divergente ou outro. Não há lista
+fechada de motivos nesta versão. O motivo é aparado e precisa de pelo menos 3 caracteres, como os outros motivos
+obrigatórios (bloquear lote, recusar laudo); o máximo é o da observação da decisão, 1000, em qualquer situação.
+
+**O motivo é a observação do evento.** O histórico de homologação já guardava uma observação por evento (`note`); o
+motivo do bloqueio é ela, no evento `→ BLOCKED`. Sem coluna nova e sem migration. Cada decisão continua sendo um evento
+que só se acrescenta, com de → para, autor e data (§101): bloquear nunca reescreve evento anterior.
+
+**Todas as portas.** Vale na rota de homologação e na criação já bloqueada (Administrador, §101). Sem motivo válido é
+400 `validation_error`, com a frase e o campo (`note` na rota, `qualificationNote` na criação), e nada é gravado — nem
+situação, preferencial, evento ou relação. A recusa por perfil vem antes: quem não decide a homologação recebe 403 com
+ou sem motivo. O motivo é conferido antes de ler a relação: sem ele, relação inexistente também é 400; com ele, 404.
+Nenhuma permissão mudou — bloquear segue com Qualidade e Administrador.
+
+**Homologar e voltar para pendente não mudam.** A observação continua opcional nas duas, sem passo novo.
+
+**Legado.** Bloqueio gravado antes desta regra, sem observação, continua válido e legível. Nada é preenchido por
+backfill, e homologar ou voltar para pendente a partir dele não pede motivo retroativo. Na tela, o histórico diz
+"Motivo não registrado".
+
+**Na tela.** No detalhe da relação, "Bloquear" abre "Bloquear fornecedor para este item", com o campo obrigatório
+Motivo, a frase "Este motivo ficará registrado no histórico de homologação." e o botão Bloquear desabilitado sem motivo
+válido. O texto já escrito na "Observação da decisão" chega ao campo, e cancelar não apaga o que foi digitado; com a
+relação preferencial, o diálogo diz que ela deixa de ser. Homologar e "Voltar para pendente" seguem diretos. O histórico
+mostra "Motivo / observação" em cada evento. O mesmo detalhe serve Compras › Item × Fornecedor e o cadastro do Item
+(§102), sem segundo diálogo; na nova relação, o Administrador que escolhe Bloqueado informa o "Motivo do bloqueio".
+Perfis sem autoridade não veem "Bloquear" e continuam lendo o histórico inteiro.

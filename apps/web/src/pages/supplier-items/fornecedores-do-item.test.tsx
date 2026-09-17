@@ -541,6 +541,36 @@ describe("ITEM-SUPPLIER-UX-01 — quem faz o quê na seção e no detalhe aberto
     await waitFor(() => expect(within(linhaDe("SWEETMIX")).getByText("Homologado")).toBeInTheDocument());
   });
 
+  it("Qualidade: bloqueia pelo detalhe aberto da linha com o motivo obrigatório — o mesmo diálogo da tela geral (SUPPLIER-QUALITY-REJECTION-REASON-01)", async () => {
+    sessao.role = "QUALITY";
+    servidor.relacoes = [relacao(SWEETMIX, { qualificationStatus: "APPROVED" })];
+    await abrirSecao();
+
+    fireEvent.click(linhaDe("SWEETMIX"));
+    const dialogo = await screen.findByRole("dialog", { name: "Cafeína · SWEETMIX" });
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Bloquear" }));
+    const confirmacao = await screen.findByRole("alertdialog", { name: "Bloquear fornecedor para este item" });
+    const confirmar = within(confirmacao).getByRole("button", { name: "Bloquear" });
+    expect(confirmar).toBeDisabled();
+    expect(changeSupplierItemQualification).not.toHaveBeenCalled();
+
+    fireEvent.change(within(confirmacao).getByLabelText(/^Motivo/), { target: { value: "Laudo reprovado" } });
+    fireEvent.click(confirmar);
+    await waitFor(() =>
+      expect(changeSupplierItemQualification).toHaveBeenCalledWith("si-for-2", {
+        status: "BLOCKED",
+        note: "Laudo reprovado",
+      }),
+    );
+    // Só a confirmação fecha: o detalhe continua aberto por cima do Item.
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(screen.getByRole("dialog", { name: "Cafeína · SWEETMIX" })).toBeInTheDocument();
+
+    fireEvent.click(within(dialogo).getByRole("button", { name: /Fechar/ }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(within(linhaDe("SWEETMIX")).getByText("Bloqueado")).toBeInTheDocument());
+  });
+
   it("Produto acabado: sem administração, com o porquê", async () => {
     await abrirSecao(item({ id: "item-pa", code: "PA-000001", type: "FINISHED_PRODUCT", name: "Cápsula" }));
     expect(screen.queryByRole("button", { name: "Adicionar fornecedor" })).toBeNull();

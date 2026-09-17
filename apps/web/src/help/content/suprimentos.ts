@@ -125,7 +125,7 @@ export const suprimentosTopics = {
       },
       {
         term: "Homologação",
-        text: "Se este fornecedor está aprovado para ESTE item. Pendente é ausência de decisão, não recusa; só Bloqueado é recusa deliberada. Aprovar e bloquear é da Qualidade.",
+        text: "Se este fornecedor está aprovado para ESTE item. Pendente é ausência de decisão, não recusa; só Bloqueado é recusa deliberada, sempre com motivo. Aprovar e bloquear é da Qualidade.",
       },
       {
         term: "Preferencial",
@@ -177,7 +177,7 @@ export const suprimentosTopics = {
           {
             label: "Histórico",
             detail:
-              "Toda mudança de homologação fica registrada com autor e data, e o histórico nunca é reescrito.",
+              "Toda mudança de homologação fica registrada com autor e data, e o histórico nunca é reescrito. Bloquear pede o motivo, que fica no evento; bloqueio antigo sem motivo aparece como “Motivo não registrado”.",
           },
           {
             label: "Ativa ou inativa",

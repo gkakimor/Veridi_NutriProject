@@ -1,3 +1,5 @@
+import { MOTIVO_DO_BLOQUEIO_OBRIGATORIO_MESSAGE } from "@veridi/shared";
+
 export class SupplierItemNotFoundError extends Error {
   constructor(id: string) {
     super(`Relação item × fornecedor não encontrada: ${id}`);
@@ -42,6 +44,21 @@ export class InactiveSupplierItemPartyError extends Error {
         : "Fornecedor inativo — reative o fornecedor antes de criar a relação.",
     );
     this.name = "InactiveSupplierItemPartyError";
+  }
+}
+
+/**
+ * Bloquear sem motivo (SUPPLIER-QUALITY-REJECTION-REASON-01). `campo` é o
+ * caminho que a resposta de validação aponta — `note` na rota de homologação,
+ * `qualificationNote` na criação já bloqueada —, para a tela saber de onde é a frase.
+ */
+export class SupplierItemBlockReasonRequiredError extends Error {
+  readonly campo: "note" | "qualificationNote";
+
+  constructor(campo: "note" | "qualificationNote") {
+    super(MOTIVO_DO_BLOQUEIO_OBRIGATORIO_MESSAGE);
+    this.name = "SupplierItemBlockReasonRequiredError";
+    this.campo = campo;
   }
 }
 

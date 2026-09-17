@@ -69,6 +69,7 @@ export const createSupplierItemSchema = z.object({
    * só de `SUPPLIER_ITEM_QUALIFICATION_ROLES` — o serviço recusa com 403.
    */
   qualificationStatus: z.enum(["PENDING", "APPROVED", "BLOCKED"]).optional(),
+  /** Com `BLOCKED` é o motivo, obrigatório — conferido no serviço, depois do 403. */
   qualificationNote: optionalNullableText(1000),
   /** Só é aceito com homologação APPROVED — a regra é a mesma da rota. */
   preferred: z.boolean().optional(),
@@ -83,6 +84,11 @@ export const updateSupplierItemSchema = z.object({
 
 export const changeQualificationSchema = z.object({
   status: z.enum(["PENDING", "APPROVED", "BLOCKED"]),
+  /**
+   * Observação da decisão. Com `BLOCKED` é o motivo e passa a ser obrigatória
+   * (SUPPLIER-QUALITY-REJECTION-REASON-01) — no serviço, não aqui: a recusa por
+   * perfil vem antes, e quem não decide ouve 403, não "falta o motivo".
+   */
   note: optionalNullableText(1000),
 });
 
