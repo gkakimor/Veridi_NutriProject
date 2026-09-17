@@ -1299,6 +1299,52 @@ Advanced cycle-count scheduling remains future scope.
   item, a lot or a movement, and never block completion. The timeline shows only
   what the server stamped; recount request and decision keep only the latest.
 
+## Durable rules confirmed at implementation — review and completion screens (INVENTORY-PHYSICAL-COUNT-01, slice 2B)
+
+- Review actions (request recount, Adjust, Do not adjust) act on positions the
+  reviewer selected one by one, sent by position id — never on a server-side
+  filter such as "all divergences". Adjust/Do not adjust only where there is a
+  difference (divergent or already decided); recount on any counted position
+  not already awaiting one. The reason is mandatory with the API's own rule
+  (3 to 500 characters); one reason may cover a batch.
+- A divergent position with movement during the count, still on its first
+  round, is decided only with a confirmation ticked by hand for that position,
+  after the screen offers the position's movements. The screen never sends the
+  confirmation on its own; a recounted position needs none.
+- The position's movements after the reference are a review read (hidden in a
+  blind count until the first round closes), with the same window as the
+  movement flag. Each says whether it was posted after the valid count and
+  whether it is a retroactive posting (posted after the count, occurred before
+  it). Adjustment numbers never come from this list.
+- Completing shows the real consequence read from a fresh review: number of
+  inbound and outbound adjustments, sums per unit computed with the shared
+  `Decimal` and never added across units, positions decided Do not adjust,
+  positions that match, and findings. There is no pre-check endpoint: the
+  screen tries to complete and shows what the server refused. It sends the
+  adjustments it showed (`expectedAdjustments`: position + valid entry); if the
+  server would apply a different set, completion is refused with
+  `stock_count_changed` and nothing is written.
+- A refused completion writes nothing. The refusal is listed per position with
+  item/lot, balance now, adjustment, reserved and the reason, and offers what
+  resolves it: count (pending count or recount), recount or decide again
+  (undecided, unconfirmed movement, negative balance, below reserved), decide
+  again (unit changed), and back to review with the refused positions filtered.
+- The quick count reads the item's positions from the count preview in
+  assisted mode: a position held by an open count comes back without a balance,
+  and the screen points to that `INV-` before showing any balance. A lot shows
+  owner, status, expiry, location and balance. Confirming sends the balance the
+  screen showed (`expectedSystemQuantity`); a changed balance is refused with
+  nothing adjusted, and confirming again requires reloading it. The difference
+  is computed with `Decimal`; the result shows the `INV-` it recorded.
+- An inventory adjustment points to its `INV-` through the position's 1:1 link
+  (`stockCountId`/`stockCountCode` on the movement, R-03 document, movements
+  CSV). Movements stay read-only; a legacy `STOCK_COUNT` adjustment without a
+  document keeps the source label.
+- Lot filters of the count scope — location contains, lot status and expiry
+  (expired, not expired, expiring within N days, N from 1 to 3650, the expiry
+  day valid in full) — select lots only: with any of them, a position of an
+  item without lot control is left out.
+
 ---
 
 # 17. FEFO

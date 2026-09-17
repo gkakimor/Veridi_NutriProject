@@ -49,9 +49,10 @@ estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0
   (PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01); o do Painel Gerencial (FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01) está
   `IMPLEMENTADO`;
 - **Inventário Físico:** discovery `DECIDIDO` (D1–D8 e P1–P7 fechadas pelo PO em 2026-09-15; DU-1 a DU-6 das telas em
-  2026-09-16); Fatia 1 (domínio e API) entregue em 2026-09-15 e Fatia 2A (telas até Em revisão) em 2026-09-16, na `main`
-  e fora de PROD (INVENTORY-PHYSICAL-COUNT-01); Fatia 2B (revisão, decisão e encerramento pela tela) e Fatia 3 (FO-01 de
-  sessão e CSV) abertas;
+  2026-09-16); Fatia 1 (domínio e API) entregue em 2026-09-15, Fatias 2A (telas até Em revisão) e 2B (revisão,
+  recontagem, decisão e encerramento pela tela — o ciclo completo) em 2026-09-16, na `main` e fora de PROD
+  (INVENTORY-PHYSICAL-COUNT-01); Fatia 3 (FO-01 de sessão e CSV) aberta, e INVENTORY-CONFIRMATION-AFTER-DECISION-01
+  esperando o PO;
 - **Painel Gerencial:** entregue em 2026-09-15 — BILLED-VALUE-CANONICAL-01 (valor faturado = `Billing.totalAmount` em
   Painel, R-14 e R-15) e MANAGEMENT-DASHBOARD-V1-01 (Gestão → Painel Gerencial, D1–D5); G2, G5 e o G4 residual seguem sem
   posição;
@@ -5468,6 +5469,68 @@ bloqueada pelo ADMIN, tela geral) e o caso novo no cadastro do Item em `forneced
 (Item × Fornecedor, criação no contexto, filtros e listas, polimento, endurecimento e guardas de ajuda), 18 arquivos e
 543 testes. Typecheck de shared, API e web. Sem suíte completa, E2E, Playwright, mutação nem Railway.
 
+## Inventário Físico: revisar, decidir e encerrar pela tela (INVENTORY-PHYSICAL-COUNT-01, Fatia 2B, 2026-09-16)
+
+Fecha o ciclo operacional pela tela: contar → Em revisão → recontar → decidir → encerrar → ajustes de estoque. Regras
+duráveis em §16 ("review and completion screens"). **Sem migration**; na `main` e fora de PROD (`release/prod` segue
+`5b7c1a3`). Decisões do PO da rodada: movimentos da posição só em leitura; aba Contagens rápidas com o resultado; **sem
+endpoint de pré-checagem do encerramento** — a tela tenta encerrar e mostra a recusa; Contagem rápida detecta retenção
+antes de expor saldo; `INV-` com link em Movimentações; dos filtros extras, local primeiro, e situação/validade por serem
+simples; só a última decisão e a última recontagem ficam gravadas (histórico completo, não agora).
+
+**API (só acréscimos).** `GET /stock-counts/:id/positions/:positionId/movements`: movimentos do ledger da posição depois
+da referência (mesma janela e recorte da marca "com movimentação", sem ajuste de inventário, até o fim da sessão), cada
+um com `afterCount` e `retroactive` (lançado depois da contagem que vale, ocorrido antes dela); cego até a revelação;
+até 200, com `total`. `POST /stock-counts/:id/complete` aceita `expectedAdjustments` (posição + registro que vale): com a
+sessão travada, se os ajustes que seriam aplicados não são os mostrados, 409 `stock_count_changed` e nada gravado — o
+diálogo explica a consequência real, e é ela que se aplica. Sem o campo, o contrato da Fatia 1 segue. `quickResult` no
+resumo (lista e detalhe) da Contagem rápida: item, lote, dono, contado, sistema, diferença, ajuste e autor.
+`InventoryMovementDTO` ganhou `stockCountId`/`stockCountCode` pela FK 1:1 da posição (legado sem documento fica `null`);
+o R-03 aponta o `INV-` como documento (`documentKind: STOCK_COUNT`) e o CSV de Movimentações ganhou a coluna
+"Inventário". Escopo com filtros de lote — `locationContains`, `lotStatuses`, `expiry` (`EXPIRED`, `NOT_EXPIRED`,
+`EXPIRING` + `expiringWithinDays` de 1 a 3.650, na régua de `isLotExpired`) —, que tiram a posição de item sem lote.
+
+**Telas.** **Revisão** (detalhe em Em revisão, `RevisaoDoInventario`): recortes com quantidade — divergentes, com
+movimentação, recontagem pedida, decididas, conferem, sem contagem, retiradas, recusadas no encerramento —; referência,
+esperado, contagem (com a rodada), diferença, situação, última decisão e recontagem; histórico por posição com os
+registros e os movimentos depois do início. Seleção caixa a caixa pelo id (recontagem pedida não se seleciona; "confere"
+só recontável) e barra fixa com Pedir recontagem, Ajustar e Não ajustar. **Recontagem** pela rota existente: a posição
+volta a "Contar pendentes" e a tela de contagem (`view=counting`) a mostra sem a contagem anterior nem saldo na cega.
+**Decisão**: Ajustar/Não ajustar na mesma janela, motivo obrigatório (3 a 500, um para o lote), o ajuste de cada
+diferença; divergência com movimentação ainda na primeira rodada exige a confirmação marcada à mão naquela posição,
+depois de ver os movimentos — a tela nunca a envia sozinha; recontada, não pede. **Encerrar**: relê a revisão e mostra
+entradas, saídas, itens, lotes, somas POR UNIDADE em `Decimal` do shared (nunca kg + un), Não ajustar, conferem e
+ocorrências, e o que já sabe que vai ser recusado; confirma com os ajustes mostrados. **Recusa**
+(`stock_count_close_blocked`): "nada foi gravado", cada posição com item/lote, saldo agora, ajuste, reservado e motivo,
+e a ação que resolve — Contar, Recontar, Redecidir (abre a decisão daquela posição) — e Voltar à revisão no recorte das
+recusadas; `stock_count_changed` trava o confirmar até atualizar o resumo. **390px**: revisão em cartões, diálogos da
+revisão em tela cheia com ações fixas no rodapé, sem rolagem lateral (CSS; a contagem 2A não mudou). **Contagem
+rápida**: posições do item pela prévia em modo com saldo — a posição retida num inventário aberto volta sem saldo e a
+tela aponta o `INV-` antes de mostrar saldo nenhum; lote com dono, situação, validade, local e saldo; confirmar manda
+`expectedSystemQuantity`; saldo que mudou e posição retida no confirmar não ajustam nada e pedem reler; diferença em
+`Decimal`; resultado com o `INV-`; chamada em `stock-counts-api` com o corpo da recusa (`createStockCount` saiu de
+`inventory-api`). **Lista**: aba Contagens rápidas com INV-, data, item, lote, proprietário, contado, sistema, diferença,
+ajuste e autor. **Movimentações**: `OrigemDoMovimento` com o `INV-` em link (o extrato segue somente leitura); R-03 com
+link para o inventário. **Novo inventário**: seção "Filtros de lote" (local contém, situação, validade com dias pela
+leitura pt-BR).
+
+**Achado registrado, não corrigido.** INVENTORY-CONFIRMATION-AFTER-DECISION-01 (BACKLOG, P2, decisão do PO): a
+confirmação de movimentação fica valendo para movimentos lançados depois da decisão, e a recontagem dispensa a
+confirmação para os lançados depois dela — regra de domínio da Fatia 1, que toca quantidade.
+
+**Validação.** API: `stock-count-telas-2b.test.ts` (5 casos: movimentos da posição cegos antes da revelação e, depois, o
+consumo antes da contagem e o retroativo depois dela, só da posição; 404 com código; encerramento com ajustes que não são
+os mostrados recusado sem gravar e com a posição retida, com registro trocado também, e com o conjunto certo encerrando e
+o `INV-` na lista, no R-03 e no CSV; `quickResult` na lista e no detalhe; filtros de lote com o dia da validade inteiro,
+validação de `EXPIRING` e retrato no início); com o módulo de estoque, relatórios, exportações e a guarda de paginação,
+15 arquivos e 891 testes depois do rebase sobre `4d1178c`. Web: `revisao-do-inventario.test.tsx` (11 casos),
+`contagem-rapida.test.tsx` (6), `movimentacoes-origem-inventario.test.tsx` (1) e casos novos em contagem (recontagem
+cega), lista (aba Contagens rápidas) e novo inventário (filtros de lote); testes da 2A ajustados ao que a revisão passou
+a ser (texto de Em revisão e duas colunas com o mesmo saldo), a guarda de alterações não salvas e a busca de itens
+movidas para a prévia; com os vizinhos (relatórios, listas, ajuda, UX operacional, guarda do campo numérico — que pegou
+um `parseInt` meu, trocado pela leitura pt-BR), 29 arquivos e 565 testes depois do rebase. Typecheck de shared, API e
+web. Sem suíte completa, E2E, Playwright, mutação, conferência visual em navegador nem Railway.
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a
@@ -5476,7 +5539,7 @@ homologação com a Veridi. **Publicado em PROD no mesmo dia** (HOMOLOGATION-REL
 (FORMULATION-TEMPLATE-TECHNICAL-SHEET-PDF-01) e espera a próxima decisão de publicação do PO.
 
 **A ordem vive na fila viva do [`BACKLOG.md`](BACKLOG.md)**, reconciliada em 2026-09-15: WAVE 4; Inventário Físico em
-fatias (a próxima é a Fatia 2B, revisão e encerramento pela tela); decisões de permissões da Produção; WAVE 5; estabilização final. Os parágrafos
+fatias (a próxima é a Fatia 3, FO-01 de sessão e CSV); decisões de permissões da Produção; WAVE 5; estabilização final. Os parágrafos
 abaixo registram como cada assunto chegou até aqui.
 
 **BILLED-VALUE-CANONICAL-01 fechado em 2026-09-15** (§30), o primeiro da fila: com a decisão D1 do PO,
@@ -5488,7 +5551,9 @@ lê o faturado por essas funções.
 
 **INVENTORY-PHYSICAL-COUNT-01 — Fatia 1 entregue em 2026-09-15** (§16, seção própria acima): sessões de inventário no
 domínio e na API, e a Contagem rápida gravando `INV-` QUICK. **Fatia 2A entregue em 2026-09-16** (seção própria acima):
-as telas contam até Em revisão. Próxima do assunto: Fatia 2B (revisão, decisão e encerramento pela tela).
+as telas contam até Em revisão. **Fatia 2B entregue no mesmo dia** (seção própria acima): revisão, recontagem, decisão e
+encerramento pela tela, Contagem rápida pela prévia e `INV-` em Movimentações — o ciclo operacional completo. Próxima do
+assunto: Fatia 3 (FO-01 de sessão e CSV).
 
 **PRICING-TEMPLATE-FLEX-01 fechado em 2026-09-11** (§84). Os três achados fecharam:
 PRICING-MODEL-DIFF-01 e PRICING-ACTIVATE-CONFIRM-01 em COST-PRICING-CLARITY-WAVE-01, e
