@@ -127,6 +127,7 @@ import {
   InventoryPositionReportPage,
   MovementsReportPage,
 } from "./pages/reports/InventoryReports";
+import { InternalConsumptionReportPage } from "./pages/reports/InternalConsumptionReport";
 import {
   ConsumptionReportPage,
   PlannedActualReportPage,
@@ -375,6 +376,7 @@ const router = createBrowserRouter(
         <Route path="/relatorios/estoque/posicao" element={<InventoryPositionReportPage />} />
         <Route path="/relatorios/estoque/vencimentos" element={<ExpiryReportPage />} />
         <Route path="/relatorios/estoque/movimentacoes" element={<MovementsReportPage />} />
+        <Route path="/relatorios/estoque/uso-e-consumo" element={<InternalConsumptionReportPage />} />
         <Route path="/relatorios/producao/necessidades" element={<RequirementsReportPage />} />
         <Route path="/relatorios/producao/planejado-realizado" element={<PlannedActualReportPage />} />
         <Route path="/relatorios/producao/rastreabilidade" element={<ProductionTraceabilityReportPage />} />

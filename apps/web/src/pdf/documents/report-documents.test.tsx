@@ -164,6 +164,10 @@ const CABECALHOS: Record<string, string[]> = {
     "Qualidade do custo do cálculo", "Custo do cálculo/un", "Custo p/ preço/un", "Margem de contribuição (%)",
     "Enviado em", "Aceito em",
   ],
+  "R-21": [
+    "Data", "Consumo", "Item", "Descrição", "Lote", "Quantidade", "Unidade", "Destino/uso", "Custo unitário",
+    "Custo total", "Origem do custo", "Usuário", "Observação",
+  ],
 };
 
 /** Filtros como a tela os manda para a rota de impressão. */
@@ -224,6 +228,12 @@ function amostra(codigo: string, coluna: string, indice: number): string {
     case "Recebimento":
     case "Documento":
       return `REC-${n}`;
+    case "Consumo":
+      return `CI-${n}`;
+    case "Destino/uso":
+      return desconhecido ? "" : "Almoxarifado de limpeza — reposição semanal";
+    case "Observação":
+      return desconhecido ? "" : "Retirada para a limpeza da área de envase";
     case "Expedição":
       return `EXP-${n}`;
     case "Faturamento":
@@ -333,6 +343,7 @@ function amostra(codigo: string, coluna: string, indice: number): string {
     case "Custo material unitário":
     case "Custo unitário":
     case "Custo do consumo":
+    case "Custo total":
     case "Valor previsto":
     case "Preço previsto (OC)":
     case "Custo efetivo":

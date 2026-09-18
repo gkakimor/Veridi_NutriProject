@@ -32,6 +32,21 @@
   color: var(--ink-2);
 }
 
+/* O que um total parcial não contém, na mesma caixa dele (R-21). */
+.report-summary__note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+/* R-21 — resumos por item e por destino, lado a lado quando cabem. */
+.report-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--sp-4);
+}
+
 .report-summary__value {
   font-size: var(--fs-lg);
   font-variant-numeric: tabular-nums;

@@ -6,6 +6,8 @@ import type {
   CustomerOrderReportRowDTO,
   ExpiryRowDTO,
   FulfillmentRowDTO,
+  InternalConsumptionReportDTO,
+  InternalConsumptionReportFilterOptionsDTO,
   InventoryPositionRowDTO,
   LatePurchaseOrderRowDTO,
   MovementReportRowDTO,
@@ -51,6 +53,13 @@ export const getExpiryReport = (filters: ReportFilters) =>
   fetchReport<ReportPageDTO<ExpiryRowDTO>>("inventory/expiry", filters);
 export const getMovementsReport = (filters: ReportFilters) =>
   fetchReport<ReportPageDTO<MovementReportRowDTO>>("inventory/movements", filters);
+
+/* Uso e consumo (R-21) */
+export const getInternalConsumptionReport = (filters: ReportFilters) =>
+  fetchReport<InternalConsumptionReportDTO>("inventory/internal-consumption", filters);
+/** Destinos já escritos e quem já registrou — as opções dos dois seletores do R-21. */
+export const getInternalConsumptionReportFilterOptions = () =>
+  fetchReport<InternalConsumptionReportFilterOptionsDTO>("inventory/internal-consumption/filter-options", {});
 
 /* Produção */
 export const getRequirementsReport = (filters: ReportFilters) =>

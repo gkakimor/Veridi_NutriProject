@@ -36,6 +36,7 @@ const MATRIZ: [string, string, [string, string], string][] = [
   ["R-18", "active=false", ["Produto ativo", "Não"], "status=SENT"],
   ["R-19", "search=PROD-000123", ["Busca", "PROD-000123"], "active=true"],
   ["R-20", "priceSource=PRICING_TIER", ["Origem do preço", "Faixa de precificação"], "itemId=item-1"],
+  ["R-21", "hasCost=false", ["Custo", "Custo não disponível"], "customerId=cli-1"],
 ];
 
 describe("filtros aplicados no PDF: só o contrato de cada relatório", () => {

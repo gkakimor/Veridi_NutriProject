@@ -139,6 +139,8 @@ const ROTAS_ANTES_DA_MIGRACAO = [
   "/relatorios/custos/industrial-por-produto",
   "/relatorios/custos/precificacao-por-produto",
   "/relatorios/estoque/movimentacoes",
+  // INTERNAL-CONSUMPTION-REPORT-01: o relatório gerencial de Uso e consumo (R-21).
+  "/relatorios/estoque/uso-e-consumo",
   "/relatorios/estoque/posicao",
   "/relatorios/estoque/vencimentos",
   "/relatorios/faturamento/pedido-entregue-faturado",

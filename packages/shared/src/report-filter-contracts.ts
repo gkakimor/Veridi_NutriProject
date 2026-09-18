@@ -97,6 +97,10 @@ export const REPORT_FILTER_CONTRACTS = {
     csvPath: "/reports/commercial/quote-pricing/export.csv",
     filterKeys: ["search", "customerId", "priceSource", "status", "from", "to"],
   },
+  "R-21": {
+    csvPath: "/reports/inventory/internal-consumption/export.csv",
+    filterKeys: ["search", "itemId", "purpose", "registeredByUserId", "costSource", "hasCost", "from", "to"],
+  },
 } as const satisfies Readonly<Record<string, ReportFilterContract>>;
 
 export type ReportFilterContractCode = keyof typeof REPORT_FILTER_CONTRACTS;

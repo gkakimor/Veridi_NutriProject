@@ -5,6 +5,7 @@ import type {
   CustomerOrderReportRowDTO,
   ExpiryRowDTO,
   FulfillmentRowDTO,
+  InternalConsumptionDTO,
   InventoryPositionRowDTO,
   LatePurchaseOrderRowDTO,
   MovementReportRowDTO,
@@ -27,7 +28,16 @@ import {
   PRODUCTION_ORDER_STATUS_LABELS,
   PURCHASE_ORDER_STATUS_LABELS,
 } from "@veridi/shared";
-import { csvCode, csvDate, csvDateTime, csvDecimal, csvMoney, csvText, csvUnitPrice } from "../../lib/csv.js";
+import {
+  csvCode,
+  csvDate,
+  csvDateTime,
+  csvDecimal,
+  csvEventDate,
+  csvMoney,
+  csvText,
+  csvUnitPrice,
+} from "../../lib/csv.js";
 import { marcadorDoDiaCivil } from "../../lib/business-day.js";
 import { ALL_ROWS } from "../../lib/pagination.js";
 import {
@@ -35,6 +45,7 @@ import {
   getInventoryPosition,
   getMovementsReport,
 } from "../reports/inventory-reports.service.js";
+import { getInternalConsumptionReport } from "../reports/internal-consumption-report.service.js";
 import {
   getConsumptionReport,
   getPlannedActualReport,
@@ -62,6 +73,7 @@ import type {
   CustomerOrdersQuery,
   ExpiryQuery,
   FulfillmentQuery,
+  InternalConsumptionReportQuery,
   InventoryPositionQuery,
   MovementsQuery,
   OnOrderQuery,
@@ -77,6 +89,7 @@ import {
   customerOrdersQuerySchema,
   expiryQuerySchema,
   fulfillmentQuerySchema,
+  internalConsumptionReportQuerySchema,
   inventoryPositionQuerySchema,
   movementsQuerySchema,
   onOrderQuerySchema,
@@ -661,6 +674,37 @@ const r20 = defineCsvExport({
   ],
 });
 
+/**
+ * R-21 — Uso e consumo. Os snapshots do `CI-`, como foram gravados: custo
+ * unitário e total com as casas do registro (`csvDecimal`), para a soma da
+ * coluna na planilha bater com o "Valor total conhecido" da tela ao centavo.
+ * Custo desconhecido é célula VAZIA, com "Sem custo" na origem — nunca 0.
+ */
+const r21 = defineCsvExport({
+  path: "/reports/inventory/internal-consumption/export.csv",
+  slug: "r21_uso_e_consumo",
+  schema: internalConsumptionReportQuerySchema,
+  fetch: async (query: InternalConsumptionReportQuery) =>
+    (await getInternalConsumptionReport(query, ALL_ROWS)).rows,
+  period,
+  columns: [
+    // Instante do consumo: o dia é o da operação, não o do UTC.
+    { header: "Data", value: (row: InternalConsumptionDTO) => csvEventDate(row.occurredAt) },
+    { header: "Consumo", value: (row: InternalConsumptionDTO) => csvCode(row.code) },
+    { header: "Item", value: (row: InternalConsumptionDTO) => csvCode(row.itemCode) },
+    { header: "Descrição", value: (row: InternalConsumptionDTO) => csvText(row.itemName) },
+    { header: "Lote", value: (row: InternalConsumptionDTO) => csvCode(row.lotCode) },
+    { header: "Quantidade", value: (row: InternalConsumptionDTO) => csvDecimal(row.quantity) },
+    { header: "Unidade", value: (row: InternalConsumptionDTO) => csvText(row.uomCode) },
+    { header: "Destino/uso", value: (row: InternalConsumptionDTO) => csvText(row.purpose) },
+    { header: "Custo unitário", value: (row: InternalConsumptionDTO) => csvDecimal(row.unitCost) },
+    { header: "Custo total", value: (row: InternalConsumptionDTO) => csvDecimal(row.totalCost) },
+    { header: "Origem do custo", value: (row: InternalConsumptionDTO) => COST_SOURCE_LABELS[row.costSource] },
+    { header: "Usuário", value: (row: InternalConsumptionDTO) => csvText(row.registeredByName) },
+    { header: "Observação", value: (row: InternalConsumptionDTO) => csvText(row.notes) },
+  ],
+});
+
 export const reportCsvExports: CsvExportRoute[] = [
   r01,
   r02,
@@ -680,4 +724,5 @@ export const reportCsvExports: CsvExportRoute[] = [
   r18,
   r19,
   r20,
+  r21,
 ];

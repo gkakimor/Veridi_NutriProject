@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { CostSource } from "@veridi/shared";
+import { COST_SOURCE_LABELS } from "@veridi/shared";
 import { booleanoDeConsultaSchema } from "../../lib/boolean-schema.js";
 import { itemTypeSchema } from "../items/items.schemas.js";
 import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
@@ -80,6 +82,29 @@ export const expiryQuerySchema = z
     // As pontas só são filtro na janela personalizada; nas prontas nem se leem.
     if (query.window === "CUSTOM") recusarPeriodoDoRelatorioInvertido(query, ctx);
   });
+
+/**
+ * R-21 — Uso e consumo (INTERNAL-CONSUMPTION-REPORT-01).
+ *
+ * - `purpose`: destino EXATO, como foi gravado. A tela oferece os destinos que
+ *   existem (`/filter-options`), e o resumo por destino agrupa pelo mesmo
+ *   texto — filtro e agrupamento com a mesma identidade;
+ * - `costSource`: as mesmas origens que a tela oferece, pelo mapa de rótulos;
+ * - `hasCost`: ausente = todos; `true` = só custo conhecido; `false` = só
+ *   "Custo não disponível".
+ */
+export const internalConsumptionReportQuerySchema = z
+  .object({
+    search: z.string().trim().min(1).optional(),
+    itemId: z.string().trim().min(1).optional(),
+    purpose: z.string().trim().min(1).optional(),
+    registeredByUserId: z.string().trim().min(1).optional(),
+    costSource: z.enum(Object.keys(COST_SOURCE_LABELS) as [CostSource, ...CostSource[]]).optional(),
+    hasCost: booleanoDeConsultaSchema().optional(),
+    ...periodFields,
+    ...paginationFields,
+  })
+  .superRefine(recusarPeriodoDoRelatorioInvertido);
 
 export const movementsQuerySchema = z
   .object({
@@ -219,6 +244,7 @@ export const awaitingBillingQuerySchema = z.object({
 export type InventoryPositionQuery = z.infer<typeof inventoryPositionQuerySchema>;
 export type ExpiryQuery = z.infer<typeof expiryQuerySchema>;
 export type MovementsQuery = z.infer<typeof movementsQuerySchema>;
+export type InternalConsumptionReportQuery = z.infer<typeof internalConsumptionReportQuerySchema>;
 export type RequirementsQuery = z.infer<typeof requirementsQuerySchema>;
 export type PlannedActualQuery = z.infer<typeof plannedActualQuerySchema>;
 export type ProductionTraceabilityQuery = z.infer<typeof productionTraceabilityQuerySchema>;

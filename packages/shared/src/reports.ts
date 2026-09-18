@@ -18,6 +18,7 @@ import type { PricingModelConfig } from "./pricing-model.js";
 import type { QuotePriceSource, QuoteStatus } from "./projects.js";
 import type { BillingStatus, CustomerOrderBillingStatus } from "./billings.js";
 import type { CustomerOrderStatus } from "./customer-orders.js";
+import type { InternalConsumptionDTO } from "./internal-consumption.js";
 import type { InventoryMovementSourceType, InventoryMovementType } from "./inventory.js";
 import type { ItemType } from "./items.js";
 import type { InventoryOwnerType, SupplyResponsibility } from "./ownership.js";
@@ -645,4 +646,76 @@ export interface QuotePricingAuditRowDTO {
   contributionMarginPercent: string | null;
   sentAt: string | null;
   acceptedAt: string | null;
+}
+
+/* ─────────────── R-21 Uso e consumo ─────────────── */
+
+/**
+ * Relatório gerencial do consumo interno (INTERNAL-CONSUMPTION-REPORT-01,
+ * Fatia 3 de Uso e consumo).
+ *
+ * Tudo sai dos SNAPSHOTS gravados em cada `CI-`: o custo do dia do consumo,
+ * nunca o de hoje. Uma compra posterior não reescreve a despesa que já
+ * aconteceu, e o relatório histórico não recalcula nada.
+ *
+ * A linha é o próprio `InternalConsumptionDTO` — o mesmo mapeamento do
+ * histórico operacional, sem segunda leitura do registro.
+ */
+export interface InternalConsumptionReportSummaryDTO {
+  /** Consumos do recorte inteiro, não da página. */
+  consumptionCount: number;
+  /** Consumos com custo conhecido — os únicos que entram no valor. */
+  knownCostCount: number;
+  /** Consumos sem custo (`totalCost` nulo). Nunca somados como zero. */
+  missingCostCount: number;
+  /**
+   * Soma dos custos CONHECIDOS. `null` quando nenhum consumo do recorte tem
+   * custo — ausência não vira R$ 0,00. `"0"` só quando os custos conhecidos
+   * somam zero de verdade.
+   */
+  knownCostTotal: string | null;
+  distinctItemCount: number;
+}
+
+/** Resumo por Item — uma linha por item e unidade gravada no consumo. */
+export interface InternalConsumptionReportItemGroupDTO {
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  /** A unidade do snapshot; quantidade só soma dentro da mesma unidade. */
+  uomCode: string;
+  consumptionCount: number;
+  quantity: string;
+  /** Soma dos custos conhecidos do item; `null` quando nenhum tem custo. */
+  knownCostTotal: string | null;
+  missingCostCount: number;
+}
+
+/**
+ * Resumo por Destino/uso. O destino é texto livre: o agrupamento é pelo texto
+ * gravado, exatamente como foi escrito — "Escritório" e "escritório" são duas
+ * linhas até existir o Centro de Custo (INTERNAL-CONSUMPTION-COST-CENTER-01).
+ */
+export interface InternalConsumptionReportPurposeGroupDTO {
+  /** `null` = consumo registrado sem destino. */
+  purpose: string | null;
+  consumptionCount: number;
+  knownCostTotal: string | null;
+  missingCostCount: number;
+}
+
+export interface InternalConsumptionReportDTO extends ReportPageDTO<InternalConsumptionDTO> {
+  summary: InternalConsumptionReportSummaryDTO;
+  /** Do recorte inteiro, maior valor conhecido primeiro. */
+  byItem: InternalConsumptionReportItemGroupDTO[];
+  byPurpose: InternalConsumptionReportPurposeGroupDTO[];
+}
+
+/**
+ * Opções dos filtros de Destino/uso e Usuário, tiradas dos próprios
+ * consumos: só destino que já foi escrito e só quem já registrou.
+ */
+export interface InternalConsumptionReportFilterOptionsDTO {
+  purposes: string[];
+  users: { id: string; name: string }[];
 }
