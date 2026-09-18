@@ -1,4 +1,9 @@
-import type { DecisaoDeDuplicata } from "./item-duplicates.js";
+import type {
+  DecisaoDeDuplicata,
+  DecisaoDeExclusaoDeAgregado,
+  DecisaoDeRenomeacao,
+  DecisaoDeRevisao,
+} from "./item-duplicates.js";
 
 /**
  * Arquivo de decisão da carga: Item duplicado absorvido → Item canônico
@@ -19,9 +24,14 @@ import type { DecisaoDeDuplicata } from "./item-duplicates.js";
  * é esse.
  *
  * Quem executa: a Onda A, `item-duplicate-sanitization.ts`; a Onda 2 (grupo de
- * mais de dois, par nomeado e consolidação no canônico),
- * `master-data-duplicate-sanitization.ts --onda=2`. As duas leem daqui, e cada
+ * mais de dois, par nomeado e consolidação no canônico) e a Onda 3,
+ * `master-data-duplicate-sanitization.ts --onda=<n>`. As duas leem daqui, e cada
  * uma recusa a onda da outra.
+ *
+ * Da Onda 3 em diante (MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-3-01) o arquivo
+ * guarda também as decisões que NÃO são fusão, nas listas do fim: renomeação
+ * por nome técnico distinto, exclusão de agregado de teste nunca usado e grupo
+ * mantido em revisão. Um código está em UMA decisão só, de uma espécie só.
  */
 export const DECISOES_DE_DUPLICATAS: readonly DecisaoDeDuplicata[] = [
   // Onda A — duplicatas inequívocas, aprovadas pelo PO em 2026-09-17.
@@ -177,5 +187,112 @@ export const DECISOES_DE_DUPLICATAS: readonly DecisaoDeDuplicata[] = [
     absorvido: { codigo: "ME-000089", codigoPlanilha: "548" },
     canonico: { codigo: "ME-000021", codigoPlanilha: "437" },
     nomeDoAbsorvido: "SACHÊ SÍLICA GEL 5G",
+  },
+  // Onda 3 — aprovada pelo PO em 2026-09-17 (MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-3-01).
+  // G4: duplicado verdadeiro. Nenhum dos dois tem uso físico, Formulação, compra, estoque
+  // nem histórico que diferencie material; o MP-000475 é o único com fornecedor e oferta
+  // (APLINOVA). Consolida só o nutriente, canônico primeiro; forma física nenhuma é
+  // inventada — o nome continua sem "pó" nem "líquido".
+  {
+    onda: "3",
+    grupo: "G4",
+    nome: "Concentrado de maçã",
+    absorvido: { codigo: "MP-000149", codigoPlanilha: "149" },
+    canonico: { codigo: "MP-000475", codigoPlanilha: "581" },
+    consolidar: { declaredNutrient: "Açúcar de maçã · Carboidrato" },
+  },
+];
+
+/**
+ * Onda 3 — mesmo nome, material diferente (§114): cada registro ganha um nome
+ * técnico distinto, e nada mais muda — código, fornecedores, ofertas, histórico,
+ * `declaredNutrient` e Formulações ficam onde estão. `de` é o nome exato de hoje:
+ * a ferramenta recusa se ele já não for o gravado.
+ */
+export const RENOMEACOES_DE_ITEM: readonly DecisaoDeRenomeacao[] = [
+  {
+    onda: "3",
+    grupo: "G7",
+    cadastro: "ITEM",
+    nome: "Extrato de polpa de oliva (Olea europaea L.)",
+    renomear: [
+      {
+        codigo: "MP-000320",
+        codigoPlanilha: "321",
+        de: "Extrato de polpa de oliva (Olea europaea L.)",
+        para: "Extrato de polpa de oliva (Olea europaea L.) — Verbascosídeo",
+      },
+      {
+        codigo: "MP-000468",
+        codigoPlanilha: "574",
+        de: "Extrato de polpa de oliva (Olea europaea L.)",
+        para: "Extrato de polpa de oliva (Olea europaea L.) — Hidroxitirosol",
+      },
+    ],
+    manter: [],
+    motivo:
+      "Materiais/especificações diferentes (Verbascosídeo × Hidroxitirosol): nome técnico distinto resolve a colisão (§114). Decisão do PO, Onda 3.",
+  },
+  {
+    onda: "3",
+    grupo: "G13",
+    cadastro: "ITEM",
+    nome: "Guaraná em pó soluvel",
+    renomear: [
+      { codigo: "MP-000393", codigoPlanilha: "409", de: "Guaraná em pó soluvel", para: "Extrato de guaraná 22%" },
+    ],
+    // O MP-000486 fica com o nome gravado hoje, sem mudança nenhuma.
+    manter: [{ codigo: "MP-000486", codigoPlanilha: "594", nome: "Guaraná em pó soluvel" }],
+    motivo:
+      "Materiais diferentes: o MP-000393 é o extrato declarado a 22% (nutriente \"EXT GUARANÁ 22%\", pureza 22); o MP-000486 mantém o nome. Nome técnico distinto resolve a colisão (§114). Decisão do PO, Onda 3.",
+  },
+];
+
+/**
+ * Onda 3 — cadastros de teste nunca usados. Sai o agregado inteiro: o Modelo e a
+ * V1 DRAFT que nasceu com ele. O buraco nos códigos é aceito, e a sequence não volta.
+ */
+export const EXCLUSOES_DE_AGREGADO: readonly DecisaoDeExclusaoDeAgregado[] = [
+  {
+    onda: "3",
+    grupo: "MODELO-X",
+    cadastro: "FORMULATION_TEMPLATE",
+    nome: "X",
+    excluir: [{ codigo: "FT-000001" }, { codigo: "FT-000002" }],
+    motivo:
+      "Cadastro de teste nunca usado: só a V1 DRAFT, sem componente, sem Formulação derivada nem referência. Decisão do PO: excluir os dois (Onda 3); buraco nos códigos aceito, sequence não volta.",
+  },
+];
+
+/**
+ * Onda 3 — continuam em revisão: dependem da Veridi. Aparecem no PLAN como
+ * BLOCKED e nada neles é tocado. A resposta NÃO se infere: o significado de `*`
+ * e `**` e o teor de cada material vêm da Veridi.
+ */
+export const GRUPOS_EM_REVISAO: readonly DecisaoDeRevisao[] = [
+  {
+    onda: "3",
+    grupo: "G6",
+    cadastro: "ITEM",
+    nome: "Extrato de café verde",
+    codigos: ["MP-000325", "MP-000348"],
+    motivo: "Decisão do PO (Onda 3): continua em revisão — depende da Veridi. Não fundir, não renomear, não tocar.",
+    perguntas: [
+      'O que significam "*" e "**" nos nutrientes? (MP-000348 declara "Clorogênico**"; MP-000325, "Clorogênico")',
+      "Qual o teor real de ácido clorogênico de cada código de Extrato de café verde (MP-000325 e MP-000348)?",
+      "As cotações FLORIEN R$160/kg (pedido mínimo 1 kg) e R$650/kg (pedido mínimo 100 g) representam a mesma especificação/material?",
+      "Por que o código legado 349 (MP-000348) aparece nas fórmulas antigas com teor aplicado de 8%, 45% e 50%?",
+    ],
+  },
+  {
+    onda: "3",
+    grupo: "G11",
+    cadastro: "ITEM",
+    nome: "Fosfato de piridoxal",
+    codigos: ["MP-000014", "MP-000022"],
+    motivo: "Decisão do PO (Onda 3): continua em revisão — depende da Veridi. Não fundir, não renomear, não tocar.",
+    perguntas: [
+      'O que significam "*" e "**" nos nutrientes? (MP-000022 declara "Vitamina B6*"; MP-000014, "Vitamina B6")',
+    ],
   },
 ];

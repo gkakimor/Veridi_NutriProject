@@ -4,9 +4,25 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { descreverDestino, exigirBancoLocal } from "../local-db-guard.mjs";
-import { DECISOES_DE_DUPLICATAS } from "../veridi-import/item-duplicate-decisions.js";
-import { decisoesDaOnda, gruposDaOnda, impressaoDasDecisoes } from "../veridi-import/item-duplicates.js";
-import type { DecisaoDeDuplicata, GrupoDeDecisao } from "../veridi-import/item-duplicates.js";
+import {
+  CONJUNTO_DO_ARQUIVO,
+  cadastrosDaOnda,
+  conjuntoDaOnda,
+  conjuntoDeFusoes,
+  gruposDeFusao,
+  impressaoDaOnda,
+  decisaoDoCodigo,
+  nomeNormalizado,
+} from "../veridi-import/item-duplicates.js";
+import type {
+  ConjuntoDeDecisoes,
+  DecisaoDeDuplicata,
+  DecisaoDeExclusaoDeAgregado,
+  DecisaoDeRenomeacao,
+  DecisaoDeRevisao,
+  DecisaoDoCodigo,
+  GrupoDeDecisao,
+} from "../veridi-import/item-duplicates.js";
 import { avaliarRelacao, executarRelacao, lerRelacoes } from "./item-duplicate-sanitization.js";
 import type { OperacaoDeRelacao } from "./item-duplicate-sanitization.js";
 import {
@@ -147,9 +163,56 @@ export interface RelacaoPlanejada {
   operacao: OperacaoDeRelacao;
 }
 
+/**
+ * O que o grupo faz (Onda 3 em diante). Plano sem o campo — modo automático e
+ * planos gravados antes — é fusão.
+ *
+ *  - `MERGE` — o canônico absorve os duplicados (§110, §118);
+ *  - `RENAME` — mesmo nome, material diferente: nome técnico distinto, nada movido (§114);
+ *  - `DELETE_UNUSED_AGGREGATE` — cadastro de teste nunca usado sai inteiro;
+ *  - `BLOCKED` — o PO mantém o grupo em revisão: aparece, e nada nele é tocado.
+ */
+export type AcaoDoGrupo = "MERGE" | "RENAME" | "DELETE_UNUSED_AGGREGATE" | "BLOCKED";
+
+export const acaoDoGrupo = (grupo: Pick<GrupoPlanejado, "acao">): AcaoDoGrupo => grupo.acao ?? "MERGE";
+
+/** Um registro que muda de nome: o de ANTES exato, o novo e o que aponta para ele (nada se move). */
+export interface RenomeacaoPlanejada {
+  id: string;
+  codigo: string;
+  de: string;
+  para: string;
+  referencias: ReferenciaContada[];
+}
+
+/** Registro do grupo de renomeação que fica com o nome de hoje, sem mudança nenhuma. */
+export interface RegistroMantido {
+  id: string;
+  codigo: string;
+  nome: string;
+  referencias: ReferenciaContada[];
+}
+
+/** Uma linha que nasceu junto com o agregado e sai com ele (a V1 DRAFT do Modelo). */
+export interface LinhaInterna {
+  tabela: string;
+  id: string;
+  /** Código do registro dono do agregado. */
+  dono: string;
+  descricao: string;
+}
+
+/** O agregado que sai inteiro: os registros e as linhas internas, e só elas. */
+export interface ExclusaoPlanejada {
+  registros: { id: string; codigo: string; nome: string; criadoEm: string | null }[];
+  internos: LinhaInterna[];
+}
+
 export interface GrupoPlanejado {
   /** `ITEM/ARABINOGALACTANA` — estável entre execuções. */
   grupo: string;
+  /** Ausente: `MERGE` (modo automático e planos anteriores à Onda 3). */
+  acao?: AcaoDoGrupo | undefined;
   cadastro: string;
   rotulo: string;
   chaveDoNome: string;
@@ -175,6 +238,16 @@ export interface GrupoPlanejado {
   atualizacoes?: AtualizacaoDoCanonico[] | undefined;
   /** Relações Item × Fornecedor dos absorvidos: movidas ou consolidadas. */
   relacoes?: RelacaoPlanejada[] | undefined;
+  /** `RENAME`: quem muda de nome, de quê para quê. */
+  renomeacoes?: RenomeacaoPlanejada[] | undefined;
+  /** `RENAME`: quem fica com o nome de hoje. */
+  mantidos?: RegistroMantido[] | undefined;
+  /** `DELETE_UNUSED_AGGREGATE`: o agregado inteiro que sai. */
+  exclusao?: ExclusaoPlanejada | undefined;
+  /** O porquê escrito na decisão do PO (renomeação, exclusão, revisão). */
+  motivoDaDecisao?: string | undefined;
+  /** `BLOCKED`: o que a Veridi precisa responder para destravar o grupo. */
+  perguntas?: string[] | undefined;
 }
 
 export interface Plano {
@@ -375,16 +448,12 @@ async function colisoesDoMovimento(
  * ------------------------------------------------------------------ */
 
 /**
- * Códigos de Item que o arquivo de decisão já decidiu, com a onda de cada um.
- * A regra automática não os toca: quem executa é a decisão — a Onda A pela
- * ferramenta de Item, da Onda 2 em diante por esta, com `--onda`.
+ * Códigos que o arquivo de decisão já decidiu — de qualquer espécie: fusão,
+ * renomeação, exclusão de agregado ou revisão —, com a onda de cada um. A regra
+ * automática não os toca: quem executa é a decisão — a Onda A pela ferramenta
+ * de Item, da Onda 2 em diante por esta, com `--onda`.
  */
-const ONDA_DO_CODIGO_DECIDIDO = new Map(
-  DECISOES_DE_DUPLICATAS.flatMap((d) => [
-    [d.absorvido.codigo, d.onda] as const,
-    [d.canonico.codigo, d.onda] as const,
-  ]),
-);
+const DECISAO_DO_CODIGO = decisaoDoCodigo(CONJUNTO_DO_ARQUIVO);
 
 const ferramentaDaOnda = (onda: string): string =>
   onda === "A" ? "item-duplicate-sanitization.ts" : "master-data-duplicate-sanitization.ts";
@@ -518,16 +587,19 @@ async function planejarGrupo(
     }
   }
 
-  if (cadastro.chave === "ITEM") {
-    const decididos = registros
-      .map((r) => [r.codigo, ONDA_DO_CODIGO_DECIDIDO.get(r.codigo)] as const)
-      .filter((par): par is readonly [string, string] => par[1] !== undefined);
-    for (const onda of [...new Set(decididos.map(([, o]) => o))]) {
-      const codigos = decididos.filter(([, o]) => o === onda).map(([c]) => c);
-      motivos.push(
-        `${codigos.join(", ")} está no arquivo de decisão (Onda ${onda}) — quem executa é ${ferramentaDaOnda(onda)} --onda=${onda}`,
-      );
-    }
+  // Código já decidido (qualquer cadastro: o código tem prefixo próprio) não é
+  // da regra automática.
+  const decididos = registros
+    .map((r) => [r.codigo, DECISAO_DO_CODIGO.get(r.codigo)] as const)
+    .filter((par): par is readonly [string, DecisaoDoCodigo] => par[1] !== undefined);
+  for (const chave of [...new Set(decididos.map(([, d]) => JSON.stringify([d.onda, d.grupo, d.especie])))]) {
+    const [onda, grupo, especie] = JSON.parse(chave) as [string, string, string];
+    const codigos = decididos.filter(([, d]) => d.onda === onda && d.grupo === grupo).map(([c]) => c);
+    motivos.push(
+      especie === "revisão"
+        ? `${codigos.join(", ")} está em revisão por decisão do PO (Onda ${onda}, grupo ${grupo}) — depende da Veridi`
+        : `${codigos.join(", ")} está no arquivo de decisão (Onda ${onda}) — quem executa é ${ferramentaDaOnda(onda)} --onda=${onda}`,
+    );
   }
 
   const idsDoGrupo = registros.map((r) => r.id);
@@ -694,6 +766,7 @@ async function planejarGrupoDaDecisao(
         ...(extra ?? {}),
       }),
       decisao: { onda: decisao.onda, grupo: decisao.grupo },
+      acao: "MERGE",
       nomesDoGrupo: [...new Set(nomesDecididos.map((n) => n.trim().toUpperCase()))],
       atualizacoes: resto.atualizacoes ?? [],
       relacoes: resto.relacoes ?? [],
@@ -869,6 +942,514 @@ async function planejarGrupoDaDecisao(
   });
 }
 
+/* ------------------------------------------------------------------ *
+ * Onda 3 em diante: renomeação, exclusão de agregado e revisão
+ * (MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-3-01)
+ * ------------------------------------------------------------------ */
+
+/** Um registro lido por código, com o que aponta para ele. */
+async function lerRegistrosPorCodigo(
+  db: Banco,
+  cadastro: CadastroMestreNoBanco,
+  catalogo: readonly ColunaDeReferencia[],
+  codigos: readonly string[],
+): Promise<Map<string, RegistroDoGrupo & { referenciasContadas: ReferenciaContada[] }>> {
+  const lidos = new Map<string, RegistroDoGrupo & { referenciasContadas: ReferenciaContada[] }>();
+  for (const { bruto } of await db.$queryRawUnsafe<{ bruto: string }[]>(
+    `SELECT to_jsonb(x)::text AS bruto FROM ${ident(cadastro.tabela)} x
+     WHERE ${ident(cadastro.colunaCodigo)} = ANY($1::text[])
+     ORDER BY ${ident(cadastro.colunaCodigo)}`,
+    [...codigos],
+  )) {
+    const dados = JSON.parse(bruto) as Registro;
+    const id = comoTexto(dados, cadastro.colunaId)!;
+    const codigo = comoTexto(dados, cadastro.colunaCodigo)!;
+    const referenciasContadas = await contarReferencias(db, catalogo, { id, codigo });
+    lidos.set(codigo, {
+      id,
+      codigo,
+      nome: comoTexto(dados, cadastro.colunaNome) ?? "",
+      dados,
+      referencias: referenciasContadas.reduce((soma, r) => soma + r.linhas, 0),
+      tabelasQueReferenciam: new Set(referenciasContadas.map((r) => r.tabela)).size,
+      criadoEm: comoTexto(dados, "createdAt"),
+      referenciasContadas,
+    });
+  }
+  return lidos;
+}
+
+/** Códigos do cadastro com este nome (sem caixa), fora da lista. */
+async function outrosComONome(
+  db: Banco,
+  cadastro: CadastroMestreNoBanco,
+  nome: string,
+  exceto: readonly string[],
+): Promise<string[]> {
+  const linhas = await db.$queryRawUnsafe<{ codigo: string }[]>(
+    `SELECT ${ident(cadastro.colunaCodigo)} AS codigo FROM ${ident(cadastro.tabela)}
+     WHERE upper(btrim(${ident(cadastro.colunaNome)})) = upper(btrim($1))
+       AND ${ident(cadastro.colunaCodigo)} <> ALL($2::text[])
+     ORDER BY 1`,
+    nome,
+    [...exceto],
+  );
+  return linhas.map((l) => l.codigo);
+}
+
+const semLinha = (r: RegistroDoGrupo): LadoDoPlano => ({
+  id: r.id,
+  codigo: r.codigo,
+  nome: r.nome,
+  criadoEm: r.criadoEm,
+  referencias: [],
+  dados: r.dados,
+});
+
+const ladoAusente = (codigo: string, nome: string): LadoDoPlano => ({
+  id: "",
+  codigo,
+  nome,
+  criadoEm: null,
+  referencias: [],
+  dados: {},
+});
+
+/**
+ * `RENAME`: mesmo nome, material diferente (§114). O grupo sai da colisão por
+ * nome técnico distinto — e é SÓ o nome que muda: nenhuma referência se move,
+ * nenhum registro sai, nenhum outro campo é escrito.
+ *
+ * Aborta quando: um registro não existe ou está inativo; o nome gravado já não
+ * é o `de` da decisão; o código da planilha diverge; o nome destino (sem caixa)
+ * já existe em outro Item; aparece Item com o nome do grupo que a decisão não
+ * conhece; a renomeação ficou pela metade.
+ */
+async function planejarRenomeacao(
+  db: Banco,
+  cadastro: CadastroMestreNoBanco,
+  catalogo: readonly ColunaDeReferencia[],
+  decisao: DecisaoDeRenomeacao,
+): Promise<GrupoPlanejado> {
+  const motivos: string[] = [];
+  const chaveDoNome = nomeNormalizado(decisao.nome);
+  const codigos = [...decisao.renomear.map((r) => r.codigo), ...decisao.manter.map((m) => m.codigo)];
+  const lidos = await lerRegistrosPorCodigo(db, cadastro, catalogo, codigos);
+
+  const renomeacoes: RenomeacaoPlanejada[] = [];
+  const mantidos: RegistroMantido[] = [];
+  for (const r of decisao.renomear) {
+    const lido = lidos.get(r.codigo);
+    renomeacoes.push({
+      id: lido?.id ?? "",
+      codigo: r.codigo,
+      de: r.de,
+      para: r.para,
+      referencias: lido?.referenciasContadas ?? [],
+    });
+  }
+  for (const m of decisao.manter) {
+    const lido = lidos.get(m.codigo);
+    mantidos.push({ id: lido?.id ?? "", codigo: m.codigo, nome: lido?.nome ?? m.nome, referencias: lido?.referenciasContadas ?? [] });
+  }
+
+  const registros = [...lidos.values()];
+  const primeiro = registros[0];
+  const fechar = (situacao: GrupoPlanejado["situacao"]): GrupoPlanejado => ({
+    grupo: `${cadastro.chave}/${chaveDoNome}`,
+    acao: "RENAME",
+    cadastro: cadastro.chave,
+    rotulo: cadastro.rotulo,
+    chaveDoNome,
+    situacao,
+    motivos,
+    criterio: "menor-codigo",
+    explicacao: "Mesmo nome, material diferente: nome técnico distinto, sem fundir (§114).",
+    canonico: primeiro ? semLinha(primeiro) : ladoAusente(codigos[0] ?? "", decisao.nome),
+    absorvidos: [],
+    conflitos: [],
+    camposPerdidos: [],
+    movimentos: [],
+    impressao: impressaoDoGrupo(chaveDoNome, registros, [], {
+      decisao: [decisao.onda, decisao.grupo, "RENAME"],
+      renomeacoes: renomeacoes.map(({ id, codigo, de, para }) => [id, codigo, de, para]),
+      mantidos: mantidos.map(({ id, codigo, nome }) => [id, codigo, nome]),
+    }),
+    decisao: { onda: decisao.onda, grupo: decisao.grupo },
+    renomeacoes,
+    mantidos,
+    motivoDaDecisao: decisao.motivo,
+  });
+
+  const faltando = codigos.filter((c) => !lidos.has(c));
+  if (faltando.length > 0) {
+    // Renomear não remove ninguém: registro sumido é estado fora da decisão.
+    motivos.push(`${faltando.join(", ")} não existe(m): a renomeação não remove registro, então o estado mudou desde a decisão`);
+    return fechar("BLOQUEADO");
+  }
+
+  // Rodar de novo depois do APPLY: todos já têm o nome novo.
+  const jaRenomeados = decisao.renomear.filter((r) => lidos.get(r.codigo)!.nome === r.para);
+  if (jaRenomeados.length === decisao.renomear.length) {
+    for (const m of decisao.manter) {
+      const lido = lidos.get(m.codigo)!;
+      if (nomeNormalizado(lido.nome) !== chaveDoNome) {
+        motivos.push(`os renomeados já têm o nome novo, e ${m.codigo} se chama "${lido.nome}", não "${m.nome}"`);
+      }
+    }
+    return fechar(motivos.length === 0 ? "JA_SANEADO" : "BLOQUEADO");
+  }
+  if (jaRenomeados.length > 0) {
+    motivos.push(`renomeação pela metade: ${jaRenomeados.map((r) => r.codigo).join(", ")} já tem o nome novo`);
+    return fechar("BLOQUEADO");
+  }
+
+  const conferir = (codigo: string, planilha: string): RegistroDoGrupo => {
+    const lido = lidos.get(codigo)!;
+    const gravado = comoTexto(lido.dados, "externalCode");
+    if (gravado !== planilha) motivos.push(`${codigo} tem código da planilha "${gravado ?? ""}", e a decisão diz "${planilha}"`);
+    if (lido.dados["active"] !== true) motivos.push(`${codigo} está inativo`);
+    return lido;
+  };
+  for (const r of decisao.renomear) {
+    const lido = conferir(r.codigo, r.codigoPlanilha);
+    // O de ANTES é exato: é ele que o APPLY confere antes de escrever.
+    if (lido.nome !== r.de) motivos.push(`${r.codigo} se chama "${lido.nome}", e a decisão renomeia de "${r.de}"`);
+  }
+  for (const m of decisao.manter) {
+    const lido = conferir(m.codigo, m.codigoPlanilha);
+    if (nomeNormalizado(lido.nome) !== chaveDoNome) {
+      motivos.push(`${m.codigo} se chama "${lido.nome}", e a decisão o mantém com "${m.nome}"`);
+    }
+  }
+
+  // Item com o nome do grupo que a decisão não conhece: a colisão não se resolveria.
+  for (const intruso of await outrosComONome(db, cadastro, decisao.nome, codigos)) {
+    motivos.push(`${intruso} tem o nome do grupo e não está na decisão: o grupo mudou desde a decisão`);
+  }
+
+  // Nome destino livre, sem caixa, em QUALQUER Item — inclusive dos outros tipos.
+  for (const r of decisao.renomear) {
+    for (const ocupante of await outrosComONome(db, cadastro, r.para, [])) {
+      motivos.push(`o nome destino de ${r.codigo}, "${r.para}", já existe em ${ocupante} (sem caixa): ABORTAR`);
+    }
+  }
+
+  return fechar(motivos.length === 0 ? "PRONTO" : "BLOQUEADO");
+}
+
+/**
+ * Tudo o que aponta para um agregado de fora dele: FK real do catálogo do
+ * PostgreSQL (com a ação de exclusão), id sem FK, código guardado como retrato
+ * e JSON — para o registro dono E para as linhas internas. A linha interna que
+ * aponta para o dono (a V1 → o Modelo) é o próprio agregado e não conta.
+ */
+async function referenciasDoAgregado(
+  db: Banco,
+  cadastro: CadastroMestreNoBanco,
+  donos: readonly { id: string; codigo: string }[],
+  internos: readonly { tabela: string; id: string }[],
+): Promise<ReferenciaContada[]> {
+  const achadas: ReferenciaContada[] = [];
+  const idsDosDonos = donos.map((d) => d.id);
+  const tabelasInternas = new Set(internos.map((i) => i.tabela));
+  const idsDaTabela = (tabela: string): string[] => internos.filter((i) => i.tabela === tabela).map((i) => i.id);
+
+  // 1. FK real para o dono ou para uma tabela interna.
+  const fks = await db.$queryRawUnsafe<{ tabela: string; coluna: string; alvo: string; aoApagar: string }[]>(`
+    SELECT src.relname AS tabela, a.attname AS coluna, tgt.relname AS alvo, c.confdeltype AS "aoApagar"
+    FROM pg_constraint c
+    JOIN pg_class src ON src.oid = c.conrelid
+    JOIN pg_class tgt ON tgt.oid = c.confrelid
+    JOIN pg_namespace n ON n.oid = src.relnamespace
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+    WHERE c.contype = 'f' AND n.nspname = 'public'
+    ORDER BY 1, 2`);
+  for (const fk of fks) {
+    const alvos = fk.alvo === cadastro.tabela ? idsDosDonos : tabelasInternas.has(fk.alvo) ? idsDaTabela(fk.alvo) : null;
+    if (!alvos || alvos.length === 0) continue;
+    const exceto = tabelasInternas.has(fk.tabela) ? idsDaTabela(fk.tabela) : [];
+    const linhas = await contar(
+      db,
+      `SELECT count(*)::int AS n FROM ${ident(fk.tabela)}
+       WHERE ${ident(fk.coluna)}::text = ANY($1::text[])${exceto.length > 0 ? ` AND id::text <> ALL($2::text[])` : ""}`,
+      alvos,
+      ...(exceto.length > 0 ? [exceto] : []),
+    );
+    if (linhas > 0) achadas.push({ tabela: fk.tabela, coluna: fk.coluna, tipo: "fk", aoApagar: fk.aoApagar, linhas });
+  }
+
+  // 2. Id sem FK, código guardado e JSON do dono — o catálogo do cadastro.
+  const catalogo = (await lerCatalogo(db, cadastro)).filter((c) => c.tipo !== "fk");
+  for (const dono of donos) {
+    for (const referencia of await contarReferencias(db, catalogo, dono)) {
+      if (tabelasInternas.has(referencia.tabela)) continue;
+      achadas.push(referencia);
+    }
+  }
+
+  // 3. Linha interna citada em JSON ou em coluna de id sem FK ("...versionid").
+  const idsInternos = internos.map((i) => i.id);
+  if (idsInternos.length > 0) {
+    const colunas = await db.$queryRawUnsafe<{ tabela: string; coluna: string; tipo: string }[]>(`
+      SELECT c.table_name AS tabela, c.column_name AS coluna, c.data_type AS tipo
+      FROM information_schema.columns c
+      JOIN information_schema.tables t
+        ON t.table_schema = c.table_schema AND t.table_name = c.table_name AND t.table_type = 'BASE TABLE'
+      WHERE c.table_schema = 'public'
+      ORDER BY 1, 2`);
+    const comFk = new Set(fks.map((fk) => `${fk.tabela}.${fk.coluna}`));
+    for (const { tabela, coluna, tipo } of colunas) {
+      const json = tipo === "json" || tipo === "jsonb";
+      const idSemFk =
+        ["text", "character varying", "uuid"].includes(tipo) &&
+        coluna.toLowerCase().endsWith("versionid") &&
+        !comFk.has(`${tabela}.${coluna}`);
+      if (!json && !idSemFk) continue;
+      const exceto = tabelasInternas.has(tabela) ? idsDaTabela(tabela) : [];
+      const condicao = json
+        ? `EXISTS (SELECT 1 FROM unnest($1::text[]) AS alvo WHERE strpos(${ident(coluna)}::text, alvo) > 0)`
+        : `${ident(coluna)}::text = ANY($1::text[])`;
+      const linhas = await contar(
+        db,
+        `SELECT count(*)::int AS n FROM ${ident(tabela)}
+         WHERE ${condicao}${exceto.length > 0 ? ` AND id::text <> ALL($2::text[])` : ""}`,
+        idsInternos,
+        ...(exceto.length > 0 ? [exceto] : []),
+      );
+      if (linhas > 0) achadas.push({ tabela, coluna, tipo: json ? "json" : "id", linhas });
+    }
+  }
+  return achadas;
+}
+
+/** O porquê legível de uma referência externa ao Modelo. */
+function referenciaAoModeloEmTexto(referencia: ReferenciaContada): string {
+  const onde = `${referencia.tabela}.${referencia.coluna}`;
+  if (onde === "formulation_template_components.formulationTemplateVersionId") {
+    return `a V1 tem ${referencia.linhas} componente(s)`;
+  }
+  if (onde === "formulation_versions.originTemplateVersionId") {
+    return `${referencia.linhas} Formulação(ões) derivada(s) da versão (o Modelo já foi aplicado)`;
+  }
+  if (onde === "formulation_versions.originTemplateCode") {
+    return `proveniência: ${referencia.linhas} Formulação(ões) guardam o código do Modelo`;
+  }
+  if (onde === "formulation_template_versions.formulationTemplateId") {
+    return `o Modelo tem ${referencia.linhas} versão(ões) além da V1`;
+  }
+  if (onde === "formulation_template_versions.sourceVersionId") {
+    return `${referencia.linhas} versão(ões) nasceram desta V1`;
+  }
+  return `referência externa: ${onde} em ${referencia.linhas} linha(s)`;
+}
+
+/**
+ * `DELETE_UNUSED_AGGREGATE`: cadastro de teste nunca usado sai inteiro — o
+ * Modelo e a V1 DRAFT que nasceu com ele. Pré-condições, uma por uma, e
+ * qualquer uma falhando BLOQUEIA (volta ao PO):
+ *
+ *  - só a V1; DRAFT; nunca ativada (nem arquivada); criada junto com o Modelo;
+ *  - zero componentes, zero Formulações derivadas, zero versões derivadas;
+ *  - zero referências externas (FK, id sem FK, código guardado, JSON) e zero
+ *    proveniência (`originTemplateCode`);
+ *  - sem alteração posterior (`updatedAt` = `createdAt`, sem arquivamento).
+ */
+async function planejarExclusaoDeAgregado(db: Banco, decisao: DecisaoDeExclusaoDeAgregado): Promise<GrupoPlanejado> {
+  const motivos: string[] = [];
+  const cadastro = cadastroPorChave(decisao.cadastro);
+  const chaveDoNome = nomeNormalizado(decisao.nome);
+  const codigos = decisao.excluir.map((e) => e.codigo);
+
+  const donos = (
+    await db.$queryRawUnsafe<{ bruto: string }[]>(
+      `SELECT to_jsonb(x)::text AS bruto FROM ${ident(cadastro.tabela)} x
+       WHERE ${ident(cadastro.colunaCodigo)} = ANY($1::text[]) ORDER BY ${ident(cadastro.colunaCodigo)}`,
+      codigos,
+    )
+  ).map(({ bruto }) => JSON.parse(bruto) as Registro);
+  const versoes = (
+    await db.$queryRawUnsafe<{ bruto: string }[]>(
+      `SELECT to_jsonb(v)::text AS bruto FROM formulation_template_versions v
+       WHERE "formulationTemplateId"::text = ANY($1::text[]) ORDER BY "formulationTemplateId", "versionNumber", id`,
+      donos.map((d) => comoTexto(d, "id")!),
+    )
+  ).map(({ bruto }) => JSON.parse(bruto) as Registro);
+
+  const codigoDoDono = new Map(donos.map((d) => [comoTexto(d, "id")!, comoTexto(d, "code")!]));
+  // Na ordem dos donos (pelo código), e dentro de cada um pela versão: estável entre execuções.
+  versoes.sort(
+    (a, b) =>
+      (codigoDoDono.get(comoTexto(a, "formulationTemplateId")!) ?? "").localeCompare(
+        codigoDoDono.get(comoTexto(b, "formulationTemplateId")!) ?? "",
+      ) || Number(comoTexto(a, "versionNumber")) - Number(comoTexto(b, "versionNumber")),
+  );
+  const internos: LinhaInterna[] = versoes.map((v) => ({
+    tabela: "formulation_template_versions",
+    id: comoTexto(v, "id")!,
+    dono: codigoDoDono.get(comoTexto(v, "formulationTemplateId")!) ?? "",
+    descricao: `V${comoTexto(v, "versionNumber") ?? "?"} ${comoTexto(v, "status") ?? ""}`,
+  }));
+  const exclusao: ExclusaoPlanejada = {
+    registros: donos.map((d) => ({
+      id: comoTexto(d, "id")!,
+      codigo: comoTexto(d, "code")!,
+      nome: comoTexto(d, "name") ?? "",
+      criadoEm: comoTexto(d, "createdAt"),
+    })),
+    internos,
+  };
+  const registrosDoGrupo: RegistroDoGrupo[] = [
+    ...donos.map((d) => ({
+      id: comoTexto(d, "id")!,
+      codigo: comoTexto(d, "code")!,
+      nome: comoTexto(d, "name") ?? "",
+      dados: d,
+      referencias: 0,
+      tabelasQueReferenciam: 0,
+      criadoEm: comoTexto(d, "createdAt"),
+    })),
+    ...versoes.map((v) => ({
+      id: comoTexto(v, "id")!,
+      codigo: `${codigoDoDono.get(comoTexto(v, "formulationTemplateId")!) ?? "?"}/V${comoTexto(v, "versionNumber") ?? "?"}`,
+      nome: "",
+      dados: v,
+      referencias: 0,
+      tabelasQueReferenciam: 0,
+      criadoEm: comoTexto(v, "createdAt"),
+    })),
+  ];
+
+  let externas: ReferenciaContada[] = [];
+  const fechar = (situacao: GrupoPlanejado["situacao"]): GrupoPlanejado => ({
+    grupo: `${cadastro.chave}/${chaveDoNome}`,
+    acao: "DELETE_UNUSED_AGGREGATE",
+    cadastro: cadastro.chave,
+    rotulo: cadastro.rotulo,
+    chaveDoNome,
+    situacao,
+    motivos,
+    criterio: "menor-codigo",
+    explicacao: "Cadastro de teste nunca usado: o agregado inteiro sai (registro + V1 criada junto).",
+    canonico: ladoAusente("", decisao.nome),
+    absorvidos: [],
+    conflitos: [],
+    camposPerdidos: [],
+    movimentos: [],
+    impressao: impressaoDoGrupo(chaveDoNome, registrosDoGrupo, [], {
+      decisao: [decisao.onda, decisao.grupo, "DELETE_UNUSED_AGGREGATE"],
+      exclusao,
+      externas,
+    }),
+    decisao: { onda: decisao.onda, grupo: decisao.grupo },
+    exclusao,
+    motivoDaDecisao: decisao.motivo,
+  });
+
+  if (donos.length === 0) return fechar("JA_SANEADO");
+  if (donos.length < codigos.length) {
+    const presentes = new Set(exclusao.registros.map((r) => r.codigo));
+    motivos.push(`exclusão pela metade: ${codigos.filter((c) => !presentes.has(c)).join(", ")} já não existe(m)`);
+    return fechar("BLOQUEADO");
+  }
+
+  for (const dono of donos) {
+    const codigo = comoTexto(dono, "code")!;
+    const id = comoTexto(dono, "id")!;
+    const nome = comoTexto(dono, "name") ?? "";
+    if (nomeNormalizado(nome) !== chaveDoNome) motivos.push(`${codigo} se chama "${nome}", e a decisão é para "${decisao.nome}"`);
+    if (comoTexto(dono, "archivedAt") !== null) motivos.push(`${codigo} foi arquivado depois de criado`);
+    if (comoTexto(dono, "updatedAt") !== comoTexto(dono, "createdAt")) {
+      motivos.push(`${codigo} foi alterado depois de criado (updatedAt ${comoTexto(dono, "updatedAt")} × createdAt ${comoTexto(dono, "createdAt")})`);
+    }
+    const dele = versoes.filter((v) => comoTexto(v, "formulationTemplateId") === id);
+    if (dele.length !== 1) {
+      motivos.push(`${codigo} tem ${dele.length} versão(ões): a exclusão é só de Modelo com a V1 e nada mais`);
+      continue;
+    }
+    const v1 = dele[0]!;
+    if (comoTexto(v1, "versionNumber") !== "1") motivos.push(`${codigo}: a única versão é V${comoTexto(v1, "versionNumber")}, não V1`);
+    if (comoTexto(v1, "status") !== "DRAFT") motivos.push(`${codigo}: a V1 está ${comoTexto(v1, "status")}, não DRAFT`);
+    if (comoTexto(v1, "activatedAt") !== null || comoTexto(v1, "activatedBy") !== null) {
+      motivos.push(`${codigo}: a V1 já foi ativada um dia (activatedAt ${comoTexto(v1, "activatedAt") ?? "—"})`);
+    }
+    if (comoTexto(v1, "archivedAt") !== null) motivos.push(`${codigo}: a V1 foi arquivada`);
+    if (comoTexto(v1, "sourceVersionId") !== null || comoTexto(v1, "sourceVersionNumber") !== null) {
+      motivos.push(`${codigo}: a V1 nasceu de outra versão — não é a V1 criada junto com o Modelo`);
+    }
+    if (comoTexto(v1, "createdAt") !== comoTexto(dono, "createdAt")) {
+      motivos.push(`${codigo}: a V1 não nasceu junto com o Modelo (${comoTexto(v1, "createdAt")} × ${comoTexto(dono, "createdAt")})`);
+    }
+  }
+
+  for (const intruso of await outrosComONome(db, cadastro, decisao.nome, codigos)) {
+    motivos.push(`${intruso} tem o nome do grupo e não está na decisão: o grupo mudou desde a decisão`);
+  }
+
+  externas = await referenciasDoAgregado(db, cadastro, exclusao.registros, internos);
+  for (const referencia of externas) motivos.push(referenciaAoModeloEmTexto(referencia));
+
+  return fechar(motivos.length === 0 ? "PRONTO" : "BLOQUEADO");
+}
+
+/**
+ * `BLOCKED`: o PO mantém o grupo em revisão. Entra no plano para aparecer — com
+ * o motivo, os conflitos que a Veridi precisa resolver e as perguntas —, e a
+ * impressão guarda o retrato dos registros: o VERIFY cobra que ninguém os tocou.
+ */
+async function planejarGrupoEmRevisao(
+  db: Banco,
+  cadastro: CadastroMestreNoBanco,
+  catalogo: readonly ColunaDeReferencia[],
+  decisao: DecisaoDeRevisao,
+): Promise<GrupoPlanejado> {
+  const motivos = [decisao.motivo];
+  const chaveDoNome = nomeNormalizado(decisao.nome);
+  const lidos = await lerRegistrosPorCodigo(db, cadastro, catalogo, decisao.codigos);
+  const registros = [...lidos.values()];
+  const faltando = decisao.codigos.filter((c) => !lidos.has(c));
+  if (faltando.length > 0) motivos.push(`${faltando.join(", ")} não existe(m) mais — o grupo em revisão mudou`);
+
+  let conflitos: ConflitoDeCampo[] = [];
+  let canonico: LadoDoPlano = ladoAusente(decisao.codigos[0] ?? "", decisao.nome);
+  let absorvidos: LadoDoPlano[] = [];
+  if (registros.length >= 2) {
+    // Só para mostrar o que diverge — em revisão, ninguém é canônico de verdade.
+    const escolha = escolherCanonico(registros, cadastro);
+    conflitos = compararCampos(escolha.canonico, escolha.absorvidos, cadastro).conflitos;
+    const lado = (r: RegistroDoGrupo): LadoDoPlano => ({
+      ...semLinha(r),
+      referencias: lidos.get(r.codigo)?.referenciasContadas ?? [],
+    });
+    canonico = lado(escolha.canonico);
+    absorvidos = escolha.absorvidos.map(lado);
+  }
+  for (const conflito of conflitos) {
+    motivos.push(`conflito material em "${conflito.coluna}": ${conflito.valores.map((v) => `"${v}"`).join(" × ")}`);
+  }
+
+  return {
+    grupo: `${cadastro.chave}/${chaveDoNome}`,
+    acao: "BLOCKED",
+    cadastro: cadastro.chave,
+    rotulo: cadastro.rotulo,
+    chaveDoNome,
+    situacao: "BLOQUEADO",
+    motivos,
+    criterio: "menor-codigo",
+    explicacao: "Em revisão por decisão do PO: nada é tocado.",
+    canonico,
+    absorvidos,
+    conflitos,
+    camposPerdidos: [],
+    movimentos: [],
+    impressao: impressaoDoGrupo(chaveDoNome, registros, [], { decisao: [decisao.onda, decisao.grupo, "BLOCKED"] }),
+    decisao: { onda: decisao.onda, grupo: decisao.grupo },
+    motivoDaDecisao: decisao.motivo,
+    perguntas: [...decisao.perguntas],
+  };
+}
+
 /** O efeito por tabela que a transação de um plano deve produzir — e só ele. */
 export function efeitoEsperado(grupos: readonly GrupoPlanejado[]): Record<string, EfeitoNaTabela> {
   const efeito: Record<string, EfeitoNaTabela> = {};
@@ -886,6 +1467,19 @@ export function efeitoEsperado(grupos: readonly GrupoPlanejado[]): Record<string
   for (const grupo of grupos) {
     if (grupo.situacao !== "PRONTO") continue;
     const cadastro = cadastroPorChave(grupo.cadastro);
+    const acao = acaoDoGrupo(grupo);
+    if (acao === "BLOCKED") continue;
+    if (acao === "RENAME") {
+      // Um UPDATE por registro renomeado, e nada além: nenhuma referência se move.
+      somar(cadastro.tabela, { upd: (grupo.renomeacoes ?? []).length });
+      continue;
+    }
+    if (acao === "DELETE_UNUSED_AGGREGATE") {
+      // O dono sai, e as linhas internas saem com ele pelo CASCADE — só elas.
+      somar(cadastro.tabela, { del: grupo.exclusao?.registros.length ?? 0 });
+      for (const interno of grupo.exclusao?.internos ?? []) somar(interno.tabela, { del: 1 });
+      continue;
+    }
     for (const { operacao } of grupo.relacoes ?? []) {
       if (operacao.tipo === "CONSOLIDAR_RELACAO") {
         somar("supplier_item_offers", { upd: operacao.ofertas.length });
@@ -913,8 +1507,16 @@ export interface OpcoesDoPlano {
   onda?: string | undefined;
   /** Modo de decisão: só estes grupos da onda (o APPLY relê um por vez). */
   grupos?: readonly string[] | undefined;
-  /** Ponto de teste: decisões no lugar do arquivo real. */
+  /** Ponto de teste: fusões no lugar do arquivo real (as outras espécies ficam vazias). */
   decisoes?: readonly DecisaoDeDuplicata[] | undefined;
+  /** Ponto de teste: o conjunto inteiro de decisões no lugar do arquivo real. */
+  conjunto?: ConjuntoDeDecisoes | undefined;
+}
+
+/** O conjunto de decisões que vale para esta chamada: o do teste ou o do arquivo. */
+function conjuntoDasOpcoes(opcoes: { decisoes?: readonly DecisaoDeDuplicata[] | undefined; conjunto?: ConjuntoDeDecisoes | undefined }): ConjuntoDeDecisoes {
+  if (opcoes.conjunto) return opcoes.conjunto;
+  return opcoes.decisoes ? conjuntoDeFusoes(opcoes.decisoes) : CONJUNTO_DO_ARQUIVO;
 }
 
 export async function planejarCom(
@@ -924,17 +1526,39 @@ export async function planejarCom(
 ): Promise<Plano> {
   const grupos: GrupoPlanejado[] = [];
   const variantes: VarianteDeNome[] = [];
+  let cadastrosDoPlano = [...chaves];
   if (opcoes.onda !== undefined) {
-    if (chaves.length !== 1 || chaves[0] !== "ITEM") {
-      throw new Error("o modo de decisão é do cadastro de Item: o arquivo de decisão é o de-para de Item.");
+    // Modo de decisão: os grupos vêm da DECISÃO, de todas as espécies, e os
+    // cadastros do plano são os que a onda toca — `chaves` não escolhe nada aqui.
+    const conjunto = conjuntoDaOnda(opcoes.onda, conjuntoDasOpcoes(opcoes));
+    cadastrosDoPlano = cadastrosDaOnda(opcoes.onda, conjuntoDasOpcoes(opcoes));
+    const quer = (grupo: string): boolean => !opcoes.grupos || opcoes.grupos.includes(grupo);
+    const item = cadastroPorChave("ITEM");
+    let doItem: { catalogo: ColunaDeReferencia[]; indices: IndiceUnico[] } | null = null;
+    const catalogoDoItem = async (): Promise<{ catalogo: ColunaDeReferencia[]; indices: IndiceUnico[] }> => {
+      if (!doItem) {
+        const catalogo = await lerCatalogo(db, item);
+        const tabelas = [...new Set(catalogo.filter((c) => c.tipo !== "json").map((c) => c.tabela))];
+        doItem = { catalogo, indices: await lerIndicesUnicos(db, tabelas) };
+      }
+      return doItem;
+    };
+    for (const decisao of gruposDeFusao(conjunto.fusoes)) {
+      if (!quer(decisao.grupo)) continue;
+      const { catalogo, indices } = await catalogoDoItem();
+      grupos.push(await planejarGrupoDaDecisao(db, item, catalogo, indices, decisao));
     }
-    const cadastro = cadastroPorChave("ITEM");
-    const catalogo = await lerCatalogo(db, cadastro);
-    const tabelas = [...new Set(catalogo.filter((c) => c.tipo !== "json").map((c) => c.tabela))];
-    const indices = await lerIndicesUnicos(db, tabelas);
-    for (const decisao of gruposDaOnda(opcoes.onda, opcoes.decisoes)) {
-      if (opcoes.grupos && !opcoes.grupos.includes(decisao.grupo)) continue;
-      grupos.push(await planejarGrupoDaDecisao(db, cadastro, catalogo, indices, decisao));
+    for (const decisao of conjunto.renomeacoes) {
+      if (!quer(decisao.grupo)) continue;
+      grupos.push(await planejarRenomeacao(db, item, (await catalogoDoItem()).catalogo, decisao));
+    }
+    for (const decisao of conjunto.exclusoes) {
+      if (!quer(decisao.grupo)) continue;
+      grupos.push(await planejarExclusaoDeAgregado(db, decisao));
+    }
+    for (const decisao of conjunto.revisoes) {
+      if (!quer(decisao.grupo)) continue;
+      grupos.push(await planejarGrupoEmRevisao(db, item, (await catalogoDoItem()).catalogo, decisao));
     }
   } else {
     for (const chave of chaves) {
@@ -950,18 +1574,18 @@ export async function planejarCom(
   }
   grupos.sort((a, b) => a.grupo.localeCompare(b.grupo));
 
-  const decisoes =
-    opcoes.onda !== undefined ? impressaoDasDecisoes(decisoesDaOnda(opcoes.onda, opcoes.decisoes)) : undefined;
+  const decisoes = opcoes.onda !== undefined ? impressaoDaOnda(opcoes.onda, conjuntoDasOpcoes(opcoes)) : undefined;
   const plano: Plano = {
     ferramenta: FERRAMENTA,
     formato: FORMATO,
     geradoEm: new Date().toISOString(),
     banco: await bancoAtual(db),
-    cadastros: [...chaves],
+    cadastros: cadastrosDoPlano,
     grupos,
     variantes,
     efeitoEsperado: efeitoEsperado(grupos),
-    pronto: grupos.every((g) => g.situacao !== "BLOQUEADO"),
+    // Grupo em revisão por decisão do PO não impede os decididos.
+    pronto: grupos.every((g) => acaoDoGrupo(g) === "BLOCKED" || g.situacao !== "BLOQUEADO"),
     impressao: "",
     ...(opcoes.onda !== undefined ? { onda: opcoes.onda, decisoes } : {}),
   };
@@ -981,7 +1605,11 @@ export async function planejarCom(
 export async function planejar(
   prisma: PrismaClient,
   chaves: readonly string[],
-  opcoes: { onda?: string | undefined; decisoes?: readonly DecisaoDeDuplicata[] | undefined } = {},
+  opcoes: {
+    onda?: string | undefined;
+    decisoes?: readonly DecisaoDeDuplicata[] | undefined;
+    conjunto?: ConjuntoDeDecisoes | undefined;
+  } = {},
 ): Promise<Plano> {
   return prisma.$transaction(
     async (tx) => {
@@ -990,6 +1618,7 @@ export async function planejar(
         comVariantes: opcoes.onda === undefined,
         onda: opcoes.onda,
         decisoes: opcoes.decisoes,
+        conjunto: opcoes.conjunto,
       });
     },
     { maxWait: 10_000, timeout: 600_000 },
@@ -1021,6 +1650,18 @@ function divergenciasDoGrupo(aprovado: GrupoPlanejado, agora: GrupoPlanejado | u
   if (JSON.stringify(aprovado.relacoes ?? []) !== JSON.stringify(agora.relacoes ?? [])) {
     divergencias.push(`${agora.grupo}: as relações com fornecedor mudaram desde o plano`);
   }
+  if (acaoDoGrupo(aprovado) !== acaoDoGrupo(agora)) {
+    divergencias.push(`${agora.grupo}: a ação mudou (${acaoDoGrupo(aprovado)} → ${acaoDoGrupo(agora)})`);
+  }
+  if (JSON.stringify(aprovado.renomeacoes ?? []) !== JSON.stringify(agora.renomeacoes ?? [])) {
+    divergencias.push(`${agora.grupo}: a renomeação mudou desde o plano`);
+  }
+  if (JSON.stringify(aprovado.mantidos ?? []) !== JSON.stringify(agora.mantidos ?? [])) {
+    divergencias.push(`${agora.grupo}: quem mantém o nome mudou desde o plano`);
+  }
+  if (JSON.stringify(aprovado.exclusao ?? null) !== JSON.stringify(agora.exclusao ?? null)) {
+    divergencias.push(`${agora.grupo}: o agregado a excluir mudou desde o plano`);
+  }
   return divergencias;
 }
 
@@ -1047,6 +1688,32 @@ function efeitoEntre(
 
 /** Trava ANTES de ler: quem chegar depois espera esta transação terminar. */
 async function travarGrupo(tx: Banco, cadastro: CadastroMestreNoBanco, grupo: GrupoPlanejado): Promise<void> {
+  const acao = acaoDoGrupo(grupo);
+  if (acao === "RENAME") {
+    const ids = [...(grupo.renomeacoes ?? []).map((r) => r.id), ...(grupo.mantidos ?? []).map((m) => m.id)];
+    await tx.$queryRawUnsafe(
+      `SELECT ${ident(cadastro.colunaId)} FROM ${ident(cadastro.tabela)}
+       WHERE ${ident(cadastro.colunaId)}::text = ANY($1::text[]) ORDER BY 1 FOR UPDATE`,
+      ids,
+    );
+    return;
+  }
+  if (acao === "DELETE_UNUSED_AGGREGATE") {
+    // O dono e as linhas internas: versão nova, componente ou Formulação que
+    // apontasse para eles agora espera (a FK pede FOR KEY SHARE no alvo).
+    const ids = (grupo.exclusao?.registros ?? []).map((r) => r.id);
+    await tx.$queryRawUnsafe(
+      `SELECT ${ident(cadastro.colunaId)} FROM ${ident(cadastro.tabela)}
+       WHERE ${ident(cadastro.colunaId)}::text = ANY($1::text[]) ORDER BY 1 FOR UPDATE`,
+      ids,
+    );
+    await tx.$queryRawUnsafe(
+      `SELECT id FROM formulation_template_versions
+       WHERE "formulationTemplateId"::text = ANY($1::text[]) ORDER BY id FOR UPDATE`,
+      ids,
+    );
+    return;
+  }
   const ids = [grupo.canonico.id, ...grupo.absorvidos.map((a) => a.id)];
   await tx.$queryRawUnsafe(
     `SELECT ${ident(cadastro.colunaId)} FROM ${ident(cadastro.tabela)}
@@ -1086,6 +1753,34 @@ async function executarGrupo(
       throw new Error(`ABORTADO: ${oque} mexeu em ${obtido} linha(s), o plano previa ${esperado}.`);
     }
   };
+
+  const acao = acaoDoGrupo(grupo);
+  if (acao === "BLOCKED") throw new Error(`ABORTADO: ${grupo.grupo} está em revisão — nada nele se executa.`);
+  if (acao === "RENAME") {
+    // Compare-and-set do nome: só se ele ainda é o de ANTES. Nenhum outro campo.
+    for (const r of grupo.renomeacoes ?? []) {
+      const mexidas = await tx.$executeRawUnsafe(
+        `UPDATE ${ident(cadastro.tabela)} SET ${ident(cadastro.colunaNome)} = $2, "updatedAt" = now()
+         WHERE ${ident(cadastro.colunaId)}::text = $1 AND ${ident(cadastro.colunaNome)} = $3`,
+        r.id,
+        r.para,
+        r.de,
+      );
+      exigir(mexidas, 1, `renomear ${r.codigo}`);
+    }
+    return;
+  }
+  if (acao === "DELETE_UNUSED_AGGREGATE") {
+    // Só o dono: a V1 criada junto sai pelo CASCADE, e o efeito conferido em
+    // pg_stat_xact_user_tables prova que nada além dela saiu ou mudou.
+    const ids = (grupo.exclusao?.registros ?? []).map((r) => r.id);
+    const removidos = await tx.$executeRawUnsafe(
+      `DELETE FROM ${ident(cadastro.tabela)} WHERE ${ident(cadastro.colunaId)}::text = ANY($1::text[])`,
+      ids,
+    );
+    exigir(removidos, ids.length, `DELETE em ${cadastro.tabela}`);
+    return;
+  }
 
   // 1. Relação Item × Fornecedor, pela regra da §110 (modo de decisão).
   for (const { absorvido, operacao } of grupo.relacoes ?? []) {
@@ -1142,6 +1837,10 @@ export interface ResultadoDoGrupo {
   motivo: string | null;
   efeito: Record<string, EfeitoNaTabela>;
   aplicadoEm: string | null;
+  /** `RENAME` aplicado: antes, depois e motivo de cada registro — a hora é `aplicadoEm`. */
+  renomeados?: { codigo: string; antes: string; depois: string; motivo: string }[] | undefined;
+  /** `DELETE_UNUSED_AGGREGATE` aplicado: o que saiu, com as linhas internas. */
+  excluidos?: { codigo: string; nome: string; internos: string[] }[] | undefined;
 }
 
 export interface OpcoesDaAplicacao {
@@ -1149,6 +1848,8 @@ export interface OpcoesDaAplicacao {
   somente?: readonly string[] | undefined;
   /** Ponto de teste: decisões no lugar do arquivo real (modo de decisão). */
   decisoes?: readonly DecisaoDeDuplicata[] | undefined;
+  /** Ponto de teste: o conjunto inteiro de decisões no lugar do arquivo real. */
+  conjunto?: ConjuntoDeDecisoes | undefined;
   /**
    * Ponto de teste: a chave da trava consultiva. Suítes que rodam em paralelo
    * no mesmo banco usam chaves próprias para não se recusarem entre si; o CLI
@@ -1157,6 +1858,12 @@ export interface OpcoesDaAplicacao {
   trava?: string | undefined;
   /** Ponto de teste: roda dentro da transação, depois do grupo aplicado. */
   aoConcluirGrupo?: ((grupo: string, tx: Banco) => Promise<void> | void) | undefined;
+  /**
+   * Ponto de teste: roda dentro da transação logo depois da escrita do grupo e
+   * ANTES da conferência do efeito — é por aqui que o teste prova que escrita
+   * fora do previsto (um CASCADE ou SET NULL a mais) desfaz o grupo.
+   */
+  antesDaConferencia?: ((grupo: string, tx: Banco) => Promise<void> | void) | undefined;
 }
 
 /**
@@ -1173,10 +1880,7 @@ export async function aplicar(
   if (plano.ferramenta !== FERRAMENTA || plano.formato !== FORMATO) {
     throw new Error("ABORTADO: o arquivo não é um plano desta ferramenta.");
   }
-  if (
-    plano.onda !== undefined &&
-    plano.decisoes !== impressaoDasDecisoes(decisoesDaOnda(plano.onda, opcoes.decisoes))
-  ) {
+  if (plano.onda !== undefined && plano.decisoes !== impressaoDaOnda(plano.onda, conjuntoDasOpcoes(opcoes))) {
     throw new Error(`ABORTADO: o arquivo de decisão da Onda ${plano.onda} mudou desde o plano. Refaça o PLAN.`);
   }
   const escolhidos = opcoes.somente && opcoes.somente.length > 0 ? new Set(opcoes.somente) : null;
@@ -1223,7 +1927,12 @@ export async function aplicar(
             tx,
             [doPlano.cadastro],
             plano.onda !== undefined && doPlano.decisao
-              ? { onda: plano.onda, grupos: [doPlano.decisao.grupo], decisoes: opcoes.decisoes }
+              ? {
+                  onda: plano.onda,
+                  grupos: [doPlano.decisao.grupo],
+                  decisoes: opcoes.decisoes,
+                  conjunto: opcoes.conjunto,
+                }
               : {},
           );
           const divergencias = divergenciasDoGrupo(
@@ -1235,6 +1944,7 @@ export async function aplicar(
           }
 
           await executarGrupo(tx, cadastro, doPlano);
+          await opcoes.antesDaConferencia?.(doPlano.grupo, tx);
           const efeitoDoGrupo = efeitoEntre(noInicio, await contadoresDaConexao(tx));
           const previsto = efeitoEsperado([doPlano]);
           if (JSON.stringify(efeitoDoGrupo) !== JSON.stringify(previsto)) {
@@ -1251,12 +1961,34 @@ export async function aplicar(
         },
         { maxWait: 10_000, timeout: 120_000 },
       );
+      const acao = acaoDoGrupo(doPlano);
       resultados.push({
         grupo: doPlano.grupo,
         situacao: "APLICADO",
         motivo: null,
         efeito,
         aplicadoEm: new Date().toISOString(),
+        ...(acao === "RENAME"
+          ? {
+              renomeados: (doPlano.renomeacoes ?? []).map((r) => ({
+                codigo: r.codigo,
+                antes: r.de,
+                depois: r.para,
+                motivo: doPlano.motivoDaDecisao ?? "",
+              })),
+            }
+          : {}),
+        ...(acao === "DELETE_UNUSED_AGGREGATE"
+          ? {
+              excluidos: (doPlano.exclusao?.registros ?? []).map((r) => ({
+                codigo: r.codigo,
+                nome: r.nome,
+                internos: (doPlano.exclusao?.internos ?? [])
+                  .filter((i) => i.dono === r.codigo)
+                  .map((i) => `${i.tabela} ${i.descricao} ${i.id}`),
+              })),
+            }
+          : {}),
       });
     } catch (erro: unknown) {
       resultados.push({
@@ -1290,7 +2022,25 @@ export async function verificarCom(
   const conferidos: string[] = [];
 
   for (const grupo of grupos) {
+    const acao = acaoDoGrupo(grupo);
+    if (acao === "BLOCKED") {
+      // Em revisão: a prova é que ninguém tocou nos registros desde o plano.
+      const mudou = await conferirIntocado(db, grupo);
+      problemas.push(...mudou);
+      if (mudou.length === 0) conferidos.push(`${grupo.grupo} (em revisão, intocado)`);
+      continue;
+    }
     if (grupo.situacao !== "PRONTO") continue;
+    if (acao === "RENAME") {
+      problemas.push(...(await verificarRenomeacao(db, grupo)));
+      conferidos.push(grupo.grupo);
+      continue;
+    }
+    if (acao === "DELETE_UNUSED_AGGREGATE") {
+      problemas.push(...(await verificarExclusao(db, grupo)));
+      conferidos.push(grupo.grupo);
+      continue;
+    }
     const cadastro = cadastroPorChave(grupo.cadastro);
     const catalogo = await lerCatalogo(db, cadastro);
     const existe = async (id: string): Promise<boolean> =>
@@ -1420,6 +2170,100 @@ export async function verificarCom(
   return { problemas, conferidos, duplicidades };
 }
 
+/** `RENAME` depois do APPLY: o nome novo, único; o de hoje só em quem o mantém; nenhuma referência saiu. */
+async function verificarRenomeacao(db: Banco, grupo: GrupoPlanejado): Promise<string[]> {
+  const cadastro = cadastroPorChave(grupo.cadastro);
+  const catalogo = await lerCatalogo(db, cadastro);
+  const problemas: string[] = [];
+  const nomeAtual = async (id: string): Promise<string | null> => {
+    const [linha] = await db.$queryRawUnsafe<{ nome: string }[]>(
+      `SELECT ${ident(cadastro.colunaNome)} AS nome FROM ${ident(cadastro.tabela)} WHERE ${ident(cadastro.colunaId)}::text = $1`,
+      id,
+    );
+    return linha?.nome ?? null;
+  };
+  // Renomear não move referência: o que apontava para o registro continua apontando.
+  const nadaSaiu = async (id: string, codigo: string, antes: readonly ReferenciaContada[]): Promise<void> => {
+    const agora = await contarReferencias(db, catalogo, { id, codigo });
+    for (const r of antes) {
+      const hoje = agora.find((a) => a.tabela === r.tabela && a.coluna === r.coluna)?.linhas ?? 0;
+      if (hoje < r.linhas) {
+        problemas.push(`${grupo.grupo}: ${r.tabela}.${r.coluna} de ${codigo} tem ${hoje} linha(s), eram ${r.linhas} — renomear não move nada`);
+      }
+    }
+  };
+
+  for (const r of grupo.renomeacoes ?? []) {
+    const nome = await nomeAtual(r.id);
+    if (nome === null) problemas.push(`${grupo.grupo}: ${r.codigo} não está no banco`);
+    else if (nome !== r.para) problemas.push(`${grupo.grupo}: ${r.codigo} se chama "${nome}", esperava "${r.para}"`);
+    const comONovo = await outrosComONome(db, cadastro, r.para, []);
+    if (comONovo.length !== 1 || comONovo[0] !== r.codigo) {
+      problemas.push(`${grupo.grupo}: o nome "${r.para}" está em ${comONovo.join(", ") || "nenhum cadastro"}, esperava só ${r.codigo}`);
+    }
+    await nadaSaiu(r.id, r.codigo, r.referencias);
+  }
+  for (const m of grupo.mantidos ?? []) {
+    const nome = await nomeAtual(m.id);
+    if (nome !== m.nome) problemas.push(`${grupo.grupo}: ${m.codigo} se chama "${nome ?? "—"}", e ficava "${m.nome}"`);
+    await nadaSaiu(m.id, m.codigo, m.referencias);
+  }
+  const comONomeDoGrupo = await outrosComONome(db, cadastro, grupo.chaveDoNome, []);
+  const esperados = (grupo.mantidos ?? []).map((m) => m.codigo).sort();
+  if (JSON.stringify(comONomeDoGrupo) !== JSON.stringify(esperados)) {
+    problemas.push(
+      `${grupo.grupo}: o nome do grupo está em ${comONomeDoGrupo.join(", ") || "nenhum cadastro"}, esperava ${esperados.join(", ") || "nenhum"}`,
+    );
+  }
+  return problemas;
+}
+
+/** `DELETE_UNUSED_AGGREGATE` depois do APPLY: o dono e as linhas internas fora, e nenhum resíduo em lugar nenhum. */
+async function verificarExclusao(db: Banco, grupo: GrupoPlanejado): Promise<string[]> {
+  const cadastro = cadastroPorChave(grupo.cadastro);
+  const problemas: string[] = [];
+  const registros = grupo.exclusao?.registros ?? [];
+  const internos = grupo.exclusao?.internos ?? [];
+  const sobra = await contar(
+    db,
+    `SELECT count(*)::int AS n FROM ${ident(cadastro.tabela)} WHERE ${ident(cadastro.colunaId)}::text = ANY($1::text[])`,
+    registros.map((r) => r.id),
+  );
+  if (sobra > 0) problemas.push(`${grupo.grupo}: ${sobra} de ${registros.map((r) => r.codigo).join(", ")} continua(m) no banco`);
+  for (const tabela of [...new Set(internos.map((i) => i.tabela))]) {
+    const ids = internos.filter((i) => i.tabela === tabela).map((i) => i.id);
+    const restantes = await contar(db, `SELECT count(*)::int AS n FROM ${ident(tabela)} WHERE id::text = ANY($1::text[])`, ids);
+    if (restantes > 0) problemas.push(`${grupo.grupo}: ${restantes} linha(s) interna(s) em ${tabela} continuam no banco`);
+  }
+  for (const residuo of await referenciasDoAgregado(db, cadastro, registros, internos)) {
+    problemas.push(`${grupo.grupo}: resíduo em ${residuo.tabela}.${residuo.coluna} (${residuo.linhas} linha(s))`);
+  }
+  const comONome = await outrosComONome(db, cadastro, grupo.chaveDoNome, []);
+  if (comONome.length > 0) problemas.push(`${grupo.grupo}: o nome "${grupo.chaveDoNome}" continua em ${comONome.join(", ")}`);
+  return problemas;
+}
+
+/** `BLOCKED`: cada registro do grupo em revisão está exatamente como no plano. */
+async function conferirIntocado(db: Banco, grupo: GrupoPlanejado): Promise<string[]> {
+  const cadastro = cadastroPorChave(grupo.cadastro);
+  const problemas: string[] = [];
+  const forma = (dados: Registro): string => JSON.stringify(dados, Object.keys(dados).sort());
+  for (const lado of [grupo.canonico, ...grupo.absorvidos].filter((l) => l.id)) {
+    const [linha] = await db.$queryRawUnsafe<{ bruto: string }[]>(
+      `SELECT to_jsonb(x)::text AS bruto FROM ${ident(cadastro.tabela)} x WHERE ${ident(cadastro.colunaId)}::text = $1`,
+      lado.id,
+    );
+    if (!linha) {
+      problemas.push(`${grupo.grupo}: ${lado.codigo} (em revisão) não está mais no banco`);
+      continue;
+    }
+    if (forma(JSON.parse(linha.bruto) as Registro) !== forma(lado.dados)) {
+      problemas.push(`${grupo.grupo}: ${lado.codigo} (em revisão) mudou desde o plano — nada deveria tê-lo tocado`);
+    }
+  }
+  return problemas;
+}
+
 export async function verificar(
   prisma: PrismaClient,
   grupos: readonly GrupoPlanejado[],
@@ -1461,7 +2305,40 @@ export function descreverPlano(plano: Plano, destino: string): string[] {
 
   for (const grupo of plano.grupos) {
     const daDecisao = grupo.decisao ? ` · decisão ${grupo.decisao.onda}/${grupo.decisao.grupo}` : "";
-    linhas.push(`[${grupo.situacao}] ${grupo.grupo} — ${grupo.rotulo} "${grupo.canonico.nome}"${daDecisao}`);
+    const acao = acaoDoGrupo(grupo);
+    // No modo de decisão a ação aparece sempre; no automático tudo é fusão.
+    const rotuloDaAcao = plano.onda !== undefined ? ` ${acao}` : "";
+    if (acao !== "MERGE") {
+      linhas.push(`[${grupo.situacao}]${rotuloDaAcao} ${grupo.grupo} — ${grupo.rotulo}${daDecisao}`);
+      if (grupo.motivoDaDecisao) linhas.push(`  decisão do PO: ${grupo.motivoDaDecisao}`);
+      for (const r of grupo.renomeacoes ?? []) {
+        const referencias = r.referencias.map((x) => `${x.tabela}.${x.coluna}=${x.linhas}`).join(", ");
+        linhas.push(`  renomeia: ${r.codigo} "${r.de}" → "${r.para}" (referências, nenhuma movida: ${referencias || "nenhuma"})`);
+      }
+      for (const m of grupo.mantidos ?? []) {
+        const referencias = m.referencias.map((x) => `${x.tabela}.${x.coluna}=${x.linhas}`).join(", ");
+        linhas.push(`  mantém: ${m.codigo} "${m.nome}" sem mudança (referências: ${referencias || "nenhuma"})`);
+      }
+      for (const r of grupo.exclusao?.registros ?? []) {
+        const internos = (grupo.exclusao?.internos ?? []).filter((i) => i.dono === r.codigo);
+        linhas.push(
+          `  exclui: ${r.codigo} "${r.nome}" (criado ${r.criadoEm ?? "—"}) + ${internos.map((i) => `${i.descricao} ${i.id}`).join(", ") || "nenhuma linha interna"} (CASCADE interno)`,
+        );
+      }
+      if (acao === "DELETE_UNUSED_AGGREGATE" && grupo.situacao === "PRONTO") {
+        linhas.push("  pré-condições: só V1 DRAFT criada junto, nunca ativada, 0 componentes, 0 Formulações derivadas, 0 referências externas, sem alteração posterior — conferidas");
+      }
+      if (acao === "BLOCKED") {
+        linhas.push(`  em revisão: ${[grupo.canonico, ...grupo.absorvidos].map((l) => `${l.codigo} "${l.nome}"`).join(", ")}`);
+        for (const pergunta of grupo.perguntas ?? []) linhas.push(`  pergunta à Veridi: ${pergunta}`);
+        for (const motivo of grupo.motivos.filter((m) => m !== grupo.motivoDaDecisao)) linhas.push(`  bloqueio: ${motivo}`);
+      } else {
+        for (const motivo of grupo.motivos) linhas.push(`  ABORTAR: ${motivo}`);
+      }
+      linhas.push("");
+      continue;
+    }
+    linhas.push(`[${grupo.situacao}]${rotuloDaAcao} ${grupo.grupo} — ${grupo.rotulo} "${grupo.canonico.nome}"${daDecisao}`);
     linhas.push(`  canônico: ${grupo.canonico.codigo} — ${grupo.explicacao}`);
     for (const absorvido of grupo.absorvidos) {
       const referencias = absorvido.referencias
@@ -1501,8 +2378,18 @@ export function descreverPlano(plano: Plano, destino: string): string[] {
   linhas.push(
     `resumo: ${plano.grupos.length} grupo(s) — ${prontos.length} PRONTO, ${bloqueados.length} BLOQUEADO (revisão necessária)` +
       (saneados.length > 0 ? `, ${saneados.length} JÁ SANEADO` : ""),
-    `efeito esperado: ${descreverEfeito(plano.efeitoEsperado)}`,
   );
+  if (plano.onda !== undefined) {
+    const acoes: AcaoDoGrupo[] = ["MERGE", "RENAME", "DELETE_UNUSED_AGGREGATE", "BLOCKED"];
+    linhas.push(
+      `ações: ${acoes
+        .map((acao) => [acao, plano.grupos.filter((g) => acaoDoGrupo(g) === acao)] as const)
+        .filter(([, grupos]) => grupos.length > 0)
+        .map(([acao, grupos]) => `${acao} ${grupos.length} (${grupos.map((g) => `${g.decisao?.grupo ?? g.grupo} ${g.situacao}`).join(", ")})`)
+        .join(" · ")}`,
+    );
+  }
+  linhas.push(`efeito esperado: ${descreverEfeito(plano.efeitoEsperado)}`);
   return linhas;
 }
 
@@ -1548,10 +2435,13 @@ function gravar(arquivo: string, conteudo: string | Buffer): void {
  * PO antes de qualquer escrita (decisão do PO na Onda 2).
  */
 export function exigirOndaInteira(plano: Plano): void {
-  const fora = plano.grupos.filter((g) => g.situacao !== "PRONTO");
-  if (plano.grupos.length === 0 || fora.length > 0) {
+  // Grupo em revisão por decisão do PO (BLOCKED) não é da execução: fica de
+  // fora da conta e nunca impede os grupos decididos. Todo o resto: PRONTO.
+  const decididos = plano.grupos.filter((g) => acaoDoGrupo(g) !== "BLOCKED");
+  const fora = decididos.filter((g) => g.situacao !== "PRONTO");
+  if (decididos.length === 0 || fora.length > 0) {
     throw new Error(
-      `a Onda ${plano.onda ?? "?"} só aplica com todos os grupos PRONTO (${plano.grupos.length - fora.length}/${plano.grupos.length}). ` +
+      `a Onda ${plano.onda ?? "?"} só aplica com todos os grupos PRONTO (${decididos.length - fora.length}/${decididos.length}). ` +
         `Fora: ${fora.map((g) => `${g.decisao?.grupo ?? g.grupo} (${g.situacao})`).join(", ") || "nenhum grupo no plano"}. Nada foi alterado.`,
     );
   }
@@ -1563,6 +2453,7 @@ export function tabelasDoPlano(plano: Plano): string[] {
   for (const grupo of plano.grupos) {
     if (grupo.situacao !== "PRONTO") continue;
     tabelas.add(cadastroPorChave(grupo.cadastro).tabela);
+    for (const interno of grupo.exclusao?.internos ?? []) tabelas.add(interno.tabela);
     for (const movimento of grupo.movimentos) tabelas.add(movimento.tabela);
     for (const { operacao } of grupo.relacoes ?? []) {
       tabelas.add("supplier_items");
@@ -1628,6 +2519,11 @@ export function conferirBackup(
   for (const grupo of plano.grupos) {
     if (grupo.situacao !== "PRONTO") continue;
     const tabela = cadastroPorChave(grupo.cadastro).tabela;
+    // Renomeação: o nome de ANTES precisa estar guardado.
+    for (const r of grupo.renomeacoes ?? []) exigirLinha(tabela, r.id, `${grupo.grupo}: ${r.codigo} (nome de antes)`);
+    // Agregado excluído: o dono e cada linha interna.
+    for (const r of grupo.exclusao?.registros ?? []) exigirLinha(tabela, r.id, `${grupo.grupo}: ${r.codigo}`);
+    for (const i of grupo.exclusao?.internos ?? []) exigirLinha(i.tabela, i.id, `${grupo.grupo}: ${i.dono} ${i.descricao}`);
     for (const absorvido of grupo.absorvidos) exigirLinha(tabela, absorvido.id, `${grupo.grupo}: ${absorvido.codigo}`);
     // O canônico muda de valor: o de ANTES precisa estar guardado.
     if ((grupo.atualizacoes ?? []).length > 0) {
@@ -1677,7 +2573,8 @@ async function main(): Promise<void> {
   const escolhidos = lista("cadastro");
   const todos = CADASTROS_MESTRE_NO_BANCO.map((c) => c.chave);
   if (onda !== undefined && escolhidos.length > 0) throw new Error("--onda e --cadastro não andam juntos: a onda é de Item.");
-  const chaves = onda !== undefined ? ["ITEM"] : escolhidos.length > 0 ? escolhidos : todos;
+  // Modo de decisão: os cadastros são os que a onda toca (Item e, da Onda 3, Modelo).
+  const chaves = onda !== undefined ? cadastrosDaOnda(onda) : escolhidos.length > 0 ? escolhidos : todos;
   for (const chave of chaves) cadastroPorChave(chave);
 
   // O client é o da API, como nos vizinhos: `@prisma/client` não resolve a partir de `scripts/`.
@@ -1730,7 +2627,10 @@ async function main(): Promise<void> {
         console.log(`Planilha salva em ${arquivoExcel}`);
       }
       console.log("\nSomente leitura: nada foi alterado.");
-      process.exitCode = plano.grupos.every((g) => g.situacao === "PRONTO") ? 0 : 2;
+      // Grupo em revisão por decisão (BLOCKED) não conta: é esperado que fique.
+      process.exitCode = plano.grupos.filter((g) => acaoDoGrupo(g) !== "BLOCKED").every((g) => g.situacao === "PRONTO")
+        ? 0
+        : 2;
       return;
     }
 
@@ -1797,7 +2697,14 @@ async function main(): Promise<void> {
       gravar(arquivoResultado, `${JSON.stringify(resultados, null, 2)}\n`);
       console.log(`\nResultado salvo em ${arquivoResultado}`);
     }
-    const conferencia = await verificar(prisma, plano.grupos.filter((g) => resultados.some((r) => r.grupo === g.grupo && r.situacao === "APLICADO")));
+    // Os aplicados, e os em revisão: a prova de que nada neles foi tocado.
+    const conferencia = await verificar(
+      prisma,
+      plano.grupos.filter(
+        (g) =>
+          acaoDoGrupo(g) === "BLOCKED" || resultados.some((r) => r.grupo === g.grupo && r.situacao === "APLICADO"),
+      ),
+    );
     console.log(`\n${descreverVerificacao(conferencia).join("\n")}`);
     const recontagem = onda !== undefined ? await recontar() : null;
     if (arquivoExcel) {
