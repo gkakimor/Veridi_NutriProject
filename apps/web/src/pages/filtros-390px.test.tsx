@@ -56,6 +56,7 @@ import { listCustomerOrders } from "../lib/customer-orders-api";
 import { listShipments } from "../lib/shipments-api";
 import { listPurchaseOrders } from "../lib/purchase-orders-api";
 import { clearStoredFilters } from "../lib/stored-filters";
+import { declaracoesEmMedia } from "../styles/testing/css-media";
 import { ReceiptsPage } from "./receiving/ReceiptsPage";
 import { FinishedGoodsPage } from "./finished-goods/FinishedGoodsPage";
 import { PickingConsumptionPage } from "./production-orders/PickingConsumptionPage";
@@ -94,12 +95,12 @@ beforeEach(() => {
 describe("a regra de tela estreita", () => {
   it("os controles com largura mínima em pixel ocupam a linha inteira", () => {
     const folha = css();
-    const estreita = folha.slice(folha.lastIndexOf("@media (max-width: 640px)"));
-    expect(estreita.length).toBeLessThan(folha.length);
-    for (const seletor of [".toolbar__search", ".toolbar__entity", ".filter-period__custom"]) {
-      expect(estreita).toContain(seletor);
+    // Todo bloco de 640px conta, não só o último: há um por componente.
+    const estreita = (seletor: string) => declaracoesEmMedia(folha, "max-width: 640px", seletor);
+    for (const seletor of [".toolbar__search", ".toolbar__entity"]) {
+      expect(estreita(seletor), seletor).toContain("min-width: 100%");
     }
-    expect(estreita).toContain("min-width: 100%");
+    expect(estreita(".filter-period__custom")).toContain("width: 100%");
   });
 
   it("atalhos de período e chips quebram linha em vez de esticar a página", () => {
