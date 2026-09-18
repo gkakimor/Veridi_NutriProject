@@ -202,6 +202,10 @@ O APPLY recusa, antes de escrever, arquivo de decisão diferente do que gerou o 
 o pacote de revisão, o importador nunca recria os absorvidos da onda e resolve o código da planilha deles para o
 canônico.
 
+Termo do campo consolidado só se junta por `trim` e caixa. Asterisco não é regra: juntar "X" e "X**" é equivalência
+declarada no grupo (`equivalentes`). **Antes da Onda 2 em PROD:** responder a V4 com a Veridi (o que `*`/`**`
+significam no nutriente) — a equivalência do G5 ("Clorogênico" = "Clorogênico**") foi aceita só para o DEV.
+
 ## 7. Apply
 
 ```

@@ -818,8 +818,10 @@ snapshots que os documentos já congelam. Exigiria migration. Quem pode alterar 
 **Executada no `veridi_dev` em 2026-09-17** (§118; seção própria do `PROJECT_STATE.md`): 8/8 grupos, 11 Itens
 removidos, 7 canônicos com `declaredNutrient` consolidado, duas relações com fornecedor consolidadas; PROD e Railway
 intocados. Pendente: a mesma onda em PROD, com conferência READ ONLY, PLAN em PROD, backup restaurável e aprovação do PO
-antes — o código do ERP sai de sequence por banco, e a decisão confere o código da planilha dos dois lados. O texto
-abaixo é o registro da aprovação.
+antes — o código do ERP sai de sequence por banco, e a decisão confere o código da planilha dos dois lados. **Antes de
+PROD, também a V4 com a Veridi** (o que `*`/`**` significam no nutriente): no G5, "Clorogênico" = "Clorogênico**" é
+equivalência declarada só para o DEV, na integração de 2026-09-17 — não regra geral de asterisco —, e a resposta pode
+mudar a decisão do grupo. O texto abaixo é o registro da aprovação.
 
 Aprovado pelo PO em 2026-09-17, na integração de MASTER-DATA-DUPLICATE-SANITIZATION-01 (§114). São nove
 consolidações, em duas naturezas:

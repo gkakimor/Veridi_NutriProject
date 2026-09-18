@@ -1,4 +1,4 @@
-import { cadastroPorChave } from "./master-data-catalog.js";
+import { cadastroPorChave, motivoDoFundidoEmTexto } from "./master-data-catalog.js";
 import type { AbaDaPlanilha, ValorDeCelula } from "./xlsx-writer.js";
 import type { GrupoPlanejado, Plano, ResultadoDoGrupo } from "./master-data-duplicate-sanitization.js";
 
@@ -269,7 +269,7 @@ export function planilhaDaOnda(
           : null,
         ...(atualizacao?.fundidos ?? [])
           .filter((f) => termosDoRemovido.has(f.termo))
-          .map((f) => `"${f.termo}" é o mesmo termo de "${f.em}" (marcador ou caixa): ficou "${f.em}"`),
+          .map((f) => `"${f.termo}" é o mesmo termo de "${f.em}" (${motivoDoFundidoEmTexto(f.motivo)}): ficou "${f.em}"`),
         ...grupo.camposPerdidos
           .filter((c) => c.codigo === absorvido.codigo)
           .map((c) => `campo que só existia no removido: ${c.coluna}="${c.valor}"`),

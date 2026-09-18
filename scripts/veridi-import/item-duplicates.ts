@@ -40,7 +40,20 @@ export interface DecisaoDeDuplicata {
    * cálculo não der exatamente isto: nada é escrito no canônico sem estar
    * escrito aqui antes.
    */
-  consolidar?: { declaredNutrient: string };
+  consolidar?: ConsolidacaoDecidida;
+}
+
+/**
+ * O que a decisão escreve no canônico.
+ *
+ * `equivalentes` é a exceção declarada DESTE grupo: `{ "Clorogênico":
+ * "Clorogênico**" }` diz que os dois termos são o mesmo e que fica a grafia da
+ * direita. Não é regra geral — sem ela, termos que diferem por asterisco (ou
+ * por qualquer coisa além de espaço nas pontas e caixa) continuam diferentes.
+ */
+export interface ConsolidacaoDecidida {
+  declaredNutrient: string;
+  equivalentes?: Readonly<Record<string, string>>;
 }
 
 const CODIGO_DO_ITEM = /^(MP|ME)-\d{6}$/;
@@ -91,6 +104,17 @@ export function validarDecisoes(decisoes: readonly DecisaoDeDuplicata[]): string
       const partes = decisao.consolidar.declaredNutrient.split(SEPARADOR_DA_CONSOLIDACAO);
       if (partes.some((parte) => !parte.trim() || parte !== parte.trim() || parte.includes("·"))) {
         erros.push(`${ref}: consolidação de declaredNutrient com termo vazio ou com espaço sobrando`);
+      }
+      // A equivalência declarada tem de levar a um termo que fica, e o termo
+      // que ela junta não pode continuar no valor final.
+      for (const [termo, fica] of Object.entries(decisao.consolidar.equivalentes ?? {})) {
+        if (!termo.trim() || termo !== termo.trim() || !fica.trim() || fica !== fica.trim()) {
+          erros.push(`${ref}: equivalência com termo vazio ou com espaço sobrando`);
+        } else if (!partes.includes(fica)) {
+          erros.push(`${ref}: a equivalência leva "${termo}" a "${fica}", que não está no valor consolidado`);
+        } else if (partes.includes(termo)) {
+          erros.push(`${ref}: "${termo}" é declarado igual a "${fica}" e continua no valor consolidado`);
+        }
       }
     }
 
@@ -174,7 +198,7 @@ export interface GrupoDeDecisao {
   nome: string;
   canonico: LadoDaDecisao;
   absorvidos: (LadoDaDecisao & { nomeDoAbsorvido?: string })[];
-  consolidar?: { declaredNutrient: string };
+  consolidar?: ConsolidacaoDecidida;
 }
 
 /**

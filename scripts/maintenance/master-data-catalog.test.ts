@@ -248,13 +248,40 @@ describe("consolidação de campo no canônico (Onda 2)", () => {
   it("caixa diferente é o mesmo termo, e fica a grafia que veio primeiro", () => {
     const { valor, fundidos } = consolidarTermos(["Fibra Alimentar", "FIBRA ALIMENTAR", "Beta-glucana"]);
     expect(valor).toBe("Fibra Alimentar · Beta-glucana");
-    expect(fundidos).toEqual([{ termo: "FIBRA ALIMENTAR", em: "Fibra Alimentar" }]);
+    expect(fundidos).toEqual([{ termo: "FIBRA ALIMENTAR", em: "Fibra Alimentar", motivo: "caixa" }]);
   });
 
-  it("asterisco final é marcador: 'Clorogênico' e 'Clorogênico**' são o mesmo termo, e o fundido é declarado", () => {
+  it("asterisco NÃO é regra: sem equivalência declarada, 'Clorogênico' e 'Clorogênico**' são termos diferentes", () => {
     const { valor, fundidos } = consolidarTermos(["Clorogênico**", "Adenosina", "Clorogênico", "Rutina"]);
+    expect(valor).toBe("Clorogênico** · Adenosina · Clorogênico · Rutina");
+    expect(fundidos).toEqual([]);
+    expect(consolidarTermos(["Vitamina C*", "Vitamina C"]).valor).toBe("Vitamina C* · Vitamina C");
+  });
+
+  it("a equivalência que a decisão do grupo declara junta os dois, fica a grafia declarada, e o fundido diz 'decisão'", () => {
+    const equivalentes = { "Clorogênico": "Clorogênico**" };
+    const { valor, fundidos } = consolidarTermos(["Clorogênico**", "Adenosina", "Clorogênico", "Rutina"], equivalentes);
     expect(valor).toBe("Clorogênico** · Adenosina · Rutina");
-    expect(fundidos).toEqual([{ termo: "Clorogênico", em: "Clorogênico**" }]);
+    expect(fundidos).toEqual([{ termo: "Clorogênico", em: "Clorogênico**", motivo: "decisão" }]);
+    // O termo declarado chegando antes da grafia que fica: entra já na grafia declarada.
+    expect(consolidarTermos(["Adenosina", "Clorogênico", "Clorogênico**"], equivalentes)).toEqual({
+      valor: "Adenosina · Clorogênico**",
+      fundidos: [{ termo: "Clorogênico", em: "Clorogênico**", motivo: "decisão" }],
+    });
+  });
+
+  it("a equivalência vale só para o termo que ela nomeia — o resto segue a regra", () => {
+    const { valor, fundidos } = consolidarTermos(["Clorogênico**", "Vitamina C*", "Vitamina C", "Clorogênico"], {
+      "Clorogênico": "Clorogênico**",
+    });
+    expect(valor).toBe("Clorogênico** · Vitamina C* · Vitamina C");
+    expect(fundidos).toEqual([{ termo: "Clorogênico", em: "Clorogênico**", motivo: "decisão" }]);
+  });
+
+  it("o mesmo termo fundido duas vezes é declarado uma vez", () => {
+    expect(consolidarTermos(["Fibra", "FIBRA", "FIBRA"]).fundidos).toEqual([
+      { termo: "FIBRA", em: "Fibra", motivo: "caixa" },
+    ]);
   });
 
   it("acento continua contando: 'Fosforo' e 'Fósforo' NÃO são o mesmo termo", () => {

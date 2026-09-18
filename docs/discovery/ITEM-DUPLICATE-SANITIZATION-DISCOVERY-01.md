@@ -185,6 +185,10 @@ Onda B, conforme o PO.
   de `versionNumber`. A execução é MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-2-01, que precisa de escrita no canônico e
   de par nomeado — nenhuma das duas existe na ferramenta de hoje.
 - 2026-09-17 — Onda 2 executada no `veridi_dev` (MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-2-01, §118): a ferramenta
-  genérica ganhou modo de decisão, consolidação declarada no canônico e par nomeado; 8/8 grupos aplicados. Regra do
-  termo decidida na implementação e escrita na §118: asterisco final é marcador ("Clorogênico" e "Clorogênico**" são o
-  mesmo termo, fica a grafia do canônico) — o significado do marcador continua sendo a pergunta V4.
+  genérica ganhou modo de decisão, consolidação declarada no canônico e par nomeado; 8/8 grupos aplicados. A entrega
+  tratava asterisco final como marcador em qualquer termo — regra que a integração desfez (linha abaixo).
+- 2026-09-17 — PO, na integração da Onda 2: **asterisco NÃO é regra geral**. "Clorogênico" e "Clorogênico**" não
+  aparecem duas vezes no nutriente do G5, e fica a grafia do canônico, por equivalência declarada SÓ nesse grupo
+  (`equivalentes` no arquivo de decisão), aceita para o DEV. **V4 segue aberta com a Veridi e tem de ser respondida
+  antes de a onda rodar em PROD.** A sílica mantém "Sachê Silica gel 5g" (ME-000021), sem renomear. Sem novo APPLY: o
+  DEV foi reconhecido como JÁ SANEADO (8/8) e o VERIFY passou.

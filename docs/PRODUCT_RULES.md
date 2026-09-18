@@ -7540,15 +7540,22 @@ para o canônico. A impressão da Onda A não muda.
 
 **Par nomeado.** A sílica difere por acento ("Silica" × "SÍLICA"), e a regra automática preserva acento — continua
 preservando. O par entra por decisão explícita (`nomeDoAbsorvido`), que o arquivo só aceita para nome que a regra
-automática NÃO junta. O canônico mantém o nome dele: renomear não é desta onda.
+automática NÃO junta. O canônico mantém o nome dele — ME-000021 "Sachê Silica gel 5g", sem renomear: padronizar nome
+não é desta onda.
 
 **Consolidação no canônico (canonicalUpdates).** Só `declaredNutrient`, e só onde a decisão pede:
 
 - os termos ÚNICOS de todos os registros do grupo, em "A · B · C";
 - a ordem é a do canônico primeiro e depois a dos absorvidos pelo código — o valor de antes é o começo do de depois;
-- `trim`, sem caixa; asterisco final é marcador da planilha, não outro nutriente: "Clorogênico" e "Clorogênico**" são o
-  mesmo termo, e fica a grafia do canônico (o significado do marcador segue como pergunta V4 à Veridi);
-- acento conta, como na regra do nome; termo nenhum é inventado;
+- termo repetido é o mesmo só por `trim` e caixa; acento conta, como na regra do nome; termo nenhum é inventado;
+- **asterisco NÃO é regra**: termo com e sem `*`/`**` são termos DIFERENTES para a ferramenta. Juntar dois termos que
+  diferem por outra coisa que não caixa é decisão do grupo, declarada por escrito (`equivalentes` no arquivo de decisão);
+- **única equivalência declarada: G5** (integração, PO em 2026-09-17, aceita para o DEV). "Clorogênico" (MP-000324) e
+  "Clorogênico**" (canônico MP-000347) não aparecem duas vezes no valor consolidado, e fica a grafia do canônico,
+  "Clorogênico**". Vale para este grupo, não para a planilha inteira. **V4 — o significado de `*`/`**` no nutriente —
+  continua pendente com a Veridi e tem de ser respondida ANTES de executar a onda em PROD**; a resposta pode mudar a
+  decisão do G5. Sem a equivalência declarada, o G5 calcula "Clorogênico** · Adenosina · Clorogênico · Rutina" e
+  bloqueia;
 - o valor final está ESCRITO na decisão, e a ferramenta recusa o grupo se o cálculo não der exatamente isso;
 - o PLAN mostra ANTES e DEPOIS, a escrita entra na impressão digital, e o APPLY grava por compare-and-set (só se o
   canônico ainda tem o valor de antes). Nenhum outro campo do canônico muda; `updatedAt` marca a gravação.

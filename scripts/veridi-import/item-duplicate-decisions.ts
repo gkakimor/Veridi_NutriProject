@@ -70,9 +70,10 @@ export const DECISOES_DE_DUPLICATAS: readonly DecisaoDeDuplicata[] = [
   // Onda 2 — aprovada pelo PO em 2026-09-17 (MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-2-01).
   // Mesmo material físico, uma linha por nutriente na planilha: o canônico recebe os
   // nutrientes ÚNICOS em "A · B · C" — o dele primeiro, depois os dos absorvidos na ordem
-  // do código; termo que só difere por asterisco final é o mesmo termo (fica a grafia do
-  // canônico). O valor final está escrito aqui e a ferramenta recusa o grupo se o
-  // cálculo não der exatamente isto. Executada por master-data-duplicate-sanitization.ts.
+  // do código. Termo repetido só se reconhece sem espaço nas pontas e sem caixa; qualquer
+  // outra diferença (asterisco inclusive) é outro termo, salvo equivalência declarada no
+  // grupo. O valor final está escrito aqui e a ferramenta recusa o grupo se o cálculo
+  // não der exatamente isto. Executada por master-data-duplicate-sanitization.ts.
   {
     onda: "2",
     grupo: "G2",
@@ -89,13 +90,20 @@ export const DECISOES_DE_DUPLICATAS: readonly DecisaoDeDuplicata[] = [
     canonico: { codigo: "MP-000118", codigoPlanilha: "118" },
     consolidar: { declaredNutrient: "Fibra Alimentar · Beta-glucana" },
   },
+  // G5: "Clorogênico" (MP-000324) e "Clorogênico**" (canônico MP-000347) são o mesmo
+  // nutriente POR DECISÃO DO PO NESTE GRUPO, aceita para o DEV: aparece uma vez, com a
+  // grafia do canônico. NÃO é regra geral de asterisco — o significado de * / ** na
+  // planilha (V4) segue pendente com a Veridi e tem de ser respondido antes de PROD.
   {
     onda: "2",
     grupo: "G5",
     nome: "Concentrado hidrossolúvel de tomate (Lycopersicon esculentum)",
     absorvido: { codigo: "MP-000165", codigoPlanilha: "166" },
     canonico: { codigo: "MP-000347", codigoPlanilha: "348" },
-    consolidar: { declaredNutrient: "Clorogênico** · Adenosina · Rutina" },
+    consolidar: {
+      declaredNutrient: "Clorogênico** · Adenosina · Rutina",
+      equivalentes: { "Clorogênico": "Clorogênico**" },
+    },
   },
   {
     onda: "2",
@@ -103,7 +111,10 @@ export const DECISOES_DE_DUPLICATAS: readonly DecisaoDeDuplicata[] = [
     nome: "Concentrado hidrossolúvel de tomate (Lycopersicon esculentum)",
     absorvido: { codigo: "MP-000324", codigoPlanilha: "325" },
     canonico: { codigo: "MP-000347", codigoPlanilha: "348" },
-    consolidar: { declaredNutrient: "Clorogênico** · Adenosina · Rutina" },
+    consolidar: {
+      declaredNutrient: "Clorogênico** · Adenosina · Rutina",
+      equivalentes: { "Clorogênico": "Clorogênico**" },
+    },
   },
   {
     onda: "2",
@@ -111,7 +122,10 @@ export const DECISOES_DE_DUPLICATAS: readonly DecisaoDeDuplicata[] = [
     nome: "Concentrado hidrossolúvel de tomate (Lycopersicon esculentum)",
     absorvido: { codigo: "MP-000349", codigoPlanilha: "350" },
     canonico: { codigo: "MP-000347", codigoPlanilha: "348" },
-    consolidar: { declaredNutrient: "Clorogênico** · Adenosina · Rutina" },
+    consolidar: {
+      declaredNutrient: "Clorogênico** · Adenosina · Rutina",
+      equivalentes: { "Clorogênico": "Clorogênico**" },
+    },
   },
   {
     onda: "2",

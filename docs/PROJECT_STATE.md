@@ -6238,16 +6238,23 @@ fundido ("Clorogênico" → "Clorogênico**") nas três linhas do tomate; corrig
 pelo VERIFY a partir do resultado real do APPLY (horas de cada grupo preservadas). Plano e resultado em
 `.local-data/veridi/saneamento-duplicatas/master-data/onda-2/`.
 
-**Observação para o PO.** O canônico da sílica mantém o nome "Sachê Silica gel 5g" — sem o acento em "Sílica". Renomear
-não era desta onda.
+**Integração (PO, 2026-09-17), sem novo APPLY.** A entrega juntava termo com asterisco final em qualquer grupo; o PO
+recusou a regra geral. Agora asterisco NÃO é regra: "Clorogênico" = "Clorogênico**" é equivalência declarada só no G5
+(`equivalentes` no arquivo de decisão, grafia do canônico), aceita para o DEV — **V4 (o que `*`/`**` significam) segue
+pendente com a Veridi antes de PROD**. A sílica mantém "Sachê Silica gel 5g" (ME-000021), sem renomear. A impressão da
+decisão da Onda 2 mudou com a equivalência (`6c2d6f2e…` → `f31e07c6…`); a da Onda A, não. Depois do rebase, somente
+leitura no DEV: PLAN 8/8 JÁ SANEADO (efeito: nenhuma tabela), VERIFY OK com o plano preservado, recontagem com os mesmos
+6 grupos, e os 6 conferidos byte a byte contra o backup de antes da onda (10 Itens, 2 Modelos, 13 relações, 14 ofertas,
+24 eventos, 22 componentes). Planilha, plano e resultado com o mesmo hash de antes.
 
-**Validação.** 146 testes nos scripts e no shared (consolidação, arquivo de decisão com a Onda 2, modo de decisão contra o
-banco de teste — canonicalUpdates, impressão, par nomeado, critério, conflito, relação consolidada e movida,
-preferencial, Formulação ACTIVE, colisão de componente com o canônico e entre absorvidos, onda inteira, arquivo de decisão
-mudado, recusa da ferramenta de Item, planilha — e as suítes da Onda A, que passaram sem mudança de comportamento), mais
-a "Duplicata de Item absorvida" e a revisão do importador. Typecheck dos scripts. As duas suítes de banco disputavam a
-trava consultiva em paralelo: cada arquivo usa agora a própria chave (ponto de teste; o CLI usa sempre a mesma). Sem
-migration, sem E2E, sem Playwright, sem mutação e sem suíte completa.
+**Validação.** 152 testes focados nos scripts (consolidação, arquivo de decisão com a Onda 2 e a equivalência do G5,
+modo de decisão contra o banco de teste — canonicalUpdates, asterisco sem equivalência bloqueando, impressão, par
+nomeado, critério, conflito, relação consolidada e movida, preferencial, Formulação ACTIVE, colisão de componente com o
+canônico e entre absorvidos, onda inteira, arquivo de decisão mudado, recusa da ferramenta de Item, planilha — e as
+suítes da Onda A, sem mudança de comportamento), mais a "Duplicata de Item absorvida" e a revisão do importador.
+Typecheck dos scripts. As duas suítes de banco disputavam a trava consultiva em paralelo: cada arquivo usa a própria
+chave (ponto de teste; o CLI usa sempre a mesma). Sem migration, sem E2E, sem Playwright, sem mutação e sem suíte
+completa.
 
 ## Próxima prioridade
 

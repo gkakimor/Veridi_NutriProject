@@ -15,12 +15,14 @@ import {
   compararCampos,
   consolidarTermos,
   escolherCanonico,
+  motivoDoFundidoEmTexto,
 } from "./master-data-catalog.js";
 import type {
   CadastroMestreNoBanco,
   CampoPerdido,
   ConflitoDeCampo,
   MotivoDoCanonico,
+  MotivoDoFundido,
   RegistroDoGrupo,
 } from "./master-data-catalog.js";
 import { planilhaDaOnda, planilhaDoSaneamento } from "./master-data-duplicate-report.js";
@@ -131,8 +133,11 @@ export interface AtualizacaoDoCanonico {
   coluna: string;
   antes: string | null;
   depois: string;
-  /** Termo que só diferia por caixa ou marcador e ficou na grafia do canônico. */
-  fundidos: { termo: string; em: string }[];
+  /**
+   * Termo que ficou na grafia do canônico: só pela caixa, ou pela equivalência
+   * declarada na decisão do grupo. Plano gravado antes do motivo não o tem.
+   */
+  fundidos: { termo: string; em: string; motivo?: MotivoDoFundido }[];
 }
 
 /** Relação Item × Fornecedor de um absorvido, pela regra da §110. */
@@ -760,7 +765,8 @@ async function planejarGrupoDaDecisao(
   }
 
   // Campo a campo: só a coluna que a decisão consolida pode divergir.
-  const consolidadas = Object.keys(decisao.consolidar ?? {});
+  // `equivalentes` é da regra do cálculo, não uma coluna.
+  const consolidadas = Object.keys(decisao.consolidar ?? {}).filter((chave) => chave !== "equivalentes");
   for (const coluna of consolidadas) {
     if (!COLUNAS_CONSOLIDAVEIS.has(coluna)) motivos.push(`a decisão consolida "${coluna}", que a ferramenta não sabe consolidar`);
   }
@@ -776,10 +782,12 @@ async function planejarGrupoDaDecisao(
   const atualizacoes: AtualizacaoDoCanonico[] = [];
   if (decisao.consolidar) {
     const antes = comoTexto(canonico.dados, "declaredNutrient");
-    const { valor, fundidos } = consolidarTermos([
-      antes,
-      ...absorvidos.map((a) => comoTexto(a.dados, "declaredNutrient")),
-    ]);
+    // Só a equivalência que a decisão DESTE grupo declara; sem ela, termo que
+    // difere por qualquer coisa além de espaço nas pontas e caixa fica separado.
+    const { valor, fundidos } = consolidarTermos(
+      [antes, ...absorvidos.map((a) => comoTexto(a.dados, "declaredNutrient"))],
+      decisao.consolidar.equivalentes ?? {},
+    );
     const esperado = decisao.consolidar.declaredNutrient;
     if (valor !== esperado) {
       motivos.push(`declaredNutrient consolidado dá "${valor ?? ""}", e a decisão espera "${esperado}"`);
@@ -1464,8 +1472,8 @@ export function descreverPlano(plano: Plano, destino: string): string[] {
     }
     for (const atualizacao of grupo.atualizacoes ?? []) {
       linhas.push(`  ${atualizacao.coluna} do canônico: ANTES "${atualizacao.antes ?? ""}" → DEPOIS "${atualizacao.depois}"`);
-      for (const { termo, em } of atualizacao.fundidos) {
-        linhas.push(`    "${termo}" é o mesmo termo de "${em}" (só difere por caixa ou marcador): fica "${em}"`);
+      for (const { termo, em, motivo } of atualizacao.fundidos) {
+        linhas.push(`    "${termo}" é o mesmo termo de "${em}" (${motivoDoFundidoEmTexto(motivo)}): fica "${em}"`);
       }
     }
     for (const { codigo, operacao } of grupo.relacoes ?? []) {

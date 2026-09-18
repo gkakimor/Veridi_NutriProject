@@ -85,6 +85,18 @@ describe("Onda 2 no arquivo de decisão (MASTER-DATA-DUPLICATE-SANITIZATION-WAVE
     ]);
   });
 
+  it("'Clorogênico' = 'Clorogênico**' é equivalência declarada SÓ no G5 — nenhum outro grupo junta termo por asterisco", () => {
+    const comEquivalencia = gruposDaOnda("2").filter((g) => g.consolidar?.equivalentes !== undefined);
+    expect(comEquivalencia.map((g) => [g.grupo, g.consolidar?.equivalentes])).toEqual([
+      ["G5", { "Clorogênico": "Clorogênico**" }],
+    ]);
+    expect(DECISOES_DE_DUPLICATAS.filter((d) => d.consolidar?.equivalentes !== undefined).map((d) => d.grupo)).toEqual([
+      "G5",
+      "G5",
+      "G5",
+    ]);
+  });
+
   it("os grupos em revisão e o Modelo X ficam FORA — nenhum código deles no arquivo", () => {
     const codigos = new Set(DECISOES_DE_DUPLICATAS.flatMap((d) => [d.absorvido.codigo, d.canonico.codigo]));
     for (const codigo of ["MP-000149", "MP-000475", "MP-000325", "MP-000348", "MP-000320", "MP-000468", "MP-000014", "MP-000022", "MP-000393", "MP-000486"]) {
@@ -126,6 +138,17 @@ describe("Onda 2 no arquivo de decisão (MASTER-DATA-DUPLICATE-SANITIZATION-WAVE
     );
   });
 
+  it("equivalência declarada: leva a um termo do valor final, e o termo que ela junta sai do valor", () => {
+    const base = decisao("G1", "MP-000002", "MP-000001", "2", "1");
+    const com = (declaredNutrient: string, equivalentes: Record<string, string>) =>
+      validarDecisoes([{ ...base, consolidar: { declaredNutrient, equivalentes } }]).join("\n");
+    expect(com("A** · B", { A: "A**" })).toBe("");
+    expect(com("A · B", { A: "A**" })).toMatch(/leva "A" a "A\*\*", que não está no valor consolidado/);
+    expect(com("A** · A · B", { A: "A**" })).toMatch(/"A" é declarado igual a "A\*\*" e continua no valor consolidado/);
+    expect(com("A** · B", { " A": "A**" })).toMatch(/equivalência com termo vazio ou com espaço sobrando/);
+    expect(com("A** · B", { "": "A**" })).toMatch(/equivalência com termo vazio/);
+  });
+
   it("a impressão da Onda A não mudou com a Onda 2 no mesmo arquivo", () => {
     // O valor da main antes desta capability: plano da Onda A feito antes continua válido.
     expect(impressaoDasDecisoes(decisoesDaOnda("A"))).toBe(
@@ -139,6 +162,10 @@ describe("Onda 2 no arquivo de decisão (MASTER-DATA-DUPLICATE-SANITIZATION-WAVE
       impressaoDasDecisoes([{ ...base, consolidar: { declaredNutrient: "A · C" } }]),
     );
     expect(impressaoDasDecisoes([base])).not.toBe(impressaoDasDecisoes([{ ...base, nomeDoAbsorvido: "Matérial" }]));
+    // A equivalência é decisão: plano feito sem ela não se aplica com ela.
+    expect(impressaoDasDecisoes([base])).not.toBe(
+      impressaoDasDecisoes([{ ...base, consolidar: { declaredNutrient: "A · B", equivalentes: { "A*": "A" } } }]),
+    );
   });
 
   it("decisaoDeGrupo separa o que é da ferramenta de Item do que é da ferramenta genérica", () => {

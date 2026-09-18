@@ -175,7 +175,7 @@ function decisaoDoGrupo(
   onda: string,
   canonico: ItemCriado,
   absorvidos: readonly ItemCriado[],
-  extra: { consolidar?: string; nomeDoAbsorvido?: string } = {},
+  extra: { consolidar?: string; equivalentes?: Record<string, string>; nomeDoAbsorvido?: string } = {},
 ): DecisaoDeDuplicata[] {
   return absorvidos.map((absorvido) => ({
     onda,
@@ -183,7 +183,14 @@ function decisaoDoGrupo(
     nome: canonico.name,
     absorvido: { codigo: absorvido.code, codigoPlanilha: absorvido.externalCode },
     canonico: { codigo: canonico.code, codigoPlanilha: canonico.externalCode },
-    ...(extra.consolidar !== undefined ? { consolidar: { declaredNutrient: extra.consolidar } } : {}),
+    ...(extra.consolidar !== undefined
+      ? {
+          consolidar: {
+            declaredNutrient: extra.consolidar,
+            ...(extra.equivalentes !== undefined ? { equivalentes: extra.equivalentes } : {}),
+          },
+        }
+      : {}),
     ...(extra.nomeDoAbsorvido !== undefined ? { nomeDoAbsorvido: extra.nomeDoAbsorvido } : {}),
   }));
 }
@@ -201,7 +208,7 @@ const unico = (plano: Plano): GrupoPlanejado => {
  * ------------------------------------------------------------------ */
 
 describe("PLAN da onda — canonicalUpdates e a regra do nutriente", () => {
-  it("grupo de três: canônico pelo critério, ANTES/DEPOIS do nutriente e o marcador fundido declarado", async () => {
+  it("grupo de três: canônico pelo critério, ANTES/DEPOIS do nutriente e a equivalência declarada na decisão", async () => {
     const nome = `Tomate W2 ${marca()}`;
     const canonico = await criarItem(nome, { nutriente: "Clorogênico**" });
     const fornecedor = await criarFornecedor();
@@ -211,7 +218,13 @@ describe("PLAN da onda — canonicalUpdates e a regra do nutriente", () => {
     const o = onda();
 
     const grupo = unico(
-      await planoDa(o, decisaoDoGrupo(o, canonico, [a, b], { consolidar: "Clorogênico** · Adenosina" })),
+      await planoDa(
+        o,
+        decisaoDoGrupo(o, canonico, [a, b], {
+          consolidar: "Clorogênico** · Adenosina",
+          equivalentes: { "Clorogênico": "Clorogênico**" },
+        }),
+      ),
     );
     expect(grupo.situacao).toBe("PRONTO");
     expect(grupo.canonico.codigo).toBe(canonico.code);
@@ -222,11 +235,29 @@ describe("PLAN da onda — canonicalUpdates e a regra do nutriente", () => {
         coluna: "declaredNutrient",
         antes: "Clorogênico**",
         depois: "Clorogênico** · Adenosina",
-        fundidos: [{ termo: "Clorogênico", em: "Clorogênico**" }],
+        fundidos: [{ termo: "Clorogênico", em: "Clorogênico**", motivo: "decisão" }],
       },
     ]);
     // A escrita no canônico entra no efeito previsto: um UPDATE e as remoções.
     expect(efeitoEsperado([grupo])).toEqual({ items: { ins: 0, upd: 1, del: 2 } });
+  });
+
+  it("asterisco não é regra: sem a equivalência declarada, 'Clorogênico' e 'Clorogênico**' ficam separados e o grupo BLOQUEIA", async () => {
+    const nome = `Tomate sem equivalência W2 ${marca()}`;
+    const canonico = await criarItem(nome, { nutriente: "Clorogênico**" });
+    const a = await criarItem(nome, { nutriente: "Adenosina" });
+    const b = await criarItem(nome, { nutriente: "Clorogênico" });
+    const o = onda();
+
+    const grupo = unico(
+      await planoDa(o, decisaoDoGrupo(o, canonico, [a, b], { consolidar: "Clorogênico** · Adenosina" })),
+    );
+    expect(grupo.situacao).toBe("BLOQUEADO");
+    expect(grupo.motivos.join("\n")).toContain(
+      'declaredNutrient consolidado dá "Clorogênico** · Adenosina · Clorogênico", e a decisão espera "Clorogênico** · Adenosina"',
+    );
+    expect(grupo.atualizacoes).toEqual([]);
+    expect(efeitoEsperado([grupo])).toEqual({});
   });
 
   it("o cálculo diferente do valor escrito na decisão BLOQUEIA — nada é escrito sem estar decidido", async () => {
@@ -621,12 +652,17 @@ describe("planilha da onda", () => {
     const o = onda();
     const plano = await planoDa(
       o,
-      decisaoDoGrupo(o, canonico, [adenosina, clorogenico], { consolidar: "Clorogênico** · Adenosina" }),
+      decisaoDoGrupo(o, canonico, [adenosina, clorogenico], {
+        consolidar: "Clorogênico** · Adenosina",
+        equivalentes: { "Clorogênico": "Clorogênico**" },
+      }),
     );
 
     const [removidos] = planilhaDaOnda(plano, [], null);
     const observacao = (codigo: string) => String(removidos!.linhas.find((l) => l[1] === codigo)![13]);
-    expect(observacao(clorogenico.code)).toContain('"Clorogênico" é o mesmo termo de "Clorogênico**"');
+    expect(observacao(clorogenico.code)).toContain(
+      '"Clorogênico" é o mesmo termo de "Clorogênico**" (equivalência declarada na decisão do grupo)',
+    );
     expect(observacao(adenosina.code)).not.toContain("mesmo termo");
     expect(observacao(adenosina.code)).toContain('nutriente declarado do removido: "Adenosina"');
   });

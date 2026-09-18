@@ -386,21 +386,26 @@ export function compararCampos(
 export const SEPARADOR_DE_TERMOS = " · ";
 
 /**
- * Dois termos são o mesmo termo? `trim`, sem caixa e sem asterisco no fim.
+ * Dois termos são o mesmo termo? `trim` e sem caixa — a mesma regra do nome,
+ * acento contando.
  *
- * O asterisco final é marcador da planilha legada ("Clorogênico**", "Vitamina
- * B6*") — o significado dele é pergunta aberta com a Veridi (V4), mas o
- * nutriente é o mesmo. Acento continua contando, como na regra do nome.
+ * Asterisco NÃO é removido: "Clorogênico" e "Clorogênico**" são termos
+ * diferentes para a regra. O que o `*`/`**` da planilha legada significa é a
+ * pergunta V4, aberta com a Veridi; juntar os dois é decisão, e mora na
+ * decisão do grupo (`equivalentes`), nunca aqui.
  */
 export function chaveDoTermo(termo: string): string {
-  return termo.trim().replace(/\*+$/u, "").trim().toUpperCase();
+  return termo.trim().toUpperCase();
 }
+
+/** Por que um termo sumiu da consolidação. */
+export type MotivoDoFundido = "caixa" | "decisão";
 
 export interface Consolidacao {
   /** "A · B · C", ou `null` quando nenhum registro tinha valor. */
   valor: string | null;
-  /** Termo que só diferia por caixa ou marcador e ficou na grafia que veio antes. */
-  fundidos: { termo: string; em: string }[];
+  /** Termo que ficou em outra grafia: só pela caixa, ou por equivalência declarada na decisão. */
+  fundidos: { termo: string; em: string; motivo: MotivoDoFundido }[];
 }
 
 /**
@@ -408,31 +413,55 @@ export interface Consolidacao {
  *
  *  - valor já consolidado entra termo a termo (rodar de novo dá o mesmo);
  *  - espaço nas pontas sai, termo vazio sai;
- *  - termo repetido fica uma vez só, na PRIMEIRA grafia encontrada;
- *  - nada é inventado: só entra termo que já estava em algum registro.
+ *  - termo repetido (mesma chave: `trim` + caixa) fica uma vez só, na PRIMEIRA
+ *    grafia encontrada;
+ *  - `equivalentes` é o que a DECISÃO do grupo declara igual — `{ "Clorogênico":
+ *    "Clorogênico**" }` — e vale só para quem a passa: o termo da esquerda vira
+ *    o da direita antes de comparar. Sem declaração, termo diferente continua
+ *    diferente;
+ *  - nada é inventado: só entra termo que já estava em algum registro, ou a
+ *    grafia que a decisão declarou para ele.
  *
  * Quem chama decide a ordem — na Onda 2, o canônico primeiro e depois os
  * absorvidos pelo código, para o valor de antes ser o começo do valor de
  * depois.
  */
-export function consolidarTermos(valores: readonly (string | null | undefined)[]): Consolidacao {
+export function consolidarTermos(
+  valores: readonly (string | null | undefined)[],
+  equivalentes: Readonly<Record<string, string>> = {},
+): Consolidacao {
   const termos: string[] = [];
   const porChave = new Map<string, string>();
-  const fundidos: { termo: string; em: string }[] = [];
+  const fundidos: Consolidacao["fundidos"] = [];
   for (const valor of valores) {
     if (valor === null || valor === undefined) continue;
     for (const parte of valor.split(/\s*·\s*/u)) {
-      const termo = parte.trim();
+      const original = parte.trim();
+      const declarado = equivalentes[original];
+      const termo = declarado ?? original;
       const chave = chaveDoTermo(termo);
       if (!chave) continue;
       const existente = porChave.get(chave);
       if (existente === undefined) {
         porChave.set(chave, termo);
         termos.push(termo);
-      } else if (existente !== termo) {
-        fundidos.push({ termo, em: existente });
+        if (declarado !== undefined && declarado !== original) {
+          fundidos.push({ termo: original, em: termo, motivo: "decisão" });
+        }
+      } else if (existente !== original && !fundidos.some((f) => f.termo === original && f.em === existente)) {
+        fundidos.push({ termo: original, em: existente, motivo: declarado !== undefined ? "decisão" : "caixa" });
       }
     }
   }
   return { valor: termos.length > 0 ? termos.join(SEPARADOR_DE_TERMOS) : null, fundidos };
+}
+
+/**
+ * O porquê de um termo fundido, em texto. Sem motivo (plano gravado antes de o
+ * motivo existir) não inventa um: diz só que ficou a outra grafia.
+ */
+export function motivoDoFundidoEmTexto(motivo: MotivoDoFundido | undefined): string {
+  if (motivo === "decisão") return "equivalência declarada na decisão do grupo";
+  if (motivo === "caixa") return "só difere por caixa";
+  return "mesmo termo";
 }
