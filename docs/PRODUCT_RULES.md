@@ -7335,7 +7335,7 @@ histórico — a mesma decisão D2 da §110, agora valendo para os nove cadastro
 ## §115 — Consumo interno: usar o material é uma saída, não um acerto de saldo
 
 INTERNAL-CONSUMPTION-01 (2026-09-17), decisão do PO no handoff. Fatia 2 de Uso e consumo — a Fatia 1 é o tipo de Item
-(§113) e a Fatia 3 será o relatório gerencial.
+(§113) e a Fatia 3 é o relatório gerencial R-21 (§117).
 
 > **Movimentação própria.** `InventoryMovementType.INTERNAL_CONSUMPTION`, com origem `INTERNAL_CONSUMPTION` e o
 > documento `CI-000001` (`internal_consumption_code_seq`). NUNCA `ADJUSTMENT_OUT`: ajuste existe para CORRIGIR um saldo
@@ -7446,3 +7446,64 @@ diz qual passo será recusado; liberada e em execução mostram só a marca "Ite
 API é a autoridade, e a mensagem dela aparece inteira.
 
 **Sem migration.** Nenhuma coluna nova: `active` já existe no Item.
+
+## §117 — Relatório de Uso e consumo (R-21): a despesa como foi registrada, e o sem custo à vista
+
+INTERNAL-CONSUMPTION-REPORT-01 (2026-09-17), handoff do PO. Fatia 3 de Uso e consumo — a Fatia 1 é o tipo de Item
+(§113) e a Fatia 2, o consumo interno (§115). Centro de Custo NÃO foi criado.
+
+> **O relatório lê o que o consumo gravou e não recalcula nada.** Custo unitário, custo total, origem do custo,
+> quantidade, unidade e quem registrou são os SNAPSHOTS de cada `CI-`. Uma compra posterior não muda a despesa que o
+> relatório mostra, e nenhuma consulta dele chama a hierarquia de custo.
+
+**Onde mora.** Relatórios › Estoque › **R-21 Uso e consumo** (`/relatorios/estoque/uso-e-consumo`), sobre
+`GET /reports/inventory/internal-consumption`. É um relatório do módulo de Relatórios, não uma extensão do histórico:
+o mesmo esqueleto, o mesmo período por dia comercial, a mesma paginação e o mesmo CSV e PDF dos R-01…R-20. O histórico
+operacional continua na tela de Uso e consumo, que ganhou o atalho para o R-21.
+
+**Filtros.** Todos em AND, num `where` só — o mesmo das linhas, do resumo e dos agrupamentos:
+
+| Filtro | Chave | Regra |
+|---|---|---|
+| Período | `from`/`to` | dias comerciais sobre o instante do consumo; o consumo de dia passado, gravado no fim daquele dia (§115), é do seu dia |
+| Item de uso e consumo | `itemId` | o seletor pede `type=INTERNAL_CONSUMABLE` ao servidor, com inativo — o relatório é histórico |
+| Destino/uso | `purpose` | o texto gravado, EXATO; as opções são os destinos que existem |
+| Usuário | `registeredByUserId` | quem registrou; as opções são quem já registrou |
+| Origem do custo | `costSource` | as cinco origens, pelo mesmo mapa de rótulos da tela |
+| Com / sem custo | `hasCost` | `true` = custo total conhecido; `false` = "Custo não disponível"; ausente = todos |
+| Busca | `search` | código `CI-`, código e nome do Item, sem caixa — não o destino, que tem filtro próprio |
+
+As opções de destino e de usuário vêm de `GET /reports/inventory/internal-consumption/filter-options`, tiradas dos
+próprios consumos: o cadastro de usuários é só do ADMIN, e ali aparece só quem registrou alguma vez.
+
+**KPIs**, do recorte inteiro e nunca da página: Consumos · Valor total conhecido · Consumos sem custo · Itens distintos.
+
+**Custo conhecido.** O valor total soma SÓ os consumos com custo total gravado. `null` nunca vira zero:
+
+- consumo sem custo não entra na soma e é contado à parte;
+- recorte em que nenhum consumo tem custo tem valor `null` — a tela escreve "Custo não disponível", nunca R$ 0,00;
+- custo real zero é custo CONHECIDO (`"0"`), e não ausência;
+- havendo consumo sem custo, a tela diz ao lado do total que ele é parcial e quantos consumos ficaram de fora.
+
+**Agrupamentos.** Resumo por Item (consumos, quantidade, valor conhecido, sem custo) e por Destino/uso (consumos, valor
+conhecido, sem custo), do recorte inteiro, maior valor conhecido primeiro. A quantidade só soma dentro da unidade gravada
+no consumo — uma linha por item e unidade. O destino agrupa pelo texto EXATO, como o filtro: "Escritório" e "escritório"
+são duas linhas, e o consumo sem destino tem linha própria ("Sem destino informado"). Unificar destinos é o Centro de
+Custo (INTERNAL-CONSUMPTION-COST-CENTER-01), e o texto gravado vira o ponto de partida do mapeamento.
+
+**Tabela.** Data (o dia comercial do consumo), Consumo (`CI-`), Item, Quantidade, Unidade, Destino/uso, Custo
+unitário, Custo total, Origem do custo, Usuário. Custo nulo: "Custo não disponível" nas duas colunas de custo.
+
+**CSV.** `.../export.csv`, o mesmo schema e o mesmo serviço com o resultado inteiro — a página da tela não corta o
+arquivo. Custo unitário e custo total com as casas gravadas, para a soma da coluna bater com o valor total da tela;
+custo desconhecido é célula VAZIA, com "Sem custo" na origem, nunca 0. Além das colunas da tela: Descrição, Lote e
+Observação.
+
+**PDF.** `/print/relatorios/R-21`, o documento genérico dos relatórios, lido do CSV: filtros pelo rótulo da tela, item
+e usuário pelo nome (nunca o id), lote e observação na linha de detalhe. O resumo e os agrupamentos NÃO vão ao papel
+nesta fatia — o PDF lê só o CSV, e o R-15 também não leva o seu resumo (REPORTS-PDF-SUMMARY-01).
+
+**Leitura.** Todo perfil autenticado, `VIEWER` incluído: o histórico da Fatia 2 já mostra a todos o custo de cada
+consumo, e esconder o total no relatório não protegeria nada.
+
+**Sem migration.**

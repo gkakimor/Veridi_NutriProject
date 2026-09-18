@@ -1,9 +1,11 @@
 import { useParams, useSearchParams } from "react-router-dom";
 import type { UserRole } from "@veridi/shared";
 import {
+  COST_SOURCE_LABELS,
   CUSTOMER_ORDER_STATUS_LABELS,
   INVENTORY_MOVEMENT_SOURCE_LABELS,
   INVENTORY_MOVEMENT_TYPE_LABELS,
+  INTERNAL_CONSUMPTION_COST_FILTER_LABELS,
   INVENTORY_OWNER_TYPE_LABELS,
   ITEM_TYPE_LABELS,
   LOT_STATUS_LABELS,
@@ -26,6 +28,7 @@ import {
   ordemDeProducaoFilterSource,
   pedidoFilterSource,
   produtoFilterSource,
+  usuarioDoConsumoInternoFilterSource,
 } from "../../lib/filter-sources";
 import type { EntityFilterSource } from "../../components/filters/EntityFilterSelect";
 import { PdfScreen } from "../../pdf/PdfScreen";
@@ -364,6 +367,28 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     ],
     filterValues: { status: QUOTE_STATUS_LABELS, priceSource: QUOTE_PRICE_SOURCE_LABELS },
   },
+  "R-21": {
+    code: "R-21",
+    title: "Uso e consumo",
+    ...REPORT_FILTER_CONTRACTS["R-21"],
+    screenPath: "/relatorios/estoque/uso-e-consumo",
+    // Lote e observação descem para o detalhe: uso e consumo quase nunca
+    // controla lote, e a observação é texto livre.
+    primaryColumns: [
+      "Data",
+      "Consumo",
+      "Item",
+      "Descrição",
+      "Quantidade",
+      "Unidade",
+      "Destino/uso",
+      "Custo unitário",
+      "Custo total",
+      "Origem do custo",
+      "Usuário",
+    ],
+    filterValues: { costSource: COST_SOURCE_LABELS, hasCost: INTERNAL_CONSUMPTION_COST_FILTER_LABELS },
+  },
 };
 
 /** Rótulos legíveis dos filtros — o papel precisa dizer o que está mostrando. */
@@ -394,6 +419,10 @@ const FILTER_LABELS: Record<string, string> = {
   active: "Produto ativo",
   origin: "Origem",
   priceSource: "Origem do preço",
+  purpose: "Destino/uso",
+  registeredByUserId: "Usuário",
+  costSource: "Origem do custo",
+  hasCost: "Custo",
 };
 
 /**
@@ -417,6 +446,8 @@ const FILTROS_POR_ID: Readonly<Record<string, EntityFilterSource | null>> = {
   productionOrderId: ordemDeProducaoFilterSource,
   // O `porId` do Receber OC pergunta pela OC, em qualquer status.
   purchaseOrderId: ordemDeCompraParaReceberSource,
+  // Quem registrou o consumo interno (R-21): pelas opções do próprio relatório.
+  registeredByUserId: usuarioDoConsumoInternoFilterSource,
   lotId: null,
 };
 

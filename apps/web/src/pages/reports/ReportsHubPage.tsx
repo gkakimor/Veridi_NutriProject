@@ -52,6 +52,13 @@ const GROUPS: { title: string; reports: ReportLink[] }[] = [
         hint: "Histórico de entradas e saídas com documento de origem.",
         path: "/relatorios/estoque/movimentacoes",
       },
+      {
+        code: "R-21",
+        aliases: ["Consumo interno", "Material de uso e consumo", "Despesa com material"],
+        label: "Uso e consumo",
+        hint: "Consumo interno por item, destino e usuário, com o custo gravado e o que ficou sem custo.",
+        path: "/relatorios/estoque/uso-e-consumo",
+      },
     ],
   },
   {

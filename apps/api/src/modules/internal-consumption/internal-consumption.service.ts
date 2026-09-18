@@ -68,14 +68,15 @@ import type {
 
 const CODE_SEQUENCE = "internal_consumption_code_seq";
 
-const consumptionInclude = {
+export const internalConsumptionInclude = {
   item: true,
   lot: true,
 } as const;
 
 type ConsumptionWithRelations = InternalConsumption & { item: Item; lot: Lot | null };
 
-function toDTO(consumption: ConsumptionWithRelations): InternalConsumptionDTO {
+/** O registro como a tela, o histórico e o relatório R-21 o leem — um mapeamento só. */
+export function internalConsumptionToDTO(consumption: ConsumptionWithRelations): InternalConsumptionDTO {
   return {
     id: consumption.id,
     code: consumption.code,
@@ -266,9 +267,9 @@ export async function getInternalConsumptionById(
 ): Promise<InternalConsumptionDTO | null> {
   const consumption = await getPrisma().internalConsumption.findUnique({
     where: { id },
-    include: consumptionInclude,
+    include: internalConsumptionInclude,
   });
-  return consumption ? toDTO(consumption) : null;
+  return consumption ? internalConsumptionToDTO(consumption) : null;
 }
 
 /**
@@ -304,13 +305,13 @@ export async function listInternalConsumptions(
     prisma.internalConsumption.count({ where }),
     prisma.internalConsumption.findMany({
       where,
-      include: consumptionInclude,
+      include: internalConsumptionInclude,
       orderBy: [{ occurredAt: "desc" }, { code: "desc" }],
       ...pageArgs(query),
     }),
   ]);
 
-  return { consumptions: consumptions.map(toDTO), ...pageMeta(query, total) };
+  return { consumptions: consumptions.map(internalConsumptionToDTO), ...pageMeta(query, total) };
 }
 
 /**

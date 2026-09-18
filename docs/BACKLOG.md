@@ -968,17 +968,19 @@ e consumo.
 
 Registrado em 2026-09-17 por INTERNAL-CONSUMPTION-01, **explicitamente fora da fatia** por decisão do PO. Hoje o
 destino/uso é texto livre e opcional ("Escritório", "Limpeza", "Expedição"). Texto livre agrupa mal: "Escritorio",
-"escritório" e "ADM" viram três destinos no relatório. A Fatia 3 (relatório gerencial de uso e consumo) é onde a
-falta vai aparecer, e é o momento natural de decidir entre um cadastro de Centro de Custo e uma lista fechada de
-destinos. Migrar depois é possível: o texto gravado vira o ponto de partida do mapeamento.
+"escritório" e "ADM" viram três destinos no relatório. Desde INTERNAL-CONSUMPTION-REPORT-01 (§117) a falta está à
+vista: o R-21 filtra e agrupa o destino pelo texto EXATO gravado, e as três grafias saem como três linhas no resumo
+por destino. É o momento natural de decidir entre um cadastro de Centro de Custo e uma lista fechada de destinos.
+Migrar depois é possível: o texto gravado vira o ponto de partida do mapeamento.
 
-### INTERNAL-CONSUMPTION-REPORT-01 — relatório gerencial de uso e consumo (Fatia 3) — sem posição
+### REPORTS-PDF-SUMMARY-01 — resumo e agrupamentos dos relatórios não vão ao PDF — LOW, sem posição
 
-Anunciado pelo PO no handoff de INTERNAL-CONSUMPTION-01 como a próxima fatia, **sem handoff próprio ainda**. A
-Fatia 2 entregou o histórico OPERACIONAL (quem, quando, o quê, quanto, destino, custo) na própria tela de Uso e
-consumo — o suficiente para rastrear, não para gerir. O relatório é outra pergunta: consumo por período, por item e
-por destino, com valor, e provavelmente comparação entre períodos. Depende de
-INTERNAL-CONSUMPTION-COST-CENTER-01 para agrupar destino de forma confiável.
+Registrado em 2026-09-17 por INTERNAL-CONSUMPTION-REPORT-01, **sem mudança**. O PDF dos relatórios é um documento só,
+montado do CSV de exportação (`ReportPrintPage` → `ReportPdf`): filtros aplicados, total de registros e as linhas. O
+que a tela mostra ACIMA da tabela não está no CSV e por isso não chega ao papel — os KPIs e os resumos por item e por
+destino do R-21, e o resumo do R-15 (documentos, com preço completo, valor faturado). Levá-los pede uma segunda leitura
+por relatório (o JSON do mesmo recorte) e uma seção "Resumo" no `ReportPdf`. A pergunta ao PO: o papel gerencial
+precisa dos totais, ou a tela e o CSV bastam?
 
 ---
 

@@ -14,7 +14,7 @@ import {
 import { orDash, pdfFileName, formatIntegerPtBr } from "../format";
 
 /**
- * Relatórios R-01…R-20 em PDF — um documento só, dirigido pelas colunas.
+ * Relatórios R-01…R-21 em PDF — um documento só, dirigido pelas colunas.
  *
  * O dado é o MESMO CSV de exportação que a tela oferece: resultado filtrado
  * completo (`ALL_ROWS`), colunas rotuladas e valores já escritos pela API. O
@@ -87,6 +87,7 @@ const FORMATO_DA_COLUNA: Record<string, Formato> = {
   Faturamento: { width: 64 },
   "Faturamento em preparação": { width: 60 },
   Documento: { width: 60 },
+  Consumo: { width: 60 }, // CI-000001
   "Lote interno": LOTE,
   Lote: LOTE,
   "Lote do fornecedor": { width: 70 },
@@ -174,6 +175,7 @@ const FORMATO_DA_COLUNA: Record<string, Formato> = {
   "Custo material unitário": DINHEIRO,
   "Custo unitário": { width: 60, align: "right" },
   "Custo do consumo": DINHEIRO,
+  "Custo total": DINHEIRO,
   "Valor previsto": DINHEIRO,
   "Preço previsto (OC)": DINHEIRO,
   "Custo efetivo": { width: 60, align: "right" },
@@ -205,6 +207,8 @@ const FORMATO_DA_COLUNA: Record<string, Formato> = {
   "Nome do projeto": { flex: 1.5 },
   "Modelo de Precificação": { flex: 2 },
   Motivo: { flex: 1.5 },
+  "Destino/uso": { flex: 1 },
+  Observação: { flex: 1.5 },
   Produtos: { flex: 1.5 },
   Usuário: { flex: 1 },
   Proprietário: { flex: 1 },

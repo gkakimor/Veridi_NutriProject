@@ -41,9 +41,11 @@ vi.mock("../../lib/api", async (importOriginal) => ({
 
 const getProductionTraceabilityReport = vi.fn();
 const getOrderOperationReport = vi.fn();
+const getInternalConsumptionReportFilterOptions = vi.fn();
 vi.mock("../../lib/reports-api", () => ({
   getProductionTraceabilityReport: (...args: unknown[]) => getProductionTraceabilityReport(...args),
   getOrderOperationReport: (...args: unknown[]) => getOrderOperationReport(...args),
+  getInternalConsumptionReportFilterOptions: (...args: unknown[]) => getInternalConsumptionReportFilterOptions(...args),
 }));
 
 const sessao = vi.hoisted(() => ({ role: "ADMIN" }));
@@ -61,6 +63,7 @@ beforeEach(() => {
   apiFetch.mockReset();
   getProductionTraceabilityReport.mockReset();
   getOrderOperationReport.mockReset();
+  getInternalConsumptionReportFilterOptions.mockReset();
   URL.createObjectURL = vi.fn(() => "blob:veridi/relatorio");
   URL.revokeObjectURL = vi.fn();
 });
@@ -1003,5 +1006,60 @@ describe("R-14 Pedido → Operação em PDF", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Selecione o pedido antes de imprimir.");
     expect(getOrderOperationReport).not.toHaveBeenCalled();
+  });
+});
+
+describe("R-21 Uso e consumo em PDF (INTERNAL-CONSUMPTION-REPORT-01)", () => {
+  const USUARIO = "6b1f2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+  const ITEM = "7c2a3b4d-5e6f-4a7b-9c8d-0e1f2a3b4c5d";
+  const CABECALHO = [
+    "Data", "Consumo", "Item", "Descrição", "Lote", "Quantidade", "Unidade", "Destino/uso", "Custo unitário",
+    "Custo total", "Origem do custo", "Usuário", "Observação",
+  ];
+
+  it("o CSV do recorte; destino, usuário, item, origem e custo pelo nome — e o custo desconhecido sai —", async () => {
+    getInternalConsumptionReportFilterOptions.mockResolvedValue({
+      purposes: ["Limpeza"],
+      users: [{ id: USUARIO, name: "Bruno Lima" }],
+    });
+    apiFetch.mockImplementation(async (url: string) => {
+      if (url.startsWith(`${API_URL}/items?`)) {
+        const itens = [{ id: ITEM, code: "UC-000002", name: "Copo descartável", unitCode: "un", active: true }];
+        return { ok: true, status: 200, json: () => Promise.resolve({ items: itens, total: 1, page: 1, pageSize: 1 }) };
+      }
+      return respostaCsv([
+        CABECALHO,
+        ["10/09/2026", "CI-000002", "UC-000002", "Copo descartável", "", "3", "un", "Limpeza", "", "", "Sem custo",
+          "Bruno Lima", ""],
+      ]);
+    });
+    const query =
+      `purpose=Limpeza&registeredByUserId=${USUARIO}&itemId=${ITEM}&costSource=NO_COST&hasCost=false` +
+      "&from=2026-09-01&to=2026-09-30&page=2&pageSize=25";
+    abrir(`/print/relatorios/R-21?${query}`);
+
+    const documento = await documentoGerado("R-21-2026-09-11.pdf");
+    // O mesmo endpoint do botão CSV da tela, com o recorte inteiro.
+    expect(apiFetch).toHaveBeenCalledWith(`${API_URL}/reports/inventory/internal-consumption/export.csv?${query}`);
+    const texto = documento.textContent ?? "";
+    expect(texto).toContain("Uso e consumo");
+    expect(texto).toContain("R-21");
+    expect(campo(documento, "Destino/uso")).toBe("Limpeza");
+    expect(campo(documento, "Usuário")).toBe("Bruno Lima");
+    expect(campo(documento, "Item")).toBe("UC-000002 · Copo descartável");
+    expect(campo(documento, "Origem do custo")).toBe("Sem custo");
+    expect(campo(documento, "Custo")).toBe("Custo não disponível");
+    expect(campo(documento, "Registros")).toBe("1");
+    // Nenhum id técnico chega ao papel.
+    expect(texto).not.toContain(USUARIO);
+    expect(texto).not.toContain(ITEM);
+
+    const [principal, detalhe] = linhas(documento);
+    expect(principal).toEqual([
+      "10/09/2026", "CI-000002", "UC-000002", "Copo descartável", "3", "un", "Limpeza", "—", "—", "Sem custo",
+      "Bruno Lima",
+    ]);
+    expect(detalhe?.[0]).toContain("Lote: —");
+    expect(detalhe?.[0]).toContain("Observação: —");
   });
 });

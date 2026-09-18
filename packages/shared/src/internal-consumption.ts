@@ -13,7 +13,8 @@
  * nunca se lê daqui.
  *
  * Fatia 1 = o tipo de Item Uso e consumo; Fatia 2 = esta movimentação;
- * Fatia 3 = o relatório gerencial, que ainda não existe.
+ * Fatia 3 = o relatório gerencial R-21 (INTERNAL-CONSUMPTION-REPORT-01), que
+ * lê os snapshots daqui e não recalcula custo.
  */
 
 import type { CostSource } from "./costs.js";
@@ -138,3 +139,23 @@ export interface InternalConsumptionLotDTO {
   expiryDate: string | null;
   available: string;
 }
+
+/**
+ * O que a tela e o relatório escrevem no lugar de um custo `null`.
+ *
+ * Nunca "R$ 0,00": zero é custo real zero. A frase diz que a despesa existe e
+ * que o sistema não sabe quanto ela custou.
+ */
+export const CUSTO_NAO_DISPONIVEL = "Custo não disponível";
+
+/** O destino que ninguém escreveu — linha própria no resumo por destino. */
+export const SEM_DESTINO_INFORMADO = "Sem destino informado";
+
+/**
+ * Filtro "com custo / sem custo" do relatório R-21 (`hasCost`), pelo valor que
+ * vai na URL. O mesmo mapa monta o seletor da tela e escreve o filtro no PDF.
+ */
+export const INTERNAL_CONSUMPTION_COST_FILTER_LABELS: Readonly<Record<"true" | "false", string>> = {
+  true: "Com custo conhecido",
+  false: CUSTO_NAO_DISPONIVEL,
+};

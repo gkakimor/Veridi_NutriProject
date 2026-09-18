@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import type {
   InternalConsumptionAvailabilityDTO,
   InternalConsumptionDTO,
@@ -199,6 +200,13 @@ export function InternalConsumptionPage() {
             Saída de material que a própria empresa usa — papelaria, higiene, limpeza,
             administrativo. Não é ajuste de estoque: o saldo estava certo e o material foi usado.
           </p>
+        </div>
+        {/* O histórico daqui rastreia; quem precisa gerir (valor por item, destino e
+            período) vai ao relatório. */}
+        <div className="table__actions">
+          <Link className="btn btn--secondary btn--sm" to="/relatorios/estoque/uso-e-consumo">
+            Relatório gerencial (R-21)
+          </Link>
         </div>
       </div>
 

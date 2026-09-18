@@ -12,6 +12,7 @@ import { listFinishedGoodsQuerySchema } from "./finished-goods/finished-goods.sc
 import { listFormulationTemplatesQuerySchema } from "./formulation-templates/formulation-templates.schemas.js";
 import { listFormulationsQuerySchema } from "./formulations/formulations.schemas.js";
 import { listResourcesQuerySchema } from "./industrial-resources/industrial-resources.schemas.js";
+import { listInternalConsumptionsQuerySchema } from "./internal-consumption/internal-consumption.schemas.js";
 import {
   listCustomerMaterialsQuerySchema,
   listInventoryMovementsQuerySchema,
@@ -67,6 +68,8 @@ const CONSULTAS: { nome: string; campos: Campos; maximo: number; padrao: number 
   { nome: "formulation-templates", campos: camposDe(listFormulationTemplatesQuerySchema), maximo: 100, padrao: 20 },
   { nome: "formulations", campos: camposDe(listFormulationsQuerySchema), maximo: 100, padrao: 20 },
   { nome: "industrial-resources", campos: camposDe(listResourcesQuerySchema), maximo: 1000, padrao: 20 },
+  // INTERNAL-CONSUMPTION-01: o histórico de Uso e consumo (`GET /internal-consumptions`).
+  { nome: "internal-consumptions", campos: camposDe(listInternalConsumptionsQuerySchema), maximo: 100, padrao: 20 },
   { nome: "inventory", campos: camposDe(listInventoryQuerySchema), maximo: 100, padrao: 20 },
   { nome: "inventory/movements", campos: camposDe(listInventoryMovementsQuerySchema), maximo: 100, padrao: 20 },
   { nome: "inventory/customer-materials", campos: camposDe(listCustomerMaterialsQuerySchema), maximo: 100, padrao: 20 },

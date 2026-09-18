@@ -19,6 +19,7 @@ import { listProducts } from "./products-api";
 import { getProductionOrder, listProductionOrders } from "./production-orders-api";
 import { getProject, listProjects } from "./projects-api";
 import { getPurchaseOrder, listPurchaseOrders } from "./purchase-orders-api";
+import { getInternalConsumptionReportFilterOptions } from "./reports-api";
 import { listSuppliers } from "./suppliers-api";
 
 /**
@@ -170,6 +171,50 @@ export const itemFilterSource: EntityFilterSource = {
     return item ? opcaoDeItem(item) : null;
   },
 };
+
+/**
+ * Itens de uso e consumo — filtro do R-21. O tipo vai ao servidor, como na
+ * tela de Uso e consumo, e inativo entra: o relatório é histórico, e o item
+ * descontinuado continua tendo consumo no período.
+ */
+export const itemDeUsoEConsumoFilterSource: EntityFilterSource = {
+  inicial: async () =>
+    (await listItems({ type: "INTERNAL_CONSUMABLE", pageSize: PAGINA })).items.map(opcaoDeItemDeUsoEConsumo),
+  buscar: async (termo) =>
+    (await listItems({ type: "INTERNAL_CONSUMABLE", search: termo, pageSize: PAGINA })).items.map(
+      opcaoDeItemDeUsoEConsumo,
+    ),
+  porId: itemFilterSource.porId,
+};
+
+function opcaoDeItemDeUsoEConsumo(item: ItemDTO): EntityOption {
+  const opcao = opcaoDeItem(item);
+  return item.active ? opcao : { ...opcao, hint: `${item.unitCode} · Item inativo` };
+}
+
+/**
+ * Quem registrou consumo interno — o "Usuário" do R-21. Não é o cadastro de
+ * usuários (esse só o ADMIN lê): são as opções do próprio relatório, só de
+ * quem já registrou. É também o que dá nome ao filtro no PDF.
+ */
+export const usuarioDoConsumoInternoFilterSource: EntityFilterSource = {
+  inicial: async () => (await getInternalConsumptionReportFilterOptions()).users.map(opcaoDeUsuario),
+  buscar: async (termo) => {
+    const procurado = termo.trim().toLocaleLowerCase("pt-BR");
+    return (await getInternalConsumptionReportFilterOptions()).users
+      .filter((usuario) => usuario.name.toLocaleLowerCase("pt-BR").includes(procurado))
+      .map(opcaoDeUsuario);
+  },
+  porId: async (id) => {
+    const usuario = (await getInternalConsumptionReportFilterOptions()).users.find((candidato) => candidato.id === id);
+    return usuario ? opcaoDeUsuario(usuario) : null;
+  },
+};
+
+/** Usuário não tem código de negócio: a opção é o nome. */
+function opcaoDeUsuario(usuario: { id: string; name: string }): EntityOption {
+  return { id: usuario.id, code: "", name: usuario.name };
+}
 
 /**
  * Itens que podem entrar como material do cliente — seletor das linhas do

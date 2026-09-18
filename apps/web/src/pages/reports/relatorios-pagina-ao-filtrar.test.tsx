@@ -34,7 +34,10 @@ vi.mock("../../lib/reports-api", () => ({
   getReceiptsReport: vi.fn(),
   getCustomerOrdersReport: vi.fn(),
   getBillingPeriodReport: vi.fn(),
+  getInternalConsumptionReport: vi.fn(),
+  getInternalConsumptionReportFilterOptions: vi.fn(),
 }));
+vi.mock("../../lib/items-api", async (original) => ({ ...(await original<object>()), listItems: vi.fn() }));
 vi.mock("../../lib/production-orders-api", () => ({ listProductionOrders: vi.fn(), getProductionOrder: vi.fn() }));
 vi.mock("../../lib/customer-orders-api", () => ({ listCustomerOrders: vi.fn(), getCustomerOrder: vi.fn() }));
 vi.mock("../../lib/customers-api", () => ({ listCustomers: vi.fn() }));
@@ -47,6 +50,8 @@ vi.mock("../../app/AuthProvider", () => ({
 import {
   getBillingPeriodReport,
   getConsumptionReport,
+  getInternalConsumptionReport,
+  getInternalConsumptionReportFilterOptions,
   getCustomerOrdersReport,
   getExpiryReport,
   getMovementsReport,
@@ -55,10 +60,12 @@ import {
   getReceiptsReport,
 } from "../../lib/reports-api";
 import { listCustomers } from "../../lib/customers-api";
+import { listItems } from "../../lib/items-api";
 import { listSuppliers } from "../../lib/suppliers-api";
 import { BillingPeriodReportPage } from "./BillingReports";
 import { CustomerOrdersReportPage } from "./CommercialReports";
 import { ExpiryReportPage, MovementsReportPage } from "./InventoryReports";
+import { InternalConsumptionReportPage } from "./InternalConsumptionReport";
 import { ConsumptionReportPage, PlannedActualReportPage } from "./ProductionReports";
 import { PurchaseOrdersReportPage, ReceiptsReportPage } from "./PurchasingReports";
 import { PAUSA_DA_DIGITACAO_MS } from "./useFiltrosDigitados";
@@ -114,6 +121,12 @@ const TELAS: Tela[] = [
     outroFiltro: { select: "Status", campo: "status" },
   },
   { codigo: "R-15", Componente: BillingPeriodReportPage, consulta: getBillingPeriodReport, outroFiltro: { busca: true } },
+  {
+    codigo: "R-21",
+    Componente: InternalConsumptionReportPage,
+    consulta: getInternalConsumptionReport,
+    outroFiltro: { select: "Origem do custo", campo: "costSource" },
+  },
 ];
 
 /** 137 registros na janela padrão (6 páginas); 30 a partir de 01/09 (2 páginas). */
@@ -174,6 +187,8 @@ beforeEach(() => {
   }
   vi.mocked(listCustomers).mockResolvedValue({ customers: [], page: 1, pageSize: 20, total: 0 } as never);
   vi.mocked(listSuppliers).mockResolvedValue({ suppliers: [], page: 1, pageSize: 20, total: 0 } as never);
+  vi.mocked(listItems).mockResolvedValue({ items: [], page: 1, pageSize: 50, total: 0 } as never);
+  vi.mocked(getInternalConsumptionReportFilterOptions).mockResolvedValue({ purposes: [], users: [] });
 });
 
 afterEach(() => {

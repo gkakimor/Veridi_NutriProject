@@ -571,7 +571,7 @@ export const suprimentosTopics = {
       "Item de uso e consumo normalmente não controla lote. Quando controlar, o lote passa a ser obrigatório, e valem as mesmas regras de qualidade e validade do resto do estoque.",
       "Material de cliente nunca sai por aqui: gastar estoque de terceiro como despesa própria seria contabilizar o que não é seu.",
       "Item inativo com saldo continua podendo ser usado até acabar. Inativar interrompe compra nova, não prende o que já está no depósito.",
-      "O relatório gerencial de uso e consumo ainda não existe; esta lista é o histórico operacional enquanto ele não chega.",
+      "Esta lista é o histórico operacional. O relatório gerencial é o R-21, em Relatórios: consumo e valor por período, item, destino e usuário, e o que ficou sem custo.",
     ],
   },
   "estoque.inventario": {

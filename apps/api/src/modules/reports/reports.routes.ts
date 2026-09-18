@@ -6,6 +6,10 @@ import {
   getMovementsReport,
 } from "./inventory-reports.service.js";
 import {
+  getInternalConsumptionReport,
+  getInternalConsumptionReportFilterOptions,
+} from "./internal-consumption-report.service.js";
+import {
   getConsumptionReport,
   getPlannedActualReport,
   getProductionTraceability,
@@ -52,6 +56,7 @@ import {
   receiptsQuerySchema,
   requirementsQuerySchema,
   industrialCostByProductQuerySchema,
+  internalConsumptionReportQuerySchema,
   pricingByProductQuerySchema,
   quotePricingAuditQuerySchema,
 } from "./reports.schemas.js";
@@ -113,6 +118,17 @@ export const reportsRoutes: FastifyPluginAsync = async (app) => {
   register("/reports/inventory/position", inventoryPositionQuerySchema, getInventoryPosition);
   register("/reports/inventory/expiry", expiryQuerySchema, getExpiryReport);
   register("/reports/inventory/movements", movementsQuerySchema, getMovementsReport);
+
+  // Uso e consumo (R-21): aberto como o histórico da Fatia 2 — o custo de
+  // cada consumo já é lido por todo perfil na própria tela de Uso e consumo.
+  register(
+    "/reports/inventory/internal-consumption",
+    internalConsumptionReportQuerySchema,
+    getInternalConsumptionReport,
+  );
+  app.get("/reports/inventory/internal-consumption/filter-options", async (_request, reply) =>
+    reply.send(await getInternalConsumptionReportFilterOptions()),
+  );
 
   // Produção
   register("/reports/production/requirements", requirementsQuerySchema, getRequirementsReport);
