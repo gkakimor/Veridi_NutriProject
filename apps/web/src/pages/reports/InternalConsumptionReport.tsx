@@ -1,12 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import type {
-  CostSource,
-  InternalConsumptionReportFilterOptionsDTO,
-  InternalConsumptionReportSummaryDTO,
-} from "@veridi/shared";
+import type { CostSource, InternalConsumptionReportFilterOptionsDTO } from "@veridi/shared";
 import {
   COST_SOURCE_LABELS,
-  CUSTO_NAO_DISPONIVEL,
   INTERNAL_CONSUMPTION_COST_FILTER_LABELS,
   SEM_DESTINO_INFORMADO,
   recusaDoPeriodo,
@@ -24,6 +19,7 @@ import {
 } from "../../lib/reports-api";
 import { ReportPage, ReportPagination, ReportSummaryItem, ReportTable } from "./ReportPage";
 import { ariaDoPeriodoRecusado, diaDoRelatorio } from "./report-period";
+import { avisoDoValorDoUsoEConsumo, custo, indicadoresDoUsoEConsumo } from "./report-summaries";
 import { useFiltrosDigitados } from "./useFiltrosDigitados";
 import { useReport } from "./useReport";
 
@@ -31,27 +27,7 @@ const PAGE_SIZE = 25;
 
 const ORIGENS_DO_CUSTO = Object.entries(COST_SOURCE_LABELS) as [CostSource, string][];
 
-/** Custo numa célula: `null` é "Custo não disponível", nunca R$ 0,00. */
-function custo(valor: string | null, formatar: (valor: string) => string): string {
-  return valor === null ? CUSTO_NAO_DISPONIVEL : formatar(valor);
-}
-
 const custoUnitario = (valor: string) => formatMoneyPtBr(valor, { scale: 4 });
-
-/**
- * O que o valor total NÃO contém, dito ao lado dele. Um total de custo
- * conhecido sem essa frase seria lido como a despesa inteira do recorte.
- */
-function avisoDoValor(resumo: InternalConsumptionReportSummaryDTO): string | null {
-  if (resumo.missingCostCount === 0) return null;
-  if (resumo.knownCostCount === 0) {
-    return "Nenhum consumo do recorte tem custo conhecido: o valor total é desconhecido, não R$ 0,00.";
-  }
-  const semCusto = resumo.missingCostCount;
-  return semCusto === 1
-    ? `Valor parcial: 1 consumo com ${CUSTO_NAO_DISPONIVEL.toLowerCase()} não entra na soma.`
-    : `Valor parcial: ${formatIntegerPtBr(semCusto)} consumos com ${CUSTO_NAO_DISPONIVEL.toLowerCase()} não entram na soma.`;
-}
 
 /**
  * R-21 — Uso e consumo (INTERNAL-CONSUMPTION-REPORT-01, Fatia 3).
@@ -117,7 +93,7 @@ export function InternalConsumptionReportPage() {
   }
 
   const resumo = data?.summary;
-  const aviso = resumo ? avisoDoValor(resumo) : null;
+  const aviso = resumo ? avisoDoValorDoUsoEConsumo(resumo) : null;
 
   return (
     <ReportPage
@@ -133,13 +109,13 @@ export function InternalConsumptionReportPage() {
       filtersPending={digitados.pendente}
       summary={
         // Sem consumo no recorte não há valor a qualificar: o vazio é dito pela tabela.
+        // Os indicadores são os mesmos do PDF (REPORTS-PDF-SUMMARY-01).
         resumo &&
         resumo.consumptionCount > 0 && (
           <>
-            <ReportSummaryItem label="Consumos" value={resumo.consumptionCount} />
-            <ReportSummaryItem label="Valor total conhecido" value={custo(resumo.knownCostTotal, formatBRL)} />
-            <ReportSummaryItem label="Consumos sem custo" value={resumo.missingCostCount} />
-            <ReportSummaryItem label="Itens distintos" value={resumo.distinctItemCount} />
+            {indicadoresDoUsoEConsumo(resumo).map((indicador) => (
+              <ReportSummaryItem key={indicador.label} label={indicador.label} value={indicador.value} />
+            ))}
             {aviso && (
               <p className="report-summary__note" role="note">
                 {aviso}

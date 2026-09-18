@@ -2,7 +2,7 @@ import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import type { OrderOperationDTO, ProductionTraceabilityDTO } from "@veridi/shared";
+import type { InternalConsumptionReportDTO, OrderOperationDTO, ProductionTraceabilityDTO } from "@veridi/shared";
 import { AuthProvider, useAuth } from "../../app/AuthProvider";
 import { API_URL } from "../../lib/api";
 import {
@@ -182,6 +182,37 @@ function linhas(documento: HTMLElement): string[][] {
   );
 }
 
+/** Texto como se lê: o espaço inseparável do "R$" vira espaço comum. */
+function lido(texto: string | null | undefined): string {
+  return (texto ?? "").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Cada tabela do documento, na ordem: título da seção, cabeçalho e linhas. Com
+ * resumo, o papel tem os agrupamentos antes dos registros, e `linhas()`
+ * misturaria tudo. O título é o texto irmão logo antes do bloco da seção
+ * (`PdfSection`); tabela fora de seção não tem título.
+ */
+function tabelas(documento: HTMLElement): { titulo: string; cabecalho: string[]; linhas: string[][] }[] {
+  return [...documento.querySelectorAll('[data-pdf-role="header-row"]')].map((cabecalho) => ({
+    titulo: lido(cabecalho.parentElement?.parentElement?.previousElementSibling?.textContent),
+    cabecalho: [...cabecalho.children].map((coluna) => lido(coluna.textContent)),
+    linhas: [...(cabecalho.parentElement?.querySelectorAll('[data-pdf-role="row"]') ?? [])].map((row) =>
+      [...row.querySelectorAll('[data-pdf-role="cell"]')].map((cell) => lido(cell.textContent)),
+    ),
+  }));
+}
+
+/** As ressalvas do documento (`PdfNotice`), na ordem. */
+function ressalvas(documento: HTMLElement): string[] {
+  return [...documento.querySelectorAll('[data-pdf-role="notice"]')].map((nota) => lido(nota.textContent));
+}
+
+/** Resposta JSON da API — a leitura da tela. */
+function respostaJson(corpo: unknown) {
+  return { ok: true, status: 200, json: () => Promise.resolve(corpo) };
+}
+
 const R01_CABECALHO = [
   "Item", "Descrição", "Tipo", "Lote interno", "Lote do fornecedor", "Lote Veridi", "Proprietário", "Fornecedor",
   "Validade", "Localização", "On Hand", "Reservado", "Disponível", "Unidade", "Qualidade", "CoA",
@@ -244,8 +275,19 @@ describe("relatórios R-01…R-20 em PDF", () => {
     ]);
   });
 
+  /** R-15: o CSV das linhas e a leitura JSON da tela, que traz o resumo do recorte. */
+  function responderR15(resumo: { billingCount: number; billingsWithCompletePricing: number; totalAmount: string | null }) {
+    apiFetch.mockImplementation(async (url: string) => {
+      if (url.includes("/export.csv")) return respostaCsv([["Faturamento", "Data"], ["FAT-000001", "12/09/2026"]]);
+      if (url.startsWith(`${API_URL}/reports/billing/period?`)) {
+        return respostaJson({ rows: [], page: 1, pageSize: 1, total: resumo.billingCount, summary: resumo });
+      }
+      return { ok: false, status: 599, json: () => Promise.resolve({ error: `consulta inesperada ${url}` }) };
+    });
+  }
+
   it("R-15: o período do papel é o dia da tela, repassado ao CSV sem conversão", async () => {
-    apiFetch.mockResolvedValue(respostaCsv([["Faturamento", "Data"], ["FAT-000001", "12/09/2026"]]));
+    responderR15({ billingCount: 1, billingsWithCompletePricing: 1, totalAmount: "2848.6" });
     // O que o botão PDF da tela manda desde REPORTS-BUSINESS-DATE-01.
     abrir("/print/relatorios/R-15?from=2026-09-12&to=2026-09-12");
 
@@ -256,6 +298,55 @@ describe("relatórios R-01…R-20 em PDF", () => {
     );
     expect(campo(documento, "De")).toBe("2026-09-12");
     expect(campo(documento, "Até")).toBe("2026-09-12");
+  });
+
+  // REPORTS-PDF-SUMMARY-01: o resumo que a tela mostra acima da tabela vai ao papel.
+  it("R-15: os indicadores da tela, do mesmo recorte, antes dos faturamentos", async () => {
+    responderR15({ billingCount: 3, billingsWithCompletePricing: 3, totalAmount: "12500.5" });
+    abrir("/print/relatorios/R-15?search=FAT-0000&from=2026-09-01&to=2026-09-30&page=2&pageSize=25");
+
+    const documento = await documentoGerado("R-15-2026-09-11.pdf");
+    // A leitura da tela, com os filtros do CSV e só a primeira linha.
+    expect(apiFetch).toHaveBeenCalledWith(
+      `${API_URL}/reports/billing/period?search=FAT-0000&from=2026-09-01&to=2026-09-30&page=1&pageSize=1`,
+    );
+    expect(apiFetch).toHaveBeenCalledTimes(2);
+    expect(campo(documento, "Documentos emitidos")).toBe("3");
+    expect(campo(documento, "Com preço completo")).toBe("3 de 3");
+    expect(lido(campo(documento, "Valor faturado"))).toBe("R$ 12.500,50");
+    const texto = documento.textContent ?? "";
+    expect(texto.indexOf("Resumo")).toBeLessThan(texto.indexOf("Faturamentos"));
+    expect(tabelas(documento).at(-1)?.linhas).toEqual([["FAT-000001", "12/09/2026"]]);
+  });
+
+  it("R-15: faturamento sem preço completo — \"Valores incompletos\", nunca a soma parcial", async () => {
+    responderR15({ billingCount: 2, billingsWithCompletePricing: 1, totalAmount: null });
+    abrir("/print/relatorios/R-15?from=2026-09-01&to=2026-09-30");
+
+    const documento = await documentoGerado("R-15-2026-09-11.pdf");
+    expect(campo(documento, "Com preço completo")).toBe("1 de 2");
+    expect(campo(documento, "Valor faturado")).toBe("Valores incompletos");
+    expect(documento.textContent).not.toContain("R$");
+  });
+
+  it("R-15 sem documento no recorte: nenhum resumo — o vazio é dito pela tabela", async () => {
+    apiFetch.mockImplementation(async (url: string) =>
+      url.includes("/export.csv")
+        ? respostaCsv([["Faturamento", "Data"]])
+        : respostaJson({
+            rows: [],
+            page: 1,
+            pageSize: 1,
+            total: 0,
+            summary: { billingCount: 0, billingsWithCompletePricing: 0, totalAmount: null },
+          }),
+    );
+    abrir("/print/relatorios/R-15?from=2026-09-01&to=2026-09-30");
+
+    const documento = await documentoGerado("R-15-2026-09-11.pdf");
+    expect(documento.textContent).toContain("Nenhum registro para os filtros aplicados.");
+    expect(campo(documento, "Documentos emitidos")).toBeNull();
+    expect(documento.textContent).not.toContain("Valores incompletos");
   });
 
   it("sem registros para o filtro: a folha diz isso e o total é 0", async () => {
@@ -1016,23 +1107,86 @@ describe("R-21 Uso e consumo em PDF (INTERNAL-CONSUMPTION-REPORT-01)", () => {
     "Data", "Consumo", "Item", "Descrição", "Lote", "Quantidade", "Unidade", "Destino/uso", "Custo unitário",
     "Custo total", "Origem do custo", "Usuário", "Observação",
   ];
+  const COM_CUSTO = [
+    "10/09/2026", "CI-000001", "UC-000001", "Papel A4", "", "10", "un", "Escritório", "1,5000", "15,00", "Real",
+    "Ana Souza", "",
+  ];
+  const SEM_CUSTO = [
+    "10/09/2026", "CI-000002", "UC-000002", "Copo descartável", "", "3", "un", "", "", "", "Sem custo",
+    "Bruno Lima", "",
+  ];
+
+  /**
+   * O JSON da tela para o mesmo recorte — o que `GET
+   * /reports/inventory/internal-consumption` devolve. Padrão: um consumo com
+   * custo e um sem, em dois itens e dois destinos (um deles sem destino).
+   */
+  function jsonDaTela(parcial: Partial<InternalConsumptionReportDTO> = {}): InternalConsumptionReportDTO {
+    return {
+      rows: [],
+      page: 1,
+      pageSize: 1,
+      total: 2,
+      summary: { consumptionCount: 2, knownCostCount: 1, missingCostCount: 1, knownCostTotal: "15", distinctItemCount: 2 },
+      byItem: [
+        {
+          itemId: "i-1", itemCode: "UC-000001", itemName: "Papel A4", uomCode: "un", consumptionCount: 1,
+          quantity: "10", knownCostTotal: "15", missingCostCount: 0,
+        },
+        {
+          itemId: "i-2", itemCode: "UC-000002", itemName: "Copo descartável", uomCode: "un", consumptionCount: 1,
+          quantity: "3", knownCostTotal: null, missingCostCount: 1,
+        },
+      ],
+      byPurpose: [
+        { purpose: "Escritório", consumptionCount: 1, knownCostTotal: "15", missingCostCount: 0 },
+        { purpose: null, consumptionCount: 1, knownCostTotal: null, missingCostCount: 1 },
+      ],
+      ...parcial,
+    };
+  }
+
+  /**
+   * `apiFetch` por destino: o CSV do recorte, a leitura JSON da tela (o
+   * resumo) e o item do filtro. `resumo` com `status` é a leitura recusada.
+   */
+  function responder(csv: string[][], resumo: InternalConsumptionReportDTO | { status: number }) {
+    apiFetch.mockImplementation(async (url: string) => {
+      const caminho = url.slice(API_URL.length);
+      if (caminho.startsWith("/items?")) {
+        const itens = [{ id: ITEM, code: "UC-000002", name: "Copo descartável", unitCode: "un", active: true }];
+        return respostaJson({ items: itens, total: 1, page: 1, pageSize: 1 });
+      }
+      if (caminho.startsWith("/reports/inventory/internal-consumption/export.csv")) return respostaCsv(csv);
+      if (caminho.startsWith("/reports/inventory/internal-consumption?")) {
+        return "status" in resumo
+          ? { ok: false, status: resumo.status, json: () => Promise.resolve({ error: "internal_error" }) }
+          : respostaJson(resumo);
+      }
+      return { ok: false, status: 599, json: () => Promise.resolve({ error: `consulta inesperada ${caminho}` }) };
+    });
+  }
+
+  /** URLs que a página pediu à API. */
+  function pedidos(): string[] {
+    return apiFetch.mock.calls.map(([url]) => String(url));
+  }
 
   it("o CSV do recorte; destino, usuário, item, origem e custo pelo nome — e o custo desconhecido sai —", async () => {
     getInternalConsumptionReportFilterOptions.mockResolvedValue({
       purposes: ["Limpeza"],
       users: [{ id: USUARIO, name: "Bruno Lima" }],
     });
-    apiFetch.mockImplementation(async (url: string) => {
-      if (url.startsWith(`${API_URL}/items?`)) {
-        const itens = [{ id: ITEM, code: "UC-000002", name: "Copo descartável", unitCode: "un", active: true }];
-        return { ok: true, status: 200, json: () => Promise.resolve({ items: itens, total: 1, page: 1, pageSize: 1 }) };
-      }
-      return respostaCsv([
-        CABECALHO,
-        ["10/09/2026", "CI-000002", "UC-000002", "Copo descartável", "", "3", "un", "Limpeza", "", "", "Sem custo",
-          "Bruno Lima", ""],
-      ]);
-    });
+    const linha = [...SEM_CUSTO.slice(0, 7), "Limpeza", ...SEM_CUSTO.slice(8)];
+    responder(
+      [CABECALHO, linha],
+      jsonDaTela({
+        total: 1,
+        summary: { consumptionCount: 1, knownCostCount: 0, missingCostCount: 1, knownCostTotal: null, distinctItemCount: 1 },
+        byItem: [jsonDaTela().byItem[1]!],
+        byPurpose: [{ purpose: "Limpeza", consumptionCount: 1, knownCostTotal: null, missingCostCount: 1 }],
+      }),
+    );
     const query =
       `purpose=Limpeza&registeredByUserId=${USUARIO}&itemId=${ITEM}&costSource=NO_COST&hasCost=false` +
       "&from=2026-09-01&to=2026-09-30&page=2&pageSize=25";
@@ -1054,12 +1208,167 @@ describe("R-21 Uso e consumo em PDF (INTERNAL-CONSUMPTION-REPORT-01)", () => {
     expect(texto).not.toContain(USUARIO);
     expect(texto).not.toContain(ITEM);
 
-    const [principal, detalhe] = linhas(documento);
+    // A tabela de registros continua a última, como sempre foi.
+    const [principal, detalhe] = tabelas(documento).at(-1)!.linhas;
     expect(principal).toEqual([
       "10/09/2026", "CI-000002", "UC-000002", "Copo descartável", "3", "un", "Limpeza", "—", "—", "Sem custo",
       "Bruno Lima",
     ]);
     expect(detalhe?.[0]).toContain("Lote: —");
     expect(detalhe?.[0]).toContain("Observação: —");
+  });
+
+  describe("resumo no papel (REPORTS-PDF-SUMMARY-01)", () => {
+    it("KPIs, ressalva e resumos por item e por destino/uso, do mesmo recorte, antes dos consumos", async () => {
+      responder([CABECALHO, COM_CUSTO, SEM_CUSTO], jsonDaTela());
+      const filtros = "from=2026-09-01&to=2026-09-30&costSource=REAL&search=UC-";
+      abrir(`/print/relatorios/R-21?${filtros}&page=3&pageSize=25`);
+
+      const documento = await documentoGerado("R-21-2026-09-11.pdf");
+      // A leitura JSON da tela: os filtros do CSV, e da página só a primeira linha.
+      const leitura = pedidos().find((url) => url.startsWith(`${API_URL}/reports/inventory/internal-consumption?`));
+      expect(leitura).toBe(`${API_URL}/reports/inventory/internal-consumption?${filtros}&page=1&pageSize=1`);
+      expect(pedidos()).toHaveLength(2);
+
+      expect(campo(documento, "Consumos")).toBe("2");
+      expect(lido(campo(documento, "Valor total conhecido"))).toBe("R$ 15,00");
+      expect(campo(documento, "Consumos sem custo")).toBe("1");
+      expect(campo(documento, "Itens distintos")).toBe("2");
+      // O total é parcial, e o papel diz isso ao lado dele — como a tela.
+      expect(ressalvas(documento)).toEqual(["Valor parcial: 1 consumo com custo não disponível não entra na soma."]);
+
+      const [porItem, porDestino, consumos, ...sobra] = tabelas(documento);
+      expect(sobra).toEqual([]);
+      expect(porItem).toEqual({
+        titulo: "Resumo por item",
+        cabecalho: ["Item", "Descrição", "Consumos", "Quantidade", "Unidade", "Valor conhecido", "Sem custo"],
+        linhas: [
+          ["UC-000001", "Papel A4", "1", "10", "un", "R$ 15,00", "0"],
+          ["UC-000002", "Copo descartável", "1", "3", "un", "Custo não disponível", "1"],
+        ],
+      });
+      expect(porDestino).toEqual({
+        titulo: "Resumo por destino/uso",
+        cabecalho: ["Destino/uso", "Consumos", "Valor conhecido", "Sem custo"],
+        linhas: [
+          ["Escritório", "1", "R$ 15,00", "0"],
+          ["Sem destino informado", "1", "Custo não disponível", "1"],
+        ],
+      });
+      // A tabela detalhada continua inteira, depois do resumo, com o seu título.
+      expect(consumos?.titulo).toBe("Consumos");
+      expect(consumos?.cabecalho[1]).toBe("Consumo");
+      expect(consumos?.linhas.filter((_, indice) => indice % 2 === 0).map((linha) => linha[1])).toEqual([
+        "CI-000001",
+        "CI-000002",
+      ]);
+      // Filtros, indicadores, agrupamentos e só então os registros.
+      const texto = lido(documento.textContent);
+      const ordem = ["Filtros aplicados", "Valor total conhecido", "Resumo por item", "Resumo por destino/uso", "CI-000001"]
+        .map((marca) => texto.indexOf(marca));
+      expect(ordem.every((posicao) => posicao >= 0)).toBe(true);
+      expect(ordem).toEqual([...ordem].sort((a, b) => a - b));
+      // Nenhum custo desconhecido virou zero em lugar nenhum do papel.
+      expect(texto).not.toContain("R$ 0,00");
+    });
+
+    it("recorte só sem custo: o total é \"Custo não disponível\", nunca R$ 0,00, e a ressalva diz que é desconhecido", async () => {
+      responder(
+        [CABECALHO, SEM_CUSTO],
+        jsonDaTela({
+          total: 1,
+          summary: { consumptionCount: 1, knownCostCount: 0, missingCostCount: 1, knownCostTotal: null, distinctItemCount: 1 },
+          byItem: [jsonDaTela().byItem[1]!],
+          byPurpose: [jsonDaTela().byPurpose[1]!],
+        }),
+      );
+      abrir("/print/relatorios/R-21?hasCost=false");
+
+      const documento = await documentoGerado("R-21-2026-09-11.pdf");
+      expect(campo(documento, "Valor total conhecido")).toBe("Custo não disponível");
+      expect(ressalvas(documento)).toEqual([
+        "Nenhum consumo do recorte tem custo conhecido: o valor total é desconhecido, não R$ 0,00.",
+      ]);
+      const [porItem, porDestino] = tabelas(documento);
+      expect(porItem?.linhas.map((linha) => linha[5])).toEqual(["Custo não disponível"]);
+      expect(porDestino?.linhas.map((linha) => linha[2])).toEqual(["Custo não disponível"]);
+      // O único "R$ 0,00" do papel é a frase que diz que o total NÃO é zero.
+      const texto = lido(documento.textContent);
+      expect(texto.split("R$ 0,00")).toHaveLength(2);
+      expect(texto).toContain("desconhecido, não R$ 0,00.");
+    });
+
+    it("custo real zero é custo conhecido: R$ 0,00 só quando o custo gravado soma zero, sem ressalva", async () => {
+      responder(
+        [CABECALHO, COM_CUSTO],
+        jsonDaTela({
+          total: 1,
+          summary: { consumptionCount: 1, knownCostCount: 1, missingCostCount: 0, knownCostTotal: "0", distinctItemCount: 1 },
+          byItem: [{ ...jsonDaTela().byItem[0]!, knownCostTotal: "0" }],
+          byPurpose: [{ ...jsonDaTela().byPurpose[0]!, knownCostTotal: "0" }],
+        }),
+      );
+      abrir("/print/relatorios/R-21");
+
+      const documento = await documentoGerado("R-21-2026-09-11.pdf");
+      expect(lido(campo(documento, "Valor total conhecido"))).toBe("R$ 0,00");
+      expect(campo(documento, "Consumos sem custo")).toBe("0");
+      expect(ressalvas(documento)).toEqual([]);
+      const [porItem, porDestino] = tabelas(documento);
+      expect(porItem?.linhas).toEqual([["UC-000001", "Papel A4", "1", "10", "un", "R$ 0,00", "0"]]);
+      expect(porDestino?.linhas).toEqual([["Escritório", "1", "R$ 0,00", "0"]]);
+    });
+
+    it("recorte sem consumo: nem resumo nem título de consumos — o vazio é dito pela tabela", async () => {
+      responder(
+        [CABECALHO],
+        jsonDaTela({
+          total: 0,
+          summary: { consumptionCount: 0, knownCostCount: 0, missingCostCount: 0, knownCostTotal: null, distinctItemCount: 0 },
+          byItem: [],
+          byPurpose: [],
+        }),
+      );
+      abrir("/print/relatorios/R-21?from=2026-09-01&to=2026-09-01");
+
+      const documento = await documentoGerado("R-21-2026-09-11.pdf");
+      expect(documento.textContent).toContain("Nenhum registro para os filtros aplicados.");
+      expect(campo(documento, "Registros")).toBe("0");
+      expect(campo(documento, "Valor total conhecido")).toBeNull();
+      expect(documento.textContent).not.toContain("Resumo");
+      expect(documento.textContent).not.toContain("Consumos");
+      expect(tabelas(documento)).toHaveLength(1);
+    });
+
+    it("resumo recusado pelo servidor: nenhum documento, e a frase diz que foi o resumo", async () => {
+      responder([CABECALHO, COM_CUSTO], { status: 500 });
+      abrir("/print/relatorios/R-21?from=2026-09-01");
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Falha ao carregar o resumo do relatório (500)");
+      expect(renderPdfBlob).not.toHaveBeenCalled();
+    });
+
+    it("CSV recusado: nem o resumo nem os nomes dos filtros são consultados", async () => {
+      apiFetch.mockResolvedValue({ ok: false, status: 403, json: () => Promise.resolve({ error: "forbidden" }) });
+      abrir(`/print/relatorios/R-21?itemId=${ITEM}&from=2026-09-01`);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Falha ao carregar o relatório (403)");
+      expect(pedidos()).toEqual([`${API_URL}/reports/inventory/internal-consumption/export.csv?itemId=${ITEM}&from=2026-09-01`]);
+      expect(renderPdfBlob).not.toHaveBeenCalled();
+    });
+
+    it("`all` da URL não vai à leitura do resumo: ela pede só a primeira linha", async () => {
+      responder([CABECALHO, COM_CUSTO, SEM_CUSTO], jsonDaTela());
+      abrir("/print/relatorios/R-21?all=true&pageSize=500&search=CI-");
+
+      await documentoGerado("R-21-2026-09-11.pdf");
+      const leitura = new URL(
+        pedidos().find((url) => url.startsWith(`${API_URL}/reports/inventory/internal-consumption?`))!,
+      );
+      expect(leitura.searchParams.has("all")).toBe(false);
+      expect(leitura.searchParams.get("pageSize")).toBe("1");
+      expect(leitura.searchParams.get("page")).toBe("1");
+      expect(leitura.searchParams.get("search")).toBe("CI-");
+    });
   });
 });

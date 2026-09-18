@@ -21,6 +21,10 @@ import { orDash, pdfFileName, formatIntegerPtBr } from "../format";
  * papel não reimplementa relatório, não refaz conta e não reformata número:
  * escreve o que veio. Célula vazia é valor desconhecido e sai "—", nunca zero.
  *
+ * O relatório que tem resumo na tela (KPIs e agrupamentos acima da tabela)
+ * pode levá-lo junto, em `summary` — já escrito pela página, com o texto da
+ * tela (REPORTS-PDF-SUMMARY-01). Sem `summary`, o documento sai como sempre.
+ *
  * R-06 e R-14 são consultas de documento único e têm módulo próprio.
  */
 
@@ -32,6 +36,36 @@ export const REPORT_EMPTY_MESSAGE = "Nenhum registro para os filtros aplicados."
 
 /** No rodapé de toda folha: a folha solta de relatório interno se identifica sozinha. */
 const NOTA_INTERNA = "Documento interno — contém custo e margem.";
+
+/**
+ * Agrupamento do resumo — tabela do recorte INTEIRO, com a forma do corpo do
+ * CSV: cabeçalho rotulado e células já escritas. As larguras saem do mesmo
+ * mapa das colunas do relatório (`reportPdfColumn`).
+ */
+export type ReportPdfSummaryTable = {
+  title: string;
+  header: string[];
+  rows: string[][];
+};
+
+/**
+ * O que a tela mostra ACIMA da tabela e o CSV não traz: indicadores do recorte
+ * inteiro, a ressalva que os acompanha e os agrupamentos (REPORTS-PDF-SUMMARY-01).
+ *
+ * Chega pronto, escrito pela página com o texto da tela. O papel não soma, não
+ * conta e não formata — e por isso não tem como transformar ausência em zero:
+ * custo desconhecido chega como a tela o diz ("Custo não disponível").
+ */
+export type ReportPdfSummary = {
+  /** Indicadores, na ordem da tela. */
+  kpis: { label: string; value: string }[];
+  /** Ressalvas dos indicadores — um total parcial não se lê sem elas. */
+  notes?: string[] | undefined;
+  /** Agrupamentos, na ordem da tela. */
+  tables?: ReportPdfSummaryTable[] | undefined;
+  /** Título da tabela de registros: com o resumo acima, o papel separa o agregado do registro. */
+  detailTitle: string;
+};
 
 export type ReportPdfInput = {
   /** Código do relatório: "R-01". */
@@ -53,6 +87,8 @@ export type ReportPdfInput = {
   filters: { label: string; value: string }[];
   /** Quem gerou o documento — não substitui quem executou cada ato no sistema. */
   generatedBy: string | null;
+  /** Resumo da tela, do mesmo recorte. Ausente: relatório sem resumo, ou recorte vazio. */
+  summary?: ReportPdfSummary | null | undefined;
 };
 
 type Formato = Omit<PdfColumn, "header">;
@@ -170,12 +206,17 @@ const FORMATO_DA_COLUNA: Record<string, Formato> = {
   Expedições: { width: 54, align: "right" },
   Faturamentos: { width: 66, align: "right" },
   "Linhas com preço": { width: 44, align: "right" },
+  // Agrupamentos do resumo (R-21): quantos consumos, e quantos sem custo.
+  Consumos: { width: 54, align: "right" },
+  "Sem custo": { width: 48, align: "right" },
 
   // Dinheiro.
   "Custo material unitário": DINHEIRO,
   "Custo unitário": { width: 60, align: "right" },
   "Custo do consumo": DINHEIRO,
   "Custo total": DINHEIRO,
+  // Resumo do R-21: "Custo não disponível" cabe inteiro, sem dobrar a altura da linha.
+  "Valor conhecido": { width: 84, align: "right" },
   "Valor previsto": DINHEIRO,
   "Preço previsto (OC)": DINHEIRO,
   "Custo efetivo": { width: 60, align: "right" },
@@ -282,9 +323,72 @@ function valor(cells: string[], posicao: number): string {
   return orDash(cells[posicao]?.trim());
 }
 
+/**
+ * Resumo da tela no papel: indicadores em linhas de quatro, a ressalva logo
+ * abaixo — onde se lê junto com o total que ela qualifica — e cada
+ * agrupamento na sua seção, com as colunas do mesmo mapa do relatório.
+ */
+function ReportSummarySections({ code, summary }: { code: string; summary: ReportPdfSummary }) {
+  return (
+    <>
+      <PdfSection title="Resumo">
+        <PdfDataGrid fields={summary.kpis.map((kpi) => ({ label: kpi.label, value: kpi.value, span: 3 }))} />
+        {(summary.notes ?? []).map((nota) => (
+          <PdfNotice key={nota}>{nota}</PdfNotice>
+        ))}
+      </PdfSection>
+
+      {(summary.tables ?? []).map((tabela) => (
+        <PdfSection key={tabela.title} title={tabela.title}>
+          <PdfTable
+            columns={tabela.header.map((coluna) => reportPdfColumn(code, coluna))}
+            dense
+            isEmpty={tabela.rows.length === 0}
+            emptyMessage={REPORT_EMPTY_MESSAGE}
+          >
+            {tabela.rows.map((cells, indice) => (
+              <PdfTr key={`${indice}-${cells[0] ?? ""}`}>
+                {tabela.header.map((_, posicao) => (
+                  <PdfTd key={posicao}>{valor(cells, posicao)}</PdfTd>
+                ))}
+              </PdfTr>
+            ))}
+          </PdfTable>
+        </PdfSection>
+      ))}
+    </>
+  );
+}
+
 export function ReportPdf({ report, generatedAt }: { report: ReportPdfInput; generatedAt: Date }) {
-  const { code, title, internal, header, rows, filters, generatedBy } = report;
+  const { code, title, internal, header, rows, filters, generatedBy, summary } = report;
   const { landscape, columns, main, detail } = reportPdfLayout(report);
+
+  const registros = (
+    <PdfTable columns={columns} dense isEmpty={rows.length === 0} emptyMessage={REPORT_EMPTY_MESSAGE}>
+      {rows.map((cells, indice) => {
+        const chave = `${indice}-${cells[0] ?? ""}`;
+        const principal = main.map((posicao) => <PdfTd key={posicao}>{valor(cells, posicao)}</PdfTd>);
+        if (detail.length === 0) return <PdfTr key={chave}>{principal}</PdfTr>;
+        // Linha principal e detalhe são um registro só: não se separam.
+        return (
+          <PdfBlock key={chave}>
+            <PdfTr continued>{principal}</PdfTr>
+            <PdfTr>
+              <PdfTd span={main.length}>
+                <PdfDetails
+                  items={detail.map((posicao) => ({
+                    label: header[posicao] ?? "",
+                    value: valor(cells, posicao),
+                  }))}
+                />
+              </PdfTd>
+            </PdfTr>
+          </PdfBlock>
+        );
+      })}
+    </PdfTable>
+  );
 
   return (
     <PdfDocument
@@ -307,29 +411,14 @@ export function ReportPdf({ report, generatedAt }: { report: ReportPdfInput; gen
         />
       </PdfSection>
 
-      <PdfTable columns={columns} dense isEmpty={rows.length === 0} emptyMessage={REPORT_EMPTY_MESSAGE}>
-        {rows.map((cells, indice) => {
-          const chave = `${indice}-${cells[0] ?? ""}`;
-          const principal = main.map((posicao) => <PdfTd key={posicao}>{valor(cells, posicao)}</PdfTd>);
-          if (detail.length === 0) return <PdfTr key={chave}>{principal}</PdfTr>;
-          // Linha principal e detalhe são um registro só: não se separam.
-          return (
-            <PdfBlock key={chave}>
-              <PdfTr continued>{principal}</PdfTr>
-              <PdfTr>
-                <PdfTd span={main.length}>
-                  <PdfDetails
-                    items={detail.map((posicao) => ({
-                      label: header[posicao] ?? "",
-                      value: valor(cells, posicao),
-                    }))}
-                  />
-                </PdfTd>
-              </PdfTr>
-            </PdfBlock>
-          );
-        })}
-      </PdfTable>
+      {summary ? (
+        <>
+          <ReportSummarySections code={code} summary={summary} />
+          <PdfSection title={summary.detailTitle}>{registros}</PdfSection>
+        </>
+      ) : (
+        registros
+      )}
     </PdfDocument>
   );
 }

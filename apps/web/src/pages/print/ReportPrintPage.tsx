@@ -32,10 +32,13 @@ import {
 } from "../../lib/filter-sources";
 import type { EntityFilterSource } from "../../components/filters/EntityFilterSelect";
 import { PdfScreen } from "../../pdf/PdfScreen";
+// Só o tipo: o módulo do documento continua carregando no `build`.
+import type { ReportPdfSummary } from "../../pdf/documents/ReportPdf";
 import { JANELAS_DE_VENCIMENTO } from "../reports/report-period";
+import { resumoDoFaturamentoPorPeriodo, resumoDoUsoEConsumo } from "../reports/report-summaries";
 
 /**
- * Relatórios R-01…R-20 em PDF, em ROTA DEDICADA.
+ * Relatórios R-01…R-21 em PDF, em ROTA DEDICADA.
  *
  * A origem nunca é a tela operacional: o documento é montado do zero, fora do
  * AppShell, a partir do MESMO endpoint de exportação que a tela usa — o que
@@ -44,6 +47,11 @@ import { JANELAS_DE_VENCIMENTO } from "../reports/report-period";
  * coluna. O arquivo é PDF de verdade, gerado no navegador sobre o dado que
  * esta página buscou com a sessão do usuário; o módulo do documento só
  * carrega quando alguém gera o PDF.
+ *
+ * O relatório que tem resumo na tela (KPIs e agrupamentos acima da tabela)
+ * declara `summary`: a página faz uma segunda leitura, a JSON da tela, com o
+ * mesmo recorte, e o resumo vai ao papel antes dos registros
+ * (REPORTS-PDF-SUMMARY-01).
  */
 
 /** Separador e BOM usados pelo `buildCsv` da API. */
@@ -103,6 +111,19 @@ interface ReportPrintDefinition {
    * daqui sai como veio (REPORTS-PRESENTATION-WAVE-01).
    */
   filterValues?: FilterValueLabels;
+  /**
+   * Resumo da tela no papel (REPORTS-PDF-SUMMARY-01): os KPIs e agrupamentos
+   * que a tela mostra acima da tabela e o CSV não traz. A página lê o JSON da
+   * tela — a rota do CSV sem `/export.csv`: o mesmo schema, o mesmo recorte —
+   * e esta função o escreve com o texto da tela. `null`: recorte sem resumo.
+   * Relatório sem `summary` sai como sempre, sem a segunda leitura.
+   */
+  summary?: (data: unknown) => ReportPdfSummary | null;
+}
+
+/** O adaptador lê o DTO da tela; o tipo é o dele, conferido onde ele é escrito. */
+function resumoDaTela<T>(escrever: (data: T) => ReportPdfSummary | null): (data: unknown) => ReportPdfSummary | null {
+  return (data) => escrever(data as T);
 }
 
 export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
@@ -277,6 +298,7 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Faturamento por período",
     ...REPORT_FILTER_CONTRACTS["R-15"],
     screenPath: "/relatorios/faturamento/periodo",
+    summary: resumoDaTela(resumoDoFaturamentoPorPeriodo),
   },
   "R-16": {
     code: "R-16",
@@ -388,6 +410,8 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
       "Usuário",
     ],
     filterValues: { costSource: COST_SOURCE_LABELS, hasCost: INTERNAL_CONSUMPTION_COST_FILTER_LABELS },
+    // KPIs, ressalva do valor parcial e os resumos por item e por destino/uso.
+    summary: resumoDaTela(resumoDoUsoEConsumo),
   },
 };
 
@@ -539,11 +563,11 @@ async function nomesDosFiltrosPorId(
 }
 
 /**
- * Por que o CSV não veio. Recusa de validação — período invertido, dia mal
- * formado — chega com a frase do servidor, a mesma que a tela mostra
- * (PERIOD-RANGE-VALIDATION-WAVE-01), e não como "(400)".
+ * Por que o CSV (ou o resumo) não veio. Recusa de validação — período
+ * invertido, dia mal formado — chega com a frase do servidor, a mesma que a
+ * tela mostra (PERIOD-RANGE-VALIDATION-WAVE-01), e não como "(400)".
  */
-async function motivoDaFalha(response: Response): Promise<string> {
+async function motivoDaFalha(response: Response, oQue = "o relatório"): Promise<string> {
   if (response.status === 400) {
     const frase = await parseJsonOrThrow(response).then(
       () => "",
@@ -551,7 +575,35 @@ async function motivoDaFalha(response: Response): Promise<string> {
     );
     if (frase) return frase;
   }
-  return `Falha ao carregar o relatório (${response.status})`;
+  return `Falha ao carregar ${oQue} (${response.status})`;
+}
+
+/** A leitura JSON da tela: a rota do CSV sem `/export.csv` — a mesma rota, o mesmo schema de filtros. */
+export function reportSummaryPath(csvPath: string): string {
+  return csvPath.replace(/\/export\.csv$/, "");
+}
+
+/**
+ * O resumo do MESMO recorte do CSV, pela leitura da tela: os filtros da URL
+ * como vieram, e da página só a primeira linha — resumo e agrupamentos são do
+ * recorte inteiro, e os registros o papel já tem pelo CSV. `all` sai: pediria
+ * o resultado inteiro de novo.
+ *
+ * Falhar derruba o documento, como o CSV: o papel de um relatório com resumo
+ * sem o resumo seria um documento incompleto que não diz que está incompleto.
+ */
+async function resumoDoRecorte(
+  definition: ReportPrintDefinition,
+  params: URLSearchParams,
+): Promise<ReportPdfSummary | null> {
+  if (!definition.summary) return null;
+  const consulta = new URLSearchParams(params);
+  consulta.delete("all");
+  consulta.set("page", "1");
+  consulta.set("pageSize", "1");
+  const response = await apiFetch(`${API_URL}${reportSummaryPath(definition.csvPath)}?${consulta.toString()}`);
+  if (!response.ok) throw new Error(await motivoDaFalha(response, "o resumo do relatório"));
+  return definition.summary(await response.json());
 }
 
 /** Parser do CSV gerado pela API (`;`, aspas duplas, BOM). */
@@ -605,6 +657,7 @@ type ReportPrintData = {
   header: string[];
   rows: string[][];
   filters: { label: string; value: string }[];
+  summary: ReportPdfSummary | null;
 };
 
 export function ReportPrintPage() {
@@ -628,15 +681,19 @@ export function ReportPrintPage() {
         const response = await apiFetch(`${API_URL}${definition.csvPath}${query ? `?${query}` : ""}`);
         if (!response.ok) throw new Error(await motivoDaFalha(response));
         const csv = parseReportCsv(await response.text());
-        // Nomes só depois do CSV aceito: perfil recusado não consulta ninguém.
-        const nomes = await nomesDosFiltrosPorId(params, definition);
+        // Nomes e resumo só depois do CSV aceito: perfil recusado não consulta ninguém.
+        const [nomes, summary] = await Promise.all([
+          nomesDosFiltrosPorId(params, definition),
+          resumoDoRecorte(definition, params),
+        ]);
         return {
           definition,
           ...csv,
           filters: reportAppliedFilters(params, definition, nomes),
+          summary,
         };
       }}
-      build={async ({ definition: relatorio, header, rows, filters }) => {
+      build={async ({ definition: relatorio, header, rows, filters, summary }) => {
         const { ReportPdf, reportPdfFileName } = await import("../../pdf/documents/ReportPdf");
         const generatedAt = new Date();
         return {
@@ -651,6 +708,7 @@ export function ReportPrintPage() {
                 rows,
                 filters,
                 generatedBy,
+                summary,
               }}
               generatedAt={generatedAt}
             />

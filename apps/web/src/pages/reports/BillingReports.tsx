@@ -24,6 +24,7 @@ import {
 import { useReport } from "./useReport";
 import { useFiltrosDigitados } from "./useFiltrosDigitados";
 import { ariaDoPeriodoRecusado, diaDoRelatorio } from "./report-period";
+import { indicadoresDoFaturamentoPorPeriodo } from "./report-summaries";
 import { emDias } from "../../lib/duration";
 import { formatBRL } from "../../lib/currency";
 import { EntityLink } from "../../components/EntityLink";
@@ -93,22 +94,12 @@ export function BillingPeriodReportPage() {
       summary={
         // Sem documento no recorte, não há valor a completar: "Valores
         // incompletos" apontaria um preço faltando que não existe. O vazio é
-        // dito pela tabela.
+        // dito pela tabela. Os indicadores são os mesmos do PDF (REPORTS-PDF-SUMMARY-01).
         data &&
-        data.summary.billingCount > 0 && (
-          <>
-            <ReportSummaryItem label="Documentos emitidos" value={data.summary.billingCount} />
-            <ReportSummaryItem
-              label="Com preço completo"
-              value={`${formatIntegerPtBr(data.summary.billingsWithCompletePricing)} de ${formatIntegerPtBr(data.summary.billingCount)}`}
-            />
-            {/* Total só existe quando TODOS os documentos têm preço completo. */}
-            <ReportSummaryItem
-              label="Valor faturado"
-              value={data.summary.totalAmount ? formatBRL(data.summary.totalAmount) : "Valores incompletos"}
-            />
-          </>
-        )
+        data.summary.billingCount > 0 &&
+        indicadoresDoFaturamentoPorPeriodo(data.summary).map((indicador) => (
+          <ReportSummaryItem key={indicador.label} label={indicador.label} value={indicador.value} />
+        ))
       }
       filters={
         <>
