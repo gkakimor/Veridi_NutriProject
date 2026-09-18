@@ -875,9 +875,11 @@ Pendente:
   PO decide a ação de G6 e G11 numa onda seguinte.
 - **A mesma onda em PROD**, como a Onda 2: conferência READ ONLY, PLAN em PROD (o código do ERP sai de sequence por banco
   e os Modelos "X" são dado do DEV — o que houver em PROD é outro registro), backup restaurável e aprovação do PO.
-- **A carga não reproduz renomeação nem consolidação**: o importador absorve o MP-000149, mas a base reconstruída pelo
-  pacote volta com os nomes e nutrientes da planilha (a Onda 2 já tinha essa lacuna). Resolver antes do índice de
-  MASTER-DATA-NAME-UNIQUENESS-01, que quebraria o rebuild.
+- ~~**A carga não reproduz renomeação nem consolidação**~~ — **FECHADO em 2026-09-18 por ITEM-IMPORT-WAVE-3-CONSISTENCY-01**
+  (na `main`, fora de PROD, sem migration): com o pacote, a carga grava o `declaredNutrient` consolidado nos canônicos das
+  Ondas 2 e 3 e o nome técnico do MP-000320, MP-000468 e MP-000393, conferidos contra o pacote, e o VERIFY acusa base
+  que não reflete a decisão. O rebuild num banco descartável chegou aos mesmos 798 Itens do DEV saneado, campo a campo,
+  com os mesmos 2 grupos repetidos (G6, G11); reexecutar não recria absorvido nem desfaz renomeação.
 - O `family` "OTHER_RAW_MATERIAL" que só o MP-000149 tinha saiu com ele (a decisão só consolidou o nutriente; o canônico
   segue sem família).
 
@@ -896,8 +898,9 @@ O que precisa acontecer **antes**, e é o motivo de esta capability não ter dat
 
 1. **o saneamento tem de fechar.** O índice não nasce por cima de duplicata existente: o `CREATE UNIQUE INDEX` falha e a
    migration não aplica. Depois da Onda 3 (§124), o `veridi_dev` tem 2 grupos, ambos em revisão com a Veridi (G6 café
-   verde e G11 fosfato de piridoxal) — cada um é decisão de produto, e a ferramenta recusa escolher sozinha. A carga
-   também precisa reproduzir a renomeação e a consolidação das ondas antes do índice: hoje só não recria o absorvido;
+   verde e G11 fosfato de piridoxal) — cada um é decisão de produto, e a ferramenta recusa escolher sozinha. A carga já
+   reproduz fusão, consolidação e renomeação das ondas (ITEM-IMPORT-WAVE-3-CONSISTENCY-01): o rebuild pelo pacote chega
+   aos mesmos 2 grupos do DEV, então o índice quebraria o rebuild só por G6 e G11 — o esperado até a Veridi responder;
 2. **PROD tem de ser medido**, em conferência READ ONLY: o estado do DEV não prova o de PROD, e os códigos do ERP saem
    de sequence por banco;
 3. **o escopo do Item já está decidido**: o PO fixou em 2026-09-17 que os quatro tipos (RAW_MATERIAL, PACKAGING,

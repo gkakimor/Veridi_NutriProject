@@ -13,7 +13,8 @@ import { bloqueiosDaRevisao, loadReviewPackage } from "./review-package.js";
 import { ImportFindingLog, severityOf } from "./findings.js";
 import { applyOpeningRow, validateOpeningRows } from "./opening-stock.js";
 import type { TemplateRow } from "./opening-stock.js";
-import type { DecisaoDeDuplicata } from "./item-duplicates.js";
+import { divergenciasNaBase } from "./item-duplicates.js";
+import type { ConjuntoDeDecisoes, DecisaoDeDuplicata } from "./item-duplicates.js";
 import type { Overrides } from "./overrides.js";
 import { readOverrides } from "./overrides.js";
 import { WORKBOOKS_DO_ESCOPO, chaveDoItem, runPipeline } from "./pipeline.js";
@@ -560,6 +561,7 @@ function linhaCliente(
 function linhaItem(
   origem: { externalCode: string; name: string; type: string; unitCode: string },
   status: string,
+  campos: Record<string, string | null> = {},
 ): LinhaDoPacote {
   return {
     chave: chaveDoItem(origem.externalCode),
@@ -570,6 +572,7 @@ function linhaItem(
       TIPO: origem.type === "PACKAGING" ? "EMBALAGEM" : "MATERIA_PRIMA",
       UNIDADE: origem.unitCode,
       ATIVO: "SIM",
+      ...campos,
     },
   };
 }
@@ -879,5 +882,173 @@ integration("Duplicata de Item absorvida — a carga segue a decisão canônica"
     const semCanonico = await plano(pacote([absorvido]), [decisaoCom("MP-999999")]);
     expect(semCanonico.review?.blocked).toBe(true);
     expect(codigos(semCanonico)).toContain("ITEM_DUPLICATE_CANONICAL_UNRESOLVED");
+  });
+});
+
+/* ─── Consolidação e renomeação da decisão (ITEM-IMPORT-WAVE-3-CONSISTENCY-01) ─── */
+
+integration("Decisão de duplicata — a carga consolida e renomeia como o saneamento", () => {
+  const marca = Date.now().toString(36).toUpperCase();
+  const nomeFundido = `Material fundido ${marca}`;
+  const nomeRenomeado = `Material renomeado ${marca}`;
+  const nomeTecnico = `${nomeRenomeado} — Tipo 1`;
+  const item = (externalCode: string, name: string, nutriente: string | null) => ({
+    externalCode,
+    name,
+    type: "RAW_MATERIAL",
+    unitCode: "kg",
+    nutriente,
+  });
+  const canonico = item(`DCC${marca}`, nomeFundido, "Açúcar");
+  const absorvido = item(`DCA${marca}`, nomeFundido, "Carboidrato");
+  const renomeado = item(`DRR${marca}`, nomeRenomeado, null);
+  const mantido = item(`DRK${marca}`, nomeRenomeado, null);
+  const todos = [canonico, absorvido, renomeado, mantido];
+
+  /** A decisão com os códigos do ERP desta base — ou fictícios, no PLAN de base nova. */
+  const decisao = (codigos: { canonico: string; renomeado: string; mantido: string }): ConjuntoDeDecisoes => ({
+    fusoes: [
+      {
+        onda: "T",
+        grupo: `TF-${marca}`,
+        nome: nomeFundido,
+        absorvido: { codigo: "MP-999998", codigoPlanilha: absorvido.externalCode },
+        canonico: { codigo: codigos.canonico, codigoPlanilha: canonico.externalCode },
+        consolidar: { declaredNutrient: "Açúcar · Carboidrato" },
+      },
+    ],
+    renomeacoes: [
+      {
+        onda: "T",
+        grupo: `TR-${marca}`,
+        cadastro: "ITEM",
+        nome: nomeRenomeado,
+        renomear: [
+          { codigo: codigos.renomeado, codigoPlanilha: renomeado.externalCode, de: nomeRenomeado, para: nomeTecnico },
+        ],
+        manter: [{ codigo: codigos.mantido, codigoPlanilha: mantido.externalCode, nome: nomeRenomeado }],
+        motivo: "teste",
+      },
+    ],
+    exclusoes: [],
+    revisoes: [],
+  });
+  const ficticia = decisao({ canonico: "MP-999997", renomeado: "MP-999996", mantido: "MP-999995" });
+  const pacote = (itens: (typeof canonico)[]) =>
+    loadReviewPackage(
+      pacoteSintetico({
+        "03_MATERIAS_PRIMAS": itens.map((i) => linhaItem(i, "OK", { NUTRIENTE_DECLARADO: i.nutriente })),
+      }),
+    );
+  const rodar = (write: boolean, review: ReturnType<typeof pacote>, conjunto: ConjuntoDeDecisoes) =>
+    runPipeline({ prisma, write, overrides: emptyOverrides(), review, conjunto });
+  const doCodigo = (resultado: Awaited<ReturnType<typeof rodar>>, codigo: string) =>
+    resultado.findings.all().filter((finding) => finding.code === codigo);
+  const codigoLivre = () => `MP-9${String(10_000 + Math.floor(Math.random() * 89_999))}`;
+  /** Base carregada pela carga antiga: nome e nutriente da planilha, sem o absorvido. */
+  const carregarComoAntes = async (itens: (typeof canonico)[]) => {
+    const criados = [];
+    for (const i of itens) {
+      criados.push(
+        await prisma.item.create({
+          data: {
+            code: codigoLivre(),
+            type: "RAW_MATERIAL",
+            name: i.name,
+            unitCode: "kg",
+            externalCode: i.externalCode,
+            declaredNutrient: i.nutriente,
+          },
+        }),
+      );
+    }
+    return criados;
+  };
+
+  it("base nova: o canônico nasce consolidado, o renomeado com o nome técnico, o mantido como está e o absorvido não nasce", async () => {
+    const plano = await rodar(false, pacote(todos), ficticia);
+    expect(plano.review?.blocked).toBe(false);
+    expect(plano.domains.items).toMatchObject({ created: 3, skipped: 1 });
+    expect(doCodigo(plano, "ITEM_DUPLICATE_DECISION_MISMATCH")).toEqual([]);
+    expect(doCodigo(plano, "ITEM_DUPLICATE_DECISION_APPLIED").map((f) => [f.reference, f.detail])).toEqual([
+      [
+        chaveDoItem(canonico.externalCode),
+        `declaredNutrient consolidado "Açúcar · Carboidrato" (pacote: "Açúcar") — grupo TF-${marca} (Onda T)`,
+      ],
+      [
+        chaveDoItem(renomeado.externalCode),
+        `renomeado de "${nomeRenomeado}" para "${nomeTecnico}" — grupo TR-${marca} (Onda T)`,
+      ],
+    ]);
+    expect(doCodigo(plano, "ITEM_DUPLICATE_ABSORBED").map((f) => f.reference)).toEqual([
+      chaveDoItem(absorvido.externalCode),
+    ]);
+  });
+
+  it("base carregada com a planilha: o APPLY grava o nome técnico e o nutriente consolidado, e reexecutar não desfaz nem recria o absorvido", async () => {
+    const [c, r, k] = await carregarComoAntes([canonico, renomeado, mantido]);
+    try {
+      const conjunto = decisao({ canonico: c!.code, renomeado: r!.code, mantido: k!.code });
+      const lerBase = () =>
+        prisma.item.findMany({
+          where: { externalCode: { in: todos.map((i) => i.externalCode) } },
+          select: { externalCode: true, code: true, name: true, declaredNutrient: true },
+        });
+      // A base da carga antiga é o que a conferência depois do APPLY acusa.
+      expect(divergenciasNaBase(await lerBase(), conjunto)).toHaveLength(2);
+
+      const review = pacote(todos);
+      for (const rodada of ["primeira", "segunda"]) {
+        const resultado = await rodar(true, review, conjunto);
+        expect(resultado.review?.blocked, rodada).toBe(false);
+        expect(resultado.domains.items, rodada).toMatchObject({ created: 0, updated: 3, skipped: 1 });
+        const naBase = await lerBase();
+        expect(
+          Object.fromEntries(naBase.map((i) => [i.externalCode, [i.code, i.name, i.declaredNutrient]])),
+          rodada,
+        ).toEqual({
+          [canonico.externalCode]: [c!.code, nomeFundido, "Açúcar · Carboidrato"],
+          [renomeado.externalCode]: [r!.code, nomeTecnico, null],
+          [mantido.externalCode]: [k!.code, nomeRenomeado, null],
+        });
+        expect(divergenciasNaBase(naBase, conjunto), rodada).toEqual([]);
+      }
+    } finally {
+      await prisma.item.deleteMany({ where: { externalCode: { in: todos.map((i) => i.externalCode) } } });
+    }
+  });
+
+  it("pacote que a decisão já não descreve reprova o plano: nome fora do 'de', nutriente que não fecha, código do ERP de outro Item", async () => {
+    const outroNome = await rodar(
+      false,
+      pacote([canonico, absorvido, { ...renomeado, name: `${nomeRenomeado} B` }, mantido]),
+      ficticia,
+    );
+    expect(outroNome.review?.blocked).toBe(true);
+    expect(doCodigo(outroNome, "ITEM_DUPLICATE_DECISION_MISMATCH").map((f) => f.reference)).toEqual([
+      chaveDoItem(renomeado.externalCode),
+    ]);
+
+    const outroNutriente = await rodar(
+      false,
+      pacote([canonico, { ...absorvido, nutriente: "Fibra" }, renomeado, mantido]),
+      ficticia,
+    );
+    expect(outroNutriente.review?.blocked).toBe(true);
+    expect(doCodigo(outroNutriente, "ITEM_DUPLICATE_DECISION_MISMATCH").map((f) => f.reference)).toEqual([
+      chaveDoItem(canonico.externalCode),
+    ]);
+
+    // Nesta base o renomeado tem outro código do ERP: a decisão descreve outro Item.
+    const [r] = await carregarComoAntes([renomeado]);
+    try {
+      const outroCodigo = await rodar(false, pacote(todos), ficticia);
+      expect(outroCodigo.review?.blocked).toBe(true);
+      expect(doCodigo(outroCodigo, "ITEM_DUPLICATE_DECISION_MISMATCH").map((f) => f.detail)).toEqual([
+        `o Item da planilha ${renomeado.externalCode} e ${r!.code} nesta base, e o grupo TR-${marca} (Onda T) diz MP-999996`,
+      ]);
+    } finally {
+      await prisma.item.delete({ where: { id: r!.id } });
+    }
   });
 });

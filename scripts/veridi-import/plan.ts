@@ -3,8 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { CORPUS_DIR, corpusAvailable } from "../veridi-data/corpus.js";
 import { assertImportEnvironment } from "./environment.js";
-import { DECISOES_DE_DUPLICATAS } from "./item-duplicate-decisions.js";
-import { impressaoDasDecisoes } from "./item-duplicates.js";
+import { DECISOES_DE_DUPLICATAS, RENOMEACOES_DE_ITEM } from "./item-duplicate-decisions.js";
+import { impressaoDaCarga } from "./item-duplicates.js";
 import { readOverrides, writeOverrideTemplate, ITEM_MAP_FILE, PRICE_UOM_FILE, SAMPLE_FILE } from "./overrides.js";
 import { WORKBOOKS_DO_ESCOPO, runPipeline } from "./pipeline.js";
 import {
@@ -151,10 +151,12 @@ export async function buildPlan(options: { quiet?: boolean } = {}): Promise<void
       // outro é a mesma armadilha do manifesto de fontes.
       reviewPackage: review ? carimboDoPacote(review) : null,
       // Mesma armadilha para a decisão de duplicatas de Item: o APPLY recusa
-      // se o arquivo de decisão mudou depois do PLAN.
+      // se o arquivo de decisão mudou depois do PLAN. A impressão cobre o que
+      // a carga aplica — fusão, consolidação e renomeação.
       duplicateDecisions: {
         groups: DECISOES_DE_DUPLICATAS.length,
-        fingerprint: impressaoDasDecisoes(DECISOES_DE_DUPLICATAS),
+        renames: RENOMEACOES_DE_ITEM.reduce((soma, decisao) => soma + decisao.renomear.length, 0),
+        fingerprint: impressaoDaCarga(),
       },
       review: result.review,
       readyForLoad: review !== null && bloqueios.length === 0 && !result.review?.blocked,

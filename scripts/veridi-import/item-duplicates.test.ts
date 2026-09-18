@@ -1,5 +1,9 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { DECISOES_DE_DUPLICATAS } from "./item-duplicate-decisions.js";
+import { ImportFindingLog } from "./findings.js";
+import { DECISOES_DE_DUPLICATAS, GRUPOS_EM_REVISAO } from "./item-duplicate-decisions.js";
 import {
   CONJUNTO_DO_ARQUIVO,
   absorvidosPorCodigoDaPlanilha,
@@ -7,15 +11,27 @@ import {
   conjuntoDaOnda,
   decisaoDeGrupo,
   decisaoDoCodigo,
+  decisoesDaCarga,
   decisoesDaOnda,
+  divergenciasNaBase,
   gruposDaOnda,
   gruposDeFusao,
+  impressaoDaCarga,
   impressaoDaOnda,
   impressaoDasDecisoes,
+  nomeNormalizado,
   validarConjunto,
   validarDecisoes,
 } from "./item-duplicates.js";
-import type { ConjuntoDeDecisoes, DecisaoDeDuplicata, DecisaoDeRenomeacao } from "./item-duplicates.js";
+import type {
+  ConjuntoDeDecisoes,
+  DecisaoDeDuplicata,
+  DecisaoDeRenomeacao,
+  ItemDoPacote,
+} from "./item-duplicates.js";
+import { lerItensRevisados } from "./master-data-review.js";
+import { WORKBOOKS_DO_ESCOPO, WORKBOOK_EMBALAGENS, WORKBOOK_MATERIAS_PRIMAS } from "./pipeline.js";
+import { loadReviewPackage, workbookObrigatorio } from "./review-package.js";
 
 const decisao = (
   grupo: string,
@@ -348,5 +364,300 @@ describe("validação das espécies novas do arquivo de decisão", () => {
     expect(erros).toMatch(/MP-000010 já está em outra decisão/);
     expect(erros).toMatch(/o grupo já é de outra espécie/);
     expect(() => conjuntoDaOnda("Z")).toThrow(/não tem grupo/);
+  });
+});
+
+/* ───────── A carga reproduz as decisões (ITEM-IMPORT-WAVE-3-CONSISTENCY-01) ───────── */
+
+describe("A carga reproduz a consolidação e a renomeação da decisão", () => {
+  const conjunto = (parcial: Partial<ConjuntoDeDecisoes>): ConjuntoDeDecisoes => ({
+    fusoes: [],
+    renomeacoes: [],
+    exclusoes: [],
+    revisoes: [],
+    ...parcial,
+  });
+  // Dois absorvidos fora da ordem do código, e uma equivalência declarada só neste grupo.
+  const consolidar = { declaredNutrient: "A** · C · B", equivalentes: { A: "A**" } };
+  const fusoes: DecisaoDeDuplicata[] = [
+    {
+      onda: "T",
+      grupo: "F1",
+      nome: "Material",
+      absorvido: { codigo: "MP-000030", codigoPlanilha: "30" },
+      canonico: { codigo: "MP-000010", codigoPlanilha: "10" },
+      consolidar,
+    },
+    {
+      onda: "T",
+      grupo: "F1",
+      nome: "Material",
+      absorvido: { codigo: "MP-000020", codigoPlanilha: "20" },
+      canonico: { codigo: "MP-000010", codigoPlanilha: "10" },
+      consolidar,
+    },
+  ];
+  const renomeacao: DecisaoDeRenomeacao = {
+    onda: "T",
+    grupo: "R1",
+    cadastro: "ITEM",
+    nome: "Outro material",
+    renomear: [{ codigo: "MP-000040", codigoPlanilha: "40", de: "Outro material", para: "Outro material — Tipo 1" }],
+    manter: [{ codigo: "MP-000050", codigoPlanilha: "50", nome: "Outro material" }],
+    motivo: "material diferente",
+  };
+  const decisao = conjunto({ fusoes, renomeacoes: [renomeacao] });
+  const itens = (extra: ItemDoPacote[] = [], trocar: Record<string, Partial<ItemDoPacote>> = {}): ItemDoPacote[] =>
+    [
+      { externalCode: "10", name: "Material", declaredNutrient: "A**" },
+      { externalCode: "20", name: "Material", declaredNutrient: "C" },
+      { externalCode: "30", name: "MATERIAL", declaredNutrient: "A · B" },
+      { externalCode: "40", name: "Outro material", declaredNutrient: "X" },
+      { externalCode: "50", name: "Outro material", declaredNutrient: "Y" },
+      ...extra,
+    ].map((item) => ({ ...item, ...trocar[item.externalCode] }));
+  const divergencias = (lista: ItemDoPacote[]): string =>
+    decisoesDaCarga(lista, decisao)
+      .divergencias.map((d) => `${d.codigoPlanilha}: ${d.mensagem}`)
+      .join("\n");
+
+  it("consolida no canônico o valor da decisão — canônico primeiro, absorvidos pelo código do ERP — e renomeia pelo 'de' exato", () => {
+    const carga = decisoesDaCarga(itens(), decisao);
+    expect(carga.divergencias).toEqual([]);
+    expect([...carga.absorvidos.keys()].sort()).toEqual(["20", "30"]);
+    expect(carga.ajustes.get("10")).toMatchObject({ onda: "T", grupo: "F1", declaredNutrient: "A** · C · B" });
+    expect(carga.ajustes.get("40")).toMatchObject({ onda: "T", grupo: "R1", name: "Outro material — Tipo 1" });
+    // Renomear só troca o nome; o mantido e os absorvidos não ganham ajuste.
+    expect(carga.ajustes.get("40")?.declaredNutrient).toBeUndefined();
+    expect([...carga.ajustes.keys()].sort()).toEqual(["10", "40"]);
+    expect([...carga.renomeacaoPorPlanilha]).toEqual([
+      ["40", { codigo: "MP-000040", onda: "T", grupo: "R1" }],
+      ["50", { codigo: "MP-000050", onda: "T", grupo: "R1" }],
+    ]);
+  });
+
+  it("pacote que a decisão já não descreve vira divergência — nada é adivinhado", () => {
+    expect(divergencias(itens([], { "20": { declaredNutrient: "D" } }))).toMatch(
+      /^10: declaredNutrient de MP-000010 consolidado pelo pacote da "A\*\* · D · B", e o grupo F1 \(Onda T\) espera "A\*\* · C · B"$/,
+    );
+    expect(divergencias(itens().filter((i) => i.externalCode !== "30"))).toMatch(/fora da carga: MP-000030$/);
+    // O 'de' é exato, como no compare-and-set da ferramenta: só a caixa já diverge.
+    expect(divergencias(itens([], { "40": { name: "OUTRO MATERIAL" } }))).toMatch(
+      /^40: o pacote chama MP-000040 de "OUTRO MATERIAL", e o grupo R1 \(Onda T\) renomeia de "Outro material"$/,
+    );
+    expect(divergencias(itens([], { "50": { name: "Terceiro" } }))).toMatch(/^50: o pacote chama MP-000050 de "Terceiro"/);
+  });
+
+  it("colisão pela chave do saneamento (trim + sem caixa): intruso com o nome do grupo e nome novo já ocupado", () => {
+    expect(divergencias(itens([{ externalCode: "60", name: " OUTRO MATERIAL ", declaredNutrient: null }]))).toMatch(
+      /^60: a planilha 60 tem o nome do grupo R1 \(Onda T\), "Outro material", e nao esta na decisao/,
+    );
+    expect(divergencias(itens([{ externalCode: "70", name: "OUTRO MATERIAL — TIPO 1", declaredNutrient: null }]))).toMatch(
+      /^40: o nome novo de MP-000040, "Outro material — Tipo 1", ja e o nome da planilha 70 nesta carga$/,
+    );
+    // O absorvido não nasce: o nome dele não colide com ninguém.
+    expect(divergencias(itens())).toBe("");
+  });
+
+  it("Item decidido fora da carga não diverge: renomear não cria ninguém", () => {
+    const carga = decisoesDaCarga(
+      itens().filter((i) => !["40", "50"].includes(i.externalCode)),
+      decisao,
+    );
+    expect(carga.divergencias).toEqual([]);
+    expect(carga.ajustes.has("40")).toBe(false);
+  });
+
+  it("exclusão de agregado e grupo em revisão ficam fora da carga: nenhum ajuste, nenhum absorvido", () => {
+    const soOutrasEspecies = conjunto({
+      exclusoes: [
+        { onda: "T", grupo: "X", cadastro: "FORMULATION_TEMPLATE", nome: "X", excluir: [{ codigo: "FT-000001" }], motivo: "teste" },
+      ],
+      revisoes: [
+        { onda: "T", grupo: "V", cadastro: "ITEM", nome: "Material", codigos: ["MP-000010", "MP-000020"], motivo: "espera", perguntas: ["?"] },
+      ],
+    });
+    expect(decisoesDaCarga(itens(), soOutrasEspecies)).toEqual({
+      absorvidos: new Map(),
+      ajustes: new Map(),
+      renomeacaoPorPlanilha: new Map(),
+      divergencias: [],
+    });
+  });
+
+  it("os Modelos 'X' (FT-000001/002) eram dado do DEV: a carga não tem workbook de Modelo, não escreve Modelo e não lê a exclusão", () => {
+    expect(WORKBOOKS_DO_ESCOPO.filter((nome) => /MODELO|TEMPLATE/i.test(nome))).toEqual([]);
+    const pasta = fileURLToPath(new URL(".", import.meta.url));
+    for (const arquivo of fs.readdirSync(pasta).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))) {
+      expect(fs.readFileSync(path.join(pasta, arquivo), "utf8"), arquivo).not.toMatch(/\.formulationTemplate/);
+    }
+    const carga = decisoesDaCarga([]);
+    const codigos = [
+      ...[...carga.absorvidos.values()].flatMap((d) => [d.absorvido.codigo, d.canonico.codigo]),
+      ...[...carga.renomeacaoPorPlanilha.values()].map((d) => d.codigo),
+    ];
+    expect(codigos.filter((codigo) => !/^(MP|ME)-\d{6}$/.test(codigo))).toEqual([]);
+  });
+
+  it("a impressão da carga cobre fusão e renomeação, e ignora exclusão e revisão", () => {
+    const base = CONJUNTO_DO_ARQUIVO;
+    const antes = impressaoDaCarga(base);
+    expect(impressaoDaCarga(conjunto({ fusoes: base.fusoes }))).not.toBe(antes);
+    const [oliva, ...resto] = base.renomeacoes;
+    const outroNome = {
+      ...base,
+      renomeacoes: [
+        { ...oliva!, renomear: oliva!.renomear.map((r, i) => (i === 0 ? { ...r, para: `${r.para} 2` } : r)) },
+        ...resto,
+      ],
+    };
+    expect(impressaoDaCarga(outroNome)).not.toBe(antes);
+    expect(impressaoDaCarga({ ...base, exclusoes: [], revisoes: [] })).toBe(antes);
+  });
+
+  it("a conferência da base acusa absorvido presente, nutriente sem consolidar, nome da planilha e mantido renomeado", () => {
+    expect(
+      divergenciasNaBase(
+        [
+          { code: "MP-000010", name: "Material", declaredNutrient: "A** · C · B" },
+          { code: "MP-000040", name: "Outro material — Tipo 1", declaredNutrient: "X" },
+          { code: "MP-000050", name: "OUTRO MATERIAL", declaredNutrient: "Y" },
+        ],
+        decisao,
+      ),
+    ).toEqual([]);
+    // Registro ausente não conta: a carga só cria o que o pacote aprova.
+    expect(divergenciasNaBase([], decisao)).toEqual([]);
+    expect(
+      divergenciasNaBase(
+        [
+          { code: "MP-000010", name: "Material", declaredNutrient: "A**" },
+          { code: "MP-000020", name: "Material", declaredNutrient: "C" },
+          { code: "MP-000040", name: "Outro material", declaredNutrient: "X" },
+          { code: "MP-000050", name: "Outro", declaredNutrient: "Y" },
+        ],
+        decisao,
+      ),
+    ).toEqual([
+      "MP-000020 ainda existe, e o grupo F1 (Onda T) o absorveu em MP-000010",
+      'MP-000010 tem declaredNutrient "A**", e o grupo F1 (Onda T) consolidou "A** · C · B"',
+      'MP-000040 se chama "Outro material", e o grupo R1 (Onda T) o renomeou para "Outro material — Tipo 1"',
+      'MP-000050 se chama "Outro", e o grupo R1 (Onda T) o mantém com "Outro material"',
+    ]);
+  });
+});
+
+/*
+ * O pacote aprovado de verdade — o mesmo de PROD e do DEV — fica fora do Git,
+ * como o corpus: sem ele, o bloco é pulado. Nada dele é escrito aqui; o que o
+ * teste confere são os códigos e nomes que o arquivo de decisão já versiona.
+ */
+const RAIZ = fileURLToPath(new URL("../..", import.meta.url));
+const PACOTE_APROVADO =
+  process.env["VERIDI_REVIEW_PACKAGE"] ??
+  path.resolve(RAIZ, "..", ".local-data", "veridi", "carga-inicial", "pacote-carga-final.json");
+const comPacoteAprovado = fs.existsSync(PACOTE_APROVADO) ? describe : describe.skip;
+
+comPacoteAprovado("A carga do pacote aprovado reproduz o DEV saneado (Ondas A, 2 e 3)", () => {
+  // As seis unidades que a migration `reference_units_of_measure` semeia: o catálogo que a carga confere.
+  const UNIDADES = new Set(["kg", "g", "mg", "un", "L", "mL"]);
+  const pacote = loadReviewPackage(PACOTE_APROVADO);
+  const leituras = [WORKBOOK_MATERIAS_PRIMAS, WORKBOOK_EMBALAGENS].map((nome) =>
+    lerItensRevisados(workbookObrigatorio(pacote, nome), UNIDADES, new ImportFindingLog()),
+  );
+  const lidos = leituras.flatMap((leitura) => leitura.aprovados);
+  const carga = decisoesDaCarga(lidos);
+  const doPacote = new Map(lidos.map((item) => [item.externalCode, item]));
+  const comoNoPacote = (planilha: string) => ({
+    name: doPacote.get(planilha)?.name,
+    declaredNutrient: doPacote.get(planilha)?.declaredNutrient,
+  });
+  /** O Item como a carga o grava: o absorvido não nasce, e o ajuste da decisão vence o pacote. */
+  const final = new Map(
+    lidos
+      .filter((item) => !carga.absorvidos.has(item.externalCode))
+      .map((item) => {
+        const ajuste = carga.ajustes.get(item.externalCode);
+        return [
+          item.externalCode,
+          { name: ajuste?.name ?? item.name, declaredNutrient: ajuste?.declaredNutrient ?? item.declaredNutrient },
+        ] as const;
+      }),
+  );
+
+  it("o pacote é o que a decisão descreve: leitura sem bloqueio e nenhuma divergência", () => {
+    expect(leituras.map((leitura) => leitura.bloqueado)).toEqual([false, false]);
+    expect(carga.divergencias).toEqual([]);
+    for (const d of DECISOES_DE_DUPLICATAS) expect(doPacote.has(d.absorvido.codigoPlanilha), d.absorvido.codigo).toBe(true);
+    expect(final.size).toBe(lidos.length - DECISOES_DE_DUPLICATAS.length);
+  });
+
+  it("MP-000149 não nasce: absorvido pelo MP-000475, que termina 'Concentrado de maçã' com 'Açúcar de maçã · Carboidrato'", () => {
+    expect(comoNoPacote("149")).toEqual({ name: "Concentrado de maçã", declaredNutrient: "Carboidrato" });
+    expect(final.has("149")).toBe(false);
+    expect(carga.absorvidos.get("149")?.canonico).toEqual({ codigo: "MP-000475", codigoPlanilha: "581" });
+    expect(final.get("581")).toEqual({ name: "Concentrado de maçã", declaredNutrient: "Açúcar de maçã · Carboidrato" });
+  });
+
+  it("oliva: MP-000320 e MP-000468 com nome técnico distinto, sem fundir e sem tocar o nutriente", () => {
+    expect(final.get("321")).toEqual({
+      name: "Extrato de polpa de oliva (Olea europaea L.) — Verbascosídeo",
+      declaredNutrient: "Verbascosídeo",
+    });
+    expect(final.get("574")).toEqual({
+      name: "Extrato de polpa de oliva (Olea europaea L.) — Hidroxitirosol",
+      declaredNutrient: "Hidroxitirosol",
+    });
+    expect([carga.renomeacaoPorPlanilha.get("321")?.codigo, carga.renomeacaoPorPlanilha.get("574")?.codigo]).toEqual([
+      "MP-000320",
+      "MP-000468",
+    ]);
+  });
+
+  it("guaraná: MP-000393 vira 'Extrato de guaraná 22%', e o MP-000486 fica intacto", () => {
+    expect(final.get("409")).toEqual({ name: "Extrato de guaraná 22%", declaredNutrient: "EXT GUARANÁ 22%" });
+    expect(final.get("594")).toEqual(comoNoPacote("594"));
+    expect(final.get("594")?.name).toBe("Guaraná em pó soluvel");
+    expect(carga.ajustes.has("594")).toBe(false);
+  });
+
+  it("Ondas A e 2 preservadas: nenhum absorvido nasce, o canônico fica e sai com o nutriente consolidado", () => {
+    for (const onda of ["A", "2"]) {
+      for (const grupo of gruposDaOnda(onda)) {
+        for (const absorvido of grupo.absorvidos) expect(final.has(absorvido.codigoPlanilha), absorvido.codigo).toBe(false);
+        const canonico = final.get(grupo.canonico.codigoPlanilha);
+        // Fusão não renomeia: o canônico fica com o nome do pacote.
+        expect(canonico?.name, grupo.grupo).toBe(doPacote.get(grupo.canonico.codigoPlanilha)?.name);
+        expect(canonico?.declaredNutrient, grupo.grupo).toBe(
+          grupo.consolidar?.declaredNutrient ?? doPacote.get(grupo.canonico.codigoPlanilha)?.declaredNutrient,
+        );
+      }
+    }
+    expect(final.get("348")?.declaredNutrient).toBe("Clorogênico** · Adenosina · Rutina");
+  });
+
+  it("grupos em revisão intactos: G6 e G11 nascem do pacote como estão", () => {
+    for (const revisao of GRUPOS_EM_REVISAO) {
+      const doGrupo = lidos.filter((item) => nomeNormalizado(item.name) === nomeNormalizado(revisao.nome));
+      expect(doGrupo, revisao.grupo).toHaveLength(revisao.codigos.length);
+      for (const item of doGrupo) {
+        expect(final.get(item.externalCode), `${revisao.grupo} ${item.externalCode}`).toEqual(comoNoPacote(item.externalCode));
+        expect(carga.ajustes.has(item.externalCode)).toBe(false);
+      }
+    }
+  });
+
+  it("nenhuma duplicidade nova: pela chave do saneamento (trim + sem caixa), só restam os dois grupos em revisão", () => {
+    const porChave = new Map<string, string[]>();
+    for (const [planilha, item] of final) {
+      const chave = nomeNormalizado(item.name);
+      porChave.set(chave, [...(porChave.get(chave) ?? []), planilha]);
+    }
+    const repetidos = [...porChave].filter(([, planilhas]) => planilhas.length > 1).map(([chave]) => chave);
+    expect(repetidos.sort()).toEqual(GRUPOS_EM_REVISAO.map((d) => nomeNormalizado(d.nome)).sort());
+    // A chave é sem caixa: "Goma Xantana" × "Goma xantana" (G12, Onda A) é o mesmo nome, e só um nasce.
+    expect(doPacote.get("540")?.name).not.toBe(doPacote.get("639")?.name);
+    expect(nomeNormalizado(doPacote.get("540")!.name)).toBe(nomeNormalizado(doPacote.get("639")!.name));
+    expect([final.has("540"), final.has("639")]).toEqual([true, false]);
   });
 });

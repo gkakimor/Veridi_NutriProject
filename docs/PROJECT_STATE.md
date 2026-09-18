@@ -6479,9 +6479,8 @@ FT-000001 e FT-000002 — a V1 de cada Modelo na observação —, RENOMEADOS co
 REVISÃO NECESSÁRIA com as perguntas). Plano, resultado, VERIFY e logs em
 `.local-data/veridi/saneamento-duplicatas/master-data/onda-3/`.
 
-**Pendências.** A carga (importador) absorve o MP-000149, mas não reproduz renomeação nem consolidação de nutriente
-(como já acontecia com a Onda 2): base reconstruída pelo pacote volta com os nomes da planilha — resolver antes do índice
-de MASTER-DATA-NAME-UNIQUENESS-01. O `family` "OTHER_RAW_MATERIAL" que só o MP-000149 tinha saiu com ele (o canônico
+**Pendências.** ~~A carga (importador) não reproduzia renomeação nem consolidação de nutriente~~ — fechada por
+ITEM-IMPORT-WAVE-3-CONSISTENCY-01 (seção abaixo). O `family` "OTHER_RAW_MATERIAL" que só o MP-000149 tinha saiu com ele (o canônico
 segue sem família; a decisão só consolidou o nutriente). O PO escreveu "Guaraná em pó solúvel" com acento; o cadastro
 grava "soluvel" e ficou como está, porque o MP-000486 não estava entre os renomeados.
 
@@ -6493,6 +6492,35 @@ inesperado aborta, BLOCKED intocado, planilha) e os vizinhos `master-data-duplic
 `master-data-catalog`, `item-duplicate-sanitization`, `xlsx-writer` e a "Duplicata de Item absorvida" do importador
 (107 + 3). Typecheck avulso dos scripts sem erro novo (os 4 antigos seguem). Sem migration, E2E, Playwright, mutação nem
 suíte completa.
+
+## Carga reproduz as ondas de saneamento (ITEM-IMPORT-WAVE-3-CONSISTENCY-01, 2026-09-18)
+
+**Lacuna fechada.** Com o pacote, a carga já não recriava o Item absorvido, mas gravava o nome e o `declaredNutrient` da
+planilha: a base reconstruída voltava sem as renomeações da Onda 3 e sem o nutriente consolidado dos canônicos das
+Ondas 2 e 3. Agora grava o que a decisão escreveu no saneamento, na criação e ao completar.
+
+**Como.** `decisoesDaCarga` (`scripts/veridi-import/item-duplicates.ts`) lê o arquivo de decisão da §110 e a regra da
+ferramenta (`consolidarTermos`): o nutriente calculado do pacote — canônico primeiro, absorvidos pelo código do ERP — tem
+de dar o valor escrito na decisão; a renomeação exige o nome de antes exato, o mantido com o nome do grupo e o nome novo
+livre pela chave do saneamento (`trim` + sem caixa); o código do ERP do renomeado é conferido na base. Pacote fora da
+decisão reprova (`ITEM_DUPLICATE_DECISION_MISMATCH`); o aplicado vira `ITEM_DUPLICATE_DECISION_APPLIED`. A impressão do
+`import-plan.json` cobre fusão, consolidação e renomeação (`impressaoDaCarga`); o VERIFY ganhou "Decisões de duplicata
+de Item refletidas" (base carregada antes das ondas, PROD hoje, acusa ali). Modelos "X" e grupos em revisão ficam fora:
+a carga nunca escreve Modelo, e G6/G11 nascem do pacote como estão. **Sem migration.**
+
+**Prova em banco descartável** (`veridi_wt_imp3_e2e_baseline` pelo `e2e:baseline:rebuild`, removido no fim): 798 Itens
+(625 MP/ME + 173 PA), 18 absorvidos fora, 11 ajustes (8 consolidações, 3 renomeações), VERIFY OK. Contra o `veridi_dev`
+(só leitura): os 798 Itens comuns idênticos em 15 colunas; relações (717), ofertas (773) e componentes (1.292) iguais; os
+mesmos 2 grupos repetidos. O resto é local do DEV (parágrafo DEV abaixo), mais o preferencial de ME-000001 × HECAPLAST
+marcado à mão e 2 eventos de homologação a mais em cada uma das 4 relações que a ferramenta consolidou — movidos do
+absorvido; a carga limpa não inventa histórico de relação que nunca existiu nela. Reexecutar PLAN → APPLY → VERIFY na
+mesma base: 0 criado, 14 tabelas com a mesma contagem, renomeação e consolidação intactas.
+
+**Validação.** `item-duplicates.test.ts` (38: carga sintética — ordem do código, `de` exato, intruso e destino ocupado
+sem caixa, fora da carga, exclusão e revisão fora, Modelo nunca escrito, impressão, VERIFY — e o pacote aprovado real,
+pulado sem ele), `importer.test.ts` (24: base nova, APPLY duas vezes sobre a base da carga antiga, três divergências
+reprovando) e os vizinhos da ferramenta e da revisão (7 arquivos, 167). Mutação (extra): 4 mutantes no pipeline, 4
+derrubados. Typecheck avulso sem erro novo. Sem E2E, Playwright nem suíte completa; PROD e Railway intocados.
 
 ## Próxima prioridade
 
@@ -6596,8 +6624,10 @@ real do cliente (#7, #11). Roteiro em
 Banco local `veridi_dev` = **DEV_REALDATA_BASELINE** desde 2026-09-14 (DEV-REALDATA-BASELINE-RESET-01): as 74
 migrations, o ADMIN local do `seed-infra` e a carga inicial que PROD recebeu — mesmo pacote, mesmos códigos do ERP,
 mesmas contagens de negócio. Estoque, OP, pedido e custo real seguem vazios: é o que a Veridi ainda não lançou.
-**Desde 2026-09-17 com a Onda A de duplicatas de Item saneada** (§110): 6 Itens MP/ME a menos que PROD, que não foi
-saneado; reconstruir pelo importador chega ao mesmo estado, porque a carga segue o arquivo de decisão.
+**Desde 2026-09-17 com as Ondas A, 2 e 3 de duplicatas de Item saneadas** (§110, §118, §124): 18 Itens MP/ME a menos
+que PROD, que não foi saneado; reconstruir pelo importador chega aos mesmos Itens — nome e nutriente inclusos, desde
+ITEM-IMPORT-WAVE-3-CONSISTENCY-01 —, porque a carga segue o arquivo de decisão. O que o DEV tem a mais é local: 9 Itens
+"Exemplo" do `veridi:examples`, a V2 do PROD-000001 e os Modelos FT-000003/004.
 
 Reconstruir, nesta ordem, no Git Bash e na raiz. `W` é uma pasta de trabalho com cópia de `csv/`, `overrides/` e
 `cmv-product-overrides.csv` de `../.local-data/veridi/` (o importador grava plano, findings e de-para ao lado dos
