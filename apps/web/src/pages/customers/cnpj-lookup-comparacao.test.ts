@@ -1,12 +1,22 @@
 import { describe, expect, it } from "vitest";
-import type { CnpjLookupCompany } from "@veridi/shared";
+import type { CnpjLookupCompany, CnpjLookupResult, CustomerCnpjRegistration } from "@veridi/shared";
+import { CNPJ_REGISTRATION_FIELDS } from "@veridi/shared";
 import {
   CAMPOS_DA_CONSULTA_DE_CNPJ,
+  assinaturaDosDadosDoCnpj,
   compararComOCadastro,
+  compararDadosDoCnpj,
+  dadosDoCnpjParaAplicar,
   selecaoInicial,
+  selecaoInicialDosDadosDoCnpj,
+  simNaoOuNaoInformado,
   valoresParaAplicar,
 } from "./cnpj-lookup-fields";
-import type { LinhaDaComparacao, ValoresDoFormulario } from "./cnpj-lookup-fields";
+import type {
+  LinhaDaComparacao,
+  LinhaDosDadosDoCnpj,
+  ValoresDoFormulario,
+} from "./cnpj-lookup-fields";
 
 /**
  * As regras de comparação da consulta de CNPJ — CUSTOMER-CNPJ-LOOKUP-01.
@@ -35,7 +45,11 @@ function fonte(overrides: Partial<CnpjLookupCompany> = {}): CnpjLookupCompany {
     legalName: "VERIDI NUTRITION LTDA",
     tradeName: "VERIDI NUTRITION",
     registrationStatus: "Ativa",
+    registrationStatusDate: "2020-01-15",
     openedAt: "2019-03-08",
+    establishmentType: "HEADQUARTERS",
+    simplesOptIn: true,
+    meiOptIn: false,
     postalCode: "01310100",
     street: "AVENIDA PAULISTA",
     number: "1000",
@@ -258,5 +272,178 @@ describe("seleção e aplicação", () => {
   it("nada marcado, nada aplicado", () => {
     const linhas = compararComOCadastro(VAZIO, fonte());
     expect(valoresParaAplicar(linhas, new Set())).toEqual({});
+  });
+});
+
+/* ------------------------------------------------------------------------ */
+/* Dados cadastrais do CNPJ — CUSTOMER-CNPJ-PERSISTED-DATA-01, §119.         */
+/* ------------------------------------------------------------------------ */
+
+const CONSULTADO_EM = "2026-09-17T12:30:00.000Z";
+
+/** O bloco que o formulário já tem para o CNPJ — o da consulta anterior. */
+function dadosAtuais(overrides: Partial<CustomerCnpjRegistration> = {}): CustomerCnpjRegistration {
+  return {
+    mainCnaeCode: "1099699",
+    mainCnaeDescription: "Fabricação de outros produtos alimentícios",
+    legalNature: "Sociedade Empresária Limitada",
+    companySize: "Empresa de Pequeno Porte (EPP)",
+    openedAt: "2019-03-08",
+    establishmentType: "HEADQUARTERS",
+    simplesOptIn: true,
+    meiOptIn: false,
+    registrationStatus: "Ativa",
+    registrationStatusDate: "2020-01-15",
+    consultedAt: "2026-01-10T10:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function resultado(overrides: Partial<CnpjLookupCompany> = {}): CnpjLookupResult {
+  return { provider: "OPEN_CNPJ", consultedAt: CONSULTADO_EM, cnpj: "11444777000161", company: fonte(overrides) };
+}
+
+function dado(linhas: LinhaDosDadosDoCnpj[], campo: string): LinhaDosDadosDoCnpj {
+  const achada = linhas.find((item) => item.campo === campo);
+  if (!achada) throw new Error(`linha ausente: ${campo}`);
+  return achada;
+}
+
+describe("Sim / Não / Não informado", () => {
+  it("null nunca é Não", () => {
+    expect(simNaoOuNaoInformado(true)).toBe("Sim");
+    expect(simNaoOuNaoInformado(false)).toBe("Não");
+    expect(simNaoOuNaoInformado(null)).toBe("Não informado");
+    expect(simNaoOuNaoInformado(undefined)).toBe("Não informado");
+  });
+});
+
+describe("dados cadastrais: Atual × Retornado", () => {
+  it("compara os dez dados cadastrais, na ordem do contrato", () => {
+    const linhas = compararDadosDoCnpj(null, fonte());
+    expect(linhas.map((item) => item.campo)).toEqual([...CNPJ_REGISTRATION_FIELDS]);
+  });
+
+  it("sem consulta anterior: tudo que a fonte trouxe é aplicável, e o atual fica vazio", () => {
+    const linhas = compararDadosDoCnpj(null, fonte());
+    expect(linhas.every((item) => item.situacao === "aplicavel")).toBe(true);
+    expect(linhas.every((item) => item.atual === "")).toBe(true);
+  });
+
+  it("datas em pt-BR, CNAE com máscara, Matriz/Filial por extenso", () => {
+    const linhas = compararDadosDoCnpj(null, fonte());
+    expect(dado(linhas, "openedAt").retornado).toBe("08/03/2019");
+    expect(dado(linhas, "registrationStatusDate").retornado).toBe("15/01/2020");
+    expect(dado(linhas, "mainCnaeCode").retornado).toBe("1099-6/99");
+    expect(dado(linhas, "establishmentType").retornado).toBe("Matriz");
+    expect(dado(linhas, "simplesOptIn").retornado).toBe("Sim");
+    expect(dado(linhas, "meiOptIn").retornado).toBe("Não");
+  });
+
+  it("mesma consulta de novo: tudo 'Sem alteração'", () => {
+    const linhas = compararDadosDoCnpj(dadosAtuais(), fonte());
+    expect(linhas.map((item) => [item.campo, item.situacao])).toEqual(
+      CNPJ_REGISTRATION_FIELDS.map((campo) => [campo, "igual"]),
+    );
+    expect(selecaoInicialDosDadosDoCnpj(linhas).size).toBe(0);
+  });
+
+  it("situação em outra caixa é a mesma situação", () => {
+    const linhas = compararDadosDoCnpj(dadosAtuais(), fonte({ registrationStatus: "ATIVA" }));
+    expect(dado(linhas, "registrationStatus").situacao).toBe("igual");
+  });
+
+  it("Simples: Sim → Não é diferença útil, marcada por padrão", () => {
+    const linhas = compararDadosDoCnpj(dadosAtuais({ simplesOptIn: true }), fonte({ simplesOptIn: false }));
+    expect(dado(linhas, "simplesOptIn")).toMatchObject({ atual: "Sim", retornado: "Não", situacao: "aplicavel" });
+    expect(selecaoInicialDosDadosDoCnpj(linhas).has("simplesOptIn")).toBe(true);
+  });
+
+  it("Simples não informado no cadastro e Sim na fonte: aplicável", () => {
+    const linhas = compararDadosDoCnpj(dadosAtuais({ simplesOptIn: null }), fonte({ simplesOptIn: true }));
+    expect(dado(linhas, "simplesOptIn")).toMatchObject({
+      atual: "Não informado",
+      retornado: "Sim",
+      situacao: "aplicavel",
+    });
+  });
+
+  it("MEI Sim no cadastro e não informado na fonte: não apaga — 'Não informado pela fonte'", () => {
+    const linhas = compararDadosDoCnpj(dadosAtuais({ meiOptIn: true }), fonte({ meiOptIn: null }));
+    expect(dado(linhas, "meiOptIn")).toMatchObject({ atual: "Sim", retornado: "", situacao: "sem_valor" });
+  });
+
+  it("MEI Não dos dois lados é 'Sem alteração' — false é valor, não ausência", () => {
+    const linhas = compararDadosDoCnpj(dadosAtuais({ meiOptIn: false }), fonte({ meiOptIn: false }));
+    expect(dado(linhas, "meiOptIn").situacao).toBe("igual");
+  });
+
+  it("porte que a fonte não informou fica como 'sem valor'", () => {
+    const linhas = compararDadosDoCnpj(dadosAtuais(), fonte({ companySize: null }));
+    expect(dado(linhas, "companySize").situacao).toBe("sem_valor");
+  });
+});
+
+describe("aplicar os dados cadastrais", () => {
+  it("sem diferença nenhuma o bloco ainda é aplicado — com a data DESTA consulta", () => {
+    const atual = dadosAtuais();
+    const linhas = compararDadosDoCnpj(atual, fonte());
+
+    const aplicado = dadosDoCnpjParaAplicar(atual, resultado(), linhas, selecaoInicialDosDadosDoCnpj(linhas));
+
+    expect(aplicado).toEqual({ ...atual, consultedAt: CONSULTADO_EM });
+  });
+
+  it("vazio da fonte não apaga: o porte que já estava fica", () => {
+    const atual = dadosAtuais();
+    const r = resultado({ companySize: null, simplesOptIn: null });
+    const linhas = compararDadosDoCnpj(atual, r.company);
+
+    const aplicado = dadosDoCnpjParaAplicar(atual, r, linhas, selecaoInicialDosDadosDoCnpj(linhas));
+
+    expect(aplicado.companySize).toBe("Empresa de Pequeno Porte (EPP)");
+    // O Simples que era Sim continua Sim: "não informado" não vira "Não".
+    expect(aplicado.simplesOptIn).toBe(true);
+  });
+
+  it("marcado vem da fonte; desmarcado fica como estava", () => {
+    const atual = dadosAtuais();
+    const r = resultado({ companySize: "Demais", registrationStatus: "Baixada" });
+    const linhas = compararDadosDoCnpj(atual, r.company);
+
+    const aplicado = dadosDoCnpjParaAplicar(atual, r, linhas, new Set(["registrationStatus"]));
+
+    expect(aplicado.registrationStatus).toBe("Baixada");
+    expect(aplicado.companySize).toBe("Empresa de Pequeno Porte (EPP)");
+  });
+
+  it("sem bloco anterior: aplica o que a fonte trouxe, e o que ela não trouxe fica null", () => {
+    const r = resultado({ meiOptIn: null, legalNature: null });
+    const linhas = compararDadosDoCnpj(null, r.company);
+
+    const aplicado = dadosDoCnpjParaAplicar(null, r, linhas, selecaoInicialDosDadosDoCnpj(linhas));
+
+    expect(aplicado).toMatchObject({
+      mainCnaeCode: "1099699",
+      establishmentType: "HEADQUARTERS",
+      simplesOptIn: true,
+      meiOptIn: null,
+      legalNature: null,
+      openedAt: "2019-03-08",
+      consultedAt: CONSULTADO_EM,
+    });
+  });
+});
+
+describe("assinatura do bloco", () => {
+  it("não depende da ordem das chaves, e muda com a data da consulta", () => {
+    const atual = dadosAtuais();
+    const reordenado = Object.fromEntries(Object.entries(atual).reverse()) as CustomerCnpjRegistration;
+
+    expect(assinaturaDosDadosDoCnpj(reordenado)).toBe(assinaturaDosDadosDoCnpj(atual));
+    expect(assinaturaDosDadosDoCnpj({ ...atual, consultedAt: CONSULTADO_EM })).not.toBe(
+      assinaturaDosDadosDoCnpj(atual),
+    );
+    expect(assinaturaDosDadosDoCnpj(null)).toBe(assinaturaDosDadosDoCnpj(undefined));
   });
 });

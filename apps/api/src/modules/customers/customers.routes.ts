@@ -15,6 +15,10 @@ import {
 } from "./customers.service.js";
 import { changeCustomerStatus, listCustomerStatusHistory } from "./customer-status.js";
 import {
+  CnpjRegistrationMismatchError,
+  respostaDaRecusaDosDadosDoCnpj,
+} from "./customer-cnpj-registration.js";
+import {
   CustomerNotFoundError,
   DuplicateCnpjError,
   InvalidCustomerStatusTransitionError,
@@ -90,6 +94,10 @@ export const customersRoutes: FastifyPluginAsync = async (app) => {
       if (error instanceof InstallmentsWithoutCountError) {
         return reply.status(400).send(respostaDaRecusaDeParcelas(error));
       }
+      // Dados cadastrais de um CNPJ enviados com outro (§119): recusa no campo CNPJ.
+      if (error instanceof CnpjRegistrationMismatchError) {
+        return reply.status(400).send(respostaDaRecusaDosDadosDoCnpj(error));
+      }
       throw error;
     }
   });
@@ -122,6 +130,9 @@ export const customersRoutes: FastifyPluginAsync = async (app) => {
       }
       if (error instanceof InstallmentsWithoutCountError) {
         return reply.status(400).send(respostaDaRecusaDeParcelas(error));
+      }
+      if (error instanceof CnpjRegistrationMismatchError) {
+        return reply.status(400).send(respostaDaRecusaDosDadosDoCnpj(error));
       }
       throw error;
     }

@@ -133,7 +133,12 @@ describe("GET /cnpj-lookup/:cnpj", () => {
       legalName: "VERIDI NUTRITION LTDA",
       tradeName: "VERIDI NUTRITION",
       registrationStatus: "Ativa",
+      registrationStatusDate: "2020-01-15",
       openedAt: "2019-03-08",
+      // `matriz_filial`, `opcao_simples` e `opcao_mei` chegam traduzidos.
+      establishmentType: "HEADQUARTERS",
+      simplesOptIn: true,
+      meiOptIn: false,
       postalCode: "01310100",
       // Tipo e nome do logradouro chegam separados e formam um campo só.
       street: "AVENIDA PAULISTA",
@@ -276,6 +281,14 @@ describe("GET /cnpj-lookup/:cnpj", () => {
     expect(company.state).toBeNull();
     expect(company.email).toBeNull();
     expect(company.mainCnaeDescription).toBeNull();
+    // Os dados cadastrais que a fonte não mandou também ficam `null` — e o
+    // Simples ausente NÃO vira "Não".
+    expect(company.registrationStatusDate).toBeNull();
+    expect(company.establishmentType).toBeNull();
+    expect(company.simplesOptIn).toBeNull();
+    expect(company.meiOptIn).toBeNull();
+    expect(company.openedAt).toBeNull();
+    expect(company.companySize).toBeNull();
     await app.close();
   });
 
@@ -408,6 +421,146 @@ describe("GET /cnpj-lookup/:cnpj", () => {
     expect(response.statusCode).toBe(200);
     expect((response.json() as CnpjLookupResult).provider).toBe("OPEN_CNPJ");
     await app.close();
+  });
+});
+
+/**
+ * Dados cadastrais do CNPJ — CUSTOMER-CNPJ-PERSISTED-DATA-01.
+ *
+ * As chaves são as do JSON Schema oficial (`https://api.opencnpj.org/schema`,
+ * conferido em 2026-09-17): `matriz_filial`, `opcao_simples`, `opcao_mei`,
+ * `situacao_cadastral`, `data_situacao_cadastral`, `data_inicio_atividade`,
+ * `porte_empresa`. O que não se interpreta com segurança vira `null` — e
+ * `null` no Simples/MEI é "não informado", nunca "Não".
+ */
+describe("H — dados cadastrais do CNPJ", () => {
+  async function consultarCom(extra: Record<string, unknown>) {
+    fingirFetch(async () => new Response(JSON.stringify(respostaDoOpenCnpj(extra)), { status: 200 }));
+    const app = buildTestApp("COMMERCIAL");
+    const response = await app.inject({ url: `/cnpj-lookup/${CNPJ_VALIDO}` });
+    await app.close();
+    expect(response.statusCode, response.body).toBe(200);
+    return { company: (response.json() as CnpjLookupResult).company, body: response.body };
+  }
+
+  it.each([
+    ["Matriz", "HEADQUARTERS"],
+    ["Filial", "BRANCH"],
+    ["FILIAL", "BRANCH"],
+    ["", null],
+    // Código cru da Receita e texto fora do schema não são adivinhados.
+    ["1", null],
+    ["Sede", null],
+    [null, null],
+  ])("Matriz/Filial %j → %j", async (bruto, esperado) => {
+    const { company } = await consultarCom({ matriz_filial: bruto });
+    expect(company.establishmentType, `matriz_filial=${JSON.stringify(bruto)}`).toBe(esperado);
+  });
+
+  it("Matriz/Filial ausente do payload é não informado", async () => {
+    const semChave = respostaDoOpenCnpj() as Record<string, unknown>;
+    delete semChave["matriz_filial"];
+    fingirFetch(async () => new Response(JSON.stringify(semChave), { status: 200 }));
+    const app = buildTestApp("COMMERCIAL");
+    const response = await app.inject({ url: `/cnpj-lookup/${CNPJ_VALIDO}` });
+    await app.close();
+    expect((response.json() as CnpjLookupResult).company.establishmentType).toBeNull();
+  });
+
+  it.each([
+    ["S", true],
+    ["s", true],
+    ["N", false],
+    // Vazio, letra desconhecida e tipo errado: não informado — NUNCA false.
+    ["", null],
+    ["X", null],
+    [true, null],
+    [null, null],
+  ])("Simples %j → %j", async (bruto, esperado) => {
+    const { company } = await consultarCom({ opcao_simples: bruto });
+    expect(company.simplesOptIn, `opcao_simples=${JSON.stringify(bruto)}`).toBe(esperado);
+  });
+
+  it.each([
+    ["S", true],
+    ["N", false],
+    ["", null],
+    ["?", null],
+    [0, null],
+  ])("MEI %j → %j", async (bruto, esperado) => {
+    const { company } = await consultarCom({ opcao_mei: bruto });
+    expect(company.meiOptIn, `opcao_mei=${JSON.stringify(bruto)}`).toBe(esperado);
+  });
+
+  it("Simples e MEI são independentes: MEI sim com Simples não informado continua não informado", async () => {
+    const { company } = await consultarCom({ opcao_simples: "", opcao_mei: "S" });
+    expect(company.meiOptIn).toBe(true);
+    expect(company.simplesOptIn).toBeNull();
+  });
+
+  it("situação e data da situação chegam como vieram, a data como dia civil", async () => {
+    const { company } = await consultarCom({
+      situacao_cadastral: "Baixada",
+      data_situacao_cadastral: "2024-05-09",
+    });
+    expect(company.registrationStatus).toBe("Baixada");
+    expect(company.registrationStatusDate).toBe("2024-05-09");
+  });
+
+  it.each([
+    ["", null],
+    ["2024-02-30", null],
+    ["09/05/2024", null],
+    ["2024-05-09T10:00:00Z", null],
+    ["2024-02-29", "2024-02-29"],
+  ])("data da situação %j → %j (só dia civil que existe)", async (bruto, esperado) => {
+    const { company } = await consultarCom({ data_situacao_cadastral: bruto });
+    expect(company.registrationStatusDate).toBe(esperado);
+  });
+
+  it("data de abertura inexistente no calendário não vira data", async () => {
+    const { company } = await consultarCom({ data_inicio_atividade: "2019-02-29" });
+    expect(company.openedAt).toBeNull();
+  });
+
+  it("porte 'Não informado' é a ausência do dado, não um porte", async () => {
+    expect((await consultarCom({ porte_empresa: "Não informado" })).company.companySize).toBeNull();
+    expect((await consultarCom({ porte_empresa: "NAO INFORMADO" })).company.companySize).toBeNull();
+    expect((await consultarCom({ porte_empresa: "Demais" })).company.companySize).toBe("Demais");
+  });
+
+  it("CNAE com máscara chega em sete dígitos; código ilegível vira null", async () => {
+    const mascarado = await consultarCom({ cnae_principal: "1099-6/99" });
+    expect(mascarado.company.mainCnaeCode).toBe("1099699");
+    expect(mascarado.company.mainCnaeDescription).toBe("Fabricação de outros produtos alimentícios");
+
+    const curto = await consultarCom({ cnae_principal: "12345" });
+    expect(curto.company.mainCnaeCode).toBeNull();
+  });
+
+  it("texto acima do teto do cadastro não é cortado: vira null", async () => {
+    const { company } = await consultarCom({ natureza_juridica: "N".repeat(301) });
+    expect(company.legalNature).toBeNull();
+  });
+
+  it("nenhuma chave crua do provedor atravessa para a Web", async () => {
+    const { body } = await consultarCom({ data_opcao_simples: "2019-06-15", data_exclusao_simples: "" });
+    for (const chave of [
+      "matriz_filial",
+      "opcao_simples",
+      "opcao_mei",
+      "data_situacao_cadastral",
+      "data_inicio_atividade",
+      "porte_empresa",
+      "natureza_juridica",
+      "cnae_principal",
+      "data_opcao_simples",
+      "data_exclusao_simples",
+      "capital_social",
+      "QSA",
+    ]) {
+      expect(body, chave).not.toContain(chave);
+    }
   });
 });
 

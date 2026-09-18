@@ -13,6 +13,7 @@ import {
   tocaCondicaoPadrao,
 } from "../../lib/payment-condition.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
+import { dadosDoCnpjDTO, dadosDoCnpjParaGravar } from "./customer-cnpj-registration.js";
 import { CustomerNotFoundError, DuplicateCnpjError } from "./customers.errors.js";
 import {
   fatosComerciaisInclude,
@@ -59,6 +60,8 @@ function toCustomerDTO(customer: CustomerComBloqueio): CustomerDTO {
     email: customer.email,
     phone: customer.phone,
     taxProfile: customer.taxProfile,
+    // Dados cadastrais do CNPJ (§119): o bloco da última consulta aplicada e salva.
+    cnpjRegistration: dadosDoCnpjDTO(customer),
     street: customer.street,
     number: customer.number,
     complement: customer.complement,
@@ -167,8 +170,10 @@ export async function createCustomer(
 ): Promise<CustomerDTO> {
   await exigirNomeDeCadastroLivre("CUSTOMER", input.legalName);
   if (input.cnpj) await assertCnpjAvailable(input.cnpj);
-  // Antes de consumir código: condição parcelada sem parcelas não nasce.
+  // Antes de consumir código: condição parcelada sem parcelas não nasce, nem
+  // dado cadastral de um CNPJ sob outro (§119).
   const condicaoPadrao = tocaCondicaoPadrao(input) ? condicaoPadraoParaGravar(null, input) : {};
+  const dadosDoCnpj = dadosDoCnpjParaGravar(null, input);
 
   const prisma = getPrisma();
   const code = await nextSequenceCode(prisma, CODE_SEQUENCE, CUSTOMER_CODE_PREFIX);
@@ -185,6 +190,7 @@ export async function createCustomer(
         // Ausente: o default do banco (NOT_INFORMED) decide, como para o
         // importador legado e para toda linha anterior à coluna.
         ...(input.taxProfile !== undefined ? { taxProfile: input.taxProfile } : {}),
+        ...dadosDoCnpj,
         ...addressData(input),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
         ...(input.businessLotSuffix !== undefined
@@ -228,19 +234,24 @@ export async function updateCustomer(
   try {
     const customer = await getPrisma().$transaction(async (tx) => {
       /*
-       * Condição padrão é um bloco: o PATCH parcial se resolve contra o que está
-       * GRAVADO, e a checagem "parcelado com parcelas" vale para o estado que a
-       * gravação produz. A trava da linha impede que dois PATCHes válidos cada
-       * um, lidos antes um do outro, gravem juntos um parcelado sem parcelas.
+       * Condição padrão e dados cadastrais do CNPJ são blocos: o PATCH parcial
+       * se resolve contra o que está GRAVADO — "parcelado com parcelas" e "o
+       * bloco é do CNPJ que o Cliente terá" valem para o estado que a gravação
+       * produz. A trava da linha impede que dois PATCHes válidos cada um, lidos
+       * antes um do outro, gravem juntos um parcelado sem parcelas, ou o bloco
+       * de um CNPJ sob o número que o outro acabou de trocar.
        */
+      const tocaDadosDoCnpj = input.cnpj !== undefined || input.cnpjRegistration !== undefined;
       let condicaoPadrao = {};
-      if (tocaCondicaoPadrao(input)) {
+      let dadosDoCnpj = {};
+      if (tocaCondicaoPadrao(input) || tocaDadosDoCnpj) {
         await tx.$queryRaw`SELECT id FROM customers WHERE id = ${id} FOR UPDATE`;
         const gravado = await tx.customer.findUniqueOrThrow({
           where: { id },
-          select: padraoDePagamentoSelect,
+          select: { ...padraoDePagamentoSelect, cnpj: true },
         });
-        condicaoPadrao = condicaoPadraoParaGravar(gravado, input);
+        if (tocaCondicaoPadrao(input)) condicaoPadrao = condicaoPadraoParaGravar(gravado, input);
+        if (tocaDadosDoCnpj) dadosDoCnpj = dadosDoCnpjParaGravar(gravado.cnpj, input);
       }
 
       return tx.customer.update({
@@ -252,6 +263,7 @@ export async function updateCustomer(
           ...(input.email !== undefined ? { email: input.email } : {}),
           ...(input.phone !== undefined ? { phone: input.phone } : {}),
           ...(input.taxProfile !== undefined ? { taxProfile: input.taxProfile } : {}),
+          ...dadosDoCnpj,
           ...addressData(input),
           ...(input.notes !== undefined ? { notes: input.notes } : {}),
           ...(input.businessLotSuffix !== undefined

@@ -36,7 +36,11 @@ function empresa(overrides: Partial<CnpjLookupCompany> = {}): CnpjLookupCompany 
     legalName: "VERIDI NUTRITION LTDA",
     tradeName: "VERIDI NUTRITION",
     registrationStatus: "Ativa",
+    registrationStatusDate: "2020-01-15",
     openedAt: "2019-03-08",
+    establishmentType: "HEADQUARTERS",
+    simplesOptIn: true,
+    meiOptIn: false,
     postalCode: "01310100",
     street: "AVENIDA PAULISTA",
     number: "1000",
@@ -73,6 +77,7 @@ function cliente(overrides: Partial<CustomerDTO> = {}): CustomerDTO {
     email: "antigo@veridi.com.br",
     phone: "1133334444",
     taxProfile: "LUCRO_PRESUMIDO",
+    cnpjRegistration: null,
     street: "Rua Antiga",
     number: "10",
     complement: null,
@@ -129,7 +134,7 @@ async function consultar({ esperarResultado = true } = {}) {
   fireEvent.click(screen.getByRole("button", { name: "Consultar CNPJ" }));
   await screen.findByRole("button", { name: "Consultar" });
   fireEvent.click(screen.getByRole("button", { name: "Consultar" }));
-  if (esperarResultado) await screen.findByRole("button", { name: "Aplicar selecionados" });
+  if (esperarResultado) await screen.findByRole("button", { name: "Aplicar consulta ao cadastro" });
 }
 
 /** A linha da tabela de comparação de um campo, pelo rótulo. */
@@ -253,12 +258,14 @@ describe("C, D, L — a comparação e a seleção inicial", () => {
     expect(screen.queryByRole("checkbox", { name: "Aplicar UF" })).toBeNull();
   });
 
-  it("mostra a informação complementar sem transformá-la em campo do cadastro", async () => {
+  it("os dados cadastrais do CNPJ entram na comparação, e o perfil tributário não muda", async () => {
     renderEdicao();
     await consultar();
 
-    expect(screen.getByText("Outras informações da fonte")).toBeTruthy();
-    expect(screen.getByText("Empresa de Pequeno Porte (EPP)")).toBeTruthy();
+    // CUSTOMER-CNPJ-PERSISTED-DATA-01: deixaram de ser "informação complementar".
+    expect(screen.queryByText("Outras informações da fonte")).toBeNull();
+    expect(within(linha("Porte")).getByText("Empresa de Pequeno Porte (EPP)")).toBeTruthy();
+    expect(caixa("Porte").checked).toBe(true);
     // Perfil tributário continua como estava: a fonte não o define (§83).
     expect((campo("Perfil tributário") as unknown as HTMLSelectElement).value).toBe(
       "LUCRO_PRESUMIDO",
@@ -271,7 +278,7 @@ describe("E, F — aplicar só o escolhido", () => {
     renderEdicao();
     await consultar();
 
-    fireEvent.click(screen.getByRole("button", { name: "Aplicar selecionados" }));
+    fireEvent.click(screen.getByRole("button", { name: "Aplicar consulta ao cadastro" }));
 
     await waitFor(() => expect(campo("Razão Social").value).toBe("VERIDI NUTRITION LTDA"));
     expect(campo("Nome Fantasia").value).toBe("VERIDI NUTRITION");
@@ -292,7 +299,7 @@ describe("E, F — aplicar só o escolhido", () => {
     fireEvent.click(caixa("Telefone"));
     expect(caixa("Telefone").checked).toBe(false);
 
-    fireEvent.click(screen.getByRole("button", { name: "Aplicar selecionados" }));
+    fireEvent.click(screen.getByRole("button", { name: "Aplicar consulta ao cadastro" }));
 
     await waitFor(() => expect(campo("Logradouro").value).toBe("AVENIDA PAULISTA"));
     expect(campo("Telefone").value).toBe("(11) 3333-4444");
@@ -302,7 +309,7 @@ describe("E, F — aplicar só o escolhido", () => {
     renderEdicao();
     await consultar();
 
-    fireEvent.click(screen.getByRole("button", { name: "Aplicar selecionados" }));
+    fireEvent.click(screen.getByRole("button", { name: "Aplicar consulta ao cadastro" }));
 
     await waitFor(() => expect(campo("Razão Social").value).toBe("VERIDI NUTRITION LTDA"));
     expect(updateCustomer).not.toHaveBeenCalled();
@@ -324,7 +331,7 @@ describe("G — valor vazio da fonte nunca apaga o que existe", () => {
     expect(screen.queryByRole("checkbox", { name: "Aplicar Telefone" })).toBeNull();
     expect(within(linha("Telefone")).getByText("Não informado pela fonte")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Aplicar selecionados" }));
+    fireEvent.click(screen.getByRole("button", { name: "Aplicar consulta ao cadastro" }));
 
     await waitFor(() => expect(campo("Logradouro").value).toBe("AVENIDA PAULISTA"));
     expect(campo("Telefone").value).toBe("(11) 3333-4444");
@@ -341,7 +348,7 @@ describe("H — cancelar", () => {
     fireEvent.click(cancelar[cancelar.length - 1]!);
 
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "Aplicar selecionados" })).toBeNull(),
+      expect(screen.queryByRole("button", { name: "Aplicar consulta ao cadastro" })).toBeNull(),
     );
     expect(campo("Razão Social").value).toBe("VERIDI TESTE LTDA");
     expect(campo("Logradouro").value).toBe("Rua Antiga");
@@ -360,7 +367,7 @@ describe("I — cliente novo, sem id", () => {
     // Na criação não há "Atual": todo campo é "—".
     expect(within(linha("Razão Social / Nome")).getByText("—")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Aplicar selecionados" }));
+    fireEvent.click(screen.getByRole("button", { name: "Aplicar consulta ao cadastro" }));
 
     await waitFor(() => expect(campo("Razão Social").value).toBe("VERIDI NUTRITION LTDA"));
     expect(campo("Cidade").value).toBe("SAO PAULO");
@@ -400,7 +407,7 @@ describe("K — a fonte falhou", () => {
     await consultar({ esperarResultado: false });
 
     expect(await screen.findByText(/CNPJ não encontrado na fonte consultada/)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Aplicar selecionados" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Aplicar consulta ao cadastro" })).toBeNull();
   });
 
   it("provedor indisponível: mensagem amigável, e o formulário segue editável", async () => {

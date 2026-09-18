@@ -5891,7 +5891,8 @@ primeiro provedor e **Serpro como provedor futuro**. O nome mudou de propósito 
 **assistência ao preenchimento**. Regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §111. **Sem migration.**
 
 **Fluxo.** Cliente → "Consultar CNPJ" (ao lado do campo) → escolher a fonte → Consultar → comparar Atual × Retornado →
-marcar o que aplicar → "Aplicar selecionados" → **Salvar**. Vale igual na criação (sem id) e na edição. Consultar e
+marcar o que aplicar → "Aplicar consulta ao cadastro" (era "Aplicar selecionados") → **Salvar**. Vale igual na
+criação (sem id) e na edição. Consultar e
 aplicar **não gravam nada**.
 
 **Shared.** `cnpj-lookup.ts`: `CNPJ_LOOKUP_PROVIDERS` (hoje só `OPEN_CNPJ`), rótulos, o contrato normalizado
@@ -5914,8 +5915,9 @@ resposta grande demais caem todos no segundo, com o motivo técnico só no log.
 `pages/customers/cnpj-lookup-fields.ts` é a lógica pura da comparação — o mapa dos 11 campos, a forma canônica de cada
 um e as três regras: vazio da fonte nunca apaga, só se oferece o que o campo guardaria, e normalizar é **só para
 comparar**. `CnpjLookupDialog.tsx` é o diálogo em duas etapas (fonte → comparação) sobre o `FullWorkspaceModal`, com
-proveniência ("Fonte: OpenCNPJ · Consultado em …"), o aviso de fonte pública e a informação complementar (situação,
-abertura, CNAE, natureza jurídica, porte) claramente separada, sem virar campo. `customer-form.tsx` ganhou
+proveniência ("Fonte: OpenCNPJ · Consultado em …"), o aviso de fonte pública e — desde CUSTOMER-CNPJ-PERSISTED-DATA-01, seção própria abaixo — a tabela dos dados
+cadastrais do CNPJ (situação, abertura, CNAE, natureza jurídica, porte, matriz/filial, Simples, MEI), que o Cliente
+passou a guardar (§119). `customer-form.tsx` ganhou
 `validarCnpjParaConsulta` e `aplicarConsultaDeCnpj`.
 
 **A comparação é contra o FORMULÁRIO**, não contra o registro salvo: quem editou e não salvou compara com o que está
@@ -6286,6 +6288,40 @@ inteiro, R-15, largura das tabelas do resumo até em retrato), `pages/print/repo
 `pages/reports`, `pages/print`, `pdf` e `print` — 33 arquivos, 540 testes. Mutação por script (extra, declarada): 5
 mutantes (nulo vira zero, resumo omitido, `all` repassado, falha engolida, ressalva some), 5 caídos. Typecheck da web.
 Sem API (intocada), suíte completa, E2E nem Playwright.
+
+## Dados cadastrais do CNPJ no Cliente (CUSTOMER-CNPJ-PERSISTED-DATA-01, 2026-09-17)
+
+**Decisão do PO.** O que a consulta de CNPJ (§111) devolve sobre a empresa passa a ficar no Cliente quando a consulta é
+aplicada e o cadastro é salvo. Evolui CUSTOMER-CNPJ-LOOKUP-01, sem integração nova. Regra em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §119 (§111 revista). Na `main`, fora de PROD (`release/prod` segue `8e824e8f`).
+
+**Migration.** `20260925093036_customer_cnpj_registration_data`, só aditiva: enum `CnpjEstablishmentType`
+(`HEADQUARTERS`, `BRANCH`) e onze colunas NULL em `customers` — `cnpjMainCnaeCode`, `cnpjMainCnaeDescription`,
+`cnpjLegalNature`, `cnpjCompanySize`, `cnpjOpenedAt`, `cnpjEstablishmentType`, `cnpjSimplesOptIn`, `cnpjMeiOptIn`,
+`cnpjRegistrationStatus`, `cnpjRegistrationStatusDate`, `cnpjLastConsultedAt`. Sem backfill; PROD precisa dela quando o
+PO publicar. `pnpm validate:migrations:fresh` reconstrói a cadeia (85 migrations, sem drift).
+
+**Contrato.** `CnpjLookupCompany` ganhou `registrationStatusDate`, `establishmentType`, `simplesOptIn` e `meiOptIn`
+(Sim/Não como `boolean | null`: `null` é não informado, nunca `false`). O Cliente devolve e recebe o bloco
+`cnpjRegistration` (`CustomerCnpjRegistration`: os dez dados e o `consultedAt`; na entrada, mais o `cnpj` consultado).
+POST/PATCH: objeto troca o bloco inteiro, `null` limpa, ausente não mexe; bloco de outro CNPJ é 400 no campo CNPJ; o
+PATCH que troca o CNPJ sem bloco novo o descarta (`customers/customer-cnpj-registration.ts`, sob o mesmo `FOR UPDATE`
+do pagamento padrão). O adaptador OpenCNPJ lê `matriz_filial`, `opcao_simples`, `opcao_mei` e
+`data_situacao_cadastral` (schema oficial conferido em 2026-09-17), valida datas, CNAE de sete dígitos e tetos de texto,
+e trata porte "Não informado" como `null`.
+
+**Web.** Seção "Dados cadastrais do CNPJ", somente leitura, logo abaixo da Identificação, no formulário e na consulta. O
+diálogo compara também os dados cadastrais (segunda tabela, mesmas regras), e o botão virou "Aplicar consulta ao
+cadastro": disponível mesmo sem diferença, sempre leva o bloco com o `consultedAt`. O formulário guarda o bloco com o
+CNPJ dono — outro número na tela o tira de cena (aviso, "—" na seção, `cnpjRegistration: null` no Salvar) e voltar ao
+número o devolve. O PATCH só leva o bloco quando ele mudou; a guarda de alterações o conta.
+
+**Validação.** API `cnpj-lookup.test.ts` (58) e `customer-cnpj-registration.test.ts` (38), com `modules/customers` e
+`modules/exports` (222). Web `cnpj-lookup-comparacao.test.ts` (38), `cliente-dados-cadastrais-do-cnpj.test.tsx` (15) e
+`cliente-consulta-de-cnpj.test.tsx` (21), com `pages/customers`, `customer-consultation` e os testes de Produto que
+montam o formulário (279), mais os portões da ajuda, `create-in-context` e `pages/products` (286). Checagens estáticas
+de migration e schema (57). Typecheck dos três pacotes; fresh sem drift. Sem suíte completa, E2E, Playwright nem
+mutação; nenhum teste toca a internet.
 
 ## Próxima prioridade
 

@@ -1,14 +1,24 @@
-import type { CnpjLookupCompany } from "@veridi/shared";
+import type {
+  CnpjEstablishmentType,
+  CnpjLookupCompany,
+  CnpjLookupResult,
+  CnpjRegistrationField,
+  CustomerCnpjRegistration,
+} from "@veridi/shared";
 import {
   BR_STATE_CODES,
+  CNPJ_ESTABLISHMENT_TYPE_LABELS,
+  CNPJ_REGISTRATION_FIELDS,
   CUSTOMER_FIELD_MAX_LENGTHS,
   formatBrPhone,
+  formatCnaeCode,
   isValidBrPhone,
   isValidEmail,
   maskZipCodeInput,
   normalizePhone,
   normalizeZipCode,
 } from "@veridi/shared";
+import { formatDate } from "../../lib/dates";
 
 /**
  * A comparação Atual × Retornado da consulta de CNPJ — CUSTOMER-CNPJ-LOOKUP-01.
@@ -53,10 +63,15 @@ type ValorParaOCampo =
   | { cabe: true; valor: string }
   | { cabe: false; motivo: string };
 
+/** As chaves de TEXTO do contrato — só elas preenchem campo do cadastro. */
+type ChaveDeTextoDaEmpresa = {
+  [K in keyof CnpjLookupCompany]: CnpjLookupCompany[K] extends string | null ? K : never;
+}[keyof CnpjLookupCompany];
+
 interface DefinicaoDeCampo {
   rotulo: string;
   /** De onde o valor vem no contrato normalizado. */
-  origem: keyof CnpjLookupCompany;
+  origem: ChaveDeTextoDaEmpresa;
   /** O valor da fonte no formato que o campo guarda, ou o motivo da recusa. */
   paraOCampo: (valorDaFonte: string) => ValorParaOCampo;
   /** A forma canônica usada SÓ para responder "é o mesmo valor?". */
@@ -294,4 +309,180 @@ export function valoresParaAplicar(
     valores[linha.campo] = linha.retornado;
   }
   return valores;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Dados cadastrais do CNPJ — CUSTOMER-CNPJ-PERSISTED-DATA-01, §119.         */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Sim / Não / Não informado. `null` NUNCA é "Não": "a fonte não informou se a
+ * empresa é optante" e "a empresa não é optante" são respostas diferentes.
+ */
+export function simNaoOuNaoInformado(valor: boolean | null | undefined): string {
+  if (valor === true) return "Sim";
+  if (valor === false) return "Não";
+  return "Não informado";
+}
+
+type ValorDoDadoDoCnpj = string | boolean | null;
+
+interface DefinicaoDeDadoDoCnpj {
+  rotulo: string;
+  /** Como a tela escreve o valor. Texto ausente é `""` (a tabela mostra "—"). */
+  exibir: (valor: ValorDoDadoDoCnpj) => string;
+  /** A forma canônica usada SÓ para responder "é o mesmo valor?". */
+  canonico: (valor: ValorDoDadoDoCnpj) => string;
+}
+
+const textoDoDado = (valor: ValorDoDadoDoCnpj) => (typeof valor === "string" ? valor : "");
+
+const TEXTO_DO_CNPJ: Omit<DefinicaoDeDadoDoCnpj, "rotulo"> = {
+  exibir: textoDoDado,
+  canonico: (valor) => textoCanonico(textoDoDado(valor)),
+};
+
+const DIA_DO_CNPJ: Omit<DefinicaoDeDadoDoCnpj, "rotulo"> = {
+  // `08/03/2019`: dia civil, sem passar pelo fuso de quem lê.
+  exibir: (valor) => (typeof valor === "string" && valor ? formatDate(valor) : ""),
+  canonico: textoDoDado,
+};
+
+const SIM_OU_NAO_DO_CNPJ: Omit<DefinicaoDeDadoDoCnpj, "rotulo"> = {
+  exibir: (valor) => simNaoOuNaoInformado(typeof valor === "boolean" ? valor : null),
+  canonico: (valor) => String(valor),
+};
+
+export const DEFINICOES_DOS_DADOS_DO_CNPJ: Record<CnpjRegistrationField, DefinicaoDeDadoDoCnpj> = {
+  mainCnaeCode: {
+    rotulo: "CNAE principal",
+    exibir: (valor) => formatCnaeCode(textoDoDado(valor)) ?? "",
+    canonico: textoDoDado,
+  },
+  mainCnaeDescription: { rotulo: "Descrição do CNAE", ...TEXTO_DO_CNPJ },
+  legalNature: { rotulo: "Natureza jurídica", ...TEXTO_DO_CNPJ },
+  companySize: { rotulo: "Porte", ...TEXTO_DO_CNPJ },
+  openedAt: { rotulo: "Data de abertura", ...DIA_DO_CNPJ },
+  establishmentType: {
+    rotulo: "Matriz/Filial",
+    exibir: (valor) =>
+      typeof valor === "string" && valor in CNPJ_ESTABLISHMENT_TYPE_LABELS
+        ? CNPJ_ESTABLISHMENT_TYPE_LABELS[valor as CnpjEstablishmentType]
+        : "",
+    canonico: textoDoDado,
+  },
+  simplesOptIn: { rotulo: "Simples", ...SIM_OU_NAO_DO_CNPJ },
+  meiOptIn: { rotulo: "MEI", ...SIM_OU_NAO_DO_CNPJ },
+  registrationStatus: { rotulo: "Situação na RFB", ...TEXTO_DO_CNPJ },
+  registrationStatusDate: { rotulo: "Data da situação", ...DIA_DO_CNPJ },
+};
+
+/** Uma linha dos dados cadastrais na comparação. Nunca "não aplicável": o adaptador só devolve o que cabe. */
+export interface LinhaDosDadosDoCnpj {
+  campo: CnpjRegistrationField;
+  rotulo: string;
+  /** O que o formulário tem AGORA para este CNPJ, já escrito para a tela. */
+  atual: string;
+  /** O que a fonte devolveu, escrito para a tela. `""` quando não informou. */
+  retornado: string;
+  situacao: Exclude<SituacaoDaLinha, "nao_aplicavel">;
+}
+
+/** O valor tratado como "a fonte não informou" — inclusive o campo que a API antiga nem mandava. */
+function informado(valor: ValorDoDadoDoCnpj | undefined): valor is string | boolean {
+  if (valor === null || valor === undefined) return false;
+  return typeof valor !== "string" || valor.trim() !== "";
+}
+
+/**
+ * Atual × Retornado dos dados cadastrais, com as MESMAS regras dos campos do
+ * cadastro: diferença útil é aplicável (e nasce marcada), equivalente é "Sem
+ * alteração", e o que a fonte não informou não apaga o que existe.
+ *
+ * `atual` é o bloco que vale para o CNPJ da tela — `null` quando não há, ou
+ * quando o que havia era de outro CNPJ e foi descartado.
+ */
+export function compararDadosDoCnpj(
+  atual: CustomerCnpjRegistration | null,
+  company: CnpjLookupCompany,
+): LinhaDosDadosDoCnpj[] {
+  return CNPJ_REGISTRATION_FIELDS.map((campo) => {
+    const definicao = DEFINICOES_DOS_DADOS_DO_CNPJ[campo];
+    const noFormulario = atual ? atual[campo] : null;
+    const daFonte = company[campo] as ValorDoDadoDoCnpj | undefined;
+    const base = { campo, rotulo: definicao.rotulo, atual: atual ? definicao.exibir(noFormulario) : "" };
+
+    if (!informado(daFonte)) return { ...base, retornado: "", situacao: "sem_valor" as const };
+
+    const igual =
+      informado(noFormulario) && definicao.canonico(daFonte) === definicao.canonico(noFormulario);
+    return {
+      ...base,
+      retornado: definicao.exibir(daFonte),
+      situacao: igual ? ("igual" as const) : ("aplicavel" as const),
+    };
+  });
+}
+
+/** A seleção inicial dos dados cadastrais: toda diferença começa marcada. */
+export function selecaoInicialDosDadosDoCnpj(
+  linhas: LinhaDosDadosDoCnpj[],
+): Set<CnpjRegistrationField> {
+  return new Set(
+    linhas.filter((linha) => linha.situacao === "aplicavel").map((linha) => linha.campo),
+  );
+}
+
+/**
+ * O bloco que "Aplicar" deixa no formulário.
+ *
+ * SEMPRE um bloco, mesmo sem diferença nenhuma: a consulta aplicada confirma
+ * que os dados foram revistos naquela data, e é o `consultedAt` dela que vira
+ * a "Última consulta CNPJ" quando o cadastro for salvo.
+ *
+ * Campo a campo: o que foi marcado vem da fonte; o resto — equivalente, não
+ * informado pela fonte ou desmarcado — fica como estava no formulário. Vazio
+ * da fonte nunca apaga.
+ */
+export function dadosDoCnpjParaAplicar(
+  atual: CustomerCnpjRegistration | null,
+  resultado: CnpjLookupResult,
+  linhas: LinhaDosDadosDoCnpj[],
+  selecionados: ReadonlySet<CnpjRegistrationField>,
+): CustomerCnpjRegistration {
+  const daFonte = new Set(
+    linhas
+      .filter((linha) => linha.situacao === "aplicavel" && selecionados.has(linha.campo))
+      .map((linha) => linha.campo),
+  );
+  const campos = Object.fromEntries(
+    CNPJ_REGISTRATION_FIELDS.map((campo) => [
+      campo,
+      daFonte.has(campo) ? (resultado.company[campo] ?? null) : (atual?.[campo] ?? null),
+    ]),
+  ) as Pick<CustomerCnpjRegistration, CnpjRegistrationField>;
+  return { ...campos, consultedAt: resultado.consultedAt };
+}
+
+/**
+ * Assinatura do bloco para responder "mudou?": valores na ordem fixa dos
+ * campos, e não o JSON do objeto — o bloco que volta da API e o que a tela
+ * monta ao aplicar têm as chaves em ordens diferentes.
+ */
+export function assinaturaDosDadosDoCnpj(bloco: CustomerCnpjRegistration | null | undefined): string {
+  if (!bloco) return "null";
+  return JSON.stringify([
+    ...CNPJ_REGISTRATION_FIELDS.map((campo) => bloco[campo] ?? null),
+    bloco.consultedAt,
+  ]);
+}
+
+/** O que o diálogo entrega ao formulário quando a pessoa aplica a consulta. */
+export interface AplicacaoDaConsultaDeCnpj {
+  /** Só os campos do cadastro marcados — podem ser nenhum. */
+  valores: Partial<ValoresDoFormulario>;
+  /** O bloco dos dados cadastrais, sempre presente, com o instante da consulta. */
+  dadosDoCnpj: CustomerCnpjRegistration;
+  /** O CNPJ consultado, normalizado: é a ele que o bloco pertence. */
+  cnpj: string;
 }

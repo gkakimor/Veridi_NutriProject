@@ -11,8 +11,10 @@ import { resolveCnpjLookupProvider } from "./cnpj-lookup.provider.js";
  * depois do "Salvar".
  *
  * Também não guarda o payload cru em lugar nenhum — nem em tabela, nem em
- * cache, nem em log. Esta versão não cria migration para registrar consulta:
- * o valor de auditar quem consultou o quê não paga um conceito novo agora.
+ * cache, nem em log. Os dados cadastrais do CNPJ que o Cliente passou a
+ * guardar (§119, CUSTOMER-CNPJ-PERSISTED-DATA-01) chegam ao banco pelo
+ * POST/PATCH do cadastro, depois de "Aplicar" e "Salvar" — nunca por aqui, e
+ * o `consultedAt` abaixo só vira "Última consulta CNPJ" nesse momento.
  *
  * O serviço não conhece provedor nenhum: ele resolve o adaptador pelo
  * registro e devolve o contrato normalizado com a proveniência junto.
