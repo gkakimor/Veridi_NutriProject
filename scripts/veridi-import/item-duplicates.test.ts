@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { DECISOES_DE_DUPLICATAS } from "./item-duplicate-decisions.js";
 import {
   absorvidosPorCodigoDaPlanilha,
+  decisaoDeGrupo,
   decisoesDaOnda,
+  gruposDaOnda,
   impressaoDasDecisoes,
   validarDecisoes,
 } from "./item-duplicates.js";
@@ -59,5 +61,123 @@ describe("Arquivo de decisão de duplicatas de Item", () => {
     expect(impressaoDasDecisoes([base])).not.toBe(
       impressaoDasDecisoes([{ ...base, canonico: { codigo: "MP-000003", codigoPlanilha: "1" } }]),
     );
+  });
+});
+
+describe("Onda 2 no arquivo de decisão (MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-2-01)", () => {
+  it("traz exatamente os oito grupos aprovados pelo PO, com o canônico e o valor consolidado de cada um", () => {
+    expect(
+      gruposDaOnda("2").map((g) => [
+        g.grupo,
+        g.canonico.codigo,
+        g.absorvidos.map((a) => a.codigo).join(","),
+        g.consolidar?.declaredNutrient ?? null,
+      ]),
+    ).toEqual([
+      ["G2", "MP-000115", "MP-000322", "Fibra Alimentar · Arabinogalactana"],
+      ["G3", "MP-000118", "MP-000304", "Fibra Alimentar · Beta-glucana"],
+      ["G5", "MP-000347", "MP-000165,MP-000324,MP-000349", "Clorogênico** · Adenosina · Rutina"],
+      ["G8", "MP-000204", "MP-000285", "Magnésio · Fósforo"],
+      ["G9", "MP-000269", "MP-000283", "Cálcio · Fósforo"],
+      ["G10", "MP-000270", "MP-000284", "Cálcio · Fósforo"],
+      ["G15", "MP-000312", "MP-000317,MP-000319", "Colágeno · Glicosaminoglicanos · Ácido hialurônico"],
+      ["D5-SILICA", "ME-000021", "ME-000089", null],
+    ]);
+  });
+
+  it("'Clorogênico' = 'Clorogênico**' é equivalência declarada SÓ no G5 — nenhum outro grupo junta termo por asterisco", () => {
+    const comEquivalencia = gruposDaOnda("2").filter((g) => g.consolidar?.equivalentes !== undefined);
+    expect(comEquivalencia.map((g) => [g.grupo, g.consolidar?.equivalentes])).toEqual([
+      ["G5", { "Clorogênico": "Clorogênico**" }],
+    ]);
+    expect(DECISOES_DE_DUPLICATAS.filter((d) => d.consolidar?.equivalentes !== undefined).map((d) => d.grupo)).toEqual([
+      "G5",
+      "G5",
+      "G5",
+    ]);
+  });
+
+  it("os grupos em revisão e o Modelo X ficam FORA — nenhum código deles no arquivo", () => {
+    const codigos = new Set(DECISOES_DE_DUPLICATAS.flatMap((d) => [d.absorvido.codigo, d.canonico.codigo]));
+    for (const codigo of ["MP-000149", "MP-000475", "MP-000325", "MP-000348", "MP-000320", "MP-000468", "MP-000014", "MP-000022", "MP-000393", "MP-000486"]) {
+      expect(codigos.has(codigo), codigo).toBe(false);
+    }
+  });
+
+  it("a sílica entra como par NOMEADO, e o arquivo recusa par nomeado que a regra automática já juntaria", () => {
+    const [silica] = gruposDaOnda("2").filter((g) => g.grupo === "D5-SILICA");
+    expect(silica?.absorvidos[0]?.nomeDoAbsorvido).toBe("SACHÊ SÍLICA GEL 5G");
+    const base = decisao("G1", "MP-000002", "MP-000001", "2", "1");
+    expect(validarDecisoes([{ ...base, nomeDoAbsorvido: "  MATERIAL " }]).join("\n")).toMatch(
+      /nomeDoAbsorvido só existe para nome que a regra automática não junta/,
+    );
+    expect(validarDecisoes([{ ...base, nomeDoAbsorvido: "Matérial" }])).toEqual([]);
+  });
+
+  it("grupo de mais de dois: aceito com o mesmo canônico, nome e consolidação; recusado se algum diverge", () => {
+    const consolidar = { declaredNutrient: "A · B" };
+    const um = { ...decisao("G1", "MP-000002", "MP-000001", "2", "1"), consolidar };
+    const dois = { ...decisao("G1", "MP-000003", "MP-000001", "3", "1"), consolidar };
+    expect(validarDecisoes([um, dois])).toEqual([]);
+    expect(validarDecisoes([um, { ...dois, canonico: { codigo: "MP-000009", codigoPlanilha: "9" } }]).join("\n")).toMatch(
+      /grupo repetido com outro canônico/,
+    );
+    expect(validarDecisoes([um, { ...dois, nome: "Outro" }]).join("\n")).toMatch(/grupo repetido com outro nome/);
+    expect(validarDecisoes([um, { ...dois, consolidar: { declaredNutrient: "A" } }]).join("\n")).toMatch(
+      /grupo repetido com outra consolidação/,
+    );
+  });
+
+  it("consolidação escrita fora do formato é recusada", () => {
+    const base = decisao("G1", "MP-000002", "MP-000001", "2", "1");
+    expect(validarDecisoes([{ ...base, consolidar: { declaredNutrient: "A ·  B" } }]).join("\n")).toMatch(
+      /termo vazio ou com espaço sobrando/,
+    );
+    expect(validarDecisoes([{ ...base, consolidar: { declaredNutrient: "A · · B" } }]).join("\n")).toMatch(
+      /termo vazio/,
+    );
+  });
+
+  it("equivalência declarada: leva a um termo do valor final, e o termo que ela junta sai do valor", () => {
+    const base = decisao("G1", "MP-000002", "MP-000001", "2", "1");
+    const com = (declaredNutrient: string, equivalentes: Record<string, string>) =>
+      validarDecisoes([{ ...base, consolidar: { declaredNutrient, equivalentes } }]).join("\n");
+    expect(com("A** · B", { A: "A**" })).toBe("");
+    expect(com("A · B", { A: "A**" })).toMatch(/leva "A" a "A\*\*", que não está no valor consolidado/);
+    expect(com("A** · A · B", { A: "A**" })).toMatch(/"A" é declarado igual a "A\*\*" e continua no valor consolidado/);
+    expect(com("A** · B", { " A": "A**" })).toMatch(/equivalência com termo vazio ou com espaço sobrando/);
+    expect(com("A** · B", { "": "A**" })).toMatch(/equivalência com termo vazio/);
+  });
+
+  it("a impressão da Onda A não mudou com a Onda 2 no mesmo arquivo", () => {
+    // O valor da main antes desta capability: plano da Onda A feito antes continua válido.
+    expect(impressaoDasDecisoes(decisoesDaOnda("A"))).toBe(
+      "71004c99e54feb52e0d4fa0f80f1bbbe029b50fa8e2a9ed9a5dc981a97b436ed",
+    );
+  });
+
+  it("a consolidação e o par nomeado entram na impressão da onda", () => {
+    const base = { ...decisao("G1", "MP-000002", "MP-000001", "2", "1"), consolidar: { declaredNutrient: "A · B" } };
+    expect(impressaoDasDecisoes([base])).not.toBe(
+      impressaoDasDecisoes([{ ...base, consolidar: { declaredNutrient: "A · C" } }]),
+    );
+    expect(impressaoDasDecisoes([base])).not.toBe(impressaoDasDecisoes([{ ...base, nomeDoAbsorvido: "Matérial" }]));
+    // A equivalência é decisão: plano feito sem ela não se aplica com ela.
+    expect(impressaoDasDecisoes([base])).not.toBe(
+      impressaoDasDecisoes([{ ...base, consolidar: { declaredNutrient: "A · B", equivalentes: { "A*": "A" } } }]),
+    );
+  });
+
+  it("decisaoDeGrupo separa o que é da ferramenta de Item do que é da ferramenta genérica", () => {
+    const [primeira] = decisoesDaOnda("A");
+    expect(decisaoDeGrupo(primeira!, DECISOES_DE_DUPLICATAS)).toBe(false);
+    for (const d of decisoesDaOnda("2")) expect(decisaoDeGrupo(d, DECISOES_DE_DUPLICATAS), d.grupo).toBe(true);
+  });
+
+  it("o importador reconhece os onze absorvidos pelo código da planilha e resolve cada um para o canônico", () => {
+    const absorvidos = absorvidosPorCodigoDaPlanilha();
+    expect(absorvidos.get("166")?.canonico.codigo).toBe("MP-000347");
+    expect(absorvidos.get("548")?.canonico.codigo).toBe("ME-000021");
+    expect(decisoesDaOnda("2")).toHaveLength(11);
   });
 });

@@ -6112,17 +6112,8 @@ para o canônico, VERIFY OK e fixtures desfeitas.
 deixado inativo. Mesmo nome com material diferente **não se funde**: renomeia-se depois para nomes técnicos distintos,
 com o histórico inteiro (§114).
 
-**Onda 2 aprovada, NÃO executada.** O PO aprovou consolidar, numa rodada própria, sete grupos de Item: MP-000115/322,
-MP-000118/304, MP-000165/324/347/349, MP-000204/285, MP-000269/283, MP-000270/284 e MP-000312/317/319 — mesmo material
-com nutrientes declarados diferentes. A regra decidida para `declaredNutrient`: consolidar os valores ÚNICOS no canônico
-na forma "A · B · C", sem repetir termo. **A ferramenta de hoje não faz isso**: ela move referência e remove, e nunca
-escreve campo no canônico. A Onda 2 precisa dessa escrita, e por isso é capability própria
-(MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-2-01, no backlog).
-
-**Par da sílica.** ME-000021 "Sachê Silica gel 5g" × ME-000089 "SACHÊ SÍLICA GEL 5G" são **duplicado verdadeiro por
-decisão explícita do PO**, a consolidar na Onda 2 depois de PLAN e impressão digital. Isso **não** torna a regra geral
-accent-insensitive: é decisão deste par, e como a ferramenta não os agrupa (a regra preserva acento), o par entra por
-decisão nomeada, como na §110.
+**Onda 2 e par da sílica.** Aprovados pelo PO na integração e executados no DEV pela capability própria
+(MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-2-01, seção abaixo, §118).
 
 **Continuam em revisão**, sem consolidar: MP-000149/475, MP-000325/348, MP-000320/468, MP-000014/022 e MP-000393/486 —
 podem ser materiais tecnicamente diferentes.
@@ -6219,6 +6210,51 @@ Relatórios (o R-21 entrou em `relatorios-pagina-ao-filtrar`, cuja guarda conta 
 PDF (`report-content` e o arquivo real em `report-documents`), `src/app`, a tela de Uso e consumo, ajuda, seletores e
 as guardas estruturais que leem o fonte das telas — 41 arquivos, 764 testes. Typecheck de shared, API e web. Sem suíte
 completa, E2E, Playwright nem mutação; PROD e Railway intocados.
+
+## Onda 2 do saneamento de duplicatas no DEV (MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-2-01, 2026-09-17)
+
+**Decisão do PO.** Sete grupos de matéria-prima são o MESMO material físico declarado em uma linha por nutriente, e o par
+da sílica (ME-000021 × ME-000089, que difere só por acento) é duplicado verdadeiro por decisão deste par. Regra em §118.
+
+**O que mudou na ferramenta.** A Onda 2 entrou no arquivo de decisão da §110 (o importador passa a não recriar os onze
+absorvidos), com grupo de mais de dois, par nomeado e consolidação com o valor final escrito. A ferramenta genérica ganhou
+o modo de decisão (`--onda`): grupo pelos códigos, critério de canônico conferido contra a decisão, `declaredNutrient`
+consolidado em "A · B · C" como canonicalUpdate (ANTES/DEPOIS no plano e na impressão, gravado por compare-and-set),
+relação Item × Fornecedor pela regra da §110 com o código da ferramenta de Item (extraído e exportado, Onda A intacta),
+colisão de componente contra o grupo inteiro, onda que só aplica inteira e APPLY que grava o resultado para o VERIFY
+reescrever a planilha. A ferramenta de Item recusa onda de grupo.
+
+**DEV.** PLAN 8/8 PRONTO (impressão `3c2042961fb8…`); backup `dev-pre-onda-2-20260918T020738Z.json` com `RESTAURÁVEL: YES`
+(83 models, 5.862 linhas, 28 sequences; banco descartável removido); APPLY 8/8 APLICADO, uma transação por grupo, efeito
+igual ao previsto (`items` ~7 −11, `supplier_item_offers` ~3, `supplier_item_qualification_history` ~4, `supplier_items`
+−2); VERIFY OK duas vezes, e conferência por SQL: nenhum absorvido, 819 → 808 Itens, os sete nutrientes exatamente como
+decididos, ofertas e eventos da FAGRON (MP-000270) e da CAÇA UMIDADE (ME-000021) na relação do canônico, nenhuma oferta
+órfã. **Recontagem global: 6 grupos, todos BLOQUEADOS** — os 5 de Item em revisão e o Modelo "X" —, nenhum grupo novo e
+nenhuma variante de acento restante. **PROD e Railway intocados.**
+
+**Planilha para a Veridi.** `.local-data/veridi/exports/cadastros-duplicados-onda-2-20260918T020738Z.xlsx` (REMOVIDOS
+com 11 linhas, RESUMO por cadastro, REVISÃO NECESSÁRIA com os 6 grupos). A primeira gravação levava a nota do termo
+fundido ("Clorogênico" → "Clorogênico**") nas três linhas do tomate; corrigida para só a linha do MP-000324 e regravada
+pelo VERIFY a partir do resultado real do APPLY (horas de cada grupo preservadas). Plano e resultado em
+`.local-data/veridi/saneamento-duplicatas/master-data/onda-2/`.
+
+**Integração (PO, 2026-09-17), sem novo APPLY.** A entrega juntava termo com asterisco final em qualquer grupo; o PO
+recusou a regra geral. Agora asterisco NÃO é regra: "Clorogênico" = "Clorogênico**" é equivalência declarada só no G5
+(`equivalentes` no arquivo de decisão, grafia do canônico), aceita para o DEV — **V4 (o que `*`/`**` significam) segue
+pendente com a Veridi antes de PROD**. A sílica mantém "Sachê Silica gel 5g" (ME-000021), sem renomear. A impressão da
+decisão da Onda 2 mudou com a equivalência (`6c2d6f2e…` → `f31e07c6…`); a da Onda A, não. Depois do rebase, somente
+leitura no DEV: PLAN 8/8 JÁ SANEADO (efeito: nenhuma tabela), VERIFY OK com o plano preservado, recontagem com os mesmos
+6 grupos, e os 6 conferidos byte a byte contra o backup de antes da onda (10 Itens, 2 Modelos, 13 relações, 14 ofertas,
+24 eventos, 22 componentes). Planilha, plano e resultado com o mesmo hash de antes.
+
+**Validação.** 152 testes focados nos scripts (consolidação, arquivo de decisão com a Onda 2 e a equivalência do G5,
+modo de decisão contra o banco de teste — canonicalUpdates, asterisco sem equivalência bloqueando, impressão, par
+nomeado, critério, conflito, relação consolidada e movida, preferencial, Formulação ACTIVE, colisão de componente com o
+canônico e entre absorvidos, onda inteira, arquivo de decisão mudado, recusa da ferramenta de Item, planilha — e as
+suítes da Onda A, sem mudança de comportamento), mais a "Duplicata de Item absorvida" e a revisão do importador.
+Typecheck dos scripts. As duas suítes de banco disputavam a trava consultiva em paralelo: cada arquivo usa a própria
+chave (ponto de teste; o CLI usa sempre a mesma). Sem migration, sem E2E, sem Playwright, sem mutação e sem suíte
+completa.
 
 ## Próxima prioridade
 

@@ -4,6 +4,7 @@ import {
   cadastroPorChave,
   camposPreenchidos,
   compararCampos,
+  consolidarTermos,
   escolherCanonico,
 } from "./master-data-catalog.js";
 import type { CadastroMestreNoBanco, RegistroDoGrupo } from "./master-data-catalog.js";
@@ -224,5 +225,79 @@ describe("conflito material", () => {
       cadastro,
     );
     expect(conflitos.map((c) => c.coluna)).toEqual(["defaultPurityPercent"]);
+  });
+});
+
+describe("consolidação de campo no canônico (Onda 2)", () => {
+  it("junta os valores ÚNICOS em 'A · B · C', na ordem dada", () => {
+    expect(consolidarTermos(["Cálcio", "Fósforo"]).valor).toBe("Cálcio · Fósforo");
+    expect(consolidarTermos(["Colágeno", "Glicosaminoglicanos", "Ácido hialurônico"]).valor).toBe(
+      "Colágeno · Glicosaminoglicanos · Ácido hialurônico",
+    );
+  });
+
+  it("valor repetido entra uma vez só", () => {
+    expect(consolidarTermos(["Cálcio", "Fósforo", "Cálcio"]).valor).toBe("Cálcio · Fósforo");
+  });
+
+  it("tira espaço das pontas e ignora vazio e nulo — nunca inventa termo", () => {
+    expect(consolidarTermos(["  Cálcio ", null, "", "   ", undefined, " Fósforo"]).valor).toBe("Cálcio · Fósforo");
+    expect(consolidarTermos([null, null]).valor).toBeNull();
+  });
+
+  it("caixa diferente é o mesmo termo, e fica a grafia que veio primeiro", () => {
+    const { valor, fundidos } = consolidarTermos(["Fibra Alimentar", "FIBRA ALIMENTAR", "Beta-glucana"]);
+    expect(valor).toBe("Fibra Alimentar · Beta-glucana");
+    expect(fundidos).toEqual([{ termo: "FIBRA ALIMENTAR", em: "Fibra Alimentar", motivo: "caixa" }]);
+  });
+
+  it("asterisco NÃO é regra: sem equivalência declarada, 'Clorogênico' e 'Clorogênico**' são termos diferentes", () => {
+    const { valor, fundidos } = consolidarTermos(["Clorogênico**", "Adenosina", "Clorogênico", "Rutina"]);
+    expect(valor).toBe("Clorogênico** · Adenosina · Clorogênico · Rutina");
+    expect(fundidos).toEqual([]);
+    expect(consolidarTermos(["Vitamina C*", "Vitamina C"]).valor).toBe("Vitamina C* · Vitamina C");
+  });
+
+  it("a equivalência que a decisão do grupo declara junta os dois, fica a grafia declarada, e o fundido diz 'decisão'", () => {
+    const equivalentes = { "Clorogênico": "Clorogênico**" };
+    const { valor, fundidos } = consolidarTermos(["Clorogênico**", "Adenosina", "Clorogênico", "Rutina"], equivalentes);
+    expect(valor).toBe("Clorogênico** · Adenosina · Rutina");
+    expect(fundidos).toEqual([{ termo: "Clorogênico", em: "Clorogênico**", motivo: "decisão" }]);
+    // O termo declarado chegando antes da grafia que fica: entra já na grafia declarada.
+    expect(consolidarTermos(["Adenosina", "Clorogênico", "Clorogênico**"], equivalentes)).toEqual({
+      valor: "Adenosina · Clorogênico**",
+      fundidos: [{ termo: "Clorogênico", em: "Clorogênico**", motivo: "decisão" }],
+    });
+  });
+
+  it("a equivalência vale só para o termo que ela nomeia — o resto segue a regra", () => {
+    const { valor, fundidos } = consolidarTermos(["Clorogênico**", "Vitamina C*", "Vitamina C", "Clorogênico"], {
+      "Clorogênico": "Clorogênico**",
+    });
+    expect(valor).toBe("Clorogênico** · Vitamina C* · Vitamina C");
+    expect(fundidos).toEqual([{ termo: "Clorogênico", em: "Clorogênico**", motivo: "decisão" }]);
+  });
+
+  it("o mesmo termo fundido duas vezes é declarado uma vez", () => {
+    expect(consolidarTermos(["Fibra", "FIBRA", "FIBRA"]).fundidos).toEqual([
+      { termo: "FIBRA", em: "Fibra", motivo: "caixa" },
+    ]);
+  });
+
+  it("acento continua contando: 'Fosforo' e 'Fósforo' NÃO são o mesmo termo", () => {
+    expect(consolidarTermos(["Fósforo", "Fosforo"]).valor).toBe("Fósforo · Fosforo");
+  });
+
+  it("rodar de novo sobre o valor consolidado dá o mesmo valor", () => {
+    const primeira = consolidarTermos(["Fibra Alimentar", "Arabinogalactana"]).valor;
+    expect(consolidarTermos([primeira, "Arabinogalactana"]).valor).toBe(primeira);
+    expect(consolidarTermos([primeira]).valor).toBe(primeira);
+  });
+
+  it("a ordem é a de quem chama: o canônico primeiro deixa o ANTES como começo do DEPOIS", () => {
+    const antes = "Magnésio";
+    const depois = consolidarTermos([antes, "Fósforo"]).valor!;
+    expect(depois.startsWith(antes)).toBe(true);
+    expect(consolidarTermos(["Fósforo", antes]).valor).toBe("Fósforo · Magnésio");
   });
 });

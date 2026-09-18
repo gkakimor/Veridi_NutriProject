@@ -4,7 +4,9 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { descreverDestino, exigirBancoLocal } from "../local-db-guard.mjs";
+import { DECISOES_DE_DUPLICATAS } from "../veridi-import/item-duplicate-decisions.js";
 import {
+  decisaoDeGrupo,
   decisoesDaOnda,
   impressaoDasDecisoes,
   nomeNormalizado,
@@ -46,13 +48,33 @@ type Registro = Record<string, unknown>;
 /** Quem a carga inicial registrou como autor — o que não é isso é histórico de gente. */
 export const ATOR_DA_IMPORTACAO = "Importação Veridi";
 
+/**
+ * As decisões da onda que ESTA ferramenta executa. Grupo de mais de dois, par
+ * nomeado e consolidação no canônico são da Onda 2 em diante e têm dono:
+ * `master-data-duplicate-sanitization.ts --onda=<onda>`. Aqui eles avaliariam
+ * par a par — e um par sozinho de um grupo de quatro não é o grupo.
+ */
+function decisoesDestaFerramenta(
+  onda: string,
+  decisoes: readonly DecisaoDeDuplicata[] = DECISOES_DE_DUPLICATAS,
+): readonly DecisaoDeDuplicata[] {
+  const daOnda = decisoesDaOnda(onda, decisoes);
+  if (daOnda.some((decisao) => decisaoDeGrupo(decisao, decisoes))) {
+    throw new Error(
+      `a Onda ${onda} tem grupo de mais de dois, par nomeado ou consolidação no canônico: rode ` +
+        `master-data-duplicate-sanitization.ts --onda=${onda}.`,
+    );
+  }
+  return daOnda;
+}
+
 /** Chave da trava consultiva: duas aplicações nunca correm juntas. */
 const TRAVA = "veridi:item-duplicate-sanitization";
 
 /** Referências que a ferramenta trata. Qualquer outra ao absorvido precisa estar zerada. */
 const TRATADAS = new Set(["supplier_items.itemId", "formulation_components.itemId"]);
 
-interface Lida {
+export interface Lida {
   /** `to_jsonb(linha)::text`: a forma estável que entra na impressão digital. */
   bruto: string;
   dados: Registro;
@@ -69,7 +91,7 @@ interface Referencia extends ColunaDeReferencia {
   linhas: number;
 }
 
-interface RelacaoLida {
+export interface RelacaoLida {
   relacao: Lida;
   fornecedor: string;
   ofertas: Lida[];
@@ -97,6 +119,9 @@ export interface EstadoDoGrupo {
   relacoes: RelacaoLida[];
   componentes: ComponenteLido[];
 }
+
+/** As duas operações sobre a relação Item × Fornecedor — as mesmas nas duas ferramentas. */
+export type OperacaoDeRelacao = Extract<Operacao, { tipo: "CONSOLIDAR_RELACAO" | "MOVER_RELACAO" }>;
 
 export type Operacao =
   | {
@@ -294,45 +319,7 @@ async function lerEstado(
   const idCanonico = canonico ? texto(canonico.dados, "id") : null;
   estado.referencias = await contarReferencias(db, catalogo, { id: idAbsorvido, codigo: decisao.absorvido.codigo });
 
-  const eventosDa = (relacao: string) =>
-    lerLinhas(
-      db,
-      `SELECT to_jsonb(h)::text AS bruto FROM supplier_item_qualification_history h WHERE h."supplierItemId" = $1 ORDER BY h.id`,
-      relacao,
-    );
-  for (const relacao of await lerLinhas(
-    db,
-    `SELECT to_jsonb(si)::text AS bruto FROM supplier_items si WHERE si."itemId" = $1 ORDER BY si.id`,
-    idAbsorvido,
-  )) {
-    const idRelacao = texto(relacao.dados, "id")!;
-    const idFornecedor = texto(relacao.dados, "supplierId")!;
-    const [fornecedor] = await db.$queryRawUnsafe<{ code: string; legalName: string }[]>(
-      `SELECT code, "legalName" FROM suppliers WHERE id = $1`,
-      idFornecedor,
-    );
-    const [doCanonico] = idCanonico
-      ? await lerLinhas(
-          db,
-          `SELECT to_jsonb(si)::text AS bruto FROM supplier_items si WHERE si."itemId" = $1 AND si."supplierId" = $2`,
-          idCanonico,
-          idFornecedor,
-        )
-      : [];
-    estado.relacoes.push({
-      relacao,
-      fornecedor: `${fornecedor?.legalName ?? "?"} (${fornecedor?.code ?? idFornecedor})`,
-      ofertas: await lerLinhas(
-        db,
-        `SELECT to_jsonb(o)::text AS bruto FROM supplier_item_offers o WHERE o."supplierItemId" = $1 ORDER BY o.id`,
-        idRelacao,
-      ),
-      eventos: await eventosDa(idRelacao),
-      canonica: doCanonico
-        ? { relacao: doCanonico, eventos: await eventosDa(texto(doCanonico.dados, "id")!) }
-        : null,
-    });
-  }
+  estado.relacoes = await lerRelacoes(db, idAbsorvido, idCanonico);
 
   const componentes = await db.$queryRawUnsafe<
     { componente: string; versao: string; documento: string; tem: boolean }[]
@@ -358,6 +345,59 @@ async function lerEstado(
     versaoTemCanonico: linha.tem,
   }));
   return estado;
+}
+
+/**
+ * As relações Item × Fornecedor do absorvido, com ofertas, eventos de
+ * homologação e — quando o canônico tem o MESMO fornecedor — a relação dele.
+ * Uma leitura só para as duas ferramentas: a regra é uma, a leitura também.
+ */
+export async function lerRelacoes(
+  db: Banco,
+  idAbsorvido: string,
+  idCanonico: string | null,
+): Promise<RelacaoLida[]> {
+  const eventosDa = (relacao: string) =>
+    lerLinhas(
+      db,
+      `SELECT to_jsonb(h)::text AS bruto FROM supplier_item_qualification_history h WHERE h."supplierItemId" = $1 ORDER BY h.id`,
+      relacao,
+    );
+  const relacoes: RelacaoLida[] = [];
+  for (const relacao of await lerLinhas(
+    db,
+    `SELECT to_jsonb(si)::text AS bruto FROM supplier_items si WHERE si."itemId" = $1 ORDER BY si.id`,
+    idAbsorvido,
+  )) {
+    const idRelacao = texto(relacao.dados, "id")!;
+    const idFornecedor = texto(relacao.dados, "supplierId")!;
+    const [fornecedor] = await db.$queryRawUnsafe<{ code: string; legalName: string }[]>(
+      `SELECT code, "legalName" FROM suppliers WHERE id = $1`,
+      idFornecedor,
+    );
+    const [doCanonico] = idCanonico
+      ? await lerLinhas(
+          db,
+          `SELECT to_jsonb(si)::text AS bruto FROM supplier_items si WHERE si."itemId" = $1 AND si."supplierId" = $2`,
+          idCanonico,
+          idFornecedor,
+        )
+      : [];
+    relacoes.push({
+      relacao,
+      fornecedor: `${fornecedor?.legalName ?? "?"} (${fornecedor?.code ?? idFornecedor})`,
+      ofertas: await lerLinhas(
+        db,
+        `SELECT to_jsonb(o)::text AS bruto FROM supplier_item_offers o WHERE o."supplierItemId" = $1 ORDER BY o.id`,
+        idRelacao,
+      ),
+      eventos: await eventosDa(idRelacao),
+      canonica: doCanonico
+        ? { relacao: doCanonico, eventos: await eventosDa(texto(doCanonico.dados, "id")!) }
+        : null,
+    });
+  }
+  return relacoes;
 }
 
 const relacaoDaImportacao = (relacao: Registro): boolean =>
@@ -461,55 +501,10 @@ export function avaliar(estado: EstadoDoGrupo): AvaliacaoDoGrupo {
     );
   }
 
-  for (const { relacao, fornecedor, ofertas, eventos, canonica } of estado.relacoes) {
-    const r = relacao.dados;
-    const antes = motivos.length;
-    if (r["preferred"] === true) {
-      motivos.push(
-        canonica?.relacao.dados["preferred"] === true
-          ? `${fornecedor}: preferencial dos dois lados`
-          : `${fornecedor}: relação preferencial no absorvido`,
-      );
-    }
-    if (!relacaoDaImportacao(r)) motivos.push(`${fornecedor}: relação do absorvido alterada depois da importação`);
-    if (eventos.some((e) => !eventoDaImportacao(e.dados))) {
-      motivos.push(`${fornecedor}: histórico de homologação do absorvido além da importação`);
-    }
-    if (ofertas.some((o) => !ofertaDaImportacao(o.dados))) motivos.push(`${fornecedor}: oferta do absorvido além da importação`);
-
-    if (!canonica) {
-      if (motivos.length === antes) {
-        operacoes.push({
-          tipo: "MOVER_RELACAO",
-          fornecedor,
-          relacao: texto(r, "id")!,
-          ofertas: ofertas.length,
-          eventos: eventos.length,
-        });
-      }
-      continue;
-    }
-    const k = canonica.relacao.dados;
-    if (r["qualificationStatus"] !== k["qualificationStatus"]) {
-      motivos.push(`${fornecedor}: status divergente (${String(r["qualificationStatus"])} × ${String(k["qualificationStatus"])})`);
-    }
-    if (r["active"] !== k["active"]) motivos.push(`${fornecedor}: situação da relação divergente`);
-    for (const campo of ["supplierItemCode", "commercialNotes"]) {
-      if (r[campo] != null && r[campo] !== k[campo]) motivos.push(`${fornecedor}: ${campo} divergente`);
-    }
-    if (!relacaoDaImportacao(k) || canonica.eventos.some((e) => !eventoDaImportacao(e.dados))) {
-      motivos.push(`${fornecedor}: relação do canônico com histórico além da importação`);
-    }
-    if (motivos.length === antes) {
-      operacoes.push({
-        tipo: "CONSOLIDAR_RELACAO",
-        fornecedor,
-        relacaoAbsorvida: texto(r, "id")!,
-        relacaoCanonica: texto(k, "id")!,
-        ofertas: ofertas.map((o) => ({ id: texto(o.dados, "id")!, sourceKey: texto(o.dados, "sourceKey") })),
-        eventos: eventos.map((e) => texto(e.dados, "id")!),
-      });
-    }
+  for (const relacao of estado.relacoes) {
+    const avaliacao = avaliarRelacao(relacao);
+    motivos.push(...avaliacao.motivos);
+    if (avaliacao.operacao) operacoes.push(avaliacao.operacao);
   }
 
   for (const { componente, versao, documento, versaoTemCanonico } of estado.componentes) {
@@ -530,6 +525,68 @@ export function avaliar(estado: EstadoDoGrupo): AvaliacaoDoGrupo {
 
   operacoes.push({ tipo: "REMOVER_ITEM", item: texto(a, "id")!, codigo: decisao.absorvido.codigo });
   return fechar(motivos.length === 0 ? "PRONTO" : "ABORTAR");
+}
+
+/**
+ * A regra da relação Item × Fornecedor do absorvido (§110), uma só para as duas
+ * ferramentas: preferencial, histórico além da importação e divergência com a
+ * relação do canônico abortam; sem relação do canônico com o mesmo fornecedor,
+ * a relação passa inteira; com ela, ofertas e eventos passam para ela e a do
+ * absorvido sai.
+ */
+export function avaliarRelacao({ relacao, fornecedor, ofertas, eventos, canonica }: RelacaoLida): {
+  motivos: string[];
+  operacao: OperacaoDeRelacao | null;
+} {
+  const motivos: string[] = [];
+  const r = relacao.dados;
+  if (r["preferred"] === true) {
+    motivos.push(
+      canonica?.relacao.dados["preferred"] === true
+        ? `${fornecedor}: preferencial dos dois lados`
+        : `${fornecedor}: relação preferencial no absorvido`,
+    );
+  }
+  if (!relacaoDaImportacao(r)) motivos.push(`${fornecedor}: relação do absorvido alterada depois da importação`);
+  if (eventos.some((e) => !eventoDaImportacao(e.dados))) {
+    motivos.push(`${fornecedor}: histórico de homologação do absorvido além da importação`);
+  }
+  if (ofertas.some((o) => !ofertaDaImportacao(o.dados))) motivos.push(`${fornecedor}: oferta do absorvido além da importação`);
+
+  if (!canonica) {
+    return {
+      motivos,
+      operacao:
+        motivos.length === 0
+          ? { tipo: "MOVER_RELACAO", fornecedor, relacao: texto(r, "id")!, ofertas: ofertas.length, eventos: eventos.length }
+          : null,
+    };
+  }
+  const k = canonica.relacao.dados;
+  if (r["qualificationStatus"] !== k["qualificationStatus"]) {
+    motivos.push(`${fornecedor}: status divergente (${String(r["qualificationStatus"])} × ${String(k["qualificationStatus"])})`);
+  }
+  if (r["active"] !== k["active"]) motivos.push(`${fornecedor}: situação da relação divergente`);
+  for (const campo of ["supplierItemCode", "commercialNotes"]) {
+    if (r[campo] != null && r[campo] !== k[campo]) motivos.push(`${fornecedor}: ${campo} divergente`);
+  }
+  if (!relacaoDaImportacao(k) || canonica.eventos.some((e) => !eventoDaImportacao(e.dados))) {
+    motivos.push(`${fornecedor}: relação do canônico com histórico além da importação`);
+  }
+  return {
+    motivos,
+    operacao:
+      motivos.length === 0
+        ? {
+            tipo: "CONSOLIDAR_RELACAO",
+            fornecedor,
+            relacaoAbsorvida: texto(r, "id")!,
+            relacaoCanonica: texto(k, "id")!,
+            ofertas: ofertas.map((o) => ({ id: texto(o.dados, "id")!, sourceKey: texto(o.dados, "sourceKey") })),
+            eventos: eventos.map((e) => texto(e.dados, "id")!),
+          }
+        : null,
+  };
 }
 
 /** Linhas por tabela que as operações mexem, em ordem de tabela. */
@@ -559,7 +616,7 @@ export async function planejarCom(
   onda: string,
   decisoes?: readonly DecisaoDeDuplicata[],
 ): Promise<Plano> {
-  const daOnda = decisoesDaOnda(onda, decisoes);
+  const daOnda = decisoesDestaFerramenta(onda, decisoes);
   const banco = await bancoAtual(db);
   const catalogo = await lerCatalogo(db);
   const nomes = await lerNomes(db);
@@ -653,6 +710,50 @@ async function travar(tx: Banco, decisoes: readonly DecisaoDeDuplicata[]): Promi
   );
 }
 
+/**
+ * Escreve uma operação de relação. Cada escrita confere quantas linhas mexeu:
+ * número diferente do plano derruba a transação inteira.
+ */
+export async function executarRelacao(
+  tx: Banco,
+  op: OperacaoDeRelacao,
+  absorvido: string,
+  canonico: string,
+  exigir: (obtido: number, esperado: number, oque: string) => void,
+): Promise<void> {
+  if (op.tipo === "MOVER_RELACAO") {
+    exigir(
+      await tx.$executeRawUnsafe(`UPDATE supplier_items SET "itemId" = $1 WHERE id = $2 AND "itemId" = $3`, canonico, op.relacao, absorvido),
+      1,
+      `relação com ${op.fornecedor}`,
+    );
+    return;
+  }
+  exigir(
+    await tx.$executeRawUnsafe(
+      `UPDATE supplier_item_offers SET "supplierItemId" = $1 WHERE "supplierItemId" = $2`,
+      op.relacaoCanonica,
+      op.relacaoAbsorvida,
+    ),
+    op.ofertas.length,
+    `ofertas de ${op.fornecedor}`,
+  );
+  exigir(
+    await tx.$executeRawUnsafe(
+      `UPDATE supplier_item_qualification_history SET "supplierItemId" = $1 WHERE "supplierItemId" = $2`,
+      op.relacaoCanonica,
+      op.relacaoAbsorvida,
+    ),
+    op.eventos.length,
+    `eventos de ${op.fornecedor}`,
+  );
+  exigir(
+    await tx.$executeRawUnsafe(`DELETE FROM supplier_items WHERE id = $1 AND "itemId" = $2`, op.relacaoAbsorvida, absorvido),
+    1,
+    `relação do absorvido com ${op.fornecedor}`,
+  );
+}
+
 async function executar(tx: Banco, grupo: AvaliacaoDoGrupo, op: Operacao): Promise<void> {
   const absorvido = grupo.absorvido.id!;
   const canonico = grupo.canonico.id!;
@@ -663,36 +764,8 @@ async function executar(tx: Banco, grupo: AvaliacaoDoGrupo, op: Operacao): Promi
   };
   switch (op.tipo) {
     case "CONSOLIDAR_RELACAO":
-      exigir(
-        await tx.$executeRawUnsafe(
-          `UPDATE supplier_item_offers SET "supplierItemId" = $1 WHERE "supplierItemId" = $2`,
-          op.relacaoCanonica,
-          op.relacaoAbsorvida,
-        ),
-        op.ofertas.length,
-        `ofertas de ${op.fornecedor}`,
-      );
-      exigir(
-        await tx.$executeRawUnsafe(
-          `UPDATE supplier_item_qualification_history SET "supplierItemId" = $1 WHERE "supplierItemId" = $2`,
-          op.relacaoCanonica,
-          op.relacaoAbsorvida,
-        ),
-        op.eventos.length,
-        `eventos de ${op.fornecedor}`,
-      );
-      exigir(
-        await tx.$executeRawUnsafe(`DELETE FROM supplier_items WHERE id = $1 AND "itemId" = $2`, op.relacaoAbsorvida, absorvido),
-        1,
-        `relação do absorvido com ${op.fornecedor}`,
-      );
-      return;
     case "MOVER_RELACAO":
-      exigir(
-        await tx.$executeRawUnsafe(`UPDATE supplier_items SET "itemId" = $1 WHERE id = $2 AND "itemId" = $3`, canonico, op.relacao, absorvido),
-        1,
-        `relação com ${op.fornecedor}`,
-      );
+      await executarRelacao(tx, op, absorvido, canonico, exigir);
       return;
     case "MOVER_COMPONENTE_RASCUNHO":
       exigir(
@@ -771,7 +844,7 @@ export async function aplicar(
       );
       if (trava?.travado !== true) throw new Error("ABORTADO: outra execução do saneamento está em andamento.");
       const contadoresNoInicio = await contadoresDaConexao(tx);
-      await travar(tx, decisoesDaOnda(plano.onda, opcoes.decisoes));
+      await travar(tx, decisoesDestaFerramenta(plano.onda, opcoes.decisoes));
 
       const agora = await planejarCom(tx, plano.onda, opcoes.decisoes);
       const divergencias = divergenciasDoPlano(plano, agora);
@@ -819,7 +892,7 @@ export async function verificarCom(
   onda: string,
   opcoes: { decisoes?: readonly DecisaoDeDuplicata[] | undefined; plano?: Plano | undefined } = {},
 ): Promise<ResultadoDaVerificacao> {
-  const daOnda = decisoesDaOnda(onda, opcoes.decisoes);
+  const daOnda = decisoesDestaFerramenta(onda, opcoes.decisoes);
   const catalogo = await lerCatalogo(db);
   const nomes = await lerNomes(db);
   const problemas: string[] = [];

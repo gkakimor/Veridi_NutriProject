@@ -177,6 +177,35 @@ PLAN sai 2 quando há grupo BLOQUEADO — o que não impede aplicar os seguros, 
 recusa banco diferente do confirmado, banco diferente do plano, backup ausente ou vazio e banco que não seja local. A
 planilha do `--excel` é o arquivo que vai para a Veridi e fica fora do Git, em `.local-data/veridi/exports/`.
 
+### Onda de decisão (Onda 2 em diante)
+
+Grupo aprovado pelo PO como o mesmo material — inclusive grupo de três ou quatro Itens, par nomeado fora da regra
+automática (acento) e campo consolidado no canônico — entra no arquivo de decisão da §110 e roda no modo de decisão da
+mesma ferramenta (§118). A regra automática não toca os códigos decididos, e a ferramenta de Item recusa a onda.
+
+```bash
+# PLAN — somente leitura. Mostra ANTES/DEPOIS do campo consolidado de cada canônico.
+pnpm exec dotenv -e .env -- tsx scripts/maintenance/master-data-duplicate-sanitization.ts plan --onda=2 --plano=<plano.json>
+
+# Backup restaurável, como acima.
+
+# APPLY — só com TODOS os grupos da onda PRONTO; uma transação por grupo; grava o resultado e a planilha.
+pnpm exec dotenv -e .env -- tsx scripts/maintenance/master-data-duplicate-sanitization.ts apply --onda=2 \
+  --plano=<plano.json> --backup=<backup.json> --confirmar-banco=<banco> --resultado=<resultado.json> --excel=<planilha.xlsx>
+
+# VERIFY — somente leitura, com recontagem global; com --resultado e --excel, regrava a planilha a partir do APPLY real.
+pnpm exec dotenv -e .env -- tsx scripts/maintenance/master-data-duplicate-sanitization.ts verify --onda=2 \
+  --plano=<plano.json> [--resultado=<resultado.json> --excel=<planilha.xlsx>]
+```
+
+O APPLY recusa, antes de escrever, arquivo de decisão diferente do que gerou o plano e onda com grupo fora de PRONTO. Com
+o pacote de revisão, o importador nunca recria os absorvidos da onda e resolve o código da planilha deles para o
+canônico.
+
+Termo do campo consolidado só se junta por `trim` e caixa. Asterisco não é regra: juntar "X" e "X**" é equivalência
+declarada no grupo (`equivalentes`). **Antes da Onda 2 em PROD:** responder a V4 com a Veridi (o que `*`/`**`
+significam no nutriente) — a equivalência do G5 ("Clorogênico" = "Clorogênico**") foi aceita só para o DEV.
+
 ## 7. Apply
 
 ```
