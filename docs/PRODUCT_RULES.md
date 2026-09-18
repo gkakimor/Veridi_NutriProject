@@ -7938,8 +7938,8 @@ segunda exclusão e o clique duplo — é 404. Caminhos: `/suppliers`, `/custome
 - chave estrangeira de qualquer ação — RESTRICT, CASCADE e SET NULL contam igual: um DELETE "bem-sucedido" que apaga
   histórico por CASCADE ou desliga um Produto por SET NULL é exatamente o que a regra proíbe;
 - id sem chave estrangeira, código e nome copiados em documento, e coluna JSON que cite o id ou o código;
-- histórico: a situação do Cliente (bloqueio, desbloqueio, inativação, reativação), os dados cadastrais do CNPJ além do
-  registro da criação, e a proveniência das Formulações, Estruturas de custo e Precificações nascidas de um Modelo.
+- histórico: a situação do Cliente (bloqueio, desbloqueio, inativação, reativação), os dados cadastrais do CNPJ (ver
+  Filhos técnicos), e a proveniência das Formulações, Estruturas de custo e Precificações nascidas de um Modelo.
 
 Por cadastro: **Fornecedor** — relação Item × Fornecedor, Ordem de Compra (inclusive o código e o nome copiados nela),
 Recebimento e Lote. **Cliente** — Projeto, Pedido, Recebimento de material do cliente, Lote de propriedade, Produto
@@ -7959,10 +7959,15 @@ toda coluna JSON do schema é varrida: o que o catálogo ainda não nomeia conta
   observação, premissas, energia, modelo de precificação, perfis tributários. O que a criação preenche (base, unidade,
   modo de cálculo) vale como está. Toda coluna da tabela de versões é classificada; coluna nova sem classificação
   bloqueia. Conteúdo lançado na V1 é rascunho trabalhado e bloqueia (seção 12 do discovery);
-- o **registro dos dados cadastrais do CNPJ** que a criação do Cliente gravou (§122): um evento só, que não é troca de
-  CNPJ, num Cliente nunca regravado depois de criado (`updatedAt` = `createdAt`). Qualquer outro caso é histórico real e
-  bloqueia. **Leitura aplicada nesta fatia**: o registro nasceu depois do discovery, e o PO pode revertê-la para
-  bloqueio sem mexer no resto.
+- o **registro dos dados cadastrais do CNPJ** gravado na MESMA criação do Cliente (§122). **Decisão do PO (2026-09-18):
+  histórico de CNPJ nascido na mesma criação do Cliente é filho técnico; histórico posterior é uso real.** Ele só sai
+  junto com prova ESTRUTURAL de nascimento — "primeiro evento", hora próxima, diferença de segundos, menor id ou
+  `updatedAt` = `createdAt` não provam —, e o modelo atual não tem essa prova: o evento não guarda marca da criação, o
+  PATCH grava Cliente e evento na mesma transação, e o MERGE do saneamento move eventos de um Cliente para outro. **Por
+  isso, hoje, todo registro do CNPJ bloqueia** — o da criação inclusive, digitado ou aplicado do OpenCNPJ antes do
+  primeiro Salvar — e nenhum é apagado. Registro posterior (EDIT, CONSULTATION, CNPJ_CHANGED) bloqueia sempre. A marca
+  que habilita a exceção espera o PO: coluna anulável `createdWithCustomerId` no histórico, gravada só pela criação,
+  sem backfill (MASTER-DATA-HARD-DELETE-CNPJ-BIRTH-01).
 
 Arquivado ou inativo não bloqueia por si: o cadastro criado por engano, já arquivado e sem uso, pode sair.
 

@@ -263,7 +263,7 @@ contrário.
 | # | Decisão | Situação |
 |---|---|---|
 | D1 | Exclusão física de cadastro mestre: **só ADMIN**; não herda a permissão de criar ou editar o cadastro | **Decidida** (2026-09-17) |
-| D2 | **Qualquer uso, referência ou histórico real bloqueia**, contando rascunho já trabalhado, histórico, tarifa, oferta, referência de custo, proveniência, Json, código ou id copiado, referência ao cadastro e às versões e filhos. Exceção: filho técnico que nasce obrigatoriamente no MESMO ato e nunca foi usado não conta isoladamente — a V1 inicial ainda DRAFT e nunca aplicada nem ativada; o PA criado junto do Produto e sem uso; o evento inicial obrigatório da relação Item × Fornecedor, sem oferta nem histórico adicional. **Falha fechada** | **Decidida** (2026-09-17) |
+| D2 | **Qualquer uso, referência ou histórico real bloqueia**, contando rascunho já trabalhado, histórico, tarifa, oferta, referência de custo, proveniência, Json, código ou id copiado, referência ao cadastro e às versões e filhos. Exceção: filho técnico que nasce obrigatoriamente no MESMO ato e nunca foi usado não conta isoladamente — a V1 inicial ainda DRAFT e nunca aplicada nem ativada; o PA criado junto do Produto e sem uso; o evento inicial obrigatório da relação Item × Fornecedor, sem oferta nem histórico adicional. **Falha fechada**. Esclarecimento do PO (2026-09-18): histórico de CNPJ nascido na mesma criação do Cliente é filho técnico; histórico posterior é uso real — e o nascido na criação só sai junto com prova estrutural de nascimento | **Decidida** (2026-09-17) |
 | D3 | **Rastro da exclusão**: tabela append-only criada na Fatia 1 (migration aditiva) com, no mínimo, tipo da entidade, id original, código, nome, motivo obrigatório, usuário executor, data/hora e o retrato mínimo necessário para auditoria. O retrato não guarda dado pessoal ou de contato que não seja necessário para provar a exclusão, e nunca segredo, senha, token ou credencial. Exclusão motivada por LGPD é outra política | **Decidida** (2026-09-17) |
 | D4 | **PRODUCTION-PROFILE-ARCHIVE-01**: Arquivar e Desarquivar o Perfil de Produção, com ADMIN e Produção, sem migration; o histórico existente segue consultável; arquivado não entra em compromisso novo | **Decidida** (2026-09-17) |
 | D5 | **USER-LAST-ADMIN-GUARD-01**: nunca zero ADMIN ativo — recusar a inativação e o rebaixamento do último ADMIN ativo; ninguém inativa a si mesmo nem retira de si o papel ADMIN; havendo necessidade legítima, outro ADMIN executa. Sem migration | **Decidida** (2026-09-17) |
@@ -361,9 +361,10 @@ MASTER-DATA-HARD-DELETE-01 e, sobre ela, MASTER-DATA-HARD-DELETE-02.
   ação, id sem FK, código e nome copiados, e as referências às VERSÕES —, conferido contra o `pg_constraint` a cada
   execução, com redes por sufixo e varredura de toda coluna JSON (o F3 da seção 6 fechou aqui); transação com `FOR UPDATE`, recontagem, rastro, DELETE e `pg_stat_xact_user_tables`, com rollback em efeito
   inesperado; rastro append-only com retrato por lista branca, ALVO no `prod-cleanup` (ponto 4 da seção 12 decidido pelo
-  PO). Os pontos 1 e 2 da seção 12 valeram como escritos. **Leitura aplicada**: o registro dos dados do CNPJ gravado na
-  criação do Cliente (§122, posterior a este documento) é filho técnico com prova de nascimento — um evento, que não é
-  troca de CNPJ, num Cliente nunca regravado —; qualquer outro evento bloqueia. O Perfil recusado oferece o Arquivar da
+  PO). Os pontos 1 e 2 da seção 12 valeram como escritos. **Registro do CNPJ da criação** (§122, posterior a este
+  documento): o PO decidiu em 2026-09-18 que ele é filho técnico e que registro posterior é uso real, com prova
+  estrutural de nascimento; o modelo atual não a tem, então todo registro do CNPJ bloqueia até a marca
+  `createdWithCustomerId` (proposta, migration aditiva) ser aprovada. O Perfil recusado oferece o Arquivar da
   Fatia 0.
 - Fatia 2: `NÃO IMPLEMENTADO`.
 
@@ -380,3 +381,6 @@ MASTER-DATA-HARD-DELETE-01 e, sobre ela, MASTER-DATA-HARD-DELETE-02.
 - 2026-09-18 — Fatia 1 implementada por MASTER-DATA-HARD-DELETE-01 (§125), com a migration aditiva do rastro; o PO
   classificou o rastro como ALVO do `prod-cleanup`; leitura aplicada sobre o registro do CNPJ da criação do Cliente
   (seção 16).
+- 2026-09-18 — ajuste final: o PO decidiu o registro do CNPJ da criação (filho técnico, só com prova estrutural); o
+  modelo não prova, a regra por carimbo saiu e todo registro do CNPJ bloqueia até a marca proposta ser aprovada
+  (MASTER-DATA-HARD-DELETE-CNPJ-BIRTH-01).

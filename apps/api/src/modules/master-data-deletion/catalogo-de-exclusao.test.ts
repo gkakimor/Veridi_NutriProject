@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AGREGADOS } from "./catalogo-de-exclusao.js";
 import type { Linha } from "./filhos-tecnicos.js";
-import { REGRAS_DA_V1, julgarEventoDoCnpj, julgarV1 } from "./filhos-tecnicos.js";
+import { REGRAS_DA_V1, julgarFilhosTecnicos, julgarV1 } from "./filhos-tecnicos.js";
 import type { ChaveReal, ColunaReal } from "./master-data-deletion.service.js";
 import { agruparPorFonte, conferirCatalogo, efeitoEsperado, efeitoInesperado } from "./master-data-deletion.service.js";
 import { retratoDaExclusao } from "./retrato-da-exclusao.js";
@@ -145,21 +145,38 @@ describe("julgarV1 — a V1 como a criação a deixou", () => {
   });
 });
 
-describe("julgarEventoDoCnpj — só o registro da criação é filho técnico", () => {
-  const nascido = { createdAt: "2026-09-18T10:00:00.000", updatedAt: "2026-09-18T10:00:00.000" };
+describe("Cliente — o registro do CNPJ, sem prova estrutural de nascimento", () => {
+  const CLIENTE = AGREGADOS.CUSTOMER;
 
-  it("sem evento, ou um evento de um cliente nunca regravado: não bloqueia", () => {
-    expect(julgarEventoDoCnpj(nascido, [])).toEqual([]);
-    expect(julgarEventoDoCnpj(nascido, [{ kind: "EDIT" }])).toEqual([]);
-    expect(julgarEventoDoCnpj(nascido, [{ kind: "CONSULTATION" }])).toEqual([]);
+  it("é referência do catálogo (CASCADE), nunca linha interna: nenhum registro sai junto", () => {
+    expect(CLIENTE.internas).toEqual([]);
+    expect(CLIENTE.referencias).toContainEqual(
+      expect.objectContaining({
+        tipo: "fk",
+        tabela: "customer_cnpj_registration_history",
+        coluna: "customerId",
+        alvo: "customers",
+        acao: "c",
+        fonte: "Histórico dos dados cadastrais do CNPJ",
+      }),
+    );
+    expect(julgarFilhosTecnicos("CUSTOMER", new Map())).toEqual([]);
   });
 
-  it("dois eventos, troca de CNPJ ou cliente regravado depois: histórico real, bloqueia", () => {
-    expect(julgarEventoDoCnpj(nascido, [{ kind: "EDIT" }, { kind: "EDIT" }])[0]!.count).toBe(2);
-    expect(julgarEventoDoCnpj(nascido, [{ kind: "CNPJ_CHANGED" }])).toHaveLength(1);
-    expect(
-      julgarEventoDoCnpj({ ...nascido, updatedAt: "2026-09-18T10:05:00.000" }, [{ kind: "EDIT" }]),
-    ).toHaveLength(1);
+  it("o efeito esperado do Cliente é só ele e o rastro — um CASCADE no histórico do CNPJ desfaz tudo", () => {
+    const esperado = efeitoEsperado(CLIENTE, new Map());
+    expect(Object.fromEntries(esperado)).toEqual({
+      customers: { ins: 0, upd: 0, del: 1 },
+      master_data_deletion_history: { ins: 1, upd: 0, del: 0 },
+    });
+    const depois = new Map([
+      ["customers", { ins: 0, upd: 0, del: 1 }],
+      ["customer_cnpj_registration_history", { ins: 0, upd: 0, del: 1 }],
+      ["master_data_deletion_history", { ins: 1, upd: 0, del: 0 }],
+    ]);
+    expect(efeitoInesperado(new Map(), depois, esperado)).toEqual({
+      customer_cnpj_registration_history: { ins: 0, upd: 0, del: 1 },
+    });
   });
 });
 

@@ -31,8 +31,9 @@ import { retratoDaExclusao } from "./retrato-da-exclusao.js";
  *     apontada e espera, e quem muda o cadastro espera também);
  *  2. confere o catálogo contra o `pg_constraint` — chave que chega sem estar
  *     no catálogo, ou que mudou de ação, bloqueia (falha fechada);
- *  3. julga os filhos técnicos — a V1 como a criação a deixou, o registro do
- *     CNPJ da criação;
+ *  3. julga os filhos técnicos — a V1 como a criação a deixou (o registro do
+ *     CNPJ da criação do Cliente espera prova estrutural e, até lá, é
+ *     referência como qualquer outro);
  *  4. conta cada referência declarada e as redes: coluna sem chave com sufixo
  *     de id, código ou nome, e toda coluna JSON do schema.
  *
@@ -372,7 +373,7 @@ async function avaliar(db: Banco, agregado: AgregadoExcluivel, id: string, trava
   const colunas = await lerColunasReais(db);
   const referencias = agruparPorFonte([
     ...(await contarReferencias(db, agregado, lido, chaves, colunas)),
-    ...julgarFilhosTecnicos(agregado.tipo, lido.raiz, lido.internos),
+    ...julgarFilhosTecnicos(agregado.tipo, lido.internos),
     ...conferirCatalogo(agregado, chaves, colunas),
   ]);
 
