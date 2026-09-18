@@ -6,7 +6,9 @@ import { requireRole } from "../../lib/current-user.js";
 import {
   CapacityResourceNotAllowedError,
   DuplicateStepResourceError,
+  InvalidProductionProfileArchiveTransitionError,
   ProductWithoutUnitError,
+  ProductionProfileArchivedError,
   ProductionProfileDraftExistsError,
   ProductionProfileEmptyError,
   ProductionProfileNotFoundError,
@@ -29,10 +31,12 @@ import {
   listProductionProfiles,
   previewProductionProfileVersion,
   setProductProductionProfile,
+  setProductionProfileArchived,
   updateProductionProfileIdentity,
   updateProductionProfileVersion,
 } from "./production-profiles.service.js";
 import {
+  archiveProductionProfileSchema,
   createProductionProfileSchema,
   listProductionProfilesQuerySchema,
   previewQuerySchema,
@@ -81,6 +85,14 @@ function mapDomainError(
   }
   if (error instanceof ProductionProfileVersionNotActiveError) {
     return { status: 409, body: { error: "profile_version_not_active", message: error.message } };
+  }
+  // Roteiro arquivado não entra em compromisso novo (PRODUCTION-PROFILE-ARCHIVE-01).
+  if (error instanceof ProductionProfileArchivedError) {
+    return { status: 409, body: { error: "profile_archived", message: error.message } };
+  }
+  // Mesmo código da situação de Item, Fornecedor e Produto (§100).
+  if (error instanceof InvalidProductionProfileArchiveTransitionError) {
+    return { status: 409, body: { error: "invalid_status_transition", message: error.message } };
   }
   // Energia não é capacidade: recusa de negócio, nunca 500.
   if (error instanceof CapacityResourceNotAllowedError) {
@@ -170,6 +182,25 @@ export const productionProfilesRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: "validation_error", issues: formatZodError(parsed.error) });
       }
       return reply.send(await updateProductionProfileIdentity(id, parsed.data));
+    }),
+  );
+
+  /**
+   * Arquivar e Desarquivar — PRODUCTION-PROFILE-ARCHIVE-01. O perfil vem antes
+   * do corpo e da existência: sem permissão, perfil existente e inexistente
+   * recebem o mesmo 403, e nada é gravado.
+   */
+  app.post("/production-profiles/:id/archive", async (request, reply) =>
+    guard(reply, async () => {
+      const actor = requireRole(request, ...WRITE_ROLES);
+      const { id } = request.params as { id: string };
+      const parsed = archiveProductionProfileSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+      return reply.send(await setProductionProfileArchived(id, parsed.data.archived, actor));
     }),
   );
 

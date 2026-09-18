@@ -191,6 +191,7 @@ const PADRAO = {
   versionNumber: 3,
   referenceQuantity: "1000",
   referenceUomCode: "un",
+  profileArchived: false,
 };
 
 function planejamento(
@@ -309,6 +310,7 @@ const VERSAO_ALTERNATIVA: ProductionProfileVersionDTO = {
   archivedAt: null,
   sourceVersionId: null,
   sourceVersionNumber: null,
+  profileArchived: false,
 };
 
 function renderizar(caminho = "/producao/ordens/op-1") {
@@ -342,6 +344,7 @@ beforeEach(() => {
         code: "PPR-000099",
         name: "Linha 2 — pó",
         description: null,
+        archived: false,
         activeVersionId: "ver-9",
         activeVersionNumber: 2,
         referenceQuantity: "500",

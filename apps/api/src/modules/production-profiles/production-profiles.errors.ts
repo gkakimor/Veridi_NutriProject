@@ -101,6 +101,35 @@ export class ProductionProfileUomNotFoundError extends Error {
   }
 }
 
+/**
+ * Arquivar o que já está arquivado, ou desarquivar o que não está
+ * (PRODUCTION-PROFILE-ARCHIVE-01). A mesma recusa da situação de Item,
+ * Fornecedor e Produto (§100): a gravação repetida não re-carimba data nem autor.
+ */
+export class InvalidProductionProfileArchiveTransitionError extends Error {
+  constructor(archived: boolean) {
+    super(
+      archived
+        ? "Este Roteiro de Produção já está arquivado."
+        : "Este Roteiro de Produção não está arquivado.",
+    );
+    this.name = "InvalidProductionProfileArchiveTransitionError";
+  }
+}
+
+/**
+ * Roteiro arquivado não entra em compromisso novo — padrão de Produto nem
+ * roteiro de ordem (PRODUCTION-PROFILE-ARCHIVE-01). O que já existe fica.
+ */
+export class ProductionProfileArchivedError extends Error {
+  constructor(profileCode: string) {
+    super(
+      `O Roteiro de Produção ${profileCode} está arquivado e não pode ser escolhido para produto nem para ordem nova. Escolha um roteiro ativo ou desarquive este.`,
+    );
+    this.name = "ProductionProfileArchivedError";
+  }
+}
+
 /** Só versão ATIVA vira padrão de produto — rascunho ainda muda. */
 export class ProductionProfileVersionNotActiveError extends Error {
   constructor(status: string) {

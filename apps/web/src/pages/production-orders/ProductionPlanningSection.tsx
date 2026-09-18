@@ -220,11 +220,21 @@ export function ProductionPlanningSection({
                   {productDefaultProfile
                     ? `${productDefaultProfile.profileName} · V${productDefaultProfile.versionNumber}`
                     : "Não definido."}
-                  {productDefaultProfile && !planning.productDefaultCompatible && (
+                  {/* Arquivado depois de virar padrão: fica à vista e não se aplica
+                      (PRODUCTION-PROFILE-ARCHIVE-01). */}
+                  {productDefaultProfile?.profileArchived ? (
                     <span className="field__hint">
                       {" "}
-                      — em {productDefaultProfile.referenceUomCode}, não converte para {order.outputUnitCode}
+                      — roteiro arquivado: não se aplica a esta ordem. Escolha um roteiro ativo.
                     </span>
+                  ) : (
+                    productDefaultProfile &&
+                    !planning.productDefaultCompatible && (
+                      <span className="field__hint">
+                        {" "}
+                        — em {productDefaultProfile.referenceUomCode}, não converte para {order.outputUnitCode}
+                      </span>
+                    )
                   )}
                 </dd>
               </div>

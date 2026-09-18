@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type {
   ProductionOrderDTO,
   ProductionProfileVersionDTO,
+  ProductionRouteCompatibilityBlock,
   UnitOfMeasureDTO,
 } from "@veridi/shared";
 import {
@@ -60,6 +61,27 @@ interface Props {
   hasSchedule: boolean;
   onClose: () => void;
   onApplied: (order: ProductionOrderDTO, message: string) => void;
+}
+
+/**
+ * A frase de cada recusa da regra — a versão que abre o diálogo pode ser o
+ * padrão do Produto de um roteiro que, depois, foi arquivado ou substituído.
+ */
+function motivoDoBloqueio(
+  bloqueio: ProductionRouteCompatibilityBlock,
+  referenceUomCode: string,
+  orderUnitCode: string,
+): string {
+  switch (bloqueio) {
+    case "PERFIL_ARQUIVADO":
+      return "Este roteiro está arquivado e não é aplicado a ordem nova. Escolha um roteiro ativo.";
+    case "VERSAO_NAO_ATIVA":
+      return "Esta versão do roteiro não está mais ativa. Escolha o roteiro de novo para usar a versão ativa.";
+    case "SEM_UNIDADE":
+    case "UOM_DESCONHECIDA":
+    case "UOM_INCOMPATIVEL":
+      return `A quantidade de referência deste roteiro está em ${referenceUomCode}, e esta ordem está em ${orderUnitCode}: as unidades não se convertem. Escolha outro roteiro.`;
+  }
 }
 
 function opcaoDeRoteiro(profile: {
@@ -253,8 +275,7 @@ export function RouteChooserDialog({
             </ol>
             {bloqueio !== null && (
               <p className="form-alert" role="alert">
-                A quantidade de referência deste roteiro está em {versao.referenceUomCode}, e esta ordem está em{" "}
-                {order.outputUnitCode}: as unidades não se convertem. Escolha outro roteiro.
+                {motivoDoBloqueio(bloqueio, versao.referenceUomCode, order.outputUnitCode)}
               </p>
             )}
             {mesmaVersao && (

@@ -362,11 +362,18 @@ describe("Quantidade da ordem na unidade do roteiro (PRODUCTION-ROUTE-ASSIGNMENT
     expect(() => quantidadeNaUnidadeDoRoteiro("g", { quantity: "abc", unitCode: "kg" }, unidades)).toThrow(ProductionPlanInputError);
   });
 
-  it("compatibilidade: versão ativa, unidade presente e conversão possível — nesta ordem", () => {
-    expect(compatibilidadeDoRoteiro({ status: "ACTIVE", referenceUomCode: "g" }, "kg", unidades)).toBeNull();
-    expect(compatibilidadeDoRoteiro({ status: "ARCHIVED", referenceUomCode: "g" }, "kg", unidades)).toBe("VERSAO_NAO_ATIVA");
-    expect(compatibilidadeDoRoteiro({ status: "ACTIVE", referenceUomCode: "g" }, null, unidades)).toBe("SEM_UNIDADE");
-    expect(compatibilidadeDoRoteiro({ status: "ACTIVE", referenceUomCode: "un" }, "kg", unidades)).toBe("UOM_INCOMPATIVEL");
+  it("compatibilidade: perfil não arquivado, versão ativa, unidade presente e conversão possível — nesta ordem", () => {
+    const vivo = { profileArchived: false };
+    expect(compatibilidadeDoRoteiro({ ...vivo, status: "ACTIVE", referenceUomCode: "g" }, "kg", unidades)).toBeNull();
+    expect(compatibilidadeDoRoteiro({ ...vivo, status: "ARCHIVED", referenceUomCode: "g" }, "kg", unidades)).toBe("VERSAO_NAO_ATIVA");
+    expect(compatibilidadeDoRoteiro({ ...vivo, status: "ACTIVE", referenceUomCode: "g" }, null, unidades)).toBe("SEM_UNIDADE");
+    expect(compatibilidadeDoRoteiro({ ...vivo, status: "ACTIVE", referenceUomCode: "un" }, "kg", unidades)).toBe("UOM_INCOMPATIVEL");
+  });
+
+  it("perfil arquivado (PRODUCTION-PROFILE-ARCHIVE-01) recusa antes de tudo, mesmo com versão ativa e unidade que converte", () => {
+    const arquivado = { profileArchived: true };
+    expect(compatibilidadeDoRoteiro({ ...arquivado, status: "ACTIVE", referenceUomCode: "g" }, "kg", unidades)).toBe("PERFIL_ARQUIVADO");
+    expect(compatibilidadeDoRoteiro({ ...arquivado, status: "ARCHIVED", referenceUomCode: "un" }, null, unidades)).toBe("PERFIL_ARQUIVADO");
   });
 
   it("pendência de roteiro é de rascunho, planejada e liberada sem roteiro — em produção é histórico", () => {

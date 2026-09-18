@@ -103,6 +103,11 @@ export interface ProductionProfileVersionDTO {
   archivedAt: string | null;
   sourceVersionId: string | null;
   sourceVersionNumber: number | null;
+  /**
+   * O PERFIL desta versão está arquivado (PRODUCTION-PROFILE-ARCHIVE-01) —
+   * outra coisa que o `archivedAt` da versão, que é a versão substituída.
+   */
+  profileArchived: boolean;
 }
 
 /** Produto que tem uma versão deste perfil como padrão. */
@@ -120,6 +125,13 @@ export interface ProductionProfileDTO {
   code: string;
   name: string;
   description: string | null;
+  /**
+   * Arquivado (PRODUCTION-PROFILE-ARCHIVE-01): não entra em compromisso novo —
+   * padrão de Produto nem roteiro de ordem —, e o que já existe fica como está.
+   */
+  archived: boolean;
+  archivedAt: string | null;
+  archivedBy: string | null;
   activeVersion: ProductionProfileVersionDTO | null;
   draftVersion: ProductionProfileVersionDTO | null;
   versions: ProductionProfileVersionDTO[];
@@ -134,6 +146,7 @@ export interface ProductionProfileSummaryDTO {
   code: string;
   name: string;
   description: string | null;
+  archived: boolean;
   activeVersionId: string | null;
   activeVersionNumber: number | null;
   referenceQuantity: string | null;
@@ -192,6 +205,14 @@ export interface SetProductProductionProfileInput {
 }
 
 /**
+ * Corpo de `POST /production-profiles/:id/archive` — Arquivar (`true`) e
+ * Desarquivar (`false`) pela mesma rota, como nos Modelos.
+ */
+export interface SetProductionProfileArchivedInput {
+  archived: boolean;
+}
+
+/**
  * O padrão do produto acompanha o perfil: ativar uma versão nova move, na
  * mesma transação, os produtos que apontavam para a versão anterior DESTE
  * perfil (§89). Produto de outro perfil, ou sem perfil, não é tocado.
@@ -212,6 +233,11 @@ export interface ProductProductionProfileDTO {
     status: TemplateVersionStatus;
     referenceQuantity: string;
     referenceUomCode: string;
+    /**
+     * O perfil foi arquivado depois de escolhido: o apontamento fica e a tela
+     * avisa, mas as novas ordens do produto nascem sem roteiro (§89).
+     */
+    profileArchived: boolean;
   } | null;
 }
 
@@ -540,6 +566,7 @@ export function planProductionProfileSnapshotForOrder(
 
 /** Por que uma versão de roteiro não serve para quem pediu. */
 export type ProductionRouteCompatibilityBlock =
+  | "PERFIL_ARQUIVADO"
   | "VERSAO_NAO_ATIVA"
   | "SEM_UNIDADE"
   | "UOM_DESCONHECIDA"
@@ -549,19 +576,25 @@ export type ProductionRouteCompatibilityBlock =
  * A REGRA de compatibilidade entre uma versão de roteiro e quem vai usá-la — o
  * padrão de um Produto ou a quantidade de uma Ordem de Produção.
  *
- * Três perguntas, nesta ordem: a versão está ativa (rascunho ninguém aprovou;
- * arquivada já foi substituída); existe unidade para comparar; e essa unidade
- * chega à unidade de referência pela conversão canônica. Mesma dimensão com
- * fator conhecido converte; qualquer outra coisa recusa.
+ * Quatro perguntas, nesta ordem: o perfil não está arquivado (arquivado não
+ * entra em compromisso novo — PRODUCTION-PROFILE-ARCHIVE-01); a versão está
+ * ativa (rascunho ninguém aprovou; arquivada já foi substituída); existe
+ * unidade para comparar; e essa unidade chega à unidade de referência pela
+ * conversão canônica. Mesma dimensão com fator conhecido converte; qualquer
+ * outra coisa recusa.
+ *
+ * `profileArchived` é obrigatório de propósito: quem chama sem dizer se o
+ * perfil está arquivado não compila, em vez de tratá-lo como vivo.
  *
  * `null` é compatível. A API trava a versão e decide por esta função; a tela lê
  * o mesmo resultado para oferecer, ou não, a ação.
  */
 export function compatibilidadeDoRoteiro(
-  version: { status: string; referenceUomCode: string },
+  version: { status: string; referenceUomCode: string; profileArchived: boolean },
   quantityUnitCode: string | null,
   units: readonly UomFactorLike[],
 ): ProductionRouteCompatibilityBlock | null {
+  if (version.profileArchived) return "PERFIL_ARQUIVADO";
   if (version.status !== "ACTIVE") return "VERSAO_NAO_ATIVA";
   if (!quantityUnitCode) return "SEM_UNIDADE";
   const conversao = converterQuantidadeDeUnidade(

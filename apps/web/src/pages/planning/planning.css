@@ -10,6 +10,11 @@
   max-width: 420px;
 }
 
+/* "Mostrar arquivados" — a mesma caixa das bibliotecas, logo abaixo da busca. */
+.planning-archived-toggle {
+  margin: var(--sp-2) 0 var(--sp-3);
+}
+
 .profile-steps,
 .profile-steps-readonly,
 .profile-preview__steps {

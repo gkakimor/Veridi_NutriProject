@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { booleanoDeConsultaSchema } from "../../lib/boolean-schema.js";
 import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
 import { PRODUCTION_STEP_LIMITS } from "@veridi/shared";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
@@ -54,11 +55,17 @@ const stepSchema = z
 
 export const listProductionProfilesQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
-  /** `true`/`1`: só roteiros com versão ativa — os escolhíveis. */
+  /** `true`/`1`: só roteiros com versão ativa e não arquivados — os escolhíveis. */
   activeOnly: z
     .enum(["true", "false", "1", "0"])
     .optional()
     .transform((valor) => valor === "true" || valor === "1"),
+  /**
+   * Como nos Modelos: ausente ou `"false"`, sem os arquivados; `"true"`, só os
+   * arquivados. Só `"true"`/`"false"` exatos — o resto é 400
+   * (QUERY-BOOLEAN-PERMISSIVE-REMAINING-01).
+   */
+  archived: booleanoDeConsultaSchema().optional(),
   page: inteiroDeConsultaSchema({ minimo: 1, padrao: 1 }),
   pageSize: inteiroDeConsultaSchema({ minimo: 1, maximo: 100, padrao: 20 }),
 });
@@ -88,6 +95,9 @@ export const previewQuerySchema = z.object({ quantity: quantityDecimalSchema() }
 export const setProductProductionProfileSchema = z.object({
   productionProfileVersionId: z.string().trim().min(1).nullable(),
 });
+
+/** Arquivar (`true`) e Desarquivar (`false`) — o mesmo corpo dos Modelos. */
+export const archiveProductionProfileSchema = z.object({ archived: z.boolean() });
 
 export type ListProductionProfilesQuery = z.infer<typeof listProductionProfilesQuerySchema>;
 export type CreateProductionProfileParsed = z.infer<typeof createProductionProfileSchema>;

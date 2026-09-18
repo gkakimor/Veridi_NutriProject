@@ -107,6 +107,7 @@ function versao(): ProductionProfileVersionDTO {
     archivedAt: null,
     sourceVersionId: null,
     sourceVersionNumber: null,
+    profileArchived: false,
   };
 }
 
@@ -117,6 +118,9 @@ function perfil(): ProductionProfileDTO {
     code: "PPR-000001",
     name: "Cápsulas — linha padrão",
     description: null,
+    archived: false,
+    archivedAt: null,
+    archivedBy: null,
     activeVersion: null,
     draftVersion: rascunho,
     versions: [rascunho],

@@ -94,11 +94,12 @@ export async function gravarRoteiroDaOrdem(
  * A aplicação AUTOMÁTICA do roteiro padrão do Produto: na criação da OP
  * (manual, Plano de Atendimento e saldo) e na troca de produto em rascunho.
  *
- * NUNCA lança por falta de roteiro. Produto sem padrão, padrão fora de ACTIVE ou
- * unidade que não converte deixam a OP SEM cópia — e isso é pendência, não erro:
- * o Plano de Atendimento corre na mesma transação, e um Pedido não pode cair
- * porque a Produção ainda não disse como fabricar. A cópia anterior sai sempre:
- * nunca fica a de outro produto.
+ * NUNCA lança por falta de roteiro. Produto sem padrão, padrão fora de ACTIVE,
+ * padrão de perfil ARQUIVADO (PRODUCTION-PROFILE-ARCHIVE-01) ou unidade que não
+ * converte deixam a OP SEM cópia — e isso é pendência, não erro: o Plano de
+ * Atendimento corre na mesma transação, e um Pedido não pode cair porque a
+ * Produção ainda não disse como fabricar. Nenhum outro roteiro é escolhido no
+ * lugar. A cópia anterior sai sempre: nunca fica a de outro produto.
  */
 export async function aplicarRoteiroPadraoAutomatico(
   tx: Prisma.TransactionClient,
@@ -194,6 +195,7 @@ export function toPlanningDTO(
   }
 
   const padrao = order.product.defaultProductionProfileVersion;
+  const padraoArquivado = padrao !== null && padrao.productionProfile.archivedAt !== null;
   const productDefaultProfile: ProductionOrderAvailableProfileDTO | null =
     padrao && padrao.status === "ACTIVE"
       ? {
@@ -204,10 +206,17 @@ export function toPlanningDTO(
           versionNumber: padrao.versionNumber,
           referenceQuantity: padrao.referenceQuantity.toString(),
           referenceUomCode: padrao.referenceUomCode,
+          profileArchived: padraoArquivado,
         }
       : null;
+  // Perfil arquivado não é aplicável: a mesma regra que a autoridade usa.
   const productDefaultCompatible =
-    padrao !== null && compatibilidadeDoRoteiro(padrao, order.outputUnitCode, units) === null;
+    padrao !== null &&
+    compatibilidadeDoRoteiro(
+      { status: padrao.status, referenceUomCode: padrao.referenceUomCode, profileArchived: padraoArquivado },
+      order.outputUnitCode,
+      units,
+    ) === null;
 
   /*
    * O que a ordem ainda aceita. Sem roteiro: a PRIMEIRA aplicação, em DRAFT, e

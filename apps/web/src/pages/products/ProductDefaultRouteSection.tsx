@@ -114,12 +114,30 @@ export function ProductDefaultRouteSection({ productId }: { productId: string })
 
       {padrao && !versao && <p className="field__hint">Nenhum roteiro padrão definido.</p>}
 
+      {/* O apontamento fica (decisão do PO); a ordem nova é que não o usa —
+          PRODUCTION-PROFILE-ARCHIVE-01. Nada troca de roteiro sozinho. */}
+      {versao?.profileArchived && (
+        <div className="pendency-panel" role="status">
+          <p className="pendency-panel__title">Roteiro de Produção arquivado</p>
+          <p className="pendency-panel__sub">
+            {versao.profileCode} {versao.profileName} foi arquivado e continua gravado como padrão, mas as
+            novas ordens deste produto nascem sem roteiro. Escolha um roteiro ativo ou remova o padrão.
+          </p>
+        </div>
+      )}
+
       {versao && (
         <dl className="profile-summary" role="group" aria-label="Roteiro padrão do produto">
           <div>
             <dt>Nome do roteiro</dt>
             <dd>
               {versao.profileName} <span className="field__hint">{versao.profileCode}</span>
+              {versao.profileArchived && (
+                <>
+                  {" "}
+                  <span className="badge badge--neutral">Arquivado</span>
+                </>
+              )}
             </dd>
           </div>
           <div>

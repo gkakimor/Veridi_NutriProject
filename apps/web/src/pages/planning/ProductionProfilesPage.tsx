@@ -32,6 +32,8 @@ export function ProductionProfilesPage() {
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  /* Como nos Modelos: arquivado fica fora do recorte padrão, e a caixa mostra só eles. */
+  const [showArchived, setShowArchived] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -43,8 +45,8 @@ export function ProductionProfilesPage() {
     return () => clearTimeout(handle);
   }, [searchInput]);
 
-  /* Busca nova é página 1 no mesmo render — uma consulta por troca (LISTS-LOADING-STALE-DATA-02). */
-  const filtrosDaConsulta = search ? { search } : {};
+  /* Recorte novo é página 1 no mesmo render — uma consulta por troca (LISTS-LOADING-STALE-DATA-02). */
+  const filtrosDaConsulta = { ...(search ? { search } : {}), ...(showArchived ? { archived: true } : {}) };
   const [page, setPage] = useFilteredPage(filtrosDaConsulta);
 
   const consulta = useListQuery(
@@ -129,6 +131,14 @@ export function ProductionProfilesPage() {
           onChange={(event) => setSearchInput(event.target.value)}
         />
       </div>
+      <label className="toolbar__checkbox planning-archived-toggle">
+        <input
+          type="checkbox"
+          checked={showArchived}
+          onChange={(event) => setShowArchived(event.target.checked)}
+        />
+        Mostrar arquivados
+      </label>
 
       {erroAoCriar && (
         <p className="form-alert" role="alert">
@@ -163,6 +173,12 @@ export function ProductionProfilesPage() {
                 </td>
                 <td>
                   {profile.name}
+                  {profile.archived && (
+                    <>
+                      {" "}
+                      <span className="badge badge--neutral">Arquivado</span>
+                    </>
+                  )}
                   {profile.stepNames.length > 0 && (
                     <span className="cell-sub">{profile.stepNames.join(" → ")}</span>
                   )}
@@ -194,7 +210,9 @@ export function ProductionProfilesPage() {
             <ListStatusRow colSpan={8} query={consulta} rowCount={profiles.length}>
               {search
                 ? "Nenhum roteiro encontrado para esta busca."
-                : "Nenhum Roteiro de Produção ainda. Crie o primeiro."}
+                : showArchived
+                  ? "Nenhum roteiro arquivado."
+                  : "Nenhum Roteiro de Produção ainda. Crie o primeiro."}
             </ListStatusRow>
           </tbody>
         </table>
