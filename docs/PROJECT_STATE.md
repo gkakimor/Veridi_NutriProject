@@ -120,9 +120,9 @@ ATIVO em produção e o ponto de recuperação compatível é o backup pós-rele
   2026-09-17). Hoje nenhum cadastro mestre sai por exclusão física pela API ou pela tela, e o banco não protege a exclusão
   (CASCADE e SET NULL em Item, Produto, Cliente, Recurso e Modelos). Decidido: só ADMIN exclui; qualquer uso, referência
   ou histórico real bloqueia, com falha fechada; rastro append-only; FKs mantidas, com a segurança na aplicação; Perfil de
-  Produção arquivável; nunca zero ADMIN ativo. Da Fatia 0, USER-LAST-ADMIN-GUARD-01 entregue em 2026-09-17 (§120, seção
-  própria abaixo, na `main` e fora de PROD); na fila viva seguem PRODUCTION-PROFILE-ARCHIVE-01, a Fatia 1
-  (MASTER-DATA-HARD-DELETE-01) e a Fatia 2 (MASTER-DATA-HARD-DELETE-02);
+  Produção arquivável; nunca zero ADMIN ativo. A Fatia 0 fechou em 2026-09-17, na `main` e fora de PROD:
+  USER-LAST-ADMIN-GUARD-01 (§120) e PRODUCTION-PROFILE-ARCHIVE-01 (§121), com seções próprias abaixo; na fila viva
+  seguem a Fatia 1 (MASTER-DATA-HARD-DELETE-01) e a Fatia 2 (MASTER-DATA-HARD-DELETE-02);
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 
 Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
@@ -6356,6 +6356,42 @@ soltas, uma passa e a outra é `last_active_admin`, nos três pares (rebaixar ×
 rebaixar). Vizinhos `auth.test.ts`, `users-booleanos-de-consulta.test.ts` e `faixas-de-teste.test.ts` (18). Web
 `usuarios-guarda-do-administrador.test.tsx` (9), com `pages/admin` e os portões da ajuda (231). Typecheck de API e Web;
 shared intocado. Sem suíte completa, E2E, Playwright nem mutação.
+
+## Roteiro de Produção arquivável (PRODUCTION-PROFILE-ARCHIVE-01, 2026-09-17)
+
+**Decisão do PO** (D4 de [MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01](discovery/MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01.md),
+Fatia 0): Arquivar e Desarquivar o Perfil de Produção — Roteiro de Produção na tela —, com ADMIN e Produção; arquivado
+não entra em compromisso novo, e o que já existe fica. Regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §121, com a
+compatibilidade do §89 revista. Na `main`, fora de PROD (`release/prod` segue `8e824e8f`). **Sem migration**:
+`archivedAt`/`archivedBy` já existiam, e a lista já escondia o arquivado.
+
+**API.** `POST /production-profiles/:id/archive` (`{ archived }`, como nos Modelos): 403 antes do corpo e da existência
+para os demais perfis; 409 `invalid_status_transition` na transição repetida, com a condição no UPDATE, sem re-carimbar.
+Lista com `?archived=true` (só os arquivados; ausente, sem eles); `activeOnly`, o dos seletores, nunca traz arquivado.
+`compatibilidadeDoRoteiro` ganhou `PERFIL_ARQUIVADO`, com `profileArchived` obrigatório — quem não diz não compila —, e
+`verificarRoteiroCompativel` trava também o perfil `FOR SHARE`: 409 `profile_archived` no padrão novo de Produto e em
+toda aplicação na OP (padrão, escolhida, definir e aplicar, regularização); a aplicação automática deixa a OP nova sem
+cópia, pendente, sem trocar de roteiro. DTOs: `ProductionProfileDTO.archived`/`archivedAt`/`archivedBy`,
+`ProductionProfileSummaryDTO.archived` e `profileArchived` em `ProductionProfileVersionDTO`,
+`ProductProductionProfileDTO.version` e `ProductionOrderAvailableProfileDTO`. Nenhuma versão muda de situação; as
+cópias das OPs não são tocadas.
+
+**Web.** Detalhe do Roteiro: "Arquivar" com confirmação que diz quantos produtos têm o roteiro como padrão e que as
+ordens novas deles nascem sem roteiro, e "Desarquivar" direto — só para ADMIN e Produção; marca "Arquivado" no título e
+aviso com data e autor; sem "Definir como padrão" enquanto arquivado ("Tirar padrão" fica). Lista: "Mostrar arquivados" e
+a marca na linha. Produto: aviso "Roteiro de Produção arquivado" e a marca no retrato do padrão. OP sem roteiro: "roteiro
+arquivado: não se aplica a esta ordem", sem "Aplicar roteiro padrão atual"; o diálogo de escolha ganhou uma frase por
+recusa da regra — antes, versão fora de ACTIVE aparecia como unidade que não converte.
+
+**Validação.** API `production-profiles/production-profile-archive.test.ts` (14: ADMIN e Produção, quatro perfis 403,
+transição repetida, corrida, lista e seletores, padrão novo recusado, Produto que já apontava, OP nova sem cópia,
+regularização, OP com a cópia intacta e planejando), junto dos vizinhos `production-profiles`, `planning-snapshot`,
+`production-orders-permissoes`, `fulfillment-plan`, `product-edit-permissions`, `paginacao-da-consulta`,
+`escalar-estrito-guarda`, `nome-de-cadastro-mestre` e `modelos-arquivados-booleanos` (10 arquivos, 922 testes) e do
+serial `production-schedules` (27), em banco de teste exclusivo do worktree; shared `production-profiles.test.ts` (23).
+Web `planning/roteiro-arquivado.test.tsx` (15), com `pages/planning`, `pages/products`, `pages/production-orders` e os
+portões que varrem as telas (49 arquivos, 793 testes). Typecheck de shared, API e web. Sem suíte completa, E2E,
+Playwright nem mutação; PROD e Railway intocados.
 
 ## Próxima prioridade
 
