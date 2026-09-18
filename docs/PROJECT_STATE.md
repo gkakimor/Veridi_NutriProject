@@ -6536,7 +6536,7 @@ MASTER-DATA-HARD-DELETE-02. Regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §12
 403 antes do corpo e da existência; 400 sem motivo; 409 `master_data_in_use` com as referências; 404 no inexistente e na
 segunda exclusão. Catálogo explícito por agregado (`catalogo-de-exclusao.ts`) conferido contra o `pg_constraint` a cada
 execução, com redes por sufixo e varredura de toda coluna JSON; filhos técnicos (`filhos-tecnicos.ts`): a V1 como a
-criação a deixou e o registro do CNPJ da criação do Cliente. Transação com retrato de `pg_stat_xact_user_tables`,
+criação a deixou. Transação com retrato de `pg_stat_xact_user_tables`,
 `FOR UPDATE`, recontagem, rastro, DELETE e conferência do efeito real — efeito inesperado desfaz tudo (409
 `master_data_delete_aborted`). Rastro `master_data_deletion_history` com retrato por lista branca e autor RESTRICT; ALVO
 no `prod-cleanup`. O enum do rastro já reserva `ITEM`, `PRODUCT` e `INDUSTRIAL_RESOURCE` para a Fatia 2, que assim fica
@@ -6546,19 +6546,23 @@ sem migration, como o discovery planejou.
 `lib/master-data-deletion-api.ts`. "Excluir definitivamente" só para ADMIN: menu da linha de Fornecedores e Clientes, e
 ao lado do Arquivar nos Modelos de formulação, de estrutura de custo e de política de preço e no Roteiro.
 
-**Leitura aplicada.** O registro dos dados do CNPJ gravado na criação do Cliente (§122, posterior ao discovery) é filho
-técnico com prova de nascimento; outro evento, ou o Cliente regravado depois, bloqueia. O PO pode revertê-la para
-bloqueio.
+**Registro do CNPJ da criação (ajuste final do PO, 2026-09-18).** Decisão: histórico de CNPJ nascido na mesma criação do
+Cliente é filho técnico; histórico posterior é uso real — mas só sai junto com prova estrutural de nascimento, sem
+heurística. A auditoria mostrou que o modelo não tem essa prova (o evento não guarda marca da criação; o PATCH grava
+Cliente e evento na mesma transação; o MERGE do saneamento move eventos entre Clientes; `updatedAt` = `createdAt` e
+`xmin` não provam), então a regra por carimbo saiu (`728879c4`) e todo registro do CNPJ bloqueia, o da criação
+inclusive, sem apagar nada. A menor mudança que habilita a exceção — coluna anulável `createdWithCustomerId`, gravada
+só pela criação, migration aditiva sem backfill — espera o PO (MASTER-DATA-HARD-DELETE-CNPJ-BIRTH-01).
 
 **Dados.** Nenhum cadastro real do `veridi_dev` foi excluído (adendo do PO): toda exclusão dos testes é de fixture
 sintética no banco de teste do worktree. A migration entra no `veridi_dev` pelo `pnpm db:migrate` do checkout principal
 na integração. PROD, Railway e `release/prod` intocados.
 
-**Validação.** API `modules/master-data-deletion` (3 arquivos, 82 testes: 403 dos cinco perfis antes do corpo, prévia
+**Validação.** API `modules/master-data-deletion` (3 arquivos, 86 testes: 403 dos cinco perfis antes do corpo, prévia
 sem escrita, RESTRICT/CASCADE/SET NULL/id sem FK/versão/código/nome/JSON/históricos bloqueando, V1 técnica dos quatro
-agregados versionados saindo junto e V1 trabalhada/ativada/com V2 bloqueando, registro do CNPJ da criação, motivo, rastro
+agregados versionados saindo junto e V1 trabalhada/ativada/com V2 bloqueando, histórico do CNPJ bloqueando sem apagar nada, motivo, rastro
 e retrato, nome livre, 404 na segunda exclusão e no clique duplo, OC gravada sob a trava, gatilho fora do agregado
-desfazendo tudo, catálogo × `pg_constraint` real, rotas DELETE conhecidas e rastro sem alteração no código), em banco de
+desfazendo tudo (Fornecedor e Cliente), catálogo × `pg_constraint` real, rotas DELETE conhecidas e rastro sem alteração no código), em banco de
 teste exclusivo do worktree; scripts `prod-cleanup-models`, `-dry-run`, `-sequences`, `migration-order`,
 `migration-prefix`, `schema-fk-actions`, `restore-json-backup-check` e `apply-migrations` (8 arquivos, 68 testes). Web
 `components/exclusao-definitiva.test.tsx` (7), `pages/suppliers/fornecedor-exclusao-definitiva.test.tsx` (4) e
