@@ -1,5 +1,10 @@
-import { Fragment, useId, useState } from "react";
-import type { CnpjLookupProvider, CnpjLookupResult } from "@veridi/shared";
+import { useId, useState } from "react";
+import type {
+  CnpjLookupProvider,
+  CnpjLookupResult,
+  CnpjRegistrationField,
+  CustomerCnpjRegistration,
+} from "@veridi/shared";
 import {
   CNPJ_LOOKUP_DISCLAIMER,
   CNPJ_LOOKUP_PROVIDERS,
@@ -13,17 +18,23 @@ import { formatDateTime } from "../../lib/dates";
 import { lookupCnpj } from "../../lib/cnpj-lookup-api";
 import {
   compararComOCadastro,
+  compararDadosDoCnpj,
+  dadosDoCnpjParaAplicar,
   selecaoInicial,
+  selecaoInicialDosDadosDoCnpj,
   valoresParaAplicar,
 } from "./cnpj-lookup-fields";
 import type {
+  AplicacaoDaConsultaDeCnpj,
   CampoDaConsultaDeCnpj,
   LinhaDaComparacao,
+  LinhaDosDadosDoCnpj,
   ValoresDoFormulario,
 } from "./cnpj-lookup-fields";
 
 /**
- * Consultar CNPJ — CUSTOMER-CNPJ-LOOKUP-01.
+ * Consultar CNPJ — CUSTOMER-CNPJ-LOOKUP-01, com os dados cadastrais de
+ * CUSTOMER-CNPJ-PERSISTED-DATA-01 (§119).
  *
  * Duas etapas dentro do mesmo diálogo:
  *
@@ -33,11 +44,14 @@ import type {
  *    lista sem que a tela mude de forma. Fonte que ainda não responde não
  *    aparece aqui, nem desabilitada.
  * 2. **Comparação** — Atual × Retornado, campo a campo, com a caixa de aplicar
- *    em cada diferença.
+ *    em cada diferença: primeiro os campos do cadastro, depois os dados
+ *    cadastrais do CNPJ (CNAE, porte, Simples, MEI, situação…).
  *
- * Nada é aplicado sozinho, e NADA é gravado: "Aplicar selecionados" mexe no
- * estado do formulário, e o cadastro continua exigindo "Salvar". Cancelar,
- * fechar no ✕ e Escape saem sem tocar em campo nenhum.
+ * Nada é aplicado sozinho, e NADA é gravado: "Aplicar consulta ao cadastro"
+ * mexe no estado do formulário — os campos marcados e o bloco dos dados
+ * cadastrais com a data desta consulta, mesmo quando nada mudou — e o
+ * cadastro continua exigindo "Salvar". Cancelar, fechar no ✕ e Escape saem
+ * sem tocar em campo nenhum nem na data da consulta.
  */
 
 type Etapa = "fonte" | "resultado";
@@ -48,33 +62,87 @@ type Situacao =
   /** CNPJ não encontrado ou fonte indisponível — o cadastro manual segue de pé. */
   | { tipo: "recado"; texto: string };
 
-/** A linha informativa que a fonte trouxe e o Cliente NÃO guarda. */
-function informacaoComplementar(resultado: CnpjLookupResult): [string, string][] {
-  const { company } = resultado;
-  const cnae = [company.mainCnaeCode, company.mainCnaeDescription].filter(Boolean).join(" — ");
-  return (
-    [
-      ["Situação cadastral na fonte", company.registrationStatus],
-      ["Início de atividade", company.openedAt],
-      ["CNAE principal", cnae || null],
-      ["Natureza jurídica", company.legalNature],
-      ["Porte", company.companySize],
-    ] as [string, string | null][]
-  )
-    .filter((par): par is [string, string] => par[1] !== null && par[1] !== "")
-    .map(([rotulo, valor]) => [rotulo, valor]);
-}
-
 /** O que a coluna "OpenCNPJ" mostra quando não há o que aplicar. */
-function recadoDaLinha(linha: LinhaDaComparacao): string {
+function recadoDaLinha(linha: LinhaDaComparacao | LinhaDosDadosDoCnpj): string {
   if (linha.situacao === "sem_valor") return "Não informado pela fonte";
   if (linha.situacao === "igual") return "Sem alteração";
-  return linha.motivo ?? "";
+  return "motivo" in linha ? (linha.motivo ?? "") : "";
+}
+
+/** Uma linha da tabela Atual × Retornado — a mesma para os dois grupos. */
+function LinhaDaTabela({
+  linha,
+  marcada,
+  onAlternar,
+  idDoMotivo,
+}: {
+  linha: LinhaDaComparacao | LinhaDosDadosDoCnpj;
+  marcada: boolean;
+  onAlternar: () => void;
+  idDoMotivo: string;
+}) {
+  const aplicavel = linha.situacao === "aplicavel";
+  const recado = recadoDaLinha(linha);
+  return (
+    <tr>
+      <td className="table__select table__select--bulk">
+        {aplicavel ? (
+          <BulkSelectionCheckbox
+            label={`Aplicar ${linha.rotulo}`}
+            checked={marcada}
+            onChange={onAlternar}
+          />
+        ) : (
+          <span className="sr-only">{`${linha.rotulo}: ${recado}`}</span>
+        )}
+      </td>
+      <td className="col-flex" data-label="Campo">
+        {linha.rotulo}
+      </td>
+      <td className="col-flex" data-label="Atual">
+        {linha.atual.trim() === "" ? "—" : linha.atual}
+      </td>
+      <td className="col-flex" data-label="Retornado">
+        {/* O valor SEMPRE aparece quando a fonte informou — inclusive quando
+            não dá para aplicar. Esconder o que a fonte disse deixaria a pessoa
+            sem saber o que ela está deixando de usar. */}
+        {linha.situacao === "sem_valor" ? (
+          <span className="cell-sub">{recado}</span>
+        ) : (
+          <>
+            <div>{linha.retornado}</div>
+            {!aplicavel && (
+              <div className="cell-sub" id={idDoMotivo}>
+                {recado}
+              </div>
+            )}
+          </>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+/** Cabeçalho das duas tabelas: a coluna do retorno leva o nome da fonte. */
+function CabecalhoDaComparacao({ fonte }: { fonte: string }) {
+  return (
+    <thead>
+      <tr>
+        <th className="table__select table__select--bulk">
+          <span className="sr-only">Aplicar</span>
+        </th>
+        <th className="col-flex">Campo</th>
+        <th className="col-flex">Atual</th>
+        <th className="col-flex">{fonte}</th>
+      </tr>
+    </thead>
+  );
 }
 
 export function CnpjLookupDialog({
   cnpj,
   valoresAtuais,
+  dadosDoCnpjAtuais,
   onClose,
   onApply,
 }: {
@@ -82,9 +150,14 @@ export function CnpjLookupDialog({
   cnpj: string;
   /** O estado do FORMULÁRIO agora — não o registro salvo (§8 do handoff). */
   valoresAtuais: ValoresDoFormulario;
+  /**
+   * Os dados cadastrais que o formulário tem para ESTE CNPJ — `null` quando
+   * não há, ou quando os que havia eram do CNPJ anterior e foram descartados.
+   */
+  dadosDoCnpjAtuais: CustomerCnpjRegistration | null;
   onClose: () => void;
-  /** Recebe só os campos marcados. Quem hospeda escreve no formulário. */
-  onApply: (valores: Partial<ValoresDoFormulario>) => void;
+  /** Recebe os campos marcados e o bloco dos dados cadastrais. Quem hospeda escreve no formulário. */
+  onApply: (aplicacao: AplicacaoDaConsultaDeCnpj) => void;
 }) {
   const idBase = useId();
   const [provider, setProvider] = useState<CnpjLookupProvider>(DEFAULT_CNPJ_LOOKUP_PROVIDER);
@@ -93,6 +166,10 @@ export function CnpjLookupDialog({
   const [resultado, setResultado] = useState<CnpjLookupResult | null>(null);
   const [linhas, setLinhas] = useState<LinhaDaComparacao[]>([]);
   const [marcados, setMarcados] = useState<ReadonlySet<CampoDaConsultaDeCnpj>>(() => new Set());
+  const [linhasDosDados, setLinhasDosDados] = useState<LinhaDosDadosDoCnpj[]>([]);
+  const [dadosMarcados, setDadosMarcados] = useState<ReadonlySet<CnpjRegistrationField>>(
+    () => new Set(),
+  );
 
   const consultando = situacao.tipo === "consultando";
   const fonte = CNPJ_LOOKUP_PROVIDER_LABELS[provider];
@@ -112,28 +189,44 @@ export function CnpjLookupDialog({
     }
 
     const comparacao = compararComOCadastro(valoresAtuais, desfecho.result.company);
+    const comparacaoDosDados = compararDadosDoCnpj(dadosDoCnpjAtuais, desfecho.result.company);
     setResultado(desfecho.result);
     setLinhas(comparacao);
     setMarcados(selecaoInicial(comparacao));
+    setLinhasDosDados(comparacaoDosDados);
+    setDadosMarcados(selecaoInicialDosDadosDoCnpj(comparacaoDosDados));
     setSituacao({ tipo: "parado" });
     setEtapa("resultado");
   }
 
-  function alternar(campo: CampoDaConsultaDeCnpj) {
-    setMarcados((atual) => {
+  function alternar<T>(campo: T) {
+    return (atual: ReadonlySet<T>) => {
       const proximo = new Set(atual);
       if (proximo.has(campo)) proximo.delete(campo);
       else proximo.add(campo);
       return proximo;
-    });
+    };
   }
 
   function aplicar() {
-    onApply(valoresParaAplicar(linhas, marcados));
+    if (!resultado) return;
+    onApply({
+      valores: valoresParaAplicar(linhas, marcados),
+      dadosDoCnpj: dadosDoCnpjParaAplicar(
+        dadosDoCnpjAtuais,
+        resultado,
+        linhasDosDados,
+        dadosMarcados,
+      ),
+      cnpj: resultado.cnpj,
+    });
   }
 
-  const aplicaveis = linhas.filter((linha) => linha.situacao === "aplicavel");
-  const nenhumaDiferenca = etapa === "resultado" && aplicaveis.length === 0;
+  const aplicaveis =
+    linhas.filter((linha) => linha.situacao === "aplicavel").length +
+    linhasDosDados.filter((linha) => linha.situacao === "aplicavel").length;
+  const totalMarcado = marcados.size + dadosMarcados.size;
+  const nenhumaDiferenca = etapa === "resultado" && aplicaveis === 0;
   const idDoMotivo = (campo: string) => `${idBase}-motivo-${campo}`;
 
   const rodape =
@@ -160,20 +253,17 @@ export function CnpjLookupDialog({
       <>
         <span className="modal-fullscreen__foot-meta">
           {nenhumaDiferenca
-            ? "Nada a aplicar."
-            : `${marcados.size} de ${aplicaveis.length} ${aplicaveis.length === 1 ? "diferença marcada" : "diferenças marcadas"}. Depois de aplicar, salve o cadastro.`}
+            ? "Nenhuma diferença. Aplicar registra a data desta consulta; depois, salve o cadastro."
+            : `${totalMarcado} de ${aplicaveis} ${aplicaveis === 1 ? "diferença marcada" : "diferenças marcadas"}. Depois de aplicar, salve o cadastro.`}
         </span>
         <div className="modal-fullscreen__actions">
           <button type="button" className="btn btn--ghost" onClick={onClose}>
             Cancelar
           </button>
-          <button
-            type="button"
-            className="btn btn--accent"
-            onClick={aplicar}
-            disabled={marcados.size === 0}
-          >
-            Aplicar selecionados
+          {/* Sempre disponível no resultado: aplicar sem diferença nenhuma
+              ainda registra que os dados foram revistos nesta data. */}
+          <button type="button" className="btn btn--accent" onClick={aplicar}>
+            Aplicar consulta ao cadastro
           </button>
         </div>
       </>
@@ -248,93 +338,49 @@ export function CnpjLookupDialog({
 
             <div className="table-container">
               <table className="table table--cnpj-lookup">
-                <thead>
-                  <tr>
-                    <th className="table__select table__select--bulk">
-                      <span className="sr-only">Aplicar</span>
-                    </th>
-                    <th className="col-flex">Campo</th>
-                    <th className="col-flex">Atual</th>
-                    <th className="col-flex">
-                      {CNPJ_LOOKUP_PROVIDER_LABELS[resultado.provider]}
-                    </th>
-                  </tr>
-                </thead>
+                <CabecalhoDaComparacao fonte={CNPJ_LOOKUP_PROVIDER_LABELS[resultado.provider]} />
                 <tbody>
-                  {linhas.map((linha) => {
-                    const aplicavel = linha.situacao === "aplicavel";
-                    const recado = recadoDaLinha(linha);
-                    return (
-                      <tr key={linha.campo}>
-                        <td className="table__select table__select--bulk">
-                          {aplicavel ? (
-                            <BulkSelectionCheckbox
-                              label={`Aplicar ${linha.rotulo}`}
-                              checked={marcados.has(linha.campo)}
-                              onChange={() => alternar(linha.campo)}
-                            />
-                          ) : (
-                            <span className="sr-only">
-                              {`${linha.rotulo}: ${recado}`}
-                            </span>
-                          )}
-                        </td>
-                        <td className="col-flex" data-label="Campo">
-                          {linha.rotulo}
-                        </td>
-                        <td className="col-flex" data-label="Atual">
-                          {linha.atual.trim() === "" ? "—" : linha.atual}
-                        </td>
-                        <td className="col-flex" data-label="Retornado">
-                          {/* O valor SEMPRE aparece quando a fonte informou —
-                              inclusive quando não dá para aplicar. Esconder o
-                              que a fonte disse deixaria a pessoa sem saber o
-                              que ela está deixando de usar. */}
-                          {linha.situacao === "sem_valor" ? (
-                            <span className="cell-sub">{recado}</span>
-                          ) : (
-                            <>
-                              <div>{linha.retornado}</div>
-                              {!aplicavel && (
-                                <div className="cell-sub" id={idDoMotivo(linha.campo)}>
-                                  {recado}
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {linhas.map((linha) => (
+                    <LinhaDaTabela
+                      key={linha.campo}
+                      linha={linha}
+                      marcada={marcados.has(linha.campo)}
+                      onAlternar={() => setMarcados(alternar(linha.campo))}
+                      idDoMotivo={idDoMotivo(linha.campo)}
+                    />
+                  ))}
                 </tbody>
               </table>
             </div>
 
-            {informacaoComplementar(resultado).length > 0 && (
-              <section className="cnpj-lookup__complemento">
-                <h3 className="cnpj-lookup__complemento-titulo">
-                  Outras informações da fonte
-                </h3>
-                {/* Não viram campo do Cliente: o perfil tributário continua
-                    sendo classificação informada pela Veridi, nunca deduzida
-                    do CNAE, do porte ou da natureza jurídica. */}
-                {/* `dt`/`dd` são filhos DIRETOS: a `.definition-list` é um grid
-                    de duas colunas sobre eles, e um `<div>` no meio desmonta
-                    o alinhamento rótulo × valor. */}
-                <dl className="definition-list">
-                  {informacaoComplementar(resultado).map(([rotulo, valor]) => (
-                    <Fragment key={rotulo}>
-                      <dt>{rotulo}</dt>
-                      <dd>{valor}</dd>
-                    </Fragment>
-                  ))}
-                </dl>
-                <p className="field__hint">
-                  Informativo. Estes dados não preenchem campos do cadastro e não definem
-                  o perfil tributário.
-                </p>
-              </section>
-            )}
+            {/* Os dados cadastrais do CNPJ (§119) ficam guardados no Cliente
+                ao salvar, com a data desta consulta. Mesmas regras da tabela
+                de cima — e nenhum deles define o perfil tributário (§83). */}
+            <section className="cnpj-lookup__complemento">
+              <h3 className="cnpj-lookup__complemento-titulo">Dados cadastrais do CNPJ</h3>
+              <div className="table-container">
+                <table className="table table--cnpj-lookup">
+                  <CabecalhoDaComparacao
+                    fonte={CNPJ_LOOKUP_PROVIDER_LABELS[resultado.provider]}
+                  />
+                  <tbody>
+                    {linhasDosDados.map((linha) => (
+                      <LinhaDaTabela
+                        key={linha.campo}
+                        linha={linha}
+                        marcada={dadosMarcados.has(linha.campo)}
+                        onAlternar={() => setDadosMarcados(alternar(linha.campo))}
+                        idDoMotivo={idDoMotivo(linha.campo)}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="field__hint">
+                Ficam registrados no cadastro, com a data desta consulta, quando você salvar.
+                Não definem o perfil tributário.
+              </p>
+            </section>
           </>
         )}
       </div>

@@ -42,6 +42,7 @@ function cliente(overrides: Partial<CustomerDTO> = {}): CustomerDTO {
     email: null,
     phone: null,
     taxProfile: "NOT_INFORMED",
+    cnpjRegistration: null,
     street: null,
     number: null,
     complement: null,

@@ -45,6 +45,7 @@ function cliente(overrides: Partial<CustomerDTO> = {}): CustomerDTO {
     email: "contato@igeia.com.br",
     phone: "11999998888",
     taxProfile: "NOT_INFORMED",
+    cnpjRegistration: null,
     street: "Rua das Acácias",
     number: "158",
     complement: "Sala 2",

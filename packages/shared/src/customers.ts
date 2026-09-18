@@ -1,5 +1,6 @@
 /** Contratos do módulo de Clientes, consumidos por `apps/api` e `apps/web`. */
 
+import type { CnpjLookupCompany, CnpjRegistrationField } from "./cnpj-lookup.js";
 import type { CustomerCommercialStatusDTO } from "./customer-commercial-status.js";
 import type { CustomerBlockDTO, CustomerStatus } from "./customer-status.js";
 import type { CustomerPaymentDefaultsDTO, PaymentInstrument } from "./payment.js";
@@ -59,8 +60,9 @@ export const CUSTOMER_EDIT_ROLES: readonly UserRole[] = ["COMMERCIAL", "ADMIN"];
  * modelos compatíveis — nunca para determinar imposto.
  *
  * A consulta assistida de CNPJ (CUSTOMER-CNPJ-LOOKUP-01, §111) não muda isto:
- * este campo não está entre os que ela oferece para aplicar, e porte, CNAE e
- * natureza jurídica aparecem lá só como informação complementar.
+ * este campo não está entre os que ela oferece para aplicar. Porte, CNAE,
+ * natureza jurídica, Simples e MEI ficam guardados como dados cadastrais do
+ * CNPJ (`CustomerCnpjRegistration`, §119) e nenhum deles define o perfil.
  *
  * `NOT_INFORMED` é o estado explícito de "não definido": o campo nunca é
  * `null`, e retirar uma classificação é escolher "Não informado" de novo. MEI
@@ -108,6 +110,34 @@ export interface CustomerAddress {
 }
 
 /**
+ * Dados cadastrais do CNPJ — CUSTOMER-CNPJ-PERSISTED-DATA-01, §119.
+ *
+ * O retrato que uma consulta de CNPJ APLICADA e SALVA deixou no Cliente: CNAE,
+ * natureza jurídica, porte, abertura, matriz/filial, Simples, MEI e situação
+ * na Receita, com o instante da consulta. É um BLOCO: nasce inteiro de uma
+ * consulta, é trocado inteiro pela seguinte, e pertence ao CNPJ que o Cliente
+ * tem — trocar o CNPJ o descarta.
+ *
+ * Os campos têm os mesmos nomes e tipos do contrato da consulta, e a mesma
+ * leitura de `null`: não informado pela fonte. Simples e MEI `null` NÃO são
+ * "Não". Nada aqui define o perfil tributário (§83).
+ */
+export type CustomerCnpjRegistration = Pick<CnpjLookupCompany, CnpjRegistrationField> & {
+  /** Instante da consulta aplicada (o `consultedAt` do resultado) — a "Última consulta CNPJ". */
+  consultedAt: string;
+};
+
+/**
+ * O bloco no corpo do POST/PATCH do Cliente: os dados e o CNPJ que foi
+ * consultado. O servidor recusa o bloco cujo CNPJ não é o que o Cliente terá
+ * depois da gravação — dado cadastral de um CNPJ não fica guardado sob outro.
+ */
+export interface CustomerCnpjRegistrationInput extends CustomerCnpjRegistration {
+  /** CNPJ consultado, normalizado (o `cnpj` do resultado da consulta). */
+  cnpj: string;
+}
+
+/**
  * O Cliente carrega o pagamento padrão (`CustomerPaymentDefaultsDTO`, seis
  * campos, todos `null` quando não informado) — sugestão para novos orçamentos.
  */
@@ -121,6 +151,11 @@ export interface CustomerDTO extends CustomerPaymentDefaultsDTO {
   phone: string | null;
   /** Nunca `null`: sem classificação é `NOT_INFORMED` (§83). */
   taxProfile: CustomerTaxProfile;
+  /**
+   * Dados cadastrais do CNPJ (§119) — sempre do `cnpj` acima. `null` quando
+   * nenhuma consulta foi aplicada e salva para ele.
+   */
+  cnpjRegistration: CustomerCnpjRegistration | null;
   street: string | null;
   number: string | null;
   complement: string | null;
@@ -175,6 +210,8 @@ export interface CreateCustomerInput {
   phone?: string;
   /** Ausente vira `NOT_INFORMED`. `null` é recusado — não existe "limpar". */
   taxProfile?: CustomerTaxProfile;
+  /** Consulta de CNPJ aplicada (§119). Ausente ou `null`: sem dados cadastrais do CNPJ. */
+  cnpjRegistration?: CustomerCnpjRegistrationInput | null;
   street?: string;
   number?: string;
   complement?: string;
@@ -215,6 +252,12 @@ export interface UpdateCustomerInput {
   phone?: string;
   /** Ausente não mexe no perfil gravado. */
   taxProfile?: CustomerTaxProfile;
+  /**
+   * Dados cadastrais do CNPJ (§119), como bloco: objeto troca o bloco inteiro,
+   * `null` limpa. Ausente não mexe — salvo quando o `cnpj` muda, e aí o bloco
+   * do CNPJ anterior é descartado.
+   */
+  cnpjRegistration?: CustomerCnpjRegistrationInput | null;
   street?: string;
   number?: string;
   complement?: string;

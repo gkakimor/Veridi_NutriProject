@@ -73,6 +73,7 @@ const customer: CustomerDTO = {
   email: "contato@vidasaudavel.com.br",
   phone: "11999998888",
   taxProfile: "SIMPLES_NACIONAL",
+  cnpjRegistration: null,
   street: "Rua das Acácias",
   number: "158",
   complement: null,

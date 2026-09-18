@@ -38,26 +38,78 @@ export const CNPJ_LOOKUP_PROVIDER_LABELS: Record<CnpjLookupProvider, string> = {
 export const DEFAULT_CNPJ_LOOKUP_PROVIDER: CnpjLookupProvider = "OPEN_CNPJ";
 
 /**
+ * Matriz ou filial — o estabelecimento a que o CNPJ consultado pertence
+ * (CUSTOMER-CNPJ-PERSISTED-DATA-01). Conceito da Receita, não de um provedor:
+ * o adaptador traduz o que a fonte escreve para um destes valores, e o que
+ * ele não souber traduzir com segurança fica `null`.
+ */
+export const CNPJ_ESTABLISHMENT_TYPES = ["HEADQUARTERS", "BRANCH"] as const;
+
+export type CnpjEstablishmentType = (typeof CNPJ_ESTABLISHMENT_TYPES)[number];
+
+export const CNPJ_ESTABLISHMENT_TYPE_LABELS: Record<CnpjEstablishmentType, string> = {
+  HEADQUARTERS: "Matriz",
+  BRANCH: "Filial",
+};
+
+/**
+ * Teto dos textos cadastrais do CNPJ que o Cliente guarda.
+ *
+ * Um número em dois lugares: o adaptador descarta (vira `null`) o texto da
+ * fonte acima do teto — não dá para interpretá-lo com segurança, e cortar
+ * seria reescrever o dado em silêncio —, e o Zod do Cliente recusa o mesmo
+ * teto. O que a consulta devolve, portanto, sempre cabe no cadastro.
+ */
+export const CNPJ_REGISTRATION_TEXT_MAX_LENGTHS = {
+  mainCnaeDescription: 300,
+  legalNature: 300,
+  companySize: 100,
+  registrationStatus: 100,
+} as const;
+
+/** CNAE subclasse: sete dígitos, guardados sem máscara. */
+export const CNAE_CODE_PATTERN = /^\d{7}$/;
+
+/** `1099699` → `1099-6/99`, a máscara usual da subclasse CNAE. Outro formato passa como está. */
+export function formatCnaeCode(code: string | null | undefined): string | null {
+  if (!code) return null;
+  return CNAE_CODE_PATTERN.test(code)
+    ? `${code.slice(0, 4)}-${code.slice(4, 5)}/${code.slice(5)}`
+    : code;
+}
+
+/**
  * Os dados cadastrais que a consulta devolve, já normalizados.
  *
- * Todo campo é `string | null`: fonte pública tem buraco, e `null` significa
- * "a fonte não informou". Campo nulo NUNCA vira substituição — valor vazio do
- * provedor não apaga valor existente no cadastro (regra de ouro desta
- * capacidade).
+ * Texto é `string | null`; Simples e MEI são `boolean | null`; matriz/filial é
+ * o enum acima ou `null`. Em todos, `null` significa "a fonte não informou" —
+ * ou informou algo que não se interpreta com segurança. **`null` nunca é
+ * `false`**: "não informado" no Simples não quer dizer "não optante". Campo
+ * nulo NUNCA vira substituição — valor vazio do provedor não apaga valor
+ * existente no cadastro (regra de ouro desta capacidade).
  *
  * `postalCode` trafega só com dígitos, como o `zipCode` do Cliente.
  * `phone` trafega só com dígitos (DDD + número), como o `phone` do Cliente.
- * `openedAt` é `YYYY-MM-DD`.
+ * `openedAt` e `registrationStatusDate` são dias civis `YYYY-MM-DD` existentes.
+ * `mainCnaeCode` são os sete dígitos da subclasse, sem máscara.
  */
 export interface CnpjLookupCompany {
   /** Razão social. */
   legalName: string | null;
   /** Nome fantasia. */
   tradeName: string | null;
-  /** Situação cadastral na fonte ("Ativa", "Baixada"…). Informativo: não vira campo do Cliente. */
+  /** Situação cadastral na Receita ("Ativa", "Baixada"…). */
   registrationStatus: string | null;
-  /** Data de início de atividade, `YYYY-MM-DD`. Informativo. */
+  /** Data da situação cadastral, `YYYY-MM-DD`. */
+  registrationStatusDate: string | null;
+  /** Data de início de atividade (abertura), `YYYY-MM-DD`. */
   openedAt: string | null;
+  /** Matriz ou filial. */
+  establishmentType: CnpjEstablishmentType | null;
+  /** Optante pelo Simples Nacional: `true` Sim, `false` Não, `null` não informado. */
+  simplesOptIn: boolean | null;
+  /** Optante pelo MEI (SIMEI): `true` Sim, `false` Não, `null` não informado. */
+  meiOptIn: boolean | null;
   postalCode: string | null;
   street: string | null;
   number: string | null;
@@ -68,14 +120,34 @@ export interface CnpjLookupCompany {
   state: string | null;
   phone: string | null;
   email: string | null;
-  /** CNAE principal. Informativo — o Veridi não classifica nada por CNAE. */
+  /** CNAE principal. O Veridi não classifica nada por CNAE. */
   mainCnaeCode: string | null;
   mainCnaeDescription: string | null;
-  /** Natureza jurídica. Informativo. */
+  /** Natureza jurídica. */
   legalNature: string | null;
-  /** Porte declarado na fonte. Informativo — não é o perfil tributário (§83). */
+  /** Porte declarado na fonte — não é o perfil tributário (§83). */
   companySize: string | null;
 }
+
+/**
+ * Os campos da consulta que o Cliente GUARDA como dados cadastrais do CNPJ
+ * (CUSTOMER-CNPJ-PERSISTED-DATA-01). Os demais — razão social, endereço,
+ * contato — preenchem os campos comerciais de sempre.
+ */
+export const CNPJ_REGISTRATION_FIELDS = [
+  "mainCnaeCode",
+  "mainCnaeDescription",
+  "legalNature",
+  "companySize",
+  "openedAt",
+  "establishmentType",
+  "simplesOptIn",
+  "meiOptIn",
+  "registrationStatus",
+  "registrationStatusDate",
+] as const satisfies readonly (keyof CnpjLookupCompany)[];
+
+export type CnpjRegistrationField = (typeof CNPJ_REGISTRATION_FIELDS)[number];
 
 /** A resposta da consulta: de onde veio, quando, sobre qual CNPJ, e o quê. */
 export interface CnpjLookupResult {

@@ -1,5 +1,11 @@
-import type { CnpjLookupCompany } from "@veridi/shared";
-import { isValidBrPhone, normalizePhone } from "@veridi/shared";
+import type { CnpjEstablishmentType, CnpjLookupCompany } from "@veridi/shared";
+import {
+  CNAE_CODE_PATTERN,
+  CNPJ_REGISTRATION_TEXT_MAX_LENGTHS,
+  ehDiaCivil,
+  isValidBrPhone,
+  normalizePhone,
+} from "@veridi/shared";
 import { CnpjNotFoundError, CnpjLookupUnavailableError } from "./cnpj-lookup.errors.js";
 import type { CnpjLookupProviderAdapter } from "./cnpj-lookup.provider.js";
 
@@ -20,11 +26,26 @@ import type { CnpjLookupProviderAdapter } from "./cnpj-lookup.provider.js";
  *   cota fixa para consulta pontual por CNPJ, que é exatamente este uso —
  *   uma consulta por clique, dentro do cadastro.
  *
+ * Chaves dos dados cadastrais (CUSTOMER-CNPJ-PERSISTED-DATA-01), conferidas no
+ * mesmo JSON Schema em 2026-09-17 — todas `required`, todas `string`, e todas
+ * podem vir vazias:
+ *
+ * - `matriz_filial` — exemplos `"Matriz"`, `"Filial"`;
+ * - `opcao_simples` e `opcao_mei` — uma letra, exemplos `"S"`, `"N"`, `""`;
+ * - `situacao_cadastral` — `"Nula"`, `"Ativa"`, `"Suspensa"`, `"Inapta"`,
+ *   `"Baixada"`, com outros valores possíveis como fallback;
+ * - `data_situacao_cadastral` e `data_inicio_atividade` — `YYYY-MM-DD` ou `""`;
+ * - `porte_empresa` — `"Não informado"`, `"Microempresa (ME)"`, `"Empresa de
+ *   Pequeno Porte (EPP)"`, `"Demais"`;
+ * - `cnae_principal` — sete dígitos ou `""`; `natureza_juridica` — texto.
+ *
  * O OpenCNPJ publica dados PÚBLICOS PROCESSADOS em releases. Ele mesmo diz
  * que não substitui validação jurídica nem consulta oficial em tempo real, e
  * é assim que a tela o apresenta.
  *
- * Nada do payload cru sai daqui: quem chama recebe `CnpjLookupCompany`.
+ * Nada do payload cru sai daqui: quem chama recebe `CnpjLookupCompany`. O que
+ * não se interpreta com segurança — letra fora de S/N, data inexistente, texto
+ * acima do teto do cadastro — vira `null`, nunca um palpite.
  */
 
 const OPEN_CNPJ_BASE_URL = "https://api.opencnpj.org";
@@ -93,6 +114,59 @@ function texto(valor: unknown): string | null {
   return limpo.length === 0 ? null : limpo;
 }
 
+/** Texto com teto: acima dele não é dado que se guarde sem cortar — e cortar é reescrever. */
+function textoComTeto(valor: unknown, teto: number): string | null {
+  const limpo = texto(valor);
+  return limpo !== null && limpo.length <= teto ? limpo : null;
+}
+
+/** Forma de comparação de uma palavra da fonte: sem acento, sem caixa. */
+function palavra(valor: unknown): string | null {
+  const limpo = texto(valor);
+  return limpo === null ? null : limpo.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
+}
+
+/**
+ * `S`/`N` da Receita. `null` é "não informado" e NÃO é `false`: a letra vazia
+ * não diz que a empresa deixou de optar, diz que a fonte não sabe.
+ */
+function simOuNao(valor: unknown): boolean | null {
+  const letra = palavra(valor);
+  if (letra === "S") return true;
+  if (letra === "N") return false;
+  return null;
+}
+
+/** Só os dois valores que o schema documenta; o resto não é adivinhado. */
+function matrizOuFilial(valor: unknown): CnpjEstablishmentType | null {
+  const tipo = palavra(valor);
+  if (tipo === "MATRIZ") return "HEADQUARTERS";
+  if (tipo === "FILIAL") return "BRANCH";
+  return null;
+}
+
+/** Dia civil `YYYY-MM-DD` que existe no calendário — `2024-02-30` não é dado, é ruído. */
+function diaCivilDaFonte(valor: unknown): string | null {
+  const limpo = texto(valor);
+  return limpo !== null && ehDiaCivil(limpo) ? limpo : null;
+}
+
+/** Os sete dígitos da subclasse CNAE; a máscara (`1099-6/99`) sai, o resto é recusado. */
+function codigoCnae(valor: unknown): string | null {
+  const limpo = texto(valor)?.replace(/[.\-/\s]/g, "") ?? null;
+  return limpo !== null && CNAE_CODE_PATTERN.test(limpo) ? limpo : null;
+}
+
+/**
+ * Porte. "Não informado" é o código 00 da Receita — a ausência do dado escrita
+ * por extenso. Guardá-lo como valor faria uma consulta sem porte parecer uma
+ * informação nova, e substituir o porte que o cadastro já tinha.
+ */
+function porte(valor: unknown): string | null {
+  if (palavra(valor) === "NAO INFORMADO") return null;
+  return textoComTeto(valor, CNPJ_REGISTRATION_TEXT_MAX_LENGTHS.companySize);
+}
+
 /**
  * Logradouro completo: o OpenCNPJ guarda o tipo separado do nome, como a base
  * da Receita — `AVENIDA` + `REPUBLICA DO CHILE`. Juntar é reconstruir o
@@ -128,8 +202,8 @@ function telefonePrincipal(valor: unknown): string | null {
  *
  * Vem de `cnaes[]`, que o payload real traz mas o schema publicado NÃO
  * declara (`additionalProperties: true`). Por isso é melhor-esforço puro: a
- * ausência não estraga nada, porque o CNAE é informação complementar e não
- * preenche campo nenhum do Cliente.
+ * ausência não estraga nada — o código segue sem a descrição, e descrição
+ * vazia da fonte nunca apaga a que o cadastro já guarda (§119).
  */
 function descricaoDoCnaePrincipal(valor: unknown, codigoPrincipal: string | null): string | null {
   if (!Array.isArray(valor)) return null;
@@ -138,8 +212,10 @@ function descricaoDoCnaePrincipal(valor: unknown, codigoPrincipal: string | null
     const registro = entrada as Record<string, unknown>;
     const ehPrincipal =
       registro["is_principal"] === true ||
-      (codigoPrincipal !== null && texto(registro["codigo"]) === codigoPrincipal);
-    if (ehPrincipal) return texto(registro["descricao"]);
+      (codigoPrincipal !== null && codigoCnae(registro["codigo"]) === codigoPrincipal);
+    if (ehPrincipal) {
+      return textoComTeto(registro["descricao"], CNPJ_REGISTRATION_TEXT_MAX_LENGTHS.mainCnaeDescription);
+    }
   }
   return null;
 }
@@ -152,13 +228,20 @@ export function normalizarRespostaDoOpenCnpj(payload: unknown): CnpjLookupCompan
   const bruto = payload as Record<string, unknown>;
 
   const uf = texto(bruto["uf"]);
-  const cnaePrincipal = texto(bruto["cnae_principal"]);
+  const cnaePrincipal = codigoCnae(bruto["cnae_principal"]);
 
   return {
     legalName: texto(bruto["razao_social"]),
     tradeName: texto(bruto["nome_fantasia"]),
-    registrationStatus: texto(bruto["situacao_cadastral"]),
-    openedAt: texto(bruto["data_inicio_atividade"]),
+    registrationStatus: textoComTeto(
+      bruto["situacao_cadastral"],
+      CNPJ_REGISTRATION_TEXT_MAX_LENGTHS.registrationStatus,
+    ),
+    registrationStatusDate: diaCivilDaFonte(bruto["data_situacao_cadastral"]),
+    openedAt: diaCivilDaFonte(bruto["data_inicio_atividade"]),
+    establishmentType: matrizOuFilial(bruto["matriz_filial"]),
+    simplesOptIn: simOuNao(bruto["opcao_simples"]),
+    meiOptIn: simOuNao(bruto["opcao_mei"]),
     // O Cliente guarda o CEP só com dígitos; a máscara é da tela.
     postalCode: texto((texto(bruto["cep"]) ?? "").replace(/\D/g, "")),
     street: logradouroCompleto(texto(bruto["tipo_logradouro"]), texto(bruto["logradouro"])),
@@ -171,8 +254,8 @@ export function normalizarRespostaDoOpenCnpj(payload: unknown): CnpjLookupCompan
     email: texto(bruto["email"]),
     mainCnaeCode: cnaePrincipal,
     mainCnaeDescription: descricaoDoCnaePrincipal(bruto["cnaes"], cnaePrincipal),
-    legalNature: texto(bruto["natureza_juridica"]),
-    companySize: texto(bruto["porte_empresa"]),
+    legalNature: textoComTeto(bruto["natureza_juridica"], CNPJ_REGISTRATION_TEXT_MAX_LENGTHS.legalNature),
+    companySize: porte(bruto["porte_empresa"]),
   };
 }
 

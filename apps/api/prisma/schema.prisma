@@ -2416,6 +2416,13 @@ enum CustomerTaxProfile {
   OTHER
 }
 
+/// Matriz ou filial do CNPJ consultado (PRODUCT_RULES §119). So existe como
+/// dado cadastral do CNPJ no Cliente; NULL = a fonte nao informou.
+enum CnpjEstablishmentType {
+  HEADQUARTERS
+  BRANCH
+}
+
 /// Cliente. Cadastro base: sem CRM, tabela de preco ou pedido neste momento.
 model Customer {
   id String @id @default(uuid())
@@ -2438,6 +2445,27 @@ model Customer {
   /// recebem quando a coluna nasce, e o que ganha quem cria sem informar —
   /// importador legado inclusive.
   taxProfile CustomerTaxProfile @default(NOT_INFORMED)
+
+  /// DADOS CADASTRAIS DO CNPJ (PRODUCT_RULES §119) — o retrato que a consulta
+  /// de CNPJ APLICADA e SALVA deixou. Bloco: gravado inteiro a partir de uma
+  /// consulta, trocado inteiro pela seguinte e descartado (tudo NULL) quando o
+  /// `cnpj` muda — pertence sempre ao `cnpj` desta linha. Consultar nao grava
+  /// nada; so o POST/PATCH do cadastro grava. NULL = nao informado pela fonte
+  /// (Simples/MEI NULL nao e "Nao"). `cnpjLastConsultedAt` NULL = nenhuma
+  /// consulta aplicada, e ai o bloco inteiro e NULL. Nada daqui define
+  /// `taxProfile` (§83). Datas de abertura e da situacao sao DATA CIVIL
+  /// guardada como a meia-noite UTC que marca o dia.
+  cnpjMainCnaeCode           String?
+  cnpjMainCnaeDescription    String?
+  cnpjLegalNature            String?
+  cnpjCompanySize            String?
+  cnpjOpenedAt               DateTime?
+  cnpjEstablishmentType      CnpjEstablishmentType?
+  cnpjSimplesOptIn           Boolean?
+  cnpjMeiOptIn               Boolean?
+  cnpjRegistrationStatus     String?
+  cnpjRegistrationStatusDate DateTime?
+  cnpjLastConsultedAt        DateTime?
 
   /// Codigo do sistema legado (planilhas). Serve para importacao e
   /// reconciliacao — NUNCA substitui `code`, que continua sendo a

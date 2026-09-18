@@ -54,6 +54,7 @@ const CLIENTE: CustomerDTO = {
   email: "compras@igeia.com.br",
   phone: "11987654321",
   taxProfile: "LUCRO_PRESUMIDO",
+  cnpjRegistration: null,
   street: "Avenida Paulista",
   number: "1000",
   complement: null,

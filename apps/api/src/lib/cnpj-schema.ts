@@ -40,6 +40,29 @@ export const optionalCnpjSchema = z
   });
 
 /**
+ * CNPJ obrigatório, com a MESMA normalização e validação do opcional acima —
+ * usado onde o número identifica algo que não existe sem ele (o CNPJ a que os
+ * dados cadastrais do Cliente pertencem, §119).
+ */
+export const requiredCnpjSchema = z
+  .string({ required_error: "CNPJ é obrigatório", invalid_type_error: "CNPJ é obrigatório" })
+  .trim()
+  .max(30)
+  .transform((value) => normalizeCnpj(value))
+  .superRefine((value, ctx) => {
+    if (value.length !== CNPJ_LENGTH) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `CNPJ deve conter ${CNPJ_LENGTH} caracteres`,
+      });
+      return;
+    }
+    if (!isValidCnpj(value)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "CNPJ inválido" });
+    }
+  });
+
+/**
  * Texto opcional: campo ausente não muda nada; string vazia **e `null`**
  * limpam o campo. Os formulários enviam `null` para "não preenchido" — sem
  * aceitar `null` aqui, deixar um campo opcional em branco derruba o salvamento

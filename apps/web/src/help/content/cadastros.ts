@@ -286,6 +286,10 @@ export const cadastrosTopics = {
         text: "Com o CNPJ preenchido e consistente, o botão consulta uma base pública de dados empresariais (hoje, OpenCNPJ) e mostra o que ela devolveu ao lado do que está na tela, campo a campo. Você marca o que quer aproveitar, aplica ao formulário e salva normalmente — a consulta não grava nada sozinha, não valida a empresa juridicamente e não define o perfil tributário. Campo que a fonte não informou nunca apaga o que já estava preenchido, e se a consulta falhar o cadastro manual continua inteiro.",
       },
       {
+        term: "Dados cadastrais do CNPJ",
+        text: "CNAE principal, natureza jurídica, porte, abertura, matriz ou filial, Simples, MEI e situação na Receita, com a data da última consulta. Vêm da consulta aplicada e ficam registrados só ao salvar — aplicar sem nenhuma diferença ainda registra a data. Na tela são somente leitura: atualizam por nova consulta. Simples e MEI dizem Sim, Não ou Não informado, e não informado não é Não. Trocar o CNPJ descarta os dados do número anterior; consulte o novo. Nenhum deles define o perfil tributário.",
+      },
+      {
         term: "Perfil tributário",
         text: "Classificação informada pela empresa: Não informado, MEI, Simples Nacional, Lucro Presumido, Lucro Real ou Outro. Não calcula impostos, não é deduzida do CNPJ e não bloqueia projeto, orçamento, pedido nem faturamento. Quem não escolhe fica como Não informado, e retirar uma classificação é escolher Não informado de novo.",
       },
@@ -310,7 +314,7 @@ export const cadastrosTopics = {
       {
         label: "Identificação",
         detail:
-          "Razão social é obrigatória. CNPJ, nome fantasia e perfil tributário entram aqui, e o código é gerado pelo sistema.",
+          "Razão social é obrigatória. CNPJ, nome fantasia e perfil tributário entram aqui, e o código é gerado pelo sistema. Logo abaixo, os dados cadastrais do CNPJ, preenchidos pela consulta.",
       },
       {
         label: "Contato e endereço",
