@@ -6357,6 +6357,11 @@ rebaixar). Vizinhos `auth.test.ts`, `users-booleanos-de-consulta.test.ts` e `fai
 `usuarios-guarda-do-administrador.test.tsx` (9), com `pages/admin` e os portões da ajuda (231). Typecheck de API e Web;
 shared intocado. Sem suíte completa, E2E, Playwright nem mutação.
 
+**Correção logo depois (2026-09-18).** O merge `ad1703d7` guardava o total da lista num `useState` próprio (`setTotal`),
+e o portão `listas-sem-consulta-solta.test.ts` — que não estava no conjunto focado — caiu na `main`, apontado pela sessão
+de PRODUCTION-PROFILE-ARCHIVE-01. A tela passou a guardar a resposta da lista inteira, e a guarda conta os ADMIN ativos
+dela. Conferido com o portão, `pages/admin`, a ajuda e os portões que varrem o `src` inteiro (349) e o typecheck da Web.
+
 ## Roteiro de Produção arquivável (PRODUCTION-PROFILE-ARCHIVE-01, 2026-09-17)
 
 **Decisão do PO** (D4 de [MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01](discovery/MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01.md),
