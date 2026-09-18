@@ -8,6 +8,7 @@ import type { ZodError } from "zod";
 import { ForbiddenError } from "../auth/auth.errors.js";
 import {
   ProductWithoutUnitError,
+  ProductionProfileArchivedError,
   ProductionProfileUomIncompatibleError,
   ProductionProfileVersionNotActiveError,
   ProductionProfileVersionNotFoundError,
@@ -93,6 +94,11 @@ function mapDomainError(
   }
   if (error instanceof ProductionProfileVersionNotActiveError) {
     return { status: 409, body: { error: "profile_version_not_active", message: error.message } };
+  }
+  // Roteiro arquivado não entra em ordem nova, nem pelo padrão do Produto
+  // (PRODUCTION-PROFILE-ARCHIVE-01). A cópia que a ordem já tem fica.
+  if (error instanceof ProductionProfileArchivedError) {
+    return { status: 409, body: { error: "profile_archived", message: error.message } };
   }
   if (error instanceof ProductWithoutUnitError) {
     return { status: 400, body: { error: "product_without_unit", message: error.message } };

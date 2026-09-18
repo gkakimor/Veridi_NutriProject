@@ -2,8 +2,8 @@
 
 ## 1. Status
 
-`DECIDIDO` — **D1–D6 decididas pelo PO em 2026-09-17**; **D5 implementada** em USER-LAST-ADMIN-GUARD-01 (2026-09-17,
-§120, seção 16), o resto não. Capabilities liberadas na fila viva do
+`DECIDIDO` — **D1–D6 decididas pelo PO em 2026-09-17**; **D4 e D5 implementadas** em PRODUCTION-PROFILE-ARCHIVE-01
+(§121) e USER-LAST-ADMIN-GUARD-01 (§120), 2026-09-17, seção 16; o resto não. Capabilities liberadas na fila viva do
 [`BACKLOG.md`](../BACKLOG.md): Fatia 0 — PRODUCTION-PROFILE-ARCHIVE-01 e USER-LAST-ADMIN-GUARD-01; Fatia 1 —
 MASTER-DATA-HARD-DELETE-01; Fatia 2 — MASTER-DATA-HARD-DELETE-02.
 
@@ -345,7 +345,14 @@ MASTER-DATA-HARD-DELETE-01 e, sobre ela, MASTER-DATA-HARD-DELETE-02.
   perfil Administrador (`self_demotion`), mesmo havendo outro ADMIN. A edição corre numa transação que começa travando
   as linhas de ADMIN ativo (`FOR NO KEY UPDATE`, ordem de id), como a seção 13 pedia, e a revogação das sessões do
   inativado entrou nela. Reset de senha e `user:bootstrap-admin` intocados.
-- PRODUCTION-PROFILE-ARCHIVE-01, Fatia 1 e Fatia 2: `NÃO IMPLEMENTADO`.
+- **Fatia 0, D4 — PRODUCTION-PROFILE-ARCHIVE-01** (2026-09-17, [`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §121), na `main`
+  e fora de PROD, sem migration: `POST /production-profiles/:id/archive` (`{ archived }`, como nos Modelos), com ADMIN e
+  Produção e 409 na transição repetida; arquivado fora da lista padrão e dos seletores; `compatibilidadeDoRoteiro` ganhou
+  `PERFIL_ARQUIVADO`, e a autoridade recusa com 409 `profile_archived` o padrão novo de Produto e toda aplicação à OP. O
+  ponto de leitura 3 da seção 12 foi confirmado pelo PO no handoff: o padrão do Produto em perfil arquivado fica, com
+  aviso, e a aplicação automática o trata como fora de ACTIVE — a OP nova nasce sem cópia, sem troca de roteiro. Versões
+  e cópias nas OPs intocadas.
+- Fatia 1 e Fatia 2: `NÃO IMPLEMENTADO`.
 
 ## 17. Histórico de decisões
 
@@ -355,3 +362,5 @@ MASTER-DATA-HARD-DELETE-01 e, sobre ela, MASTER-DATA-HARD-DELETE-02.
 - 2026-09-17 — D1–D6 decididas pelo PO; documento persistido no fechamento, sem código nem migration; Fatias 0, 1 e 2
   liberadas na fila viva.
 - 2026-09-17 — D5 implementada por USER-LAST-ADMIN-GUARD-01 (§120), sem migration.
+- 2026-09-17 — D4 implementada por PRODUCTION-PROFILE-ARCHIVE-01 (§121), sem migration; o handoff confirmou o ponto de
+  leitura 3 da seção 12.

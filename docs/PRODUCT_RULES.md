@@ -5920,10 +5920,11 @@ precificação, tarifa, formulação nem OP.
     seguro (unidade desconhecida ou de outra dimensão) a projeção é recusada,
     nunca feita com a quantidade crua.
   - **Compatibilidade tem UMA regra** (`compatibilidadeDoRoteiro`, em
-    `@veridi/shared`): versão ATIVA, unidade presente e conversão canônica
-    possível. A autoridade na API (`exigirRoteiroCompativel`, com a versão
-    travada `FOR SHARE` na transação) vale para o padrão do Produto, para a
-    escolha na ordem e para "definir padrão e aplicar".
+    `@veridi/shared`): perfil não arquivado (§121), versão ATIVA, unidade
+    presente e conversão canônica possível. A autoridade na API
+    (`exigirRoteiroCompativel`, com a versão e o perfil travados `FOR SHARE`
+    na transação) vale para o padrão do Produto, para a escolha na ordem, para
+    "definir padrão e aplicar" e para a aplicação automática na criação.
   - **Sem roteiro, a OP existe mas não segue** (decisão do PO, 2026-09-12). O
     Pedido nunca é bloqueado por falta de roteiro, e o Comercial não define
     como fabricar: Plano de Atendimento, saldo e OP manual criam a ordem em
@@ -7714,3 +7715,58 @@ que a página traz, a tela não afirma nada e quem decide é a API. A recusa que
 frase da API. Lista, consulta e histórico de qualquer usuário seguem abertos.
 
 **Sem migration.**
+
+## §121 — Roteiro de Produção arquivado: sai das escolhas, e o que já existe fica
+
+PRODUCTION-PROFILE-ARCHIVE-01 (2026-09-17), D4 do
+[MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01](discovery/MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01.md). Completa o §89: o
+Perfil de Produção — Roteiro de Produção na interface — ganha Arquivar e Desarquivar, como os Modelos.
+
+> **Arquivado não entra em compromisso novo; o que já foi assumido com ele não muda.** Desarquivar devolve o roteiro às
+> escolhas, sem refazer nada.
+
+**Quem.** Arquivar e Desarquivar: Produção e Administrador — o mesmo gate de quem configura o roteiro. Os demais perfis
+continuam lendo. O perfil é conferido antes do corpo e da existência: sem permissão, roteiro existente e inexistente
+recebem o mesmo 403, e nada é gravado.
+
+**O gesto.** `POST /production-profiles/:id/archive` com `{ "archived": true }` arquiva e com `false` desarquiva — a
+mesma rota e o mesmo corpo dos Modelos. Arquivar grava `archivedAt` (agora) e `archivedBy` (o nome de quem arquivou,
+como nos Modelos); desarquivar limpa as duas colunas. Arquivar o que já está arquivado, ou desarquivar o que não está, é
+409 `invalid_status_transition`, como a situação do §100: a condição mora no próprio UPDATE, a gravação repetida não
+re-carimba data nem autor, e de dois pedidos simultâneos o segundo cai no 409.
+
+**É do cadastro pai.** Nada é apagado — perfil, versões, etapas, recursos, histórico e referências ficam. Nenhuma versão
+muda de situação: a ativa continua ACTIVE, o rascunho continua DRAFT e a substituída continua ARCHIVED (o `archivedAt` da
+VERSÃO é outra coisa: a versão que uma ativação substituiu). Editar a identificação, salvar o rascunho e ativar versão
+nova seguem abertos, como nos Modelos arquivados: nada disso é compromisso de outro cadastro, e o Produto que já aponta
+para o roteiro acompanha a versão nova, como no §89.
+
+**Fora das escolhas.** A lista abre sem os arquivados; "Mostrar arquivados" (`?archived=true`) mostra só eles, com o
+valor `"true"`/`"false"` exato, como nos Modelos. Os seletores de Produto e de Ordem de Produção (`activeOnly`) nunca
+trazem arquivado — somados a `archived=true`, não trazem nada.
+
+**A API é a autoridade.** `compatibilidadeDoRoteiro` pergunta primeiro se o perfil está arquivado (`PERFIL_ARQUIVADO`,
+com `profileArchived` obrigatório na entrada), e `exigirRoteiroCompativel` recusa com 409 `profile_archived`. A
+verificação trava o perfil `FOR SHARE` junto com a versão: um arquivamento concorrente espera a gravação em curso, e quem
+chega depois dele já lê o perfil arquivado. Recusa:
+
+- o padrão novo de Produto (`PUT /products/:productId/production-profile`), inclusive trocando outro padrão — o
+  ponteiro não se mexe;
+- a aplicação na Ordem de Produção (`POST /production-orders/:id/production-profile`): o padrão atual do Produto, a
+  versão escolhida só para a ordem, "definir como padrão e aplicar" (nada fica, nem o padrão) e a regularização de
+  legado.
+
+**Produto que já apontava.** O apontamento fica — ninguém o apaga nem o troca por outro roteiro. A leitura do padrão diz
+`profileArchived`, e a tela avisa "Roteiro de Produção arquivado". Tirar o padrão continua possível: não é compromisso
+novo.
+
+**Ordem nova.** A aplicação automática na criação da ordem (manual, Plano de Atendimento e saldo) e na troca de produto
+em rascunho trata o padrão arquivado como padrão fora de ACTIVE: a ordem nasce SEM cópia, como pendência de roteiro, sem
+erro, e nenhum outro roteiro é escolhido no lugar. A tela da ordem mostra o padrão com "roteiro arquivado" e não oferece
+aplicá-lo; o caminho é escolher um roteiro ativo, ou desarquivar.
+
+**Ordem que já tem a cópia.** Nada muda: a cópia é por valor (§89) e não é relida, reescrita nem apagada ao arquivar ou
+desarquivar. Planejar, programar, liberar, separar, consumir, apontar e concluir não consultam a situação do perfil.
+
+**Sem migration.** `archivedAt` e `archivedBy` já existiam em `production_profiles`, e a lista já escondia o
+arquivado — faltava a ação.

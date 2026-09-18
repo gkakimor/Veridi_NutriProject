@@ -251,6 +251,11 @@ export interface ProductionOrderAvailableProfileDTO {
   versionNumber: number;
   referenceQuantity: string;
   referenceUomCode: string;
+  /**
+   * O perfil foi arquivado depois de virar padrão (PRODUCTION-PROFILE-ARCHIVE-01):
+   * a tela mostra o padrão e diz por que ele não se aplica — nunca aplicável.
+   */
+  profileArchived: boolean;
 }
 
 /**
@@ -352,7 +357,10 @@ export interface ProductionOrderPlanningDTO {
   applicationReason: string | null;
   /** Roteiro padrão ATIVO do Produto hoje, para mostrar e oferecer; `null` = não definido. */
   productDefaultProfile: ProductionOrderAvailableProfileDTO | null;
-  /** O padrão do Produto serve para a quantidade desta ordem (versão ativa, unidade convertível). */
+  /**
+   * O padrão do Produto serve para a quantidade desta ordem (perfil não
+   * arquivado, versão ativa, unidade convertível).
+   */
   productDefaultCompatible: boolean;
   /** Padrão aplicável agora: `productDefaultProfile` quando `canApply` ou `canUpdate`. */
   availableProfile: ProductionOrderAvailableProfileDTO | null;

@@ -144,6 +144,7 @@ function versao(sobre: Partial<ProductionProfileVersionDTO> = {}): ProductionPro
     archivedAt: null,
     sourceVersionId: null,
     sourceVersionNumber: null,
+    profileArchived: false,
     ...sobre,
   };
 }
@@ -155,6 +156,9 @@ function perfil(sobre: Partial<ProductionProfileDTO> = {}): ProductionProfileDTO
     code: "PPR-000001",
     name: "Cápsulas — linha padrão",
     description: null,
+    archived: false,
+    archivedAt: null,
+    archivedBy: null,
     activeVersion: null,
     draftVersion: rascunho,
     versions: rascunho ? [rascunho] : [],
@@ -237,6 +241,7 @@ describe("Roteiros de Produção — lista", () => {
       code: "PPR-000001",
       name: "Cápsulas",
       description: null,
+      archived: false,
       activeVersionId: "ppv-1",
       activeVersionNumber: 1,
       referenceQuantity: "1000",

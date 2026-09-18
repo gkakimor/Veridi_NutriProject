@@ -133,6 +133,7 @@ function versao(sobre: Partial<ProductionProfileVersionDTO> = {}): ProductionPro
     archivedAt: null,
     sourceVersionId: null,
     sourceVersionNumber: null,
+    profileArchived: false,
     ...sobre,
   };
 }
@@ -147,6 +148,9 @@ function perfil(
     code: "PPR-000001",
     name: "Cápsulas — linha padrão",
     description: null,
+    archived: false,
+    archivedAt: null,
+    archivedBy: null,
     activeVersion: null,
     draftVersion: rascunho,
     versions: [rascunho],

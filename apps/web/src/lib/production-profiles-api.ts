@@ -4,6 +4,7 @@ import type {
   ProductionProfileDTO,
   ProductionProfileListResponse,
   ProductionProfileVersionDTO,
+  SetProductionProfileArchivedInput,
   UpdateProductionProfileIdentityInput,
   UpdateProductionProfileVersionInput,
 } from "@veridi/shared";
@@ -34,8 +35,10 @@ async function read<T>(path: string): Promise<T> {
 
 export interface ProductionProfileListParams {
   search?: string;
-  /** Só roteiros com versão ativa — os escolhíveis para Produto e OP. */
+  /** Só roteiros com versão ativa e não arquivados — os escolhíveis para Produto e OP. */
   activeOnly?: boolean;
+  /** Só os arquivados — a consulta da lista. Seletor nunca manda. */
+  archived?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -46,6 +49,7 @@ export function listProductionProfiles(
   const q = new URLSearchParams();
   if (params.search) q.set("search", params.search);
   if (params.activeOnly) q.set("activeOnly", "true");
+  if (params.archived) q.set("archived", "true");
   q.set("page", String(params.page ?? 1));
   q.set("pageSize", String(params.pageSize ?? 20));
   return read<ProductionProfileListResponse>(`/production-profiles?${q.toString()}`);
@@ -66,6 +70,12 @@ export const createProductionProfile = (input: CreateProductionProfileInput) =>
 
 export const updateProductionProfile = (id: string, input: UpdateProductionProfileIdentityInput) =>
   send<ProductionProfileDTO>(`/production-profiles/${id}`, "PATCH", input);
+
+/** Arquivar (`true`) ou Desarquivar (`false`) — PRODUCTION-PROFILE-ARCHIVE-01. */
+export const setProductionProfileArchived = (id: string, archived: boolean) =>
+  send<ProductionProfileDTO>(`/production-profiles/${id}/archive`, "POST", {
+    archived,
+  } satisfies SetProductionProfileArchivedInput);
 
 export const updateProductionProfileVersion = (
   id: string,

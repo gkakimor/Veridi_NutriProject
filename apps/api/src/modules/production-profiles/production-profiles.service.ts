@@ -32,7 +32,9 @@ import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import {
   CapacityResourceNotAllowedError,
   DuplicateStepResourceError,
+  InvalidProductionProfileArchiveTransitionError,
   ProductWithoutUnitError,
+  ProductionProfileArchivedError,
   ProductionProfileDraftExistsError,
   ProductionProfileEmptyError,
   ProductionProfileNotFoundError,
@@ -131,6 +133,7 @@ export function toProductionProfileVersionDTO(
     archivedAt: version.archivedAt ? version.archivedAt.toISOString() : null,
     sourceVersionId: version.sourceVersionId,
     sourceVersionNumber: version.sourceVersionNumber,
+    profileArchived: version.productionProfile.archivedAt !== null,
   };
 }
 
@@ -141,6 +144,7 @@ function toSummaryDTO(profile: ProfileWithVersions): ProductionProfileSummaryDTO
     code: profile.code,
     name: profile.name,
     description: profile.description,
+    archived: profile.archivedAt !== null,
     activeVersionId: ativa?.id ?? null,
     activeVersionNumber: ativa?.versionNumber ?? null,
     referenceQuantity: ativa ? ativa.referenceQuantity.toString() : null,
@@ -209,6 +213,9 @@ export async function getProductionProfile(id: string): Promise<ProductionProfil
     code: profile.code,
     name: profile.name,
     description: profile.description,
+    archived: profile.archivedAt !== null,
+    archivedAt: profile.archivedAt ? profile.archivedAt.toISOString() : null,
+    archivedBy: profile.archivedBy,
     activeVersion: versions.find((version) => version.status === "ACTIVE") ?? null,
     draftVersion: versions.find((version) => version.status === "DRAFT") ?? null,
     versions,
@@ -230,7 +237,8 @@ export async function listProductionProfiles(
   const prisma = getPrisma();
   const termo = query.search?.trim();
   const where: Prisma.ProductionProfileWhereInput = {
-    archivedAt: null,
+    // Arquivado sai da lista por padrão, como nos Modelos; `archived` mostra só eles.
+    archivedAt: query.archived ? { not: null } : null,
     ...(termo
       ? {
           OR: [
@@ -243,11 +251,15 @@ export async function listProductionProfiles(
   };
 
   /*
-   * `activeOnly`: só roteiro com versão ATIVA — é o que se escolhe para um
-   * Produto ou para uma ordem. Filtro de existência, não de compatibilidade:
-   * servir para a unidade de quem pediu é a autoridade que decide, na gravação.
+   * `activeOnly`: só roteiro com versão ATIVA e não arquivado — é o que se
+   * escolhe para um Produto ou para uma ordem. Filtro de existência, não de
+   * compatibilidade: servir para a unidade de quem pediu é a autoridade que
+   * decide, na gravação. Somado a `archived=true` não sobra nada: arquivado
+   * nunca é escolhível.
    */
-  if (query.activeOnly) where.versions = { some: { status: "ACTIVE" } };
+  if (query.activeOnly) {
+    where.AND = [{ archivedAt: null }, { versions: { some: { status: "ACTIVE" } } }];
+  }
 
   const [total, profiles] = await Promise.all([
     prisma.productionProfile.count({ where }),
@@ -359,6 +371,40 @@ export async function updateProductionProfileIdentity(
       ...(input.description !== undefined ? { description: input.description } : {}),
     },
   });
+  return getProductionProfile(id);
+}
+
+/**
+ * Arquivar e desarquivar o Perfil — PRODUCTION-PROFILE-ARCHIVE-01 (D4 do
+ * MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01), `PRODUCT_RULES.md` §89.
+ *
+ * Arquivar é do CADASTRO pai: nada é apagado e nenhuma versão muda de
+ * situação — a ativa continua ativa, o rascunho continua rascunho. O arquivado
+ * sai dos seletores e a autoridade de compatibilidade o recusa em compromisso
+ * novo (padrão de Produto, roteiro de ordem, aplicação automática); o Produto
+ * que já apontava para ele continua apontando, e a cópia congelada nas ordens
+ * não é tocada. Desarquivar devolve tudo como estava — as mesmas colunas que
+ * os Modelos limpam.
+ *
+ * A condição mora no próprio UPDATE, como na situação do §100: a transição
+ * repetida é 409 e não re-carimba data nem autor, e de dois pedidos
+ * concorrentes o segundo cai no 409.
+ */
+export async function setProductionProfileArchived(
+  id: string,
+  archived: boolean,
+  actor: User,
+): Promise<ProductionProfileDTO> {
+  const { count } = await getPrisma().productionProfile.updateMany({
+    where: { id, archivedAt: archived ? null : { not: null } },
+    data: archived
+      ? { archivedAt: new Date(), archivedBy: actor.name }
+      : { archivedAt: null, archivedBy: null },
+  });
+  if (count === 0) {
+    await requireProfile(id);
+    throw new InvalidProductionProfileArchiveTransitionError(archived);
+  }
   return getProductionProfile(id);
 }
 
@@ -606,6 +652,7 @@ export async function getProductProductionProfile(
           status: version.status,
           referenceQuantity: version.referenceQuantity.toString(),
           referenceUomCode: version.referenceUomCode,
+          profileArchived: version.productionProfile.archivedAt !== null,
         }
       : null,
   };
@@ -636,23 +683,30 @@ export interface RouteCompatibilityCheck {
 
 /**
  * A AUTORIDADE de compatibilidade entre uma versão de roteiro e quem vai
- * usá-la — o padrão do Produto, a escolha explícita numa ordem e "definir padrão
- * e aplicar". Todas passam por aqui; a regra em si é `compatibilidadeDoRoteiro`
- * (`@veridi/shared`): versão ATIVA e unidade que chega à de referência pela
+ * usá-la — o padrão do Produto, a escolha explícita numa ordem, "definir padrão
+ * e aplicar" e a aplicação automática na criação da ordem. Todas passam por
+ * aqui; a regra em si é `compatibilidadeDoRoteiro` (`@veridi/shared`): perfil
+ * não arquivado, versão ATIVA e unidade que chega à de referência pela
  * conversão canônica.
  *
  * Trava a linha da versão para leitura (FOR SHARE) dentro da transação de quem
  * chama: uma ativação concorrente só arquiva esta versão depois que a gravação
- * terminar, e aí o ponteiro do Produto avança junto com as outras.
+ * terminar, e aí o ponteiro do Produto avança junto com as outras. Trava também
+ * a linha do PERFIL (PRODUCTION-PROFILE-ARCHIVE-01): um arquivamento
+ * concorrente espera esta gravação, e quem chega depois dele lê o perfil já
+ * arquivado — nunca um vínculo novo gravado sobre um "não arquivado" velho.
  */
 export async function verificarRoteiroCompativel(
   tx: Prisma.TransactionClient,
   versionId: string,
   quantityUnitCode: string | null,
 ): Promise<RouteCompatibilityCheck> {
-  const travada = await tx.$queryRaw<{ id: string }[]>`
-    SELECT id FROM production_profile_versions WHERE id = ${versionId} FOR SHARE`;
-  if (travada.length === 0) return { version: null, bloqueio: null };
+  const travada = await tx.$queryRaw<{ profileId: string }[]>`
+    SELECT "productionProfileId" AS "profileId"
+    FROM production_profile_versions WHERE id = ${versionId} FOR SHARE`;
+  const profileId = travada[0]?.profileId;
+  if (!profileId) return { version: null, bloqueio: null };
+  await tx.$queryRaw`SELECT id FROM production_profiles WHERE id = ${profileId} FOR SHARE`;
 
   const version = await tx.productionProfileVersion.findUniqueOrThrow({
     where: { id: versionId },
@@ -660,7 +714,15 @@ export async function verificarRoteiroCompativel(
   });
   return {
     version,
-    bloqueio: compatibilidadeDoRoteiro(version, quantityUnitCode, await unidadesDeMedida(tx)),
+    bloqueio: compatibilidadeDoRoteiro(
+      {
+        status: version.status,
+        referenceUomCode: version.referenceUomCode,
+        profileArchived: version.productionProfile.archivedAt !== null,
+      },
+      quantityUnitCode,
+      await unidadesDeMedida(tx),
+    ),
   };
 }
 
@@ -676,6 +738,8 @@ export async function exigirRoteiroCompativel(
   switch (bloqueio) {
     case null:
       return version;
+    case "PERFIL_ARQUIVADO":
+      throw new ProductionProfileArchivedError(version.productionProfile.code);
     case "VERSAO_NAO_ATIVA":
       throw new ProductionProfileVersionNotActiveError(version.status);
     case "SEM_UNIDADE":

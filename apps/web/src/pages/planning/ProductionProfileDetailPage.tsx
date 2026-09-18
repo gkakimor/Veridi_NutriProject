@@ -26,6 +26,7 @@ import {
   createProductionProfileVersionFrom,
   getProductionProfile,
   setProductProductionProfile,
+  setProductionProfileArchived,
   updateProductionProfile,
   updateProductionProfileVersion,
 } from "../../lib/production-profiles-api";
@@ -43,6 +44,7 @@ import { DecimalField, IntegerField } from "../../components/NumericField";
 import { formatQuantity } from "../../lib/quantity";
 import { formatDateTime } from "../../lib/dates";
 import { formatMinutes, formatMinutesPlain } from "../../lib/duration";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { FormSection } from "../../components/FormSection";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
@@ -588,6 +590,8 @@ export function ProductionProfileDetailPage() {
   const [unidades, setUnidades] = useState<UnitOfMeasureDTO[]>([]);
   const [opcoesProduto, setOpcoesProduto] = useState<EntityOption[]>([]);
   const [produtoEscolhido, setProdutoEscolhido] = useState("");
+  /* Arquivar pede confirmação: tira o roteiro das ordens novas dos produtos que o usam. */
+  const [confirmarArquivar, setConfirmarArquivar] = useState(false);
 
   /*
    * A identificação que o servidor devolveu na última leitura — `null` antes
@@ -992,6 +996,7 @@ export function ProductionProfileDetailPage() {
           />
           <h1 className="doc-title">
             <code>{profile.code}</code> {profile.name}
+            {profile.archived && <span className="badge badge--neutral">Arquivado</span>}
           </h1>
         </div>
         <div className="doc-actions">
@@ -1010,6 +1015,22 @@ export function ProductionProfileDetailPage() {
           <p className="form-alert" role="alert">
             {error}
           </p>
+        )}
+
+        {/* Arquivado é do cadastro pai: nada some da consulta, só deixa de ser
+            oferecido para compromisso novo (PRODUCTION-PROFILE-ARCHIVE-01). */}
+        {profile.archived && (
+          <div className="pendency-panel" role="status">
+            <p className="pendency-panel__title">Roteiro arquivado</p>
+            <p className="pendency-panel__sub">
+              {profile.archivedAt
+                ? `Arquivado em ${formatDateTime(profile.archivedAt)}${profile.archivedBy ? ` por ${profile.archivedBy}` : ""}. `
+                : ""}
+              Não é oferecido como roteiro padrão de produto nem para ordem nova. Versões, histórico e as
+              cópias já feitas nas ordens continuam como estão; os produtos que ainda o têm como padrão
+              recebem ordens novas sem roteiro.
+            </p>
+          </div>
         )}
 
         <ContextHelp topic={helpTopics["planejamento.perfisProducao"]} />
@@ -1041,7 +1062,7 @@ export function ProductionProfileDetailPage() {
             </div>
           </div>
           {canEdit && (
-            <div className="form-actions">
+            <div className="form-actions form-actions--split">
               <div className="form-actions__group">
                 <button
                   type="button"
@@ -1062,6 +1083,30 @@ export function ProductionProfileDetailPage() {
                   {acaoEmCurso === "identificacao" ? "Salvando…" : "Salvar identificação"}
                 </button>
                 {estadoDoBloco("identificacao", identificacaoAlterada)}
+              </div>
+              <div className="form-actions__group">
+                {estadoDoBloco("situacao", false)}
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  disabled={saving}
+                  onClick={() =>
+                    profile.archived
+                      ? void run("desarquivar", () => setProductionProfileArchived(profile.id, false), {
+                          bloco: "situacao",
+                          texto: "Roteiro desarquivado.",
+                        })
+                      : setConfirmarArquivar(true)
+                  }
+                >
+                  {acaoEmCurso === "arquivar"
+                    ? "Arquivando…"
+                    : acaoEmCurso === "desarquivar"
+                      ? "Desarquivando…"
+                      : profile.archived
+                        ? "Desarquivar"
+                        : "Arquivar"}
+                </button>
               </div>
             </div>
           )}
@@ -1519,7 +1564,14 @@ export function ProductionProfileDetailPage() {
               </div>
             )}
 
-            {canEdit && ativa && (
+            {canEdit && ativa && profile.archived && (
+              <p className="field__hint">
+                Roteiro arquivado não é definido como padrão de produto. Desarquive para voltar a
+                oferecê-lo.
+              </p>
+            )}
+
+            {canEdit && ativa && !profile.archived && (
               <div className="planning-product-picker">
                 <div className="field">
                   <label htmlFor="ppr-produto">Produto</label>
@@ -1569,6 +1621,42 @@ export function ProductionProfileDetailPage() {
           </ul>
         </FormSection>
       </div>
+
+      <ConfirmDialog
+        open={confirmarArquivar}
+        title="Arquivar este roteiro?"
+        confirmLabel="Arquivar"
+        cancelLabel="Cancelar"
+        message={
+          <>
+            <p>
+              <b>
+                {profile.code} {profile.name}
+              </b>{" "}
+              deixa de ser oferecido como roteiro padrão de produto e para ordens novas. Nada é apagado:
+              versões, histórico e as cópias já feitas nas ordens continuam como estão, e desarquivar
+              devolve o roteiro às escolhas.
+            </p>
+            {profile.defaultProducts.length > 0 && (
+              <p>
+                {profile.defaultProducts.length === 1
+                  ? "1 produto tem este roteiro como padrão."
+                  : `${formatIntegerPtBr(profile.defaultProducts.length)} produtos têm este roteiro como padrão.`}{" "}
+                O padrão continua gravado, mas as novas ordens desses produtos vão nascer sem roteiro até
+                alguém escolher um roteiro ativo.
+              </p>
+            )}
+          </>
+        }
+        onCancel={() => setConfirmarArquivar(false)}
+        onConfirm={() => {
+          setConfirmarArquivar(false);
+          void run("arquivar", () => setProductionProfileArchived(profile.id, true), {
+            bloco: "situacao",
+            texto: "Roteiro arquivado.",
+          });
+        }}
+      />
     </div>
   );
 }

@@ -47,6 +47,7 @@ const COM_PADRAO: ProductProductionProfileDTO = {
     status: "ACTIVE",
     referenceQuantity: "100",
     referenceUomCode: "kg",
+    profileArchived: false,
   },
 };
 
@@ -60,6 +61,7 @@ beforeEach(() => {
         code: "PPR-000004",
         name: "Pó — misturador grande",
         description: null,
+        archived: false,
         activeVersionId: "ver-4",
         activeVersionNumber: 4,
         referenceQuantity: "100",
