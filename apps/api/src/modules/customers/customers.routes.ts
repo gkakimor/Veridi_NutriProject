@@ -53,8 +53,10 @@ function formatZodError(error: ZodError) {
  * (`CUSTOMER_EDIT_ROLES`); mudar a situação também
  * (`CUSTOMER_STATUS_CHANGE_ROLES`) — duas listas, porque são duas perguntas.
  *
- * Sem exclusão física: clientes bloqueados e inativos permanecem consultáveis,
- * com o histórico inteiro — a leitura segue aberta a toda sessão.
+ * Bloqueados e inativos permanecem consultáveis, com o histórico inteiro — a
+ * leitura segue aberta a toda sessão. A exclusão física existe só para cadastro
+ * criado por engano e nunca usado, só do Administrador, e mora em
+ * `master-data-deletion` (MASTER-DATA-HARD-DELETE-01).
  */
 export const customersRoutes: FastifyPluginAsync = async (app) => {
   app.get("/customers", async (request, reply) => {

@@ -33,6 +33,10 @@ import { CustomerStatusDialog } from "./CustomerStatusDialog";
 import { PEDIR_CADASTRO_DE_CLIENTE, podeEditarCliente } from "./customer-permissions";
 import { RowActions } from "../../components/RowActions";
 import {
+  ExclusaoDefinitivaDialog,
+  podeExcluirDefinitivamente,
+} from "../../components/ExclusaoDefinitivaDialog";
+import {
   RecordContextChip,
   useOpenRecord,
   useRecordContext,
@@ -90,6 +94,10 @@ export function CustomersPage() {
    * recebem "+ Novo cliente".
    */
   const podeEditar = podeEditarCliente(user?.role);
+  /* Excluir definitivamente: só o Administrador, e só o que nunca foi usado. */
+  const podeExcluir = podeExcluirDefinitivamente(user?.role);
+  const [exclusao, setExclusao] = useState<CustomerDTO | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState("");
@@ -298,6 +306,11 @@ export function CustomersPage() {
       </div>
 
       {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
+      {aviso && (
+        <p className="form-status" role="status">
+          {aviso}
+        </p>
+      )}
 
       {contextIds && (
         <RecordContextChip
@@ -381,15 +394,27 @@ export function CustomersPage() {
                 <td onClick={(event) => event.stopPropagation()}>
                   <RowActions
                     label={`Mais ações de ${customer.code}`}
-                    actions={
-                      podeMudarSituacao
+                    actions={[
+                      ...(podeMudarSituacao
                         ? CUSTOMER_STATUS_ACTIONS_BY_STATUS[customer.status].map((action) => ({
                             label: CUSTOMER_STATUS_ACTION_LABELS[action],
                             destructive: action === "BLOCK" || action === "DEACTIVATE",
                             onSelect: () => abrirAcao(action, customer),
                           }))
-                        : []
-                    }
+                        : []),
+                      ...(podeExcluir
+                        ? [
+                            {
+                              label: "Excluir definitivamente",
+                              destructive: true,
+                              onSelect: () => {
+                                setAviso(null);
+                                setExclusao(customer);
+                              },
+                            },
+                          ]
+                        : []),
+                    ]}
                   >
                     <button
                       type="button"
@@ -496,6 +521,31 @@ export function CustomersPage() {
             setErroDaAcao(null);
           }}
           onConfirm={(reason) => void confirmarAcao(reason)}
+        />
+      )}
+
+      {exclusao && (
+        <ExclusaoDefinitivaDialog
+          key={exclusao.id}
+          tipo="CUSTOMER"
+          id={exclusao.id}
+          rotulo="cliente"
+          /* Recusada, a saída é Inativar — com motivo e histórico (§95). */
+          onAlternativa={
+            podeMudarSituacao && CUSTOMER_STATUS_ACTIONS_BY_STATUS[exclusao.status].includes("DEACTIVATE")
+              ? () => {
+                  const alvo = exclusao;
+                  setExclusao(null);
+                  abrirAcao("DEACTIVATE", alvo);
+                }
+              : undefined
+          }
+          onCancelar={() => setExclusao(null)}
+          onExcluido={(resultado) => {
+            setExclusao(null);
+            setAviso(`${resultado.entityCode} — ${resultado.entityName} foi excluído definitivamente.`);
+            reload();
+          }}
         />
       )}
     </>

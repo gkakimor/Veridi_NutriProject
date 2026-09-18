@@ -63,6 +63,10 @@ import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import { useAuth } from "../../app/AuthProvider";
 import { ContextHelp } from "../../components/help";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
+import {
+  ExclusaoDefinitivaDialog,
+  podeExcluirDefinitivamente,
+} from "../../components/ExclusaoDefinitivaDialog";
 import { helpTopics } from "../../help/help-content";
 /*
   A BANCADA É A MESMA DA FORMULAÇÃO (FORMULATION-TEMPLATE-WORKBENCH-01, fatia 2).
@@ -378,6 +382,9 @@ export function FormulationTemplateDetailPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const canEdit = user?.role === "ADMIN" || user?.role === "PRODUCTION";
+  /* Excluir definitivamente o modelo criado por engano: só o Administrador. */
+  const podeExcluir = podeExcluirDefinitivamente(user?.role);
+  const [exclusaoAberta, setExclusaoAberta] = useState(false);
   /* Cadastrar Item no meio do Modelo segue a lista do Item, não a do Modelo. */
   const podeCadastrarItem = usePodeCriarItem();
 
@@ -1310,6 +1317,16 @@ export function FormulationTemplateDetailPage() {
                 >
                   {template.archived ? "Desarquivar" : "Arquivar"}
                 </button>
+                {podeExcluir && (
+                  <button
+                    type="button"
+                    className="btn btn--danger btn--sm"
+                    disabled={saving}
+                    onClick={() => setExclusaoAberta(true)}
+                  >
+                    Excluir definitivamente
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -1600,6 +1617,21 @@ export function FormulationTemplateDetailPage() {
           </>
         }
       />
+
+      {exclusaoAberta && (
+        <ExclusaoDefinitivaDialog
+          tipo="FORMULATION_TEMPLATE"
+          id={template.id}
+          rotulo="modelo de formulação"
+          /* Recusada, a saída é Arquivar: o modelo sai da biblioteca e a origem fica. */
+          onAlternativa={() => {
+            setExclusaoAberta(false);
+            void run("arquivar", () => setFormulationTemplateArchived(template.id, true));
+          }}
+          onCancelar={() => setExclusaoAberta(false)}
+          onExcluido={() => navigate("/producao/templates-formulacao")}
+        />
+      )}
     </div>
   );
 }

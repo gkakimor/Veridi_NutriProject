@@ -39,7 +39,9 @@ function formatZodError(error: ZodError) {
  * (MASTER-DATA-EDIT-PERMISSIONS-01). A Qualidade homologa na relação Item ×
  * Fornecedor, não no cadastro do Fornecedor.
  *
- * Sem exclusão física: fornecedores inativos permanecem visíveis.
+ * Fornecedores inativos permanecem visíveis. A exclusão física existe só para
+ * cadastro criado por engano e nunca usado, só do Administrador, e mora em
+ * `master-data-deletion` (MASTER-DATA-HARD-DELETE-01).
  */
 export const suppliersRoutes: FastifyPluginAsync = async (app) => {
   app.get("/suppliers", async (request, reply) => {

@@ -22,6 +22,10 @@ import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
 import { TemplateDiffTable } from "../../components/TemplateDiffTable";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
+import {
+  ExclusaoDefinitivaDialog,
+  podeExcluirDefinitivamente,
+} from "../../components/ExclusaoDefinitivaDialog";
 import { formatPercent } from "../../lib/percent";
 import { formatDateTime } from "../../lib/dates";
 import { apiErrorMessage } from "../../lib/api-errors";
@@ -113,6 +117,9 @@ export function PricingPolicyDetailPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const canEdit = user?.role === "ADMIN" || user?.role === "COMMERCIAL";
+  /* Excluir definitivamente a política criada por engano: só o Administrador. */
+  const podeExcluir = podeExcluirDefinitivamente(user?.role);
+  const [exclusaoAberta, setExclusaoAberta] = useState(false);
 
   const [policy, setPolicy] = useState<PricingPolicyDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -407,6 +414,16 @@ export function PricingPolicyDetailPage() {
                 >
                   {policy.archived ? "Desarquivar" : "Arquivar"}
                 </button>
+                {podeExcluir && (
+                  <button
+                    type="button"
+                    className="btn btn--danger btn--sm"
+                    disabled={saving}
+                    onClick={() => setExclusaoAberta(true)}
+                  >
+                    Excluir definitivamente
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -708,6 +725,21 @@ export function PricingPolicyDetailPage() {
           )}
         </FormSection>
       </div>
+
+      {exclusaoAberta && (
+        <ExclusaoDefinitivaDialog
+          tipo="PRICING_POLICY_TEMPLATE"
+          id={policy.id}
+          rotulo="modelo de política de preço"
+          /* Recusada, a saída é Arquivar: a política sai da biblioteca e a origem fica. */
+          onAlternativa={() => {
+            setExclusaoAberta(false);
+            void run("arquivar", () => setPricingPolicyArchived(policy.id, true));
+          }}
+          onCancelar={() => setExclusaoAberta(false)}
+          onExcluido={() => navigate("/gestao/politicas-precificacao")}
+        />
+      )}
     </div>
   );
 }
