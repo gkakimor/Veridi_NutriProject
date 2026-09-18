@@ -100,7 +100,10 @@ const CABECALHOS: Record<string, string[]> = {
     "Item", "Descrição", "Lote interno", "Lote Veridi", "Origem", "Validade", "Dias até vencer", "On Hand",
     "Reservado", "Disponível", "Unidade", "Qualidade", "Localização",
   ],
-  "R-03": ["Data/Hora", "Tipo", "Item", "Descrição", "Lote", "Quantidade", "Unidade", "Documento", "Motivo", "Usuário"],
+  "R-03": [
+    "Data/Hora", "Tipo", "Entrada/Saída", "Item", "Descrição", "Lote", "Quantidade", "Unidade", "Documento", "Motivo",
+    "Usuário",
+  ],
   "R-04": [
     "OP", "Produto", "Nome do produto", "Status da OP", "Item", "Descrição", "Fornecimento", "Cliente",
     "Necessário", "Reservado", "Disponível", "Em compra", "Falta", "Unidade",
@@ -167,8 +170,9 @@ const CABECALHOS: Record<string, string[]> = {
     "Enviado em", "Aceito em",
   ],
   "R-21": [
-    "Data", "Consumo", "Item", "Descrição", "Lote", "Quantidade", "Unidade", "Destino/uso", "Custo unitário",
-    "Custo total", "Origem do custo", "Usuário", "Observação",
+    "Data", "Consumo", "Item", "Descrição", "Lote", "Quantidade original", "Quantidade estornada",
+    "Quantidade líquida", "Unidade", "Destino/uso", "Custo unitário", "Custo total", "Custo total líquido",
+    "Origem do custo", "Situação", "Usuário", "Observação",
   ],
 };
 
@@ -307,7 +311,10 @@ function amostra(codigo: string, coluna: string, indice: number): string {
     case "Origem":
       return codigo === "R-08" ? "Pedido do cliente" : "Recebimento";
     case "Situação":
-      return "Em preparação";
+      // R-21: o rótulo mais longo da situação do estorno.
+      return codigo === "R-21" ? "Estornado parcialmente" : "Em preparação";
+    case "Entrada/Saída":
+      return indice % 2 === 0 ? "Entrada" : "Saída";
     case "Fornecimento":
       return "Cliente";
     case "Modo de preço":
@@ -346,6 +353,7 @@ function amostra(codigo: string, coluna: string, indice: number): string {
     case "Custo unitário":
     case "Custo do consumo":
     case "Custo total":
+    case "Custo total líquido":
     case "Valor previsto":
     case "Preço previsto (OC)":
     case "Custo efetivo":
@@ -484,14 +492,18 @@ describe("relatórios R-01…R-20 — arquivo", () => {
     expect(pdf.paginas.at(-1)).toContain(`LT-20260903-${numero(registros - 1)}`);
   }, 60_000);
 
-  it("R-03 com 100 registros (sem linha de detalhe): cabeçalho repetido e linha inteira", async () => {
+  it("R-03 com 100 registros (usuário na linha de detalhe): cabeçalho repetido e linha inteira", async () => {
     const registros = 100;
     const pdf = await gerarRelatorio(relatorio("R-03", registros), "R-03-multipagina.pdf");
 
     expect(pdf.paginas.length).toBeGreaterThanOrEqual(2);
     conferirArquivo(pdf, "paisagem");
     for (const texto of pdf.paginas) {
-      if (texto.includes("LT-20260903-")) expect(texto).toContain("DATA/HORA");
+      if (texto.includes("LT-20260903-")) {
+        expect(texto).toContain("DATA/HORA");
+        // O sentido do movimento na linha principal (INTERNAL-CONSUMPTION-REVERSAL-01).
+        expect(texto).toContain("ENTRADA/SAÍDA");
+      }
     }
     for (let indice = 0; indice < registros; indice += 1) {
       const n = numero(indice);
@@ -499,6 +511,7 @@ describe("relatórios R-01…R-20 — arquivo", () => {
       expect(folha, `registro ${n}`).toBeGreaterThanOrEqual(0);
       expect(pdf.paginas[folha]).toContain(`REC-${n}`);
     }
+    expect(pdf.paginas.join(" ")).toContain("Maria Aparecida dos Santos");
   }, 60_000);
 
   it("R-20 interno com 60 registros: a ressalva abre o documento e o rodapé a repete em toda folha", async () => {
@@ -560,6 +573,7 @@ function usoEConsumo(itens: number, destinos: number): InternalConsumptionReport
       missingCostCount,
       knownCostTotal: "987654321.12",
       distinctItemCount: itens,
+      reversedConsumptionCount: 2,
     },
     byItem,
     byPurpose,
@@ -596,22 +610,28 @@ describe("resumo da tela no arquivo (REPORTS-PDF-SUMMARY-01)", () => {
       expect(pagina, marca).toContain(marca);
     }
     expect(pagina).toContain("Valor parcial: 3 consumos com custo não disponível não entram na soma.");
+    // A ressalva dos estornos logo depois (INTERNAL-CONSUMPTION-REVERSAL-01).
+    expect(pagina).toContain("2 consumos com estorno: quantidades e valores são líquidos dos estornos;");
     // Os dois agrupamentos, com ausência escrita como ausência — nunca zero.
     expect(pagina).toContain("RESUMO POR ITEM");
     expect(pagina).toContain("RESUMO POR DESTINO/USO");
     expect(pagina).toContain("Sem destino informado");
     expect(pagina.split("Custo não disponível").length - 1).toBeGreaterThanOrEqual(2);
     expect(pagina).not.toContain("R$ 0,00");
-    // A ordem da folha: filtros, resumo, agrupamentos e os registros por último.
+    // A ordem do documento: filtros, resumo, agrupamentos e os registros por
+    // último. Com a ressalva dos estornos e o detalhe mais alto da linha do
+    // líquido (INTERNAL-CONSUMPTION-REVERSAL-01), os consumos podem começar na
+    // folha seguinte — a ordem é a mesma.
+    const tudo = pdf.paginas.map(corrido).join(" ");
     const ordem = ["FILTROS APLICADOS", "VALOR TOTAL CONHECIDO", "RESUMO POR ITEM", "RESUMO POR DESTINO/USO", "CI-000001"]
-      .map((marca) => pagina.indexOf(marca));
+      .map((marca) => tudo.indexOf(marca));
     expect(ordem.every((posicao) => posicao >= 0), ordem.join(",")).toBe(true);
     expect(ordem).toEqual([...ordem].sort((a, b) => a - b));
     // A tabela de registros continua inteira, com o título que a separa do resumo.
-    expect(pagina.indexOf("CONSUMOS DATA CONSUMO ITEM")).toBeGreaterThan(pagina.indexOf("RESUMO POR DESTINO/USO"));
-    const tudo = pdf.paginas.map(corrido).join(" ");
+    expect(tudo.indexOf("CONSUMOS DATA CONSUMO ITEM")).toBeGreaterThan(tudo.indexOf("RESUMO POR DESTINO/USO"));
     for (let indice = 0; indice < 4; indice += 1) expect(tudo).toContain(`CI-${numero(indice)}`);
-    for (const folha of pdf.paginas.slice(1).map(corrido)) expect(folha).toContain("USUÁRIO");
+    // "SITUAÇÃO" é a última coluna da linha principal dos consumos (o usuário desceu para o detalhe).
+    for (const folha of pdf.paginas.slice(1).map(corrido)) expect(folha).toContain("SITUAÇÃO");
   }, 30_000);
 
   it("R-21 com 45 itens e 70 consumos: várias folhas, cabeçalho de cada tabela repetido, nada some", async () => {
@@ -631,10 +651,10 @@ describe("resumo da tela no arquivo (REPORTS-PDF-SUMMARY-01)", () => {
       expect(folhas.some((folha) => folha.includes(`CI-${numero(indice)}`)), `consumo ${indice}`).toBe(true);
     }
     // Folha que continua o resumo por item repete o cabeçalho dele; a dos consumos, o dela.
-    // ("ORIGEM DO CUSTO" quebra em duas linhas no cabeçalho: "USUÁRIO" é a marca dos consumos.)
+    // ("SITUAÇÃO", uma palavra só no cabeçalho, é a marca dos consumos.)
     for (const folha of folhas) {
       if (/UC-0000\d\d /.test(folha)) expect(folha).toContain("VALOR CONHECIDO SEM CUSTO");
-      if (folha.includes("CI-0000")) expect(folha).toContain("USUÁRIO");
+      if (folha.includes("CI-0000")) expect(folha).toContain("SITUAÇÃO");
     }
     // "Custo não disponível" inteiro em cada grupo sem custo (15 itens + o sem destino): cabe
     // na coluna, sem dobrar em duas linhas — e nenhum deles virou zero.

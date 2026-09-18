@@ -136,7 +136,12 @@ const SEM_DECISAO = {
   concurrentMovementConfirmed: false,
 } satisfies Prisma.StockCountPositionUncheckedUpdateInput;
 
-function chaveDaPosicao(itemId: string, lotId: string | null): string {
+/**
+ * `itemId` ou `itemId:lotId` — a identidade da posição física. Exportada para
+ * o estorno de consumo interno conferir inventário aberto e contagem posterior
+ * pela MESMA chave, nunca por uma segunda montagem dela.
+ */
+export function chaveDaPosicao(itemId: string, lotId: string | null): string {
   return lotId ? `${itemId}:${lotId}` : itemId;
 }
 

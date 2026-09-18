@@ -112,10 +112,26 @@ export interface MovementReportRowDTO {
   quantity: string;
   unitCode: string;
   sourceType: InventoryMovementSourceType;
-  /** Documento de origem, quando derivável pelos vínculos 1:1 existentes. */
+  /**
+   * Documento de origem, quando derivável pelos vínculos 1:1 existentes. No
+   * estorno de consumo interno, o ECI- e o CI- que ele anula:
+   * `ECI-000001 (estorno de CI-000123)`.
+   */
   documentCode: string | null;
-  /** `STOCK_COUNT`: ajuste de Inventário Físico ou de Contagem rápida — o documento `INV-`. */
-  documentKind: "RECEIPT" | "PRODUCTION_ORDER" | "SHIPMENT" | "PROJECT_SAMPLE" | "STOCK_COUNT" | null;
+  /**
+   * `STOCK_COUNT`: ajuste de Inventário Físico ou de Contagem rápida — o documento `INV-`.
+   * `INTERNAL_CONSUMPTION`: o CI- da baixa; `INTERNAL_CONSUMPTION_REVERSAL`: o ECI-
+   * (INTERNAL-CONSUMPTION-REVERSAL-01). Os dois não têm tela própria: sem link.
+   */
+  documentKind:
+    | "RECEIPT"
+    | "PRODUCTION_ORDER"
+    | "SHIPMENT"
+    | "PROJECT_SAMPLE"
+    | "STOCK_COUNT"
+    | "INTERNAL_CONSUMPTION"
+    | "INTERNAL_CONSUMPTION_REVERSAL"
+    | null;
   documentId: string | null;
   reason: string | null;
   createdBy: string | null;
@@ -660,21 +676,30 @@ export interface QuotePricingAuditRowDTO {
  *
  * A linha é o próprio `InternalConsumptionDTO` — o mesmo mapeamento do
  * histórico operacional, sem segunda leitura do registro.
+ *
+ * LÍQUIDO DOS ESTORNOS (INTERNAL-CONSUMPTION-REVERSAL-01, decisão R21-a do
+ * PO): o estorno abate o consumo NA DATA DO CI. Indicadores e agrupamentos
+ * usam quantidade e custo líquidos; o CI estornado por inteiro continua
+ * listado, marcado, mas não conta em Consumos, Sem custo nem Itens distintos.
+ * O período de um relatório passado muda quando chega um estorno depois — a
+ * cronologia continua no extrato de movimentações.
  */
 export interface InternalConsumptionReportSummaryDTO {
-  /** Consumos do recorte inteiro, não da página. */
+  /** Consumos do recorte inteiro, não da página — sem os estornados por inteiro. */
   consumptionCount: number;
   /** Consumos com custo conhecido — os únicos que entram no valor. */
   knownCostCount: number;
   /** Consumos sem custo (`totalCost` nulo). Nunca somados como zero. */
   missingCostCount: number;
   /**
-   * Soma dos custos CONHECIDOS. `null` quando nenhum consumo do recorte tem
-   * custo — ausência não vira R$ 0,00. `"0"` só quando os custos conhecidos
-   * somam zero de verdade.
+   * Soma dos custos CONHECIDOS, líquida dos estornos. `null` quando nenhum
+   * consumo que conta tem custo — ausência não vira R$ 0,00. `"0"` só quando
+   * os custos conhecidos somam zero de verdade.
    */
   knownCostTotal: string | null;
   distinctItemCount: number;
+  /** Consumos do recorte com pelo menos um estorno, parcial ou total. */
+  reversedConsumptionCount: number;
 }
 
 /** Resumo por Item — uma linha por item e unidade gravada no consumo. */
@@ -685,8 +710,9 @@ export interface InternalConsumptionReportItemGroupDTO {
   /** A unidade do snapshot; quantidade só soma dentro da mesma unidade. */
   uomCode: string;
   consumptionCount: number;
+  /** Quantidade líquida dos estornos. */
   quantity: string;
-  /** Soma dos custos conhecidos do item; `null` quando nenhum tem custo. */
+  /** Soma dos custos conhecidos do item, líquida; `null` quando nenhum tem custo. */
   knownCostTotal: string | null;
   missingCostCount: number;
 }

@@ -22,11 +22,13 @@ import {
   COST_SOURCE_LABELS,
   CUSTOMER_ORDER_BILLING_STATUS_LABELS,
   CUSTOMER_ORDER_STATUS_LABELS,
+  INTERNAL_CONSUMPTION_REVERSAL_STATUS_LABELS,
   INVENTORY_MOVEMENT_TYPE_LABELS,
   ITEM_TYPE_LABELS,
   LOT_STATUS_LABELS,
   PRODUCTION_ORDER_STATUS_LABELS,
   PURCHASE_ORDER_STATUS_LABELS,
+  sentidoDoMovimento,
 } from "@veridi/shared";
 import {
   csvCode,
@@ -222,6 +224,8 @@ const r03 = defineCsvExport({
   columns: [
     { header: "Data/Hora", value: (row: MovementReportRowDTO) => csvDateTime(row.occurredAt) },
     { header: "Tipo", value: (row: MovementReportRowDTO) => INVENTORY_MOVEMENT_TYPE_LABELS[row.type] },
+    // O sentido pelo tipo, como no extrato: a quantidade é sempre positiva.
+    { header: "Entrada/Saída", value: (row: MovementReportRowDTO) => sentidoDoMovimento(row.type) },
     { header: "Item", value: (row: MovementReportRowDTO) => csvCode(row.itemCode) },
     { header: "Descrição", value: (row: MovementReportRowDTO) => csvText(row.itemName) },
     { header: "Lote", value: (row: MovementReportRowDTO) => csvCode(row.lotCode) },
@@ -679,6 +683,10 @@ const r20 = defineCsvExport({
  * unitário e total com as casas do registro (`csvDecimal`), para a soma da
  * coluna na planilha bater com o "Valor total conhecido" da tela ao centavo.
  * Custo desconhecido é célula VAZIA, com "Sem custo" na origem — nunca 0.
+ *
+ * Estornos (R21-a): a linha continua sendo o CI, com a quantidade original,
+ * a estornada, a líquida, o custo total original e o líquido, e a situação.
+ * A soma da coluna "Custo total líquido" é o valor da tela.
  */
 const r21 = defineCsvExport({
   path: "/reports/inventory/internal-consumption/export.csv",
@@ -694,12 +702,19 @@ const r21 = defineCsvExport({
     { header: "Item", value: (row: InternalConsumptionDTO) => csvCode(row.itemCode) },
     { header: "Descrição", value: (row: InternalConsumptionDTO) => csvText(row.itemName) },
     { header: "Lote", value: (row: InternalConsumptionDTO) => csvCode(row.lotCode) },
-    { header: "Quantidade", value: (row: InternalConsumptionDTO) => csvDecimal(row.quantity) },
+    { header: "Quantidade original", value: (row: InternalConsumptionDTO) => csvDecimal(row.quantity) },
+    { header: "Quantidade estornada", value: (row: InternalConsumptionDTO) => csvDecimal(row.reversedQuantity) },
+    { header: "Quantidade líquida", value: (row: InternalConsumptionDTO) => csvDecimal(row.reversibleQuantity) },
     { header: "Unidade", value: (row: InternalConsumptionDTO) => csvText(row.uomCode) },
     { header: "Destino/uso", value: (row: InternalConsumptionDTO) => csvText(row.purpose) },
     { header: "Custo unitário", value: (row: InternalConsumptionDTO) => csvDecimal(row.unitCost) },
     { header: "Custo total", value: (row: InternalConsumptionDTO) => csvDecimal(row.totalCost) },
+    { header: "Custo total líquido", value: (row: InternalConsumptionDTO) => csvDecimal(row.netTotalCost) },
     { header: "Origem do custo", value: (row: InternalConsumptionDTO) => COST_SOURCE_LABELS[row.costSource] },
+    {
+      header: "Situação",
+      value: (row: InternalConsumptionDTO) => INTERNAL_CONSUMPTION_REVERSAL_STATUS_LABELS[row.reversalStatus],
+    },
     { header: "Usuário", value: (row: InternalConsumptionDTO) => csvText(row.registeredByName) },
     { header: "Observação", value: (row: InternalConsumptionDTO) => csvText(row.notes) },
   ],

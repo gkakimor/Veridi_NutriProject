@@ -471,7 +471,7 @@ export const suprimentosTopics = {
       {
         label: "Origem",
         detail:
-          "Todo lançamento vem de uma operação real: recebimento, consumo de produção, produção de acabado, expedição, amostra, ajuste, perda ou saldo de abertura da migração.",
+          "Todo lançamento vem de uma operação real: recebimento, consumo de produção, produção de acabado, expedição, amostra, consumo interno e o estorno dele, ajuste, perda ou saldo de abertura da migração.",
       },
       {
         label: "Lançamento",
@@ -497,7 +497,7 @@ export const suprimentosTopics = {
       },
     ],
     notes: [
-      "Nada aqui é editável, por decisão de projeto. Quem procura o botão de corrigir está procurando o ajuste, no detalhe do item, ou o Inventário Físico.",
+      "Nada aqui é editável, por decisão de projeto. Quem procura o botão de corrigir está procurando o ajuste, no detalhe do item, o Inventário Físico ou, para consumo interno lançado errado, o estorno em Uso e consumo.",
       "Liberar, bloquear ou desbloquear lote não aparece nesta lista: essas decisões mudam a disponibilidade, não o estoque físico.",
       "Reserva também não aparece: reservar compromete quantidade para uma ordem, não movimenta estoque. Quem movimenta é o consumo.",
       "Cada lançamento carrega o documento que o originou — recebimento, ordem de compra, ordem de produção, expedição, amostra — e é por ele que se refaz o caminho do material.",
@@ -561,12 +561,13 @@ export const suprimentosTopics = {
       {
         label: "Conferir depois",
         detail:
-          "O consumo confirmado não é apagado nem editado. Erro de quantidade se resolve pelo Inventário Físico, que conta o que existe e gera o acerto.",
+          "O consumo confirmado não é apagado nem editado. Lançado errado, ele é estornado — por inteiro ou em parte, com motivo: a quantidade volta ao mesmo lote, com o custo do consumo original, e o relatório passa a mostrar o líquido.",
         tone: "warn",
       },
     ],
     notes: [
-      "Quem registra: Administrador, Compras, Produção ou Qualidade. O Comercial não registra, e o perfil de consulta só lê a lista.",
+      "Quem registra: Administrador, Compras, Produção ou Qualidade. Quem estorna: Administrador ou Qualidade. O Comercial não registra, e o perfil de consulta só lê a lista.",
+      "O estorno é recusado quando a posição está num inventário aberto, ou foi contada depois do consumo: a contagem já acertou o saldo, e estornar corrigiria duas vezes.",
       "O saldo sai do mesmo histórico de estoque de todo o resto. A saída aparece nas Movimentações, com o código do consumo na origem.",
       "Item de uso e consumo normalmente não controla lote. Quando controlar, o lote passa a ser obrigatório, e valem as mesmas regras de qualidade e validade do resto do estoque.",
       "Material de cliente nunca sai por aqui: gastar estoque de terceiro como despesa própria seria contabilizar o que não é seu.",

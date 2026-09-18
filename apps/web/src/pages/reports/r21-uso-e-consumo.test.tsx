@@ -54,6 +54,12 @@ function consumo(extra: Partial<InternalConsumptionDTO>): InternalConsumptionDTO
     registeredByUserId: "user-ana",
     registeredByName: "Ana Souza",
     createdAt: "2026-09-10T15:00:00.000Z",
+    reversedQuantity: "0",
+    reversibleQuantity: extra.quantity ?? "10",
+    reversedTotalCost: extra.totalCost === null ? null : "0",
+    netTotalCost: extra.totalCost === undefined ? "15" : extra.totalCost,
+    reversalStatus: "NOT_REVERSED",
+    reversalCount: 0,
     ...extra,
   };
 }
@@ -79,7 +85,7 @@ const COM_E_SEM_CUSTO: InternalConsumptionReportDTO = {
   page: 1,
   pageSize: 25,
   total: 2,
-  summary: { consumptionCount: 2, knownCostCount: 1, missingCostCount: 1, knownCostTotal: "15", distinctItemCount: 2 },
+  summary: { consumptionCount: 2, knownCostCount: 1, missingCostCount: 1, knownCostTotal: "15", distinctItemCount: 2, reversedConsumptionCount: 0 },
   byItem: [
     {
       itemId: "item-luva", itemCode: "UC-000001", itemName: "Luva nitrílica", uomCode: "un",
@@ -184,7 +190,7 @@ describe("R-21 — KPIs, custo desconhecido e resumos", () => {
       ...COM_E_SEM_CUSTO,
       rows: [COM_E_SEM_CUSTO.rows[1]!],
       total: 1,
-      summary: { consumptionCount: 1, knownCostCount: 0, missingCostCount: 1, knownCostTotal: null, distinctItemCount: 1 },
+      summary: { consumptionCount: 1, knownCostCount: 0, missingCostCount: 1, knownCostTotal: null, distinctItemCount: 1, reversedConsumptionCount: 0 },
       byItem: [COM_E_SEM_CUSTO.byItem[1]!],
       byPurpose: [COM_E_SEM_CUSTO.byPurpose[1]!],
     });
@@ -202,7 +208,7 @@ describe("R-21 — KPIs, custo desconhecido e resumos", () => {
       ...COM_E_SEM_CUSTO,
       rows: [COM_E_SEM_CUSTO.rows[0]!],
       total: 1,
-      summary: { consumptionCount: 1, knownCostCount: 1, missingCostCount: 0, knownCostTotal: "15", distinctItemCount: 1 },
+      summary: { consumptionCount: 1, knownCostCount: 1, missingCostCount: 0, knownCostTotal: "15", distinctItemCount: 1, reversedConsumptionCount: 0 },
     });
     abrir();
     await screen.findByText("Valor total conhecido");
@@ -214,11 +220,96 @@ describe("R-21 — KPIs, custo desconhecido e resumos", () => {
     await screen.findByText("CI-000002");
 
     expect(linhasDoDetalhe()).toEqual([
-      ["10/09/2026", "CI-000001", expect.stringContaining("UC-000001"), "10", "un", "Escritório", "R$ 1,50",
-        "R$ 15,00", "Real", "Ana Souza"],
-      ["10/09/2026", "CI-000002", expect.stringContaining("UC-000002"), "3", "un", "—", "Custo não disponível",
-        "Custo não disponível", "Sem custo", "Bruno Lima"],
+      ["10/09/2026", "CI-000001", expect.stringContaining("UC-000001"), "10", "0", "10", "un", "Escritório",
+        "R$ 1,50", "R$ 15,00", "R$ 15,00", "Real", "—", "Ana Souza"],
+      ["10/09/2026", "CI-000002", expect.stringContaining("UC-000002"), "3", "0", "3", "un", "—",
+        "Custo não disponível", "Custo não disponível", "Custo não disponível", "Sem custo", "—", "Bruno Lima"],
     ]);
+  });
+
+  it("estorno (R21-a): original, estornado, líquido, custo líquido e situação na linha; a ressalva dos estornos", async () => {
+    vi.mocked(getInternalConsumptionReport).mockResolvedValue({
+      ...COM_E_SEM_CUSTO,
+      rows: [
+        consumo({
+          reversedQuantity: "4",
+          reversibleQuantity: "6",
+          reversedTotalCost: "6",
+          netTotalCost: "9",
+          reversalStatus: "PARTIALLY_REVERSED",
+          reversalCount: 1,
+        }),
+        consumo({
+          id: "ci-2",
+          code: "CI-000002",
+          quantity: "3",
+          totalCost: "4.5",
+          unitCost: "1.5",
+          reversedQuantity: "3",
+          reversibleQuantity: "0",
+          reversedTotalCost: "4.5",
+          netTotalCost: "0",
+          reversalStatus: "REVERSED",
+          reversalCount: 2,
+        }),
+      ],
+      total: 2,
+      summary: {
+        consumptionCount: 1,
+        knownCostCount: 1,
+        missingCostCount: 0,
+        knownCostTotal: "9",
+        distinctItemCount: 1,
+        reversedConsumptionCount: 2,
+      },
+    });
+    abrir();
+    await screen.findByText("CI-000002");
+
+    expect(linhasDoDetalhe().map((linha) => [linha[1], linha[3], linha[4], linha[5], linha[10], linha[12]])).toEqual([
+      ["CI-000001", "10", "4", "6", "R$ 9,00", "Estornado parcialmente"],
+      ["CI-000002", "3", "3", "0", "R$ 0,00", "Estornado"],
+    ]);
+    expect(kpi("Consumos")).toBe("1");
+    expect(kpi("Valor total conhecido")).toBe("R$ 9,00");
+    expect(screen.getByRole("note")).toHaveTextContent(
+      "2 consumos com estorno: quantidades e valores são líquidos dos estornos; o estornado por inteiro continua na lista e não entra nos indicadores.",
+    );
+  });
+
+  it("recorte só com consumo estornado por inteiro: sem indicadores nem resumos, só a ressalva dos estornos", async () => {
+    vi.mocked(getInternalConsumptionReport).mockResolvedValue({
+      rows: [
+        consumo({
+          reversedQuantity: "10",
+          reversibleQuantity: "0",
+          reversedTotalCost: "15",
+          netTotalCost: "0",
+          reversalStatus: "REVERSED",
+          reversalCount: 1,
+        }),
+      ],
+      page: 1,
+      pageSize: 25,
+      total: 1,
+      summary: {
+        consumptionCount: 0,
+        knownCostCount: 0,
+        missingCostCount: 0,
+        knownCostTotal: null,
+        distinctItemCount: 0,
+        reversedConsumptionCount: 1,
+      },
+      byItem: [],
+      byPurpose: [],
+    });
+    abrir();
+    await screen.findByText("CI-000001");
+
+    expect(screen.queryByText("Valor total conhecido")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Resumo por item" })).toBeNull();
+    expect(screen.getByRole("note")).toHaveTextContent("1 consumo com estorno:");
+    expect(linhasDoDetalhe()[0]?.[12]).toBe("Estornado");
   });
 
   it("resumo por item e por destino/uso, com o destino vazio nomeado", async () => {
@@ -248,7 +339,7 @@ describe("R-21 — KPIs, custo desconhecido e resumos", () => {
       page: 1,
       pageSize: 25,
       total: 0,
-      summary: { consumptionCount: 0, knownCostCount: 0, missingCostCount: 0, knownCostTotal: null, distinctItemCount: 0 },
+      summary: { consumptionCount: 0, knownCostCount: 0, missingCostCount: 0, knownCostTotal: null, distinctItemCount: 0, reversedConsumptionCount: 0 },
       byItem: [],
       byPurpose: [],
     });

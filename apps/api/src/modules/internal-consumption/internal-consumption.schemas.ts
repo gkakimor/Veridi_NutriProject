@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { ehDiaCivil } from "@veridi/shared";
+import {
+  INTERNAL_CONSUMPTION_REVERSAL_REASON_MAX,
+  INTERNAL_CONSUMPTION_REVERSAL_REASON_MIN,
+  ehDiaCivil,
+} from "@veridi/shared";
 import { quantityDecimalSchema } from "../../lib/decimal-schema.js";
 import { diaCivilDeFiltroSchema, recusarPeriodoInvertido } from "../../lib/date-schema.js";
 import { inteiroDeConsultaSchema } from "../../lib/integer-schema.js";
@@ -57,3 +61,27 @@ export const listInternalConsumptionsQuerySchema = z
   .superRefine(recusarPeriodoInvertido("dateFrom", "dateTo"));
 
 export type ListInternalConsumptionsQuery = z.infer<typeof listInternalConsumptionsQuerySchema>;
+
+/**
+ * Estorno (INTERNAL-CONSUMPTION-REVERSAL-01). Quem estorna e quando vem da
+ * SESSÃO: o corpo não tem usuário, data, item, lote nem custo — o item e o
+ * lote são os do consumo, o custo é a cópia do dele, e o instante é o agora.
+ */
+export const createInternalConsumptionReversalSchema = z.object({
+  quantity: quantityDecimalSchema(),
+  reason: z
+    .string({ required_error: "Motivo é obrigatório" })
+    .trim()
+    .min(
+      INTERNAL_CONSUMPTION_REVERSAL_REASON_MIN,
+      `Motivo é obrigatório (mínimo de ${INTERNAL_CONSUMPTION_REVERSAL_REASON_MIN} caracteres)`,
+    )
+    .max(
+      INTERNAL_CONSUMPTION_REVERSAL_REASON_MAX,
+      `Use no máximo ${INTERNAL_CONSUMPTION_REVERSAL_REASON_MAX} caracteres`,
+    ),
+  /** O "já estornado" que a tela mostrou — `0` no primeiro estorno. */
+  expectedReversedQuantity: quantityDecimalSchema({ allowZero: true }),
+});
+
+export type CreateInternalConsumptionReversalBody = z.infer<typeof createInternalConsumptionReversalSchema>;

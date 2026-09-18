@@ -78,3 +78,91 @@ export class FutureInternalConsumptionDateError extends Error {
     this.name = "FutureInternalConsumptionDateError";
   }
 }
+
+/* ─────────────── Estorno (INTERNAL-CONSUMPTION-REVERSAL-01) ─────────────── */
+
+/** Decimal do domínio na frase, com vírgula — nunca `Number`. */
+function quantidadeNaFrase(valor: string): string {
+  return valor.replace(".", ",");
+}
+
+export class InternalConsumptionNotFoundError extends Error {
+  constructor() {
+    super("Consumo interno não encontrado.");
+    this.name = "InternalConsumptionNotFoundError";
+  }
+}
+
+/** Tudo já estornado: não há o que devolver. */
+export class NothingToReverseError extends Error {
+  constructor() {
+    super("Não há quantidade a estornar.");
+    this.name = "NothingToReverseError";
+  }
+}
+
+export class ReversalExceedsBalanceError extends Error {
+  constructor(consumoCode: string, pedido: string, saldo: string) {
+    super(
+      `Quantidade a estornar (${quantidadeNaFrase(pedido)}) maior que o saldo estornável de ${consumoCode} (${quantidadeNaFrase(saldo)}).`,
+    );
+    this.name = "ReversalExceedsBalanceError";
+  }
+}
+
+/**
+ * O "já estornado" mudou entre a tela e o confirmar — duplo clique, outra aba
+ * ou outra pessoa. Nada foi gravado; quem estorna decide vendo o número atual.
+ */
+export class ReversalStateChangedError extends Error {
+  constructor(
+    consumoCode: string,
+    readonly shown: string,
+    readonly current: string,
+  ) {
+    super(
+      `O consumo ${consumoCode} mudou desde que você abriu: o já estornado era ${quantidadeNaFrase(shown)} e agora é ${quantidadeNaFrase(current)}. Confira antes de estornar.`,
+    );
+    this.name = "ReversalStateChangedError";
+  }
+}
+
+/**
+ * A posição está num Inventário Físico aberto: a contagem dele vai acertar o
+ * saldo, e o estorno somaria a mesma correção de novo.
+ */
+export class ReversalPositionInOpenCountError extends Error {
+  constructor(
+    consumoCode: string,
+    readonly stockCountCode: string,
+  ) {
+    super(
+      `A posição de ${consumoCode} está no inventário ${stockCountCode}, ainda aberto. A contagem dele vai acertar o saldo: estornar agora corrigiria duas vezes. Registre a contagem lá.`,
+    );
+    this.name = "ReversalPositionInOpenCountError";
+  }
+}
+
+/**
+ * A posição foi contada DEPOIS do registro do consumo: o saldo esperado da
+ * contagem já tinha a baixa, e o ajuste já absorveu o erro.
+ */
+export class ReversalPositionCountedAfterConsumptionError extends Error {
+  constructor(
+    consumoCode: string,
+    readonly stockCountCode: string,
+  ) {
+    super(
+      `A posição de ${consumoCode} foi contada no inventário ${stockCountCode} depois do registro do consumo: a contagem já acertou o saldo, e estornar agora corrigiria duas vezes.`,
+    );
+    this.name = "ReversalPositionCountedAfterConsumptionError";
+  }
+}
+
+/** Duas escritas no mesmo consumo se cruzaram; nada foi gravado pela segunda. */
+export class ReversalConcurrentWriteError extends Error {
+  constructor() {
+    super("Outra operação neste consumo terminou antes. Recarregue e tente de novo.");
+    this.name = "ReversalConcurrentWriteError";
+  }
+}

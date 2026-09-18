@@ -28,7 +28,49 @@ import type { InternalConsumptionReportQuery } from "./reports.schemas.js";
  * Custo desconhecido é `null` do começo ao fim. O valor total soma SÓ os
  * consumos com custo conhecido, e quantos ficaram de fora sai ao lado — nunca
  * um zero que misturaria "não custou nada" com "não se sabe quanto custou".
+ *
+ * LÍQUIDO DOS ESTORNOS (INTERNAL-CONSUMPTION-REVERSAL-01, R21-a): o estorno
+ * abate o consumo na data do CI. Os agrupamentos saem do banco pelo bruto e
+ * os estornos dos CIs do recorte são descontados depois — o `groupBy` do
+ * Prisma não subtrai. CI estornado por inteiro continua na lista, marcado, e
+ * sai da contagem de Consumos, Sem custo e Itens distintos. O custo estornado
+ * é a cópia gravada no ECI-, nunca recalculada.
  */
+
+type Numeros = {
+  consumptionCount: number;
+  quantity: Prisma.Decimal;
+  /** Consumos que CONTAM com custo conhecido. */
+  knownCostCount: number;
+  missingCostCount: number;
+  /** Soma líquida dos custos conhecidos — só vale quando `knownCostCount > 0`. */
+  knownCost: Prisma.Decimal;
+};
+
+type ConsumoEstornado = {
+  itemId: string;
+  uomCode: string;
+  purpose: string | null;
+  totalCost: Prisma.Decimal | null;
+  quantidadeEstornada: Prisma.Decimal;
+  custoEstornado: Prisma.Decimal;
+  estornadoPorInteiro: boolean;
+};
+
+/** Desconta de um grupo o que os estornos de um CI tiraram dele. */
+function descontar(numeros: Numeros, estornado: ConsumoEstornado): void {
+  numeros.quantity = numeros.quantity.minus(estornado.quantidadeEstornada);
+  if (estornado.totalCost !== null) numeros.knownCost = numeros.knownCost.minus(estornado.custoEstornado);
+  if (!estornado.estornadoPorInteiro) return;
+  numeros.consumptionCount -= 1;
+  if (estornado.totalCost === null) numeros.missingCostCount -= 1;
+  else numeros.knownCostCount -= 1;
+}
+
+/** O valor que o DTO leva: `null` quando nenhum consumo que conta tem custo. */
+function valorConhecido(numeros: Numeros): string | null {
+  return numeros.knownCostCount === 0 ? null : numeros.knownCost.toString();
+}
 
 /** O recorte — o MESMO `where` para as linhas, o resumo e os agrupamentos. */
 function whereDoRelatorio(query: InternalConsumptionReportQuery): Prisma.InternalConsumptionWhereInput {
@@ -56,13 +98,6 @@ function whereDoRelatorio(query: InternalConsumptionReportQuery): Prisma.Interna
   };
 }
 
-/** Soma de custos conhecidos; `null` quando nenhum entrou — nunca `"0"` inventado. */
-function somaConhecida(valores: (Prisma.Decimal | null)[]): string | null {
-  const conhecidos = valores.filter((valor): valor is Prisma.Decimal => valor !== null);
-  if (conhecidos.length === 0) return null;
-  return conhecidos.reduce((soma, valor) => soma.plus(valor), new Decimal(0)).toString();
-}
-
 /** Maior valor conhecido primeiro; sem custo por último, e então por volume. */
 function porValorConhecido(
   a: { knownCostTotal: string | null; consumptionCount: number },
@@ -88,8 +123,9 @@ export async function getInternalConsumptionReport(
    * Resumo e agrupamentos cobrem o FILTRO inteiro, não a página, e saem do
    * banco agregados. `_count.totalCost` conta só os não nulos: a diferença
    * para `_count._all` é exatamente "sem custo", sem uma segunda consulta.
+   * Os estornos saem agregados por CI, só dos CIs do recorte.
    */
-  const [consumptions, gruposPorItem, gruposPorDestino] = await Promise.all([
+  const [consumptions, gruposPorItem, gruposPorDestino, estornosPorConsumo] = await Promise.all([
     prisma.internalConsumption.findMany({
       where,
       include: internalConsumptionInclude,
@@ -108,39 +144,118 @@ export async function getInternalConsumptionReport(
       _count: { _all: true, totalCost: true },
       _sum: { totalCost: true },
     }),
+    prisma.internalConsumptionReversal.groupBy({
+      by: ["originalConsumptionId"],
+      where: { originalConsumption: { is: where } },
+      _sum: { quantity: true, totalCost: true },
+    }),
   ]);
 
+  // Os CIs que têm estorno: o que cada um tira do grupo do item e do destino.
+  const somaPorConsumo = new Map(estornosPorConsumo.map((grupo) => [grupo.originalConsumptionId, grupo._sum]));
+  const consumosEstornados: ConsumoEstornado[] = somaPorConsumo.size
+    ? (
+        await prisma.internalConsumption.findMany({
+          where: { id: { in: [...somaPorConsumo.keys()] } },
+          select: { id: true, itemId: true, uomCode: true, purpose: true, quantity: true, totalCost: true },
+        })
+      ).map((consumo) => {
+        const soma = somaPorConsumo.get(consumo.id);
+        const quantidadeEstornada = soma?.quantity ?? new Decimal(0);
+        return {
+          itemId: consumo.itemId,
+          uomCode: consumo.uomCode,
+          purpose: consumo.purpose,
+          totalCost: consumo.totalCost,
+          quantidadeEstornada,
+          custoEstornado: soma?.totalCost ?? new Decimal(0),
+          estornadoPorInteiro: quantidadeEstornada.greaterThanOrEqualTo(consumo.quantity),
+        };
+      })
+    : [];
+
+  const brutos = (grupo: {
+    _count: { _all: number; totalCost: number };
+    _sum: { quantity?: Prisma.Decimal | null; totalCost: Prisma.Decimal | null };
+  }): Numeros => ({
+    consumptionCount: grupo._count._all,
+    quantity: grupo._sum.quantity ?? new Decimal(0),
+    knownCostCount: grupo._count.totalCost,
+    missingCostCount: grupo._count._all - grupo._count.totalCost,
+    knownCost: grupo._sum.totalCost ?? new Decimal(0),
+  });
+
+  // Id do item (UUID) e código de unidade não têm ":": a chave não colide.
+  const chaveDoItem = (itemId: string, uomCode: string) => `${itemId}:${uomCode}`;
+  const porItem = new Map(gruposPorItem.map((grupo) => [chaveDoItem(grupo.itemId, grupo.uomCode), brutos(grupo)]));
+  const porDestino = new Map(gruposPorDestino.map((grupo) => [grupo.purpose, brutos(grupo)]));
+  const recorte: Numeros = {
+    consumptionCount: 0,
+    quantity: new Decimal(0),
+    knownCostCount: 0,
+    missingCostCount: 0,
+    knownCost: new Decimal(0),
+  };
+  for (const numeros of porDestino.values()) {
+    recorte.consumptionCount += numeros.consumptionCount;
+    recorte.knownCostCount += numeros.knownCostCount;
+    recorte.missingCostCount += numeros.missingCostCount;
+    recorte.knownCost = recorte.knownCost.plus(numeros.knownCost);
+  }
+  // Cada consumo está em exatamente um destino: a lista mostra todos, os
+  // estornados por inteiro inclusive.
+  const listados = recorte.consumptionCount;
+
+  for (const estornado of consumosEstornados) {
+    const doItem = porItem.get(chaveDoItem(estornado.itemId, estornado.uomCode));
+    const doDestino = porDestino.get(estornado.purpose);
+    if (doItem) descontar(doItem, estornado);
+    if (doDestino) descontar(doDestino, estornado);
+    descontar(recorte, estornado);
+  }
+
+  const itemIds = [...new Set(gruposPorItem.map((grupo) => grupo.itemId))];
   const itens = await prisma.item.findMany({
-    where: { id: { in: [...new Set(gruposPorItem.map((grupo) => grupo.itemId))] } },
+    where: { id: { in: itemIds } },
     select: { id: true, code: true, name: true },
   });
   const itemPorId = new Map(itens.map((item) => [item.id, item]));
 
+  // Grupo cujos consumos foram todos estornados por inteiro não tem o que
+  // resumir: sai do agrupamento, como sai de Consumos e de Itens distintos.
   const byItem = gruposPorItem
-    .map((grupo): InternalConsumptionReportItemGroupDTO => {
+    .flatMap((grupo): InternalConsumptionReportItemGroupDTO[] => {
+      const numeros = porItem.get(chaveDoItem(grupo.itemId, grupo.uomCode))!;
+      if (numeros.consumptionCount === 0) return [];
       const item = itemPorId.get(grupo.itemId);
-      return {
-        itemId: grupo.itemId,
-        itemCode: item?.code ?? "",
-        itemName: item?.name ?? "",
-        uomCode: grupo.uomCode,
-        consumptionCount: grupo._count._all,
-        quantity: (grupo._sum.quantity ?? new Decimal(0)).toString(),
-        knownCostTotal: somaConhecida([grupo._sum.totalCost]),
-        missingCostCount: grupo._count._all - grupo._count.totalCost,
-      };
+      return [
+        {
+          itemId: grupo.itemId,
+          itemCode: item?.code ?? "",
+          itemName: item?.name ?? "",
+          uomCode: grupo.uomCode,
+          consumptionCount: numeros.consumptionCount,
+          quantity: numeros.quantity.toString(),
+          knownCostTotal: valorConhecido(numeros),
+          missingCostCount: numeros.missingCostCount,
+        },
+      ];
     })
     .sort((a, b) => porValorConhecido(a, b) || a.itemCode.localeCompare(b.itemCode));
 
   const byPurpose = gruposPorDestino
-    .map(
-      (grupo): InternalConsumptionReportPurposeGroupDTO => ({
-        purpose: grupo.purpose,
-        consumptionCount: grupo._count._all,
-        knownCostTotal: somaConhecida([grupo._sum.totalCost]),
-        missingCostCount: grupo._count._all - grupo._count.totalCost,
-      }),
-    )
+    .flatMap((grupo): InternalConsumptionReportPurposeGroupDTO[] => {
+      const numeros = porDestino.get(grupo.purpose)!;
+      if (numeros.consumptionCount === 0) return [];
+      return [
+        {
+          purpose: grupo.purpose,
+          consumptionCount: numeros.consumptionCount,
+          knownCostTotal: valorConhecido(numeros),
+          missingCostCount: numeros.missingCostCount,
+        },
+      ];
+    })
     .sort(
       (a, b) =>
         porValorConhecido(a, b) ||
@@ -148,19 +263,16 @@ export async function getInternalConsumptionReport(
         (a.purpose === null ? 1 : b.purpose === null ? -1 : a.purpose.localeCompare(b.purpose)),
     );
 
-  // Cada consumo está em exatamente um destino: os grupos somam o recorte.
-  const consumptionCount = byPurpose.reduce((soma, grupo) => soma + grupo.consumptionCount, 0);
-  const missingCostCount = byPurpose.reduce((soma, grupo) => soma + grupo.missingCostCount, 0);
-
   return {
     rows: consumptions.map(internalConsumptionToDTO),
-    ...pageMeta(pagination, consumptionCount),
+    ...pageMeta(pagination, listados),
     summary: {
-      consumptionCount,
-      knownCostCount: consumptionCount - missingCostCount,
-      missingCostCount,
-      knownCostTotal: somaConhecida(gruposPorDestino.map((grupo) => grupo._sum.totalCost)),
-      distinctItemCount: new Set(gruposPorItem.map((grupo) => grupo.itemId)).size,
+      consumptionCount: recorte.consumptionCount,
+      knownCostCount: recorte.knownCostCount,
+      missingCostCount: recorte.missingCostCount,
+      knownCostTotal: valorConhecido(recorte),
+      distinctItemCount: new Set(byItem.map((grupo) => grupo.itemId)).size,
+      reversedConsumptionCount: consumosEstornados.length,
     },
     byItem,
     byPurpose,

@@ -28,6 +28,7 @@ export const SEQUENCES_DE_NEGOCIO = [
   "industrial_cost_template_code_seq",
   "industrial_resource_code_seq",
   "internal_consumption_code_seq",
+  "internal_consumption_reversal_code_seq",
   "item_code_finished_product_seq",
   "item_code_internal_consumable_seq",
   "item_code_packaging_seq",

@@ -44,6 +44,18 @@ export function avisoDoValorDoUsoEConsumo(resumo: InternalConsumptionReportSumma
     : `Valor parcial: ${formatIntegerPtBr(semCusto)} consumos com ${CUSTO_NAO_DISPONIVEL.toLowerCase()} não entram na soma.`;
 }
 
+/**
+ * O que os estornos fizeram com os números (INTERNAL-CONSUMPTION-REVERSAL-01,
+ * R21-a): o relatório é LÍQUIDO, e o consumo estornado por inteiro continua na
+ * lista sem entrar nos indicadores. Sem estorno no recorte, nada a dizer.
+ */
+export function avisoDosEstornos(resumo: InternalConsumptionReportSummaryDTO): string | null {
+  const estornados = resumo.reversedConsumptionCount;
+  if (estornados === 0) return null;
+  const quantos = estornados === 1 ? "1 consumo com estorno" : `${formatIntegerPtBr(estornados)} consumos com estorno`;
+  return `${quantos}: quantidades e valores são líquidos dos estornos; o estornado por inteiro continua na lista e não entra nos indicadores.`;
+}
+
 /** Os quatro indicadores do R-21, na ordem da tela. */
 export function indicadoresDoUsoEConsumo(resumo: InternalConsumptionReportSummaryDTO): ReportKpi[] {
   return [
@@ -55,18 +67,32 @@ export function indicadoresDoUsoEConsumo(resumo: InternalConsumptionReportSummar
 }
 
 /**
- * R-21 no papel: os indicadores, a ressalva do valor e os dois agrupamentos,
- * com as colunas que o papel já usa na tabela de registros (código e descrição
- * do item separados; quantidade e unidade também). Recorte sem consumo não tem
- * resumo — como na tela, o vazio é dito pela tabela.
+ * As ressalvas do R-21, na ordem da tela: o valor parcial e os estornos. Só
+ * com consumo que conta há indicador a qualificar; os estornos se dizem sempre
+ * que houver — inclusive num recorte só de consumos estornados por inteiro.
+ */
+export function ressalvasDoUsoEConsumo(resumo: InternalConsumptionReportSummaryDTO): string[] {
+  return [avisoDoValorDoUsoEConsumo(resumo), avisoDosEstornos(resumo)].filter(
+    (aviso): aviso is string => aviso !== null,
+  );
+}
+
+/**
+ * R-21 no papel: os indicadores, as ressalvas e os dois agrupamentos, com as
+ * colunas que o papel já usa na tabela de registros (código e descrição do
+ * item separados; quantidade e unidade também). Recorte sem consumo nem
+ * estorno não tem resumo — como na tela, o vazio é dito pela tabela; recorte
+ * só com consumos estornados por inteiro leva só a ressalva dos estornos.
  */
 export function resumoDoUsoEConsumo(dados: InternalConsumptionReportDTO): ReportPdfSummary | null {
   const { summary } = dados;
-  if (summary.consumptionCount === 0) return null;
-  const aviso = avisoDoValorDoUsoEConsumo(summary);
+  if (summary.consumptionCount === 0) {
+    const estornos = avisoDosEstornos(summary);
+    return estornos ? { kpis: [], notes: [estornos], detailTitle: "Consumos" } : null;
+  }
   return {
     kpis: indicadoresDoUsoEConsumo(summary),
-    notes: aviso ? [aviso] : [],
+    notes: ressalvasDoUsoEConsumo(summary),
     tables: [
       {
         title: "Resumo por item",

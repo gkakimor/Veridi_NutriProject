@@ -259,19 +259,25 @@ describe("relatórios R-01…R-20 em PDF", () => {
     expect(linhas(documento)[2]).toContain("—");
   });
 
-  it("relatório sem linha de detalhe: célula vazia sai —, nunca zero nem branco", async () => {
+  it("R-03: célula vazia sai —, nunca zero nem branco — na linha principal e na de detalhe", async () => {
     apiFetch.mockResolvedValue(
       respostaCsv([
-        ["Data/Hora", "Tipo", "Item", "Descrição", "Lote", "Quantidade", "Unidade", "Documento", "Motivo", "Usuário"],
-        ["08/09/2026, 22:14:03", "Ajuste de entrada", "MP-000001", "Maltodextrina", "", "5", "kg", "", "", "Ana"],
+        [
+          "Data/Hora", "Tipo", "Entrada/Saída", "Item", "Descrição", "Lote", "Quantidade", "Unidade", "Documento",
+          "Motivo", "Usuário",
+        ],
+        ["08/09/2026, 22:14:03", "Ajuste de entrada", "Entrada", "MP-000001", "Maltodextrina", "", "5", "kg", "", "", ""],
       ]),
     );
     abrir("/print/relatorios/R-03?from=2026-09-01");
 
     const documento = await documentoGerado("R-03-2026-09-11.pdf");
     expect(campo(documento, "De")).toBe("2026-09-01");
+    // O sentido fica na linha principal; o usuário desce para o detalhe
+    // (INTERNAL-CONSUMPTION-REVERSAL-01): a linha inteira não cabe na folha.
     expect(linhas(documento)).toEqual([
-      ["08/09/2026, 22:14:03", "Ajuste de entrada", "MP-000001", "Maltodextrina", "—", "5", "kg", "—", "—", "Ana"],
+      ["08/09/2026, 22:14:03", "Ajuste de entrada", "Entrada", "MP-000001", "Maltodextrina", "—", "5", "kg", "—", "—"],
+      ["Usuário: —"],
     ]);
   });
 
@@ -1104,16 +1110,17 @@ describe("R-21 Uso e consumo em PDF (INTERNAL-CONSUMPTION-REPORT-01)", () => {
   const USUARIO = "6b1f2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
   const ITEM = "7c2a3b4d-5e6f-4a7b-9c8d-0e1f2a3b4c5d";
   const CABECALHO = [
-    "Data", "Consumo", "Item", "Descrição", "Lote", "Quantidade", "Unidade", "Destino/uso", "Custo unitário",
-    "Custo total", "Origem do custo", "Usuário", "Observação",
+    "Data", "Consumo", "Item", "Descrição", "Lote", "Quantidade original", "Quantidade estornada",
+    "Quantidade líquida", "Unidade", "Destino/uso", "Custo unitário", "Custo total", "Custo total líquido",
+    "Origem do custo", "Situação", "Usuário", "Observação",
   ];
   const COM_CUSTO = [
-    "10/09/2026", "CI-000001", "UC-000001", "Papel A4", "", "10", "un", "Escritório", "1,5000", "15,00", "Real",
-    "Ana Souza", "",
+    "10/09/2026", "CI-000001", "UC-000001", "Papel A4", "", "10", "0", "10", "un", "Escritório", "1,5000", "15,00",
+    "15,00", "Real", "—", "Ana Souza", "",
   ];
   const SEM_CUSTO = [
-    "10/09/2026", "CI-000002", "UC-000002", "Copo descartável", "", "3", "un", "", "", "", "Sem custo",
-    "Bruno Lima", "",
+    "10/09/2026", "CI-000002", "UC-000002", "Copo descartável", "", "3", "0", "3", "un", "", "", "", "", "Sem custo",
+    "—", "Bruno Lima", "",
   ];
 
   /**
@@ -1127,7 +1134,7 @@ describe("R-21 Uso e consumo em PDF (INTERNAL-CONSUMPTION-REPORT-01)", () => {
       page: 1,
       pageSize: 1,
       total: 2,
-      summary: { consumptionCount: 2, knownCostCount: 1, missingCostCount: 1, knownCostTotal: "15", distinctItemCount: 2 },
+      summary: { consumptionCount: 2, knownCostCount: 1, missingCostCount: 1, knownCostTotal: "15", distinctItemCount: 2, reversedConsumptionCount: 0 },
       byItem: [
         {
           itemId: "i-1", itemCode: "UC-000001", itemName: "Papel A4", uomCode: "un", consumptionCount: 1,
@@ -1177,12 +1184,12 @@ describe("R-21 Uso e consumo em PDF (INTERNAL-CONSUMPTION-REPORT-01)", () => {
       purposes: ["Limpeza"],
       users: [{ id: USUARIO, name: "Bruno Lima" }],
     });
-    const linha = [...SEM_CUSTO.slice(0, 7), "Limpeza", ...SEM_CUSTO.slice(8)];
+    const linha = [...SEM_CUSTO.slice(0, 9), "Limpeza", ...SEM_CUSTO.slice(10)];
     responder(
       [CABECALHO, linha],
       jsonDaTela({
         total: 1,
-        summary: { consumptionCount: 1, knownCostCount: 0, missingCostCount: 1, knownCostTotal: null, distinctItemCount: 1 },
+        summary: { consumptionCount: 1, knownCostCount: 0, missingCostCount: 1, knownCostTotal: null, distinctItemCount: 1, reversedConsumptionCount: 0 },
         byItem: [jsonDaTela().byItem[1]!],
         byPurpose: [{ purpose: "Limpeza", consumptionCount: 1, knownCostTotal: null, missingCostCount: 1 }],
       }),
@@ -1210,12 +1217,83 @@ describe("R-21 Uso e consumo em PDF (INTERNAL-CONSUMPTION-REPORT-01)", () => {
 
     // A tabela de registros continua a última, como sempre foi.
     const [principal, detalhe] = tabelas(documento).at(-1)!.linhas;
+    // Linha principal do líquido (INTERNAL-CONSUMPTION-REVERSAL-01): original,
+    // estornado, líquido, custo total líquido e situação.
     expect(principal).toEqual([
-      "10/09/2026", "CI-000002", "UC-000002", "Copo descartável", "3", "un", "Limpeza", "—", "—", "Sem custo",
-      "Bruno Lima",
+      "10/09/2026", "CI-000002", "UC-000002", "Copo descartável", "3", "0", "3", "un", "Limpeza", "—", "—",
     ]);
     expect(detalhe?.[0]).toContain("Lote: —");
+    expect(detalhe?.[0]).toContain("Custo total: —");
+    expect(detalhe?.[0]).toContain("Origem do custo: Sem custo");
+    expect(detalhe?.[0]).toContain("Usuário: Bruno Lima");
     expect(detalhe?.[0]).toContain("Observação: —");
+  });
+
+  it("estorno no papel: a linha leva original, estornado, líquido, custo líquido e situação; a ressalva dos estornos", async () => {
+    const estornado = [
+      "10/09/2026", "CI-000003", "UC-000001", "Papel A4", "", "10", "4", "6", "un", "Escritório", "1,5000", "15,00",
+      "9,00", "Real", "Estornado parcialmente", "Ana Souza", "",
+    ];
+    responder(
+      [CABECALHO, estornado],
+      jsonDaTela({
+        total: 1,
+        summary: {
+          consumptionCount: 1,
+          knownCostCount: 1,
+          missingCostCount: 0,
+          knownCostTotal: "9",
+          distinctItemCount: 1,
+          reversedConsumptionCount: 1,
+        },
+        byItem: [{ ...jsonDaTela().byItem[0]!, quantity: "6", knownCostTotal: "9" }],
+        byPurpose: [{ ...jsonDaTela().byPurpose[0]!, knownCostTotal: "9" }],
+      }),
+    );
+    abrir("/print/relatorios/R-21");
+
+    const documento = await documentoGerado("R-21-2026-09-11.pdf");
+    expect(lido(campo(documento, "Valor total conhecido"))).toBe("R$ 9,00");
+    expect(ressalvas(documento)).toEqual([
+      "1 consumo com estorno: quantidades e valores são líquidos dos estornos; o estornado por inteiro continua na lista e não entra nos indicadores.",
+    ]);
+    const [principal] = tabelas(documento).at(-1)!.linhas;
+    expect(principal).toEqual([
+      "10/09/2026", "CI-000003", "UC-000001", "Papel A4", "10", "4", "6", "un", "Escritório", "9,00",
+      "Estornado parcialmente",
+    ]);
+  });
+
+  it("recorte só com consumo estornado por inteiro: sem indicadores nem agrupamentos, só a ressalva dos estornos", async () => {
+    const estornado = [
+      "10/09/2026", "CI-000004", "UC-000001", "Papel A4", "", "10", "10", "0", "un", "Escritório", "1,5000", "15,00",
+      "0", "Real", "Estornado", "Ana Souza", "",
+    ];
+    responder(
+      [CABECALHO, estornado],
+      jsonDaTela({
+        total: 1,
+        summary: {
+          consumptionCount: 0,
+          knownCostCount: 0,
+          missingCostCount: 0,
+          knownCostTotal: null,
+          distinctItemCount: 0,
+          reversedConsumptionCount: 1,
+        },
+        byItem: [],
+        byPurpose: [],
+      }),
+    );
+    abrir("/print/relatorios/R-21");
+
+    const documento = await documentoGerado("R-21-2026-09-11.pdf");
+    expect(campo(documento, "Valor total conhecido")).toBeNull();
+    expect(ressalvas(documento)).toEqual([expect.stringContaining("1 consumo com estorno:")]);
+    const [consumos, ...sobra] = tabelas(documento);
+    expect(sobra).toEqual([]);
+    expect(consumos?.titulo).toBe("Consumos");
+    expect(consumos?.linhas[0]?.at(-1)).toBe("Estornado");
   });
 
   describe("resumo no papel (REPORTS-PDF-SUMMARY-01)", () => {
@@ -1277,7 +1355,7 @@ describe("R-21 Uso e consumo em PDF (INTERNAL-CONSUMPTION-REPORT-01)", () => {
         [CABECALHO, SEM_CUSTO],
         jsonDaTela({
           total: 1,
-          summary: { consumptionCount: 1, knownCostCount: 0, missingCostCount: 1, knownCostTotal: null, distinctItemCount: 1 },
+          summary: { consumptionCount: 1, knownCostCount: 0, missingCostCount: 1, knownCostTotal: null, distinctItemCount: 1, reversedConsumptionCount: 0 },
           byItem: [jsonDaTela().byItem[1]!],
           byPurpose: [jsonDaTela().byPurpose[1]!],
         }),
@@ -1303,7 +1381,7 @@ describe("R-21 Uso e consumo em PDF (INTERNAL-CONSUMPTION-REPORT-01)", () => {
         [CABECALHO, COM_CUSTO],
         jsonDaTela({
           total: 1,
-          summary: { consumptionCount: 1, knownCostCount: 1, missingCostCount: 0, knownCostTotal: "0", distinctItemCount: 1 },
+          summary: { consumptionCount: 1, knownCostCount: 1, missingCostCount: 0, knownCostTotal: "0", distinctItemCount: 1, reversedConsumptionCount: 0 },
           byItem: [{ ...jsonDaTela().byItem[0]!, knownCostTotal: "0" }],
           byPurpose: [{ ...jsonDaTela().byPurpose[0]!, knownCostTotal: "0" }],
         }),
@@ -1324,7 +1402,7 @@ describe("R-21 Uso e consumo em PDF (INTERNAL-CONSUMPTION-REPORT-01)", () => {
         [CABECALHO],
         jsonDaTela({
           total: 0,
-          summary: { consumptionCount: 0, knownCostCount: 0, missingCostCount: 0, knownCostTotal: null, distinctItemCount: 0 },
+          summary: { consumptionCount: 0, knownCostCount: 0, missingCostCount: 0, knownCostTotal: null, distinctItemCount: 0, reversedConsumptionCount: 0 },
           byItem: [],
           byPurpose: [],
         }),
