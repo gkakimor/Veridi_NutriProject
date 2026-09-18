@@ -981,15 +981,6 @@ vista: o R-21 filtra e agrupa o destino pelo texto EXATO gravado, e as três gra
 por destino. É o momento natural de decidir entre um cadastro de Centro de Custo e uma lista fechada de destinos.
 Migrar depois é possível: o texto gravado vira o ponto de partida do mapeamento.
 
-### REPORTS-PDF-SUMMARY-01 — resumo e agrupamentos dos relatórios não vão ao PDF — LOW, sem posição
-
-Registrado em 2026-09-17 por INTERNAL-CONSUMPTION-REPORT-01, **sem mudança**. O PDF dos relatórios é um documento só,
-montado do CSV de exportação (`ReportPrintPage` → `ReportPdf`): filtros aplicados, total de registros e as linhas. O
-que a tela mostra ACIMA da tabela não está no CSV e por isso não chega ao papel — os KPIs e os resumos por item e por
-destino do R-21, e o resumo do R-15 (documentos, com preço completo, valor faturado). Levá-los pede uma segunda leitura
-por relatório (o JSON do mesmo recorte) e uma seção "Resumo" no `ReportPdf`. A pergunta ao PO: o papel gerencial
-precisa dos totais, ou a tela e o CSV bastam?
-
 ---
 
 ## Backlog reservado para go-live

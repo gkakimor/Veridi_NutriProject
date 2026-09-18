@@ -363,6 +363,18 @@ always a dedicated document route: the operational screen itself is never
 printed. `window.print()` remains only for physical labels (lot and sample
 labels) — PDF-DOCUMENT-SYSTEM-01.
 
+A report whose screen shows a **summary** above the table (KPIs, groupings)
+carries it to the PDF, before the records. The print route makes a second
+read, of the screen's JSON route — the CSV route without `/export.csv`, the
+same filter schema — with the URL filters as they came, `page=1&pageSize=1`
+and no `all`, only after the CSV was accepted. The summary is written by the
+same function the screen uses (`pages/reports/report-summaries.ts`): the
+paper does not add, count or format, so unknown stays as the screen says it
+("Custo não disponível", "Valores incompletos"), never R$ 0,00. A refused
+summary read fails the document, as a refused CSV does. A report without a
+summary makes no second read and prints exactly as before. Today: R-15 and
+R-21 — REPORTS-PDF-SUMMARY-01.
+
 | Content | Output |
 | --- | --- |
 | Administrative list | CSV |
@@ -7500,8 +7512,11 @@ custo desconhecido é célula VAZIA, com "Sem custo" na origem, nunca 0. Além d
 Observação.
 
 **PDF.** `/print/relatorios/R-21`, o documento genérico dos relatórios, lido do CSV: filtros pelo rótulo da tela, item
-e usuário pelo nome (nunca o id), lote e observação na linha de detalhe. O resumo e os agrupamentos NÃO vão ao papel
-nesta fatia — o PDF lê só o CSV, e o R-15 também não leva o seu resumo (REPORTS-PDF-SUMMARY-01).
+e usuário pelo nome (nunca o id), lote e observação na linha de detalhe. Desde REPORTS-PDF-SUMMARY-01 (2026-09-17) o
+resumo da tela vai ao papel antes dos registros, pela leitura JSON do mesmo recorte ("Printing policy"): os quatro KPIs,
+a ressalva do valor parcial ou desconhecido, o resumo por item (código, descrição, consumos, quantidade, unidade, valor
+conhecido, sem custo) e o resumo por destino/uso, e só então a seção "Consumos" com a tabela de sempre. Custo nulo é
+"Custo não disponível" no KPI e nos resumos, nunca R$ 0,00; recorte sem consumo não tem resumo, como a tela.
 
 **Leitura.** Todo perfil autenticado, `VIEWER` incluído: o histórico da Fatia 2 já mostra a todos o custo de cada
 consumo, e esconder o total no relatório não protegeria nada.

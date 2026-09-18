@@ -6187,7 +6187,7 @@ Leitura de todo perfil autenticado, como o histórico.
 `ALL_ROWS`; custo com as casas gravadas (`csvDecimal`), desconhecido vazio e "Sem custo" na origem. Contrato
 `REPORT_FILTER_CONTRACTS["R-21"]` no shared, conferido contra o schema pelo teste de contrato. PDF pelo documento
 genérico (`/print/relatorios/R-21`): filtros pelo rótulo, usuário e item pelo nome, lote e observação no detalhe.
-Resumo e agrupamentos no papel ficaram de fora (REPORTS-PDF-SUMMARY-01).
+Resumo e agrupamentos foram ao papel logo depois (REPORTS-PDF-SUMMARY-01, seção própria abaixo).
 
 **Web.** Relatórios › Estoque › R-21 (`/relatorios/estoque/uso-e-consumo`,
 `pages/reports/InternalConsumptionReport.tsx`): KPIs (Consumos, Valor total conhecido, Consumos sem custo, Itens
@@ -6255,6 +6255,37 @@ suítes da Onda A, sem mudança de comportamento), mais a "Duplicata de Item abs
 Typecheck dos scripts. As duas suítes de banco disputavam a trava consultiva em paralelo: cada arquivo usa a própria
 chave (ponto de teste; o CLI usa sempre a mesma). Sem migration, sem E2E, sem Playwright, sem mutação e sem suíte
 completa.
+
+## Resumo da tela no PDF dos relatórios (REPORTS-PDF-SUMMARY-01, 2026-09-17)
+
+**Decisão do PO.** Relatório com KPIs/resumo na tela leva o resumo ao PDF estruturado, começando pelo R-21; a tabela
+detalhada fica; `null` continua "Custo não disponível", nunca R$ 0,00. Evolução genérica do documento dos relatórios, sem
+reescrever o motor de PDF. Regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) ("Printing policy" e §117). Na `main`, fora
+de PROD (`release/prod` segue `8e824e8f`). **Sem migration e sem mudança de API.**
+
+**Contrato.** `ReportPdfInput.summary`, opcional (`pdf/documents/ReportPdf.tsx`): `kpis`, `notes`, `tables` (título,
+cabeçalho e células já escritas, larguras pelo mesmo `reportPdfColumn` das colunas do relatório) e `detailTitle`. O papel
+só escreve; sem `summary`, os outros relatórios saem idênticos. `ReportPrintDefinition.summary` declara o adaptador, e a
+página lê a rota JSON da tela (`reportSummaryPath`: a do CSV sem `/export.csv`, mesmo schema) com os filtros da URL,
+`page=1&pageSize=1` e sem `all` — depois do CSV aceito, em paralelo com os nomes dos filtros. Resumo recusado derruba o
+documento ("Falha ao carregar o resumo do relatório (…)").
+
+**Texto único.** `pages/reports/report-summaries.ts` escreve os indicadores da tela E do papel: R-21 (Consumos, Valor
+total conhecido, Consumos sem custo, Itens distintos e a ressalva de valor parcial/desconhecido, mais o resumo por item e
+por destino/uso) e R-15 (Documentos emitidos, Com preço completo, Valor faturado — "Valores incompletos" no lugar da soma
+parcial). As duas telas passaram a ler dali. No papel do R-21: Filtros aplicados, Resumo, Resumo por item (código e
+descrição separados, quantidade e unidade também), Resumo por destino/uso e a seção Consumos. "Valor conhecido" com
+84 pt: "Custo não disponível" cabe numa linha. Limite conhecido: são duas leituras, e um consumo registrado entre elas
+faz "Registros" (CSV) e "Consumos" (resumo) diferirem por um.
+
+**Validação.** Web: `pdf/documents/report-content` (86: KPIs, ressalva, agrupamentos e ordem no papel, leitura JSON com
+o recorte do CSV, `all` fora, zero real conhecido, nulo nunca zero, recorte vazio sem resumo, resumo recusado sem
+documento, CSV recusado sem segunda leitura, R-15), `pdf/documents/report-documents` (34, arquivo A4 real: resumo na
+primeira folha, 45 itens e 70 consumos em várias folhas com cabeçalho de cada tabela repetido e "Custo não disponível"
+inteiro, R-15, largura das tabelas do resumo até em retrato), `pages/print/report-print-definitions` (66) e as pastas
+`pages/reports`, `pages/print`, `pdf` e `print` — 33 arquivos, 540 testes. Mutação por script (extra, declarada): 5
+mutantes (nulo vira zero, resumo omitido, `all` repassado, falha engolida, ressalva some), 5 caídos. Typecheck da web.
+Sem API (intocada), suíte completa, E2E nem Playwright.
 
 ## Próxima prioridade
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { REPORT_FILTER_CONTRACTS } from "@veridi/shared";
-import { REPORT_PRINT_DEFINITIONS, reportAppliedFilters } from "./ReportPrintPage";
+import { REPORT_PRINT_DEFINITIONS, reportAppliedFilters, reportSummaryPath } from "./ReportPrintPage";
 
 /**
  * Contrato de filtros de cada relatório no papel (REPORTS-PRINT-UNACCEPTED-FILTER-01).
@@ -99,5 +99,28 @@ describe("filtros do PDF saem do contrato compartilhado", () => {
     // Mesma referência: a lista não foi reescrita na web.
     expect(definicao(codigo).filterKeys).toBe(contrato.filterKeys);
     expect(definicao(codigo).csvPath).toBe(contrato.csvPath);
+  });
+});
+
+/**
+ * REPORTS-PDF-SUMMARY-01: o resumo da tela (KPIs e agrupamentos) vai ao papel
+ * pela leitura JSON da tela — a rota do CSV sem `/export.csv`, que a API
+ * registra com o MESMO schema de filtros. O recorte é o mesmo por construção.
+ */
+describe("resumo da tela no PDF", () => {
+  it("os relatórios com resumo na tela o levam ao papel: R-15 e R-21", () => {
+    const comResumo = Object.values(REPORT_PRINT_DEFINITIONS).filter((definicao) => definicao.summary);
+    expect(comResumo.map((definicao) => definicao.code).sort()).toEqual(["R-15", "R-21"]);
+  });
+
+  it.each(["R-15", "R-21"])("%s: a leitura do resumo é a rota JSON da tela", (codigo) => {
+    const { csvPath } = definicao(codigo);
+    expect(csvPath).toMatch(/^\/reports\/[a-z-]+\/[a-z-]+\/export\.csv$/);
+    expect(reportSummaryPath(csvPath)).toBe(csvPath.slice(0, -"/export.csv".length));
+  });
+
+  it("R-21 e R-15: as rotas que a tela lê", () => {
+    expect(reportSummaryPath(definicao("R-21").csvPath)).toBe("/reports/inventory/internal-consumption");
+    expect(reportSummaryPath(definicao("R-15").csvPath)).toBe("/reports/billing/period");
   });
 });

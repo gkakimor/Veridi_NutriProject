@@ -4,12 +4,13 @@ import { join } from "node:path";
 import type { ReactElement } from "react";
 import { describe, expect, it } from "vitest";
 import { COST_PER_1000_LABEL } from "@veridi/shared";
-import type { OrderOperationDTO, ProductionTraceabilityDTO } from "@veridi/shared";
+import type { InternalConsumptionReportDTO, OrderOperationDTO, ProductionTraceabilityDTO } from "@veridi/shared";
 import {
   REPORT_PRINT_DEFINITIONS,
   parseReportCsv,
   reportAppliedFilters,
 } from "../../pages/print/ReportPrintPage";
+import { resumoDoFaturamentoPorPeriodo, resumoDoUsoEConsumo } from "../../pages/reports/report-summaries";
 import { renderPdfBlob } from "../render";
 import { lerPdf, type PdfLido } from "../testing/pdf-text";
 import { PDF_PAGE } from "../theme";
@@ -21,6 +22,7 @@ import {
 import {
   REPORT_EMPTY_MESSAGE,
   ReportPdf,
+  reportPdfColumn,
   reportPdfFileName,
   reportPdfLayout,
   type ReportPdfInput,
@@ -514,6 +516,151 @@ describe("relatórios R-01…R-20 — arquivo", () => {
     expect(pdf.paginas).toHaveLength(1);
     conferirArquivo(pdf, "paisagem");
     expect(pdf.paginas[0]).toContain(REPORT_EMPTY_MESSAGE);
+  }, 30_000);
+});
+
+// ------------------------------------------------------------ resumo (REPORTS-PDF-SUMMARY-01)
+
+/**
+ * O JSON da tela do R-21 para `itens` itens e `destinos` destinos: a cada
+ * três itens um sem custo nenhum, e o último destino é o "sem destino", sem
+ * custo — o pior caso do papel, ausência ao lado de valor.
+ */
+function usoEConsumo(itens: number, destinos: number): InternalConsumptionReportDTO {
+  const semCusto = (indice: number) => indice % 3 === 2;
+  const byItem = Array.from({ length: itens }, (_, indice) => ({
+    itemId: `i-${indice}`,
+    itemCode: `UC-${numero(indice)}`,
+    itemName: DESCRICOES[indice % DESCRICOES.length]!,
+    uomCode: "un",
+    consumptionCount: 3,
+    quantity: "12500.123456",
+    knownCostTotal: semCusto(indice) ? null : "1234567.89",
+    missingCostCount: semCusto(indice) ? 3 : 0,
+  }));
+  const byPurpose = Array.from({ length: destinos }, (_, indice) => {
+    const ultimo = indice === destinos - 1;
+    return {
+      purpose: ultimo ? null : `Destino ${numero(indice)} — Almoxarifado de limpeza e reposição`,
+      consumptionCount: 2,
+      knownCostTotal: ultimo ? null : "98765.4",
+      missingCostCount: ultimo ? 2 : 0,
+    };
+  });
+  const missingCostCount = byItem.reduce((soma, grupo) => soma + grupo.missingCostCount, 0);
+  const consumptionCount = byItem.reduce((soma, grupo) => soma + grupo.consumptionCount, 0);
+  return {
+    rows: [],
+    page: 1,
+    pageSize: 1,
+    total: consumptionCount,
+    summary: {
+      consumptionCount,
+      knownCostCount: consumptionCount - missingCostCount,
+      missingCostCount,
+      knownCostTotal: "987654321.12",
+      distinctItemCount: itens,
+    },
+    byItem,
+    byPurpose,
+  };
+}
+
+describe("resumo da tela no arquivo (REPORTS-PDF-SUMMARY-01)", () => {
+  it("toda tabela do resumo cabe até na folha em pé: sobra largura para o texto livre", () => {
+    const util = 595.28 - 2 * PDF_PAGE.marginX;
+    const tabelas = resumoDoUsoEConsumo(usoEConsumo(3, 2))?.tables ?? [];
+    expect(tabelas.map((tabela) => tabela.title)).toEqual(["Resumo por item", "Resumo por destino/uso"]);
+    for (const tabela of tabelas) {
+      const colunas = tabela.header.map((coluna) => reportPdfColumn("R-21", coluna));
+      const fixas = colunas.reduce((soma, coluna) => soma + (coluna.width ?? 0), 0);
+      const pesos = colunas.reduce((soma, coluna) => soma + (coluna.width === undefined ? (coluna.flex ?? 1) : 0), 0);
+      expect(fixas, `${tabela.title}: colunas fixas somam ${fixas} pt em ${util} pt`).toBeLessThan(util);
+      // Número à direita, e texto livre com a sobra.
+      for (const coluna of colunas.filter((c) => c.width === undefined)) {
+        expect(((util - fixas) * (coluna.flex ?? 1)) / pesos, `${tabela.title}: "${coluna.header}"`).toBeGreaterThan(70);
+      }
+      for (const coluna of colunas.filter((c) => ["Consumos", "Quantidade", "Valor conhecido", "Sem custo"].includes(c.header))) {
+        expect(coluna.align, coluna.header).toBe("right");
+      }
+    }
+  });
+
+  it("R-21 com resumo: A4 paisagem — indicadores, ressalva e agrupamentos na primeira folha, os consumos depois", async () => {
+    const dados = { ...relatorio("R-21", 4), summary: resumoDoUsoEConsumo(usoEConsumo(3, 2)) };
+    const pdf = await gerarRelatorio(dados, "R-21-resumo-inicio.pdf");
+
+    conferirArquivo(pdf, "paisagem");
+    const pagina = corrido(pdf.paginas[0] ?? "");
+    for (const marca of ["CONSUMOS SEM CUSTO", "VALOR TOTAL CONHECIDO", "ITENS DISTINTOS", "R$ 987.654.321,12"]) {
+      expect(pagina, marca).toContain(marca);
+    }
+    expect(pagina).toContain("Valor parcial: 3 consumos com custo não disponível não entram na soma.");
+    // Os dois agrupamentos, com ausência escrita como ausência — nunca zero.
+    expect(pagina).toContain("RESUMO POR ITEM");
+    expect(pagina).toContain("RESUMO POR DESTINO/USO");
+    expect(pagina).toContain("Sem destino informado");
+    expect(pagina.split("Custo não disponível").length - 1).toBeGreaterThanOrEqual(2);
+    expect(pagina).not.toContain("R$ 0,00");
+    // A ordem da folha: filtros, resumo, agrupamentos e os registros por último.
+    const ordem = ["FILTROS APLICADOS", "VALOR TOTAL CONHECIDO", "RESUMO POR ITEM", "RESUMO POR DESTINO/USO", "CI-000001"]
+      .map((marca) => pagina.indexOf(marca));
+    expect(ordem.every((posicao) => posicao >= 0), ordem.join(",")).toBe(true);
+    expect(ordem).toEqual([...ordem].sort((a, b) => a - b));
+    // A tabela de registros continua inteira, com o título que a separa do resumo.
+    expect(pagina.indexOf("CONSUMOS DATA CONSUMO ITEM")).toBeGreaterThan(pagina.indexOf("RESUMO POR DESTINO/USO"));
+    const tudo = pdf.paginas.map(corrido).join(" ");
+    for (let indice = 0; indice < 4; indice += 1) expect(tudo).toContain(`CI-${numero(indice)}`);
+    for (const folha of pdf.paginas.slice(1).map(corrido)) expect(folha).toContain("USUÁRIO");
+  }, 30_000);
+
+  it("R-21 com 45 itens e 70 consumos: várias folhas, cabeçalho de cada tabela repetido, nada some", async () => {
+    const itens = 45;
+    const registros = 70;
+    const dados = { ...relatorio("R-21", registros), summary: resumoDoUsoEConsumo(usoEConsumo(itens, 6)) };
+    const pdf = await gerarRelatorio(dados, "R-21-resumo-multipagina.pdf");
+
+    expect(pdf.paginas.length).toBeGreaterThanOrEqual(3);
+    conferirArquivo(pdf, "paisagem");
+    const folhas = pdf.paginas.map(corrido);
+    // Todo item do resumo e todo consumo estão no papel.
+    for (let indice = 0; indice < itens; indice += 1) {
+      expect(folhas.some((folha) => folha.includes(`UC-${numero(indice)}`)), `item ${indice}`).toBe(true);
+    }
+    for (let indice = 0; indice < registros; indice += 1) {
+      expect(folhas.some((folha) => folha.includes(`CI-${numero(indice)}`)), `consumo ${indice}`).toBe(true);
+    }
+    // Folha que continua o resumo por item repete o cabeçalho dele; a dos consumos, o dela.
+    // ("ORIGEM DO CUSTO" quebra em duas linhas no cabeçalho: "USUÁRIO" é a marca dos consumos.)
+    for (const folha of folhas) {
+      if (/UC-0000\d\d /.test(folha)) expect(folha).toContain("VALOR CONHECIDO SEM CUSTO");
+      if (folha.includes("CI-0000")) expect(folha).toContain("USUÁRIO");
+    }
+    // "Custo não disponível" inteiro em cada grupo sem custo (15 itens + o sem destino): cabe
+    // na coluna, sem dobrar em duas linhas — e nenhum deles virou zero.
+    expect(folhas.join(" ").split("Custo não disponível")).toHaveLength(16 + 1);
+    // Os consumos vêm depois do resumo inteiro: o último consumo fecha o documento.
+    expect(folhas.at(-1)).toContain(`CI-${numero(registros - 1)}`);
+    expect(folhas.join(" ")).not.toContain("R$ 0,00");
+  }, 60_000);
+
+  it("R-15 com resumo: os três indicadores da tela e \"Valores incompletos\" no lugar da soma parcial", async () => {
+    const dados = {
+      ...relatorio("R-15", 4),
+      summary: resumoDoFaturamentoPorPeriodo({
+        summary: { billingCount: 4, billingsWithCompletePricing: 3, totalAmount: null },
+      }),
+    };
+    const pdf = await gerarRelatorio(dados, "R-15-resumo.pdf");
+
+    expect(pdf.paginas).toHaveLength(1);
+    conferirArquivo(pdf, "paisagem");
+    const pagina = corrido(pdf.paginas[0] ?? "");
+    for (const marca of ["DOCUMENTOS EMITIDOS", "COM PREÇO COMPLETO", "3 de 4", "VALOR FATURADO", "Valores incompletos"]) {
+      expect(pagina, marca).toContain(marca);
+    }
+    expect(pagina.indexOf("VALOR FATURADO")).toBeLessThan(pagina.indexOf("FATURAMENTOS"));
+    expect(pagina.indexOf("FATURAMENTOS")).toBeLessThan(pagina.indexOf("FAT-000001"));
   }, 30_000);
 });
 
