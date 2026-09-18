@@ -6175,6 +6175,51 @@ banco de teste exclusivo deste worktree. Web: `production-orders/componente-inat
 15 arquivos, 133 testes; `pdf/documents/transactional-documents` (14), cuja fixture ganhou o campo novo. Typecheck de
 shared, API e web. Sem suíte completa, E2E, Playwright nem mutação; PROD e Railway intocados.
 
+## Uso e consumo: o relatório gerencial R-21 (INTERNAL-CONSUMPTION-REPORT-01, 2026-09-17)
+
+**Decisão do PO.** Fatia 3 de Uso e consumo: o relatório gerencial dos consumos internos já registrados — quanto saiu,
+quanto custou, quais itens mais pesaram, quem registrou, para qual destino, em que período e o que ficou sem custo.
+Centro de Custo NÃO foi criado (INTERNAL-CONSUMPTION-COST-CENTER-01 segue aberto). Regra em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §117. Na `main`, fora de PROD (`release/prod` segue `8e824e8f`). **Sem
+migration.**
+
+**API.** `GET /reports/inventory/internal-consumption` no módulo de Relatórios
+(`reports/internal-consumption-report.service.ts`, schema `internalConsumptionReportQuerySchema`): período,
+`itemId`, `purpose` exato, `registeredByUserId`, `costSource`, `hasCost` e busca por `CI-`, código e nome do
+Item. As linhas passam pelo mesmo mapeamento do histórico (`internalConsumptionToDTO`, agora exportado do serviço da
+Fatia 2); resumo e agrupamentos saem de dois `groupBy` sobre o MESMO `where` — `_count.totalCost` conta os não
+nulos, e a diferença é "sem custo". Nada chama a hierarquia de custo: o relatório lê os snapshots do `CI-`.
+`GET .../filter-options` devolve os destinos já escritos e quem já registrou (o cadastro de usuários é só do ADMIN).
+Leitura de todo perfil autenticado, como o histórico.
+
+**Exportação.** CSV `r21_uso_e_consumo` em `exports/report-exports.ts`, com o mesmo schema e o mesmo serviço em
+`ALL_ROWS`; custo com as casas gravadas (`csvDecimal`), desconhecido vazio e "Sem custo" na origem. Contrato
+`REPORT_FILTER_CONTRACTS["R-21"]` no shared, conferido contra o schema pelo teste de contrato. PDF pelo documento
+genérico (`/print/relatorios/R-21`): filtros pelo rótulo, usuário e item pelo nome, lote e observação no detalhe.
+Resumo e agrupamentos no papel ficaram de fora (REPORTS-PDF-SUMMARY-01).
+
+**Web.** Relatórios › Estoque › R-21 (`/relatorios/estoque/uso-e-consumo`,
+`pages/reports/InternalConsumptionReport.tsx`): KPIs (Consumos, Valor total conhecido, Consumos sem custo, Itens
+distintos) com o aviso de valor parcial ao lado, resumo por item e por destino/uso lado a lado, e a tabela com "Custo
+não disponível" no lugar do custo nulo. Período padrão: os últimos 30 dias, como o R-07. A tela de Uso e consumo ganhou
+o atalho "Relatório gerencial (R-21)", e a ajuda `estoque.usoEConsumo` deixou de dizer que o relatório não existe.
+
+**Guarda de paginação.** `GET /internal-consumptions` (Fatia 2) entrou na tabela de `paginacao-da-consulta.test.ts`:
+a guarda estava vermelha na `main` desde `c9ee5be7` (62 declarações para 60).
+
+**Validação.** API: `reports/r21-uso-e-consumo` (21: KPIs, resumo por item e por destino, nulo que não
+vira zero e zero real conhecido, recorte vazio, snapshot sem recálculo, período por dia comercial com o consumo gravado
+no fim do dia, cada filtro, AND, recusas 400, paginação, CSV com o mesmo recorte, 401 e VIEWER) e os vizinhos
+`exports/report-filter-contracts`, `exports/exports`, `reports/r20-autorizacao`, `reports/reports-dia-comercial`,
+`reports/reports-booleanos-de-consulta`, `internal-consumption/internal-consumption`, `list-filter-options`,
+`lib/escalar-estrito-guarda` e `paginacao-da-consulta` — 10 arquivos, 917 testes, em banco de teste exclusivo deste
+worktree. Web: `pages/reports/r21-uso-e-consumo` (9: KPIs e aviso de valor parcial, total desconhecido, tabela,
+resumos, recorte vazio, cada filtro com a página 1, CSV e PDF com o recorte, período invertido) e a pasta inteira de
+Relatórios (o R-21 entrou em `relatorios-pagina-ao-filtrar`, cuja guarda conta os campos de data), `pages/print`, o
+PDF (`report-content` e o arquivo real em `report-documents`), `src/app`, a tela de Uso e consumo, ajuda, seletores e
+as guardas estruturais que leem o fonte das telas — 41 arquivos, 764 testes. Typecheck de shared, API e web. Sem suíte
+completa, E2E, Playwright nem mutação; PROD e Railway intocados.
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a
