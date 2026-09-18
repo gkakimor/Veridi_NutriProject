@@ -7667,3 +7667,50 @@ bloqueia fluxo ou calcula imposto. Pagamento (§99), situação cadastral (§95)
 bloqueios e notas continuam fora do alcance da consulta.
 
 **Quem grava.** Quem edita o cadastro do Cliente (`CUSTOMER_EDIT_ROLES`, §98).
+
+## §120 — Nunca zero ADMIN ativo, e ninguém tira de si o acesso administrativo
+
+USER-LAST-ADMIN-GUARD-01 (2026-09-17), handoff do PO; D5 de
+[MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01](discovery/MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01.md).
+
+> **O sistema nunca fica sem administrador ativo, e nenhum administrador tira de si mesmo o acesso
+> administrativo.** Quando isso for necessário, outro ADMIN faz.
+
+**Quem sai do conjunto.** "ADMIN ativo" é o usuário com perfil Administrador e situação ativa. Sai do conjunto quem é
+inativado ou tem o perfil trocado por qualquer outro (Produção, Qualidade, Compras, Comercial, Consulta). ADMIN inativo
+não conta: rebaixá-lo ou reativá-lo passa sem guarda, como promover, criar administrador e editar nome ou e-mail.
+
+**As três recusas.** Em `PATCH /users/:id`, 409 com o código e a frase, e nada gravado:
+
+| Caso | Código | Frase |
+|---|---|---|
+| O alvo é o único ADMIN ativo e a edição o tira do conjunto | `last_active_admin` | "Não é possível concluir. O sistema precisa manter pelo menos um administrador ativo." |
+| Quem está autenticado inativa o próprio usuário, mesmo havendo outro ADMIN | `self_deactivation` | "Não é possível concluir. Você não pode inativar o próprio usuário — outro administrador deve fazer isso." |
+| Um ADMIN troca o próprio perfil por outro, mesmo havendo outro ADMIN | `self_demotion` | "Não é possível concluir. Você não pode retirar de si mesmo o perfil Administrador — outro administrador deve fazer isso." |
+
+Sendo o último E o próprio, vale a do último: não há outro administrador a quem pedir. "O próprio" é o usuário da
+sessão, nunca um campo do corpo. A recusa vale para o pedido inteiro — nome ou e-mail enviados junto não entram. Valor
+igual ao atual não é alteração: a tela manda perfil e situação em toda edição, e editar o próprio nome passa.
+
+**Duas edições ao mesmo tempo não zeram a lista.** Contar e depois gravar deixaria dois administradores, cada um
+rebaixando ou inativando o outro no mesmo instante, lerem "há outro ADMIN" e ficarem os dois de fora. A edição inteira
+corre numa transação que começa travando as linhas de ADMIN ativo (`SELECT … WHERE role = 'ADMIN' AND active ORDER BY
+id FOR NO KEY UPDATE`): toda edição de usuário trava o mesmo conjunto, na mesma ordem, sem deadlock; a segunda espera a
+primeira confirmar, relê o alvo, conta de novo e recusa como a do último. `FOR NO KEY UPDATE`, e não `FOR UPDATE`,
+porque não disputa com o `FOR KEY SHARE` que toda gravação com autor toma na linha de quem assina. Quem vira ADMIN
+ativo depois da trava só soma na contagem, e tirá-lo do conjunto passa pela mesma trava.
+
+**Sessões.** Inativar continua revogando todas as sessões abertas do inativado — agora na mesma transação da
+inativação. A recusa não revoga nada: a sessão de quem pediu segue valendo.
+
+**Intocados.** Autenticação e o modelo de perfis; o reset de senha (`POST /users/:id/reset-password`, que derruba as
+sessões do usuário e não muda perfil nem situação); `pnpm user:bootstrap-admin`, a porta de entrada no servidor quando
+não há ADMIN; os scripts de seed. Usuário continua sem exclusão.
+
+**Na tela.** Administração → Usuários. No próprio usuário, Perfil e "Usuário ativo" ficam travados com o motivo, e nome,
+e-mail e senha seguem editáveis. No único ADMIN ativo, a tela explica que o sistema precisa manter um e como sair disso:
+cadastrar ou promover outro administrador antes. Essa conta só vale com a lista inteira na mão — com mais usuários do
+que a página traz, a tela não afirma nada e quem decide é a API. A recusa que chega mesmo assim (corrida) aparece com a
+frase da API. Lista, consulta e histórico de qualquer usuário seguem abertos.
+
+**Sem migration.**

@@ -120,9 +120,9 @@ ATIVO em produção e o ponto de recuperação compatível é o backup pós-rele
   2026-09-17). Hoje nenhum cadastro mestre sai por exclusão física pela API ou pela tela, e o banco não protege a exclusão
   (CASCADE e SET NULL em Item, Produto, Cliente, Recurso e Modelos). Decidido: só ADMIN exclui; qualquer uso, referência
   ou histórico real bloqueia, com falha fechada; rastro append-only; FKs mantidas, com a segurança na aplicação; Perfil de
-  Produção arquivável; nunca zero ADMIN ativo. Na fila viva: Fatia 0 (PRODUCTION-PROFILE-ARCHIVE-01,
-  USER-LAST-ADMIN-GUARD-01), Fatia 1 (MASTER-DATA-HARD-DELETE-01) e Fatia 2 (MASTER-DATA-HARD-DELETE-02). Nada
-  implementado;
+  Produção arquivável; nunca zero ADMIN ativo. Da Fatia 0, USER-LAST-ADMIN-GUARD-01 entregue em 2026-09-17 (§120, seção
+  própria abaixo, na `main` e fora de PROD); na fila viva seguem PRODUCTION-PROFILE-ARCHIVE-01, a Fatia 1
+  (MASTER-DATA-HARD-DELETE-01) e a Fatia 2 (MASTER-DATA-HARD-DELETE-02);
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 
 Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
@@ -6330,6 +6330,32 @@ número o devolve. O PATCH só leva o bloco quando ele mudou; a guarda de altera
 montam o formulário (279), mais os portões da ajuda, `create-in-context` e `pages/products` (286). Checagens estáticas
 de migration e schema (57). Typecheck dos três pacotes; fresh sem drift. Sem suíte completa, E2E, Playwright nem
 mutação; nenhum teste toca a internet.
+
+## Nunca zero ADMIN ativo (USER-LAST-ADMIN-GUARD-01, 2026-09-17)
+
+**Decisão do PO** (D5 de [MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01](discovery/MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01.md)):
+o sistema nunca fica sem ADMIN ativo, e ninguém inativa a si mesmo nem retira de si o perfil Administrador — outro
+ADMIN faz. Regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §120. Na `main`, fora de PROD (`release/prod` segue
+`8e824e8f`). **Sem migration.**
+
+**API.** `PATCH /users/:id` recusa com 409 e frase de negócio: `last_active_admin` (inativar o único ADMIN ativo ou
+trocar o perfil dele por qualquer outro), `self_deactivation` e `self_demotion` (o usuário da sessão fazendo isso
+consigo mesmo, mesmo havendo outro ADMIN); sendo o último e o próprio, vale a do último. `updateUser` recebe o id da
+sessão e corre inteiro numa transação que começa travando as linhas de ADMIN ativo (`FOR NO KEY UPDATE`, ordem de id):
+relê o alvo e conta sob a trava, e a revogação das sessões do inativado entrou na mesma transação. Reset de senha,
+`user:bootstrap-admin`, autenticação e perfis intocados.
+
+**Web.** Administração → Usuários: no próprio usuário, Perfil e "Usuário ativo" travados com o motivo; no único ADMIN
+ativo, a explicação do último — contada só com a lista inteira na mão; a recusa da API aparece com a frase dela, e
+`api-errors.ts` ganhou o piso dos três códigos. A nota da ajuda que dizia "nada impede" foi corrigida.
+
+**Validação.** API `users-guarda-do-administrador.test.ts` (18) na faixa serial — o conjunto de ADMIN ativo é do banco
+inteiro: o arquivo tira do conjunto os ADMIN que encontra, monta o seu caso a caso e os devolve no fim. A corrida é
+determinística: a transação do teste segura as duas linhas, as duas edições param na trava (`pg_stat_activity`) e,
+soltas, uma passa e a outra é `last_active_admin`, nos três pares (rebaixar × rebaixar, inativar × inativar, inativar ×
+rebaixar). Vizinhos `auth.test.ts`, `users-booleanos-de-consulta.test.ts` e `faixas-de-teste.test.ts` (18). Web
+`usuarios-guarda-do-administrador.test.tsx` (9), com `pages/admin` e os portões da ajuda (231). Typecheck de API e Web;
+shared intocado. Sem suíte completa, E2E, Playwright nem mutação.
 
 ## Próxima prioridade
 
