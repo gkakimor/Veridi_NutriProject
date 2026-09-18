@@ -10,7 +10,7 @@ import {
   planejarCom,
   verificar,
 } from "./master-data-duplicate-sanitization.js";
-import type { GrupoPlanejado, Plano } from "./master-data-duplicate-sanitization.js";
+import type { GrupoPlanejado, OpcoesDaAplicacao, Plano } from "./master-data-duplicate-sanitization.js";
 import { cadastroPorChave } from "./master-data-catalog.js";
 import { gerarXlsx } from "./xlsx-writer.js";
 
@@ -28,6 +28,15 @@ import { gerarXlsx } from "./xlsx-writer.js";
  */
 
 const prisma = new PrismaClient();
+/**
+ * A trava consultiva é de todas as execuções reais. Este arquivo roda em
+ * paralelo com outra suíte que também aplica: cada um usa a sua chave, e a
+ * concorrência dentro do arquivo continua provando a trava.
+ */
+const TRAVA_DO_ARQUIVO = "teste:master-data-duplicate-sanitization";
+const aplicarNoArquivo = (cliente: PrismaClient, plano: Plano, opcoes: OpcoesDaAplicacao = {}) =>
+  aplicar(cliente, plano, { ...opcoes, trava: TRAVA_DO_ARQUIVO });
+
 
 afterAll(async () => {
   await prisma.$disconnect();
@@ -307,7 +316,15 @@ describe("PLAN — ABORTAR / revisão necessária", () => {
     // MP-000032 e MP-000034 são o grupo G1 do arquivo de decisão de
     // ITEM-DUPLICATE-SANITIZATION-01: as duas ferramentas nunca disputam o
     // mesmo registro.
+    // Com o corpus carregado no banco de teste (a suíte do importador carrega),
+    // os dois já existem com este nome: usa-os, e só cria — e só apaga — o que
+    // faltar.
     for (const code of ["MP-000032", "MP-000034"]) {
+      const existente = await prisma.item.findUnique({ where: { code } });
+      if (existente) {
+        expect(existente.name.trim().toUpperCase()).toBe("ÁCIDO NICOTÍNICO");
+        continue;
+      }
       const item = await prisma.item.create({
         data: { code, type: "RAW_MATERIAL", name: "Ácido nicotínico", unitCode: "kg" },
       });
@@ -316,7 +333,9 @@ describe("PLAN — ABORTAR / revisão necessária", () => {
     const plano = await planejar(prisma, ["ITEM"]);
     const grupo = acharGrupo(plano, "Ácido nicotínico");
     expect(grupo.situacao).toBe("BLOQUEADO");
-    expect(grupo.motivos.join("\n")).toMatch(/ITEM-DUPLICATE-SANITIZATION-01 — use aquela ferramenta/);
+    expect(grupo.motivos.join("\n")).toMatch(
+      /está no arquivo de decisão \(Onda A\) — quem executa é item-duplicate-sanitization\.ts --onda=A/,
+    );
   });
 });
 
@@ -334,7 +353,7 @@ describe("APPLY", () => {
 
     const plano = await planoDoRecurso();
     const grupo = acharGrupo(plano, nome);
-    const [resultado] = await aplicar(prisma, plano, { somente: [grupo.grupo] });
+    const [resultado] = await aplicarNoArquivo(prisma, plano, { somente: [grupo.grupo] });
 
     expect(resultado?.situacao).toBe("APLICADO");
     expect(resultado?.efeito).toEqual({
@@ -362,7 +381,7 @@ describe("APPLY", () => {
 
     const plano = await planoDoRecurso();
     const grupo = acharGrupo(plano, nome);
-    await aplicar(prisma, plano, { somente: [grupo.grupo] });
+    await aplicarNoArquivo(prisma, plano, { somente: [grupo.grupo] });
 
     // A FK é `onDelete: Cascade`. Sem mover antes, o DELETE levaria a tarifa
     // junto e o "sucesso" esconderia a perda.
@@ -378,7 +397,7 @@ describe("APPLY", () => {
 
     const plano = await planoDoRecurso();
     const grupo = acharGrupo(plano, nome);
-    const [resultado] = await aplicar(prisma, plano, { somente: [grupo.grupo] });
+    const [resultado] = await aplicarNoArquivo(prisma, plano, { somente: [grupo.grupo] });
 
     expect(resultado?.situacao).toBe("APLICADO");
     expect(await prisma.industrialResource.count({ where: { name: { equals: nome, mode: "insensitive" } } })).toBe(1);
@@ -395,7 +414,7 @@ describe("APPLY", () => {
     const plano = await planoDoRecurso();
     const grupoBloqueado = acharGrupo(plano, bloqueado);
     const grupoSeguro = acharGrupo(plano, seguro);
-    const resultados = await aplicar(prisma, plano, {
+    const resultados = await aplicarNoArquivo(prisma, plano, {
       somente: [grupoBloqueado.grupo, grupoSeguro.grupo],
     });
 
@@ -408,7 +427,7 @@ describe("APPLY", () => {
   });
 
   it("recusa arquivo que não é plano desta ferramenta", async () => {
-    await expect(aplicar(prisma, { ferramenta: "outra", formato: 1 } as Plano)).rejects.toThrow(
+    await expect(aplicarNoArquivo(prisma, { ferramenta: "outra", formato: 1 } as Plano)).rejects.toThrow(
       /não é um plano desta ferramenta/,
     );
   });
@@ -426,7 +445,7 @@ describe("APPLY — o banco tem de estar no estado do plano", () => {
     // Alguém editou o absorvido entre o PLAN e o APPLY.
     await prisma.industrialResource.update({ where: { id: absorvido.id }, data: { notes: "mexido depois" } });
 
-    const [resultado] = await aplicar(prisma, plano, { somente: [grupo.grupo] });
+    const [resultado] = await aplicarNoArquivo(prisma, plano, { somente: [grupo.grupo] });
     expect(resultado?.situacao).toBe("FALHOU");
     expect(resultado?.motivo).toMatch(/impressão digital diferente/);
     expect(await prisma.industrialResource.findUnique({ where: { id: absorvido.id } })).not.toBeNull();
@@ -443,7 +462,7 @@ describe("APPLY — o banco tem de estar no estado do plano", () => {
     const grupo = acharGrupo(plano, nome);
     const tarifaNova = await criarTarifa(absorvido.id);
 
-    const [resultado] = await aplicar(prisma, plano, { somente: [grupo.grupo] });
+    const [resultado] = await aplicarNoArquivo(prisma, plano, { somente: [grupo.grupo] });
     expect(resultado?.situacao).toBe("FALHOU");
     expect(resultado?.motivo).toMatch(/as referências a mover mudaram|impressão digital diferente/);
     const tarifa = await prisma.industrialResourceRate.findUniqueOrThrow({ where: { id: tarifaNova.id } });
@@ -459,7 +478,7 @@ describe("APPLY — o banco tem de estar no estado do plano", () => {
     const grupo = acharGrupo(plano, nome);
     await prisma.industrialResource.delete({ where: { id: absorvido.id } });
 
-    const [resultado] = await aplicar(prisma, plano, { somente: [grupo.grupo] });
+    const [resultado] = await aplicarNoArquivo(prisma, plano, { somente: [grupo.grupo] });
     expect(resultado?.situacao).toBe("FALHOU");
     expect(resultado?.motivo).toMatch(/não existe mais no banco/);
   });
@@ -478,8 +497,8 @@ describe("concorrência", () => {
     const outro = new PrismaClient();
     try {
       const [primeiro, segundo] = await Promise.all([
-        aplicar(prisma, plano, { somente: [grupo.grupo] }),
-        aplicar(outro, plano, { somente: [grupo.grupo] }),
+        aplicarNoArquivo(prisma, plano, { somente: [grupo.grupo] }),
+        aplicarNoArquivo(outro, plano, { somente: [grupo.grupo] }),
       ]);
       const situacoes = [primeiro[0]?.situacao, segundo[0]?.situacao].sort();
       // Uma aplica; a outra é recusada pela trava consultiva ou pela releitura
@@ -547,7 +566,7 @@ describe("planilha da rodada", () => {
     const plano = await planoDoRecurso();
     const grupoSeguro = acharGrupo(plano, seguro);
     const grupoBloqueado = acharGrupo(plano, bloqueado);
-    const resultados = await aplicar(prisma, plano, { somente: [grupoSeguro.grupo] });
+    const resultados = await aplicarNoArquivo(prisma, plano, { somente: [grupoSeguro.grupo] });
 
     const abas = planilhaDoSaneamento(plano, resultados, plano.variantes);
     expect(abas.map((a) => a.nome)).toEqual(["Removidos", "Resumo", "Revisão necessária"]);
@@ -589,7 +608,7 @@ describe("planilha da rodada", () => {
 
     const plano = await planoDoRecurso();
     const grupo = acharGrupo(plano, nome);
-    const resultados = await aplicar(prisma, plano, { somente: [grupo.grupo] });
+    const resultados = await aplicarNoArquivo(prisma, plano, { somente: [grupo.grupo] });
 
     const resumo = planilhaDoSaneamento(plano, resultados)[1]!;
     const linha = resumo.linhas.find((l) => l[1] === "industrial_resources")!;

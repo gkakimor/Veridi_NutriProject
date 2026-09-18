@@ -377,3 +377,62 @@ export function compararCampos(
 
   return { conflitos, perdidos };
 }
+
+/* ------------------------------------------------------------------ *
+ * Consolidação de campo no canônico (Onda 2)
+ * ------------------------------------------------------------------ */
+
+/** Separador dos termos consolidados — o mesmo do arquivo de decisão. */
+export const SEPARADOR_DE_TERMOS = " · ";
+
+/**
+ * Dois termos são o mesmo termo? `trim`, sem caixa e sem asterisco no fim.
+ *
+ * O asterisco final é marcador da planilha legada ("Clorogênico**", "Vitamina
+ * B6*") — o significado dele é pergunta aberta com a Veridi (V4), mas o
+ * nutriente é o mesmo. Acento continua contando, como na regra do nome.
+ */
+export function chaveDoTermo(termo: string): string {
+  return termo.trim().replace(/\*+$/u, "").trim().toUpperCase();
+}
+
+export interface Consolidacao {
+  /** "A · B · C", ou `null` quando nenhum registro tinha valor. */
+  valor: string | null;
+  /** Termo que só diferia por caixa ou marcador e ficou na grafia que veio antes. */
+  fundidos: { termo: string; em: string }[];
+}
+
+/**
+ * Junta os valores de um campo dos registros de um grupo, na ORDEM dada:
+ *
+ *  - valor já consolidado entra termo a termo (rodar de novo dá o mesmo);
+ *  - espaço nas pontas sai, termo vazio sai;
+ *  - termo repetido fica uma vez só, na PRIMEIRA grafia encontrada;
+ *  - nada é inventado: só entra termo que já estava em algum registro.
+ *
+ * Quem chama decide a ordem — na Onda 2, o canônico primeiro e depois os
+ * absorvidos pelo código, para o valor de antes ser o começo do valor de
+ * depois.
+ */
+export function consolidarTermos(valores: readonly (string | null | undefined)[]): Consolidacao {
+  const termos: string[] = [];
+  const porChave = new Map<string, string>();
+  const fundidos: { termo: string; em: string }[] = [];
+  for (const valor of valores) {
+    if (valor === null || valor === undefined) continue;
+    for (const parte of valor.split(/\s*·\s*/u)) {
+      const termo = parte.trim();
+      const chave = chaveDoTermo(termo);
+      if (!chave) continue;
+      const existente = porChave.get(chave);
+      if (existente === undefined) {
+        porChave.set(chave, termo);
+        termos.push(termo);
+      } else if (existente !== termo) {
+        fundidos.push({ termo, em: existente });
+      }
+    }
+  }
+  return { valor: termos.length > 0 ? termos.join(SEPARADOR_DE_TERMOS) : null, fundidos };
+}

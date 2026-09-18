@@ -4,6 +4,7 @@ import {
   cadastroPorChave,
   camposPreenchidos,
   compararCampos,
+  consolidarTermos,
   escolherCanonico,
 } from "./master-data-catalog.js";
 import type { CadastroMestreNoBanco, RegistroDoGrupo } from "./master-data-catalog.js";
@@ -224,5 +225,52 @@ describe("conflito material", () => {
       cadastro,
     );
     expect(conflitos.map((c) => c.coluna)).toEqual(["defaultPurityPercent"]);
+  });
+});
+
+describe("consolidação de campo no canônico (Onda 2)", () => {
+  it("junta os valores ÚNICOS em 'A · B · C', na ordem dada", () => {
+    expect(consolidarTermos(["Cálcio", "Fósforo"]).valor).toBe("Cálcio · Fósforo");
+    expect(consolidarTermos(["Colágeno", "Glicosaminoglicanos", "Ácido hialurônico"]).valor).toBe(
+      "Colágeno · Glicosaminoglicanos · Ácido hialurônico",
+    );
+  });
+
+  it("valor repetido entra uma vez só", () => {
+    expect(consolidarTermos(["Cálcio", "Fósforo", "Cálcio"]).valor).toBe("Cálcio · Fósforo");
+  });
+
+  it("tira espaço das pontas e ignora vazio e nulo — nunca inventa termo", () => {
+    expect(consolidarTermos(["  Cálcio ", null, "", "   ", undefined, " Fósforo"]).valor).toBe("Cálcio · Fósforo");
+    expect(consolidarTermos([null, null]).valor).toBeNull();
+  });
+
+  it("caixa diferente é o mesmo termo, e fica a grafia que veio primeiro", () => {
+    const { valor, fundidos } = consolidarTermos(["Fibra Alimentar", "FIBRA ALIMENTAR", "Beta-glucana"]);
+    expect(valor).toBe("Fibra Alimentar · Beta-glucana");
+    expect(fundidos).toEqual([{ termo: "FIBRA ALIMENTAR", em: "Fibra Alimentar" }]);
+  });
+
+  it("asterisco final é marcador: 'Clorogênico' e 'Clorogênico**' são o mesmo termo, e o fundido é declarado", () => {
+    const { valor, fundidos } = consolidarTermos(["Clorogênico**", "Adenosina", "Clorogênico", "Rutina"]);
+    expect(valor).toBe("Clorogênico** · Adenosina · Rutina");
+    expect(fundidos).toEqual([{ termo: "Clorogênico", em: "Clorogênico**" }]);
+  });
+
+  it("acento continua contando: 'Fosforo' e 'Fósforo' NÃO são o mesmo termo", () => {
+    expect(consolidarTermos(["Fósforo", "Fosforo"]).valor).toBe("Fósforo · Fosforo");
+  });
+
+  it("rodar de novo sobre o valor consolidado dá o mesmo valor", () => {
+    const primeira = consolidarTermos(["Fibra Alimentar", "Arabinogalactana"]).valor;
+    expect(consolidarTermos([primeira, "Arabinogalactana"]).valor).toBe(primeira);
+    expect(consolidarTermos([primeira]).valor).toBe(primeira);
+  });
+
+  it("a ordem é a de quem chama: o canônico primeiro deixa o ANTES como começo do DEPOIS", () => {
+    const antes = "Magnésio";
+    const depois = consolidarTermos([antes, "Fósforo"]).valor!;
+    expect(depois.startsWith(antes)).toBe(true);
+    expect(consolidarTermos(["Fósforo", antes]).valor).toBe("Fósforo · Magnésio");
   });
 });
