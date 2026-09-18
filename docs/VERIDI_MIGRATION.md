@@ -132,10 +132,20 @@ Item de matéria-prima ou embalagem que o PO decidiu absorver num canônico (§1
 - reprova o plano se a base ainda tem o absorvido (`ITEM_DUPLICATE_ABSORBED_CONFLICT`) ou se o canônico não vem na
   carga ou tem outro código nesta base (`ITEM_DUPLICATE_CANONICAL_UNRESOLVED`);
 - deixa o saldo legado do código absorvido fora do template de abertura, apontando o canônico
-  (`STOCK_LEGACY_CODE_ABSORBED`, REVIEW).
+  (`STOCK_LEGACY_CODE_ABSORBED`, REVIEW);
+- grava o que a decisão escreveu no saneamento (ITEM-IMPORT-WAVE-3-CONSISTENCY-01): o `declaredNutrient` consolidado no
+  canônico (Onda 2 em diante) e o nome técnico no renomeado (Onda 3), na criação E ao completar — reexecutar não devolve o
+  valor da planilha (`ITEM_DUPLICATE_DECISION_APPLIED`, INFO). O nutriente é calculado do pacote pela regra da ferramenta
+  (`consolidarTermos`, canônico primeiro e absorvidos pelo código do ERP) e só vale se der o valor escrito na decisão; a
+  renomeação exige o nome de antes exato, o mantido com o nome do grupo e o nome novo livre na carga sem caixa. Pacote que
+  a decisão já não descreve, ou renomeado com outro código do ERP nesta base, reprova (`ITEM_DUPLICATE_DECISION_MISMATCH`).
 
-O `import-plan.json` guarda a impressão das decisões (`duplicateDecisions`) e o APPLY recusa se ela mudou. Sem pacote, o
-caminho de desenvolvimento ignora a decisão.
+O `import-plan.json` guarda a impressão do que a carga aplica — fusão, consolidação e renomeação (`duplicateDecisions`,
+`impressaoDaCarga`) — e o APPLY recusa se ela mudou: plano gerado antes desta regra também recusa. O VERIFY confere a
+base contra a decisão ("Decisões de duplicata de Item refletidas"): absorvido fora, nutriente consolidado, nome técnico.
+Base carregada antes das ondas (PROD hoje) acusa ali até o saneamento rodar lá. Exclusão de agregado e grupo em revisão
+ficam fora da carga: ela nunca escreve Modelo (os "X" eram dado do DEV), e o grupo em revisão nasce do pacote como está.
+Sem pacote, o caminho de desenvolvimento ignora a decisão.
 
 O banco já carregado sai da duplicata pela ferramenta de manutenção, no Bash (no PowerShell 5.1 as flags se perdem):
 
@@ -199,8 +209,8 @@ pnpm exec dotenv -e .env -- tsx scripts/maintenance/master-data-duplicate-saniti
 ```
 
 O APPLY recusa, antes de escrever, arquivo de decisão diferente do que gerou o plano e onda com grupo fora de PRONTO. Com
-o pacote de revisão, o importador nunca recria os absorvidos da onda e resolve o código da planilha deles para o
-canônico.
+o pacote de revisão, o importador nunca recria os absorvidos da onda, resolve o código da planilha deles para o
+canônico e grava no canônico o valor consolidado da decisão.
 
 Termo do campo consolidado só se junta por `trim` e caixa. Asterisco não é regra: juntar "X" e "X**" é equivalência
 declarada no grupo (`equivalentes`). **Antes da Onda 2 em PROD:** responder a V4 com a Veridi (o que `*`/`**`
@@ -209,9 +219,10 @@ significam no nutriente) — a equivalência do G5 ("Clorogênico" = "Clorogêni
 **Onda 3 (§124)** — os mesmos comandos com `--onda=3`. O PLAN mostra a ação de cada grupo: `MERGE` (G4), `RENAME` (G7,
 G13), `DELETE_UNUSED_AGGREGATE` (Modelo "X") e `BLOCKED` (G6, G11, em revisão com a Veridi). A onda aplica quando todos
 os grupos DECIDIDOS estão PRONTO; o em revisão não conta e nunca é tocado. A planilha ganha a aba RENOMEADOS. A carga
-com pacote absorve o MP-000149 como as outras fusões, mas **não reproduz renomeação nem consolidação**: a base
-reconstruída pelo pacote volta com os nomes e os nutrientes da planilha. Os Modelos "X" são dado do DEV, criados depois
-da carga: o que houver em PROD com esses códigos é outro registro, e o PLAN de PROD lê o que houver lá.
+com pacote reproduz a onda (ITEM-IMPORT-WAVE-3-CONSISTENCY-01): absorve o MP-000149, grava "Açúcar de maçã ·
+Carboidrato" no MP-000475 e os nomes técnicos do MP-000320, MP-000468 e MP-000393, deixa o MP-000486 como está — o
+rebuild num banco descartável chegou aos mesmos 798 Itens do DEV saneado, campo a campo. Os Modelos "X" são dado do DEV,
+criados depois da carga: o que houver em PROD com esses códigos é outro registro, e o PLAN de PROD lê o que houver lá.
 
 ## 7. Apply
 
