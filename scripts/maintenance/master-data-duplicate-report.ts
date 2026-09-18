@@ -20,6 +20,9 @@ import type { GrupoPlanejado, Plano, ResultadoDoGrupo } from "./master-data-dupl
 
 const SEM_APLICACAO = "NÃO APLICADO (somente PLAN)";
 
+/** A ação do grupo (Onda 3 em diante); plano sem o campo é fusão. */
+const acaoDe = (grupo: GrupoPlanejado): NonNullable<GrupoPlanejado["acao"]> => grupo.acao ?? "MERGE";
+
 function referenciasEmTexto(referencias: readonly { tabela: string; coluna: string; linhas: number }[]): string {
   if (referencias.length === 0) return "nenhuma";
   return referencias.map((r) => `${r.tabela}.${r.coluna}=${r.linhas}`).join("; ");
@@ -160,18 +163,24 @@ export function planilhaDoSaneamento(
 function linhasDeRevisao(
   grupos: readonly GrupoPlanejado[],
   variantes: readonly VarianteDeNome[],
+  /** Grupos em revisão por decisão do PO, pela chave do grupo: o porquê e as perguntas à Veridi. */
+  emRevisao: ReadonlyMap<string, GrupoPlanejado> = new Map(),
 ): ValorDeCelula[][] {
   const revisao: ValorDeCelula[][] = [];
   for (const grupo of grupos.filter((g) => g.situacao === "BLOQUEADO")) {
+    const decidido = emRevisao.get(grupo.grupo);
+    const perguntas = decidido?.perguntas ?? [];
     revisao.push([
       grupo.rotulo,
       grupo.chaveDoNome,
       [grupo.canonico, ...grupo.absorvidos].map((l) => `${l.codigo} (${l.nome})`).join(" | "),
-      grupo.motivos.join(" | "),
+      [decidido?.motivoDaDecisao, ...grupo.motivos].filter((m): m is string => Boolean(m)).join(" | "),
       grupo.conflitos
         .map((c) => `${c.coluna}: ${c.valores.map((v) => `"${v}"`).join(" × ")}`)
         .join(" | "),
-      "Decisão de produto: escolher o canônico ou manter os dois cadastros.",
+      perguntas.length > 0
+        ? `Perguntas à Veridi (não inferir a resposta): ${perguntas.map((p, i) => `${i + 1}) ${p}`).join(" ")}`
+        : "Decisão de produto: escolher o canônico ou manter os dois cadastros.",
     ]);
   }
   for (const variante of variantes) {
@@ -220,11 +229,62 @@ export function planilhaDaOnda(
   recontagem: Plano | null,
 ): AbaDaPlanilha[] {
   const porGrupo = new Map(resultados.map((r) => [r.grupo, r]));
+  const situacaoDaLinha = (grupo: GrupoPlanejado, feito: string): string => {
+    const resultado = porGrupo.get(grupo.grupo);
+    return grupo.situacao === "BLOQUEADO"
+      ? "BLOQUEADO — revisão necessária"
+      : grupo.situacao === "JA_SANEADO"
+        ? "JÁ SANEADO"
+        : resultado?.situacao === "APLICADO"
+          ? feito
+          : resultado?.situacao === "FALHOU"
+            ? `FALHOU — ${resultado.motivo ?? ""}`
+            : SEM_APLICACAO;
+  };
+  const daDecisao = (grupo: GrupoPlanejado): string =>
+    `Onda ${grupo.decisao?.onda ?? plano.onda ?? ""}, grupo ${grupo.decisao?.grupo ?? ""}`;
 
   /* --- REMOVIDOS --------------------------------------------------- */
   const removidos: ValorDeCelula[][] = [];
   for (const grupo of plano.grupos) {
     const resultado = porGrupo.get(grupo.grupo);
+    const acao = acaoDe(grupo);
+    // Renomeado não sai (aba própria), e grupo em revisão não é tocado.
+    if (acao === "RENAME" || acao === "BLOCKED") continue;
+    if (acao === "DELETE_UNUSED_AGGREGATE") {
+      // Uma linha por cadastro mestre excluído; a V1 que nasceu com ele vai na
+      // observação — filho técnico, não cadastro separado.
+      for (const registro of grupo.exclusao?.registros ?? []) {
+        const internos = (grupo.exclusao?.internos ?? []).filter((i) => i.dono === registro.codigo);
+        removidos.push([
+          grupo.rotulo,
+          registro.codigo,
+          registro.nome,
+          "",
+          "",
+          "",
+          "",
+          "",
+          grupo.situacao === "BLOQUEADO" ? grupo.motivos.join(" | ") : "nenhuma (conferido: FK, id sem FK, código guardado e JSON)",
+          "nenhuma (agregado sem uso: nada a mover)",
+          grupo.situacao === "BLOQUEADO"
+            ? grupo.motivos.join(" | ")
+            : `${daDecisao(grupo)}: ${grupo.motivoDaDecisao ?? "cadastro de teste nunca usado, exclusão do agregado"}`,
+          situacaoDaLinha(grupo, "EXCLUÍDO"),
+          resultado?.aplicadoEm ?? "",
+          [
+            internos.length > 0
+              ? `removida junto (CASCADE do próprio agregado): ${internos.map((i) => `${i.descricao} ${i.id}`).join(", ")}`
+              : null,
+            registro.criadoEm ? `criado em ${registro.criadoEm}` : null,
+            "sem canônico: nada foi fundido; o buraco no código é aceito e a sequence não volta",
+          ]
+            .filter((parte): parte is string => parte !== null)
+            .join(" | "),
+        ]);
+      }
+      continue;
+    }
     const atualizacao = (grupo.atualizacoes ?? [])[0];
     for (const absorvido of grupo.absorvidos) {
       const situacao =
@@ -298,6 +358,33 @@ export function planilhaDaOnda(
     }
   }
 
+  /* --- RENOMEADOS (Onda 3 em diante) -------------------------------- */
+  const gruposRenomeados = plano.grupos.filter((g) => acaoDe(g) === "RENAME");
+  const renomeados: ValorDeCelula[][] = [];
+  for (const grupo of gruposRenomeados) {
+    const resultado = porGrupo.get(grupo.grupo);
+    const mantidos = (grupo.mantidos ?? []).map((m) => `${m.codigo} mantém "${m.nome}" sem mudança`);
+    for (const r of grupo.renomeacoes ?? []) {
+      renomeados.push([
+        grupo.rotulo,
+        r.codigo,
+        r.de,
+        r.para,
+        grupo.chaveDoNome,
+        grupo.situacao === "BLOQUEADO"
+          ? grupo.motivos.join(" | ")
+          : `${daDecisao(grupo)}: ${grupo.motivoDaDecisao ?? "nome técnico distinto (§114)"}`,
+        `${referenciasEmTexto(r.referencias)} — nenhuma movida`,
+        situacaoDaLinha(grupo, "RENOMEADO"),
+        resultado?.aplicadoEm ?? "",
+        [
+          "código, fornecedores, ofertas, histórico, declaredNutrient e Formulações preservados",
+          ...mantidos,
+        ].join(" | "),
+      ]);
+    }
+  }
+
   /* --- RESUMO ------------------------------------------------------ */
   const restantes = recontagem?.grupos ?? [];
   const cadastros = [
@@ -307,23 +394,51 @@ export function planilhaDaOnda(
     const cadastro = cadastroPorChave(chave);
     const daOnda = plano.grupos.filter((g) => g.cadastro === chave);
     const aplicados = daOnda.filter((g) => porGrupo.get(g.grupo)?.situacao === "APLICADO");
+    const fundidos = aplicados.filter((g) => acaoDe(g) === "MERGE");
+    const excluidos = aplicados.filter((g) => acaoDe(g) === "DELETE_UNUSED_AGGREGATE");
     const restantesDoCadastro = restantes.filter((g) => g.cadastro === chave);
     return [
       cadastro.rotulo,
       cadastro.tabela,
       daOnda.length,
-      aplicados.length,
-      aplicados.reduce((soma, g) => soma + g.absorvidos.length, 0),
-      aplicados.filter((g) => (g.atualizacoes ?? []).length > 0).length,
+      fundidos.length,
+      fundidos.reduce((soma, g) => soma + g.absorvidos.length, 0) +
+        excluidos.reduce((soma, g) => soma + (g.exclusao?.registros.length ?? 0), 0),
+      fundidos.filter((g) => (g.atualizacoes ?? []).length > 0).length,
       recontagem ? restantesDoCadastro.filter((g) => g.situacao === "BLOQUEADO").length : "sem recontagem",
       recontagem ? restantesDoCadastro.length : "sem recontagem",
+      aplicados.filter((g) => acaoDe(g) === "RENAME").reduce((soma, g) => soma + (g.renomeacoes ?? []).length, 0),
+      excluidos.reduce((soma, g) => soma + (g.exclusao?.registros.length ?? 0), 0),
     ];
   });
 
   /* --- REVISÃO NECESSÁRIA ------------------------------------------ */
+  const emRevisao = new Map(plano.grupos.filter((g) => acaoDe(g) === "BLOCKED").map((g) => [g.grupo, g]));
   const revisao = recontagem
-    ? linhasDeRevisao(restantes, recontagem.variantes)
+    ? linhasDeRevisao(restantes, recontagem.variantes, emRevisao)
     : [["", "", "", "Planilha gerada sem recontagem global: rode com --excel no APPLY ou no VERIFY", "", ""]];
+
+  const abaDeRenomeados: AbaDaPlanilha[] =
+    gruposRenomeados.length === 0
+      ? []
+      : [
+          {
+            nome: "RENOMEADOS",
+            cabecalho: [
+              "Tipo de cadastro",
+              "Código",
+              "Nome anterior",
+              "Nome novo",
+              "Nome em colisão (sem caixa)",
+              "Motivo",
+              "Referências (não movidas)",
+              "Resultado",
+              "Data/hora",
+              "Observação",
+            ],
+            linhas: renomeados,
+          },
+        ];
 
   return [
     {
@@ -346,6 +461,7 @@ export function planilhaDaOnda(
       ],
       linhas: removidos,
     },
+    ...abaDeRenomeados,
     {
       nome: "RESUMO",
       cabecalho: [
@@ -357,6 +473,8 @@ export function planilhaDaOnda(
         "Canônicos com campo consolidado",
         "Grupos em revisão (restantes)",
         "Duplicidades restantes",
+        "Registros renomeados",
+        "Agregados excluídos",
       ],
       linhas: resumo,
     },

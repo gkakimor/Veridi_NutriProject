@@ -41,8 +41,8 @@ reconstruído do zero, DEV e produção são a mesma estrutura, campo a campo.
 estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0d81aae` (MAIN-STABILITY-FAST-GATE-01,
 2026-09-15: MAIN_STABLE = YES); **PROD em `release/prod` = `8e824e8f`** desde 2026-09-17
 (PROD-RELEASE-DEPLOY-01, [`RELEASES.md`](RELEASES.md)): as duas migrations aditivas entraram, o R2 está
-ATIVO em produção e o ponto de recuperação compatível é o backup pós-release. A Onda A de duplicatas e o
-`prod-cleanup --apply` continuam fora de PROD. As seções mais abaixo que dizem "na `main`, fora de PROD
+ATIVO em produção e o ponto de recuperação compatível é o backup pós-release. As Ondas A, 2 e 3 de duplicatas
+(§110, §118, §124) e o `prod-cleanup --apply` continuam fora de PROD. As seções mais abaixo que dizem "na `main`, fora de PROD
 (`release/prod` segue `5b7c1a3`)" registram o estado **da época da entrega**: tudo o que está em
 `8e824e8f` foi publicado nesta release.
 
@@ -6448,6 +6448,51 @@ o mesmo token. Vale para Cliente, Fornecedor, Item, Produto, Modelos, Roteiro e 
 (27) e o portão `pages/espaco-entre-blocos.test.tsx` (16), com `pages/customers`, Fornecedor, Item, Produto, Roteiro,
 ajuda e os portões de tela (50 arquivos, 890 testes). Typecheck de shared, API e Web; fresh sem drift. Sem suíte
 completa, E2E, Playwright nem mutação; PROD e Railway intocados.
+
+## Onda 3 do saneamento de duplicatas no DEV (MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-3-01, 2026-09-17)
+
+**Decisão do PO** sobre os seis grupos que a Onda 2 deixou bloqueados, a partir da revisão READ ONLY
+MASTER-DATA-DUPLICATE-REVIEW-03 (só no chat). Regra em §124. G4 maçã é duplicado verdadeiro (MERGE em MP-000475); G7
+oliva e G13 guaraná são materiais diferentes e ganham nome técnico distinto (RENAME); o Modelo "X" é cadastro de teste
+(DELETE_UNUSED_AGGREGATE dos dois); G6 café verde e G11 piridoxal seguem em revisão com a Veridi (BLOCKED).
+
+**O que mudou na ferramenta.** O arquivo de decisão ganhou três espécies além da fusão — renomeação, exclusão de
+agregado e revisão —, com validação cruzada (um código em uma decisão só) e impressão por onda (a das Ondas A e 2 não
+mudou). A ferramenta genérica planeja por ação (`MERGE`, `RENAME`, `DELETE_UNUSED_AGGREGATE`, `BLOCKED`): renomeação por
+compare-and-set com o destino livre sem caixa; exclusão só com V1 DRAFT nunca ativada, zero componente, zero Formulação
+derivada, zero proveniência e zero referência externa, e o `CASCADE` da V1 conferido como único efeito; grupo em revisão
+no PLAN, fora da conta da "onda inteira", e o VERIFY prova que ficou intocado. O catálogo do Modelo passou a ver
+`originTemplateCode`. Planilha ganhou a aba RENOMEADOS e as perguntas à Veridi na REVISÃO NECESSÁRIA.
+
+**DEV.** PLAN 4/4 PRONTO + 2 BLOCKED (impressão da decisão `88315fc3…`); backup `dev-pre-onda-3-20260918T050711Z.json`
+com `RESTAURÁVEL: YES` (83 models, 5.849 linhas, 28 sequences; banco descartável removido); APPLY 4/4 APLICADO, efeito
+igual ao previsto (`formulation_templates` −2, `formulation_template_versions` −2, `items` ~4 −1), os dois em revisão
+BLOQUEADOS e intocados; VERIFY OK duas vezes. Conferência contra o backup: só `Item` 808 → 807 e os Modelos 4 → 2
+mudaram; MP-000475 com "Açúcar de maçã · Carboidrato"; MP-000320 "… — Verbascosídeo", MP-000468 "… — Hidroxitirosol",
+MP-000393 "Extrato de guaraná 22%", MP-000486 sem mudança; 13 relações, 14 ofertas, 24 eventos e 22 componentes
+(inclusive os 11 ACTIVE do guaraná) iguais ao backup; `formulation_template_code_seq` segue em 4. **Recontagem global:
+2 grupos, ambos em revisão** (G6 e G11), nenhum novo. Ondas A (6/6) e 2 (8/8) relidas como JÁ SANEADO. **PROD, Railway
+e `release/prod` intocados.**
+
+**Planilha.** `.local-data/veridi/exports/cadastros-duplicados-onda-3-20260918T050643Z.xlsx` (REMOVIDOS com MP-000149,
+FT-000001 e FT-000002 — a V1 de cada Modelo na observação —, RENOMEADOS com MP-000320, MP-000468 e MP-000393, RESUMO e
+REVISÃO NECESSÁRIA com as perguntas). Plano, resultado, VERIFY e logs em
+`.local-data/veridi/saneamento-duplicatas/master-data/onda-3/`.
+
+**Pendências.** A carga (importador) absorve o MP-000149, mas não reproduz renomeação nem consolidação de nutriente
+(como já acontecia com a Onda 2): base reconstruída pelo pacote volta com os nomes da planilha — resolver antes do índice
+de MASTER-DATA-NAME-UNIQUENESS-01. O `family` "OTHER_RAW_MATERIAL" que só o MP-000149 tinha saiu com ele (o canônico
+segue sem família; a decisão só consolidou o nutriente). O PO escreveu "Guaraná em pó solúvel" com acento; o cadastro
+grava "soluvel" e ficou como está, porque o MP-000486 não estava entre os renomeados.
+
+**Validação.** Scripts: `item-duplicates.test.ts` (23: as decisões da Onda 3, perguntas, validação das espécies novas,
+impressões das Ondas A e 2 fixadas), `master-data-duplicate-wave-3.test.ts` (14, banco de teste: MERGE com o nutriente
+consolidado, RENAME sem mover nada, Formulação ACTIVE no mesmo Item, destino ocupado aborta, compare-and-set, exclusão do
+agregado vazio, Modelo aplicado/com componente/ativo/alterado bloqueia, referência nova entre PLAN e APPLY, efeito
+inesperado aborta, BLOCKED intocado, planilha) e os vizinhos `master-data-duplicate-wave`, `-sanitization`,
+`master-data-catalog`, `item-duplicate-sanitization`, `xlsx-writer` e a "Duplicata de Item absorvida" do importador
+(107 + 3). Typecheck avulso dos scripts sem erro novo (os 4 antigos seguem). Sem migration, E2E, Playwright, mutação nem
+suíte completa.
 
 ## Próxima prioridade
 

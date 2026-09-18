@@ -206,6 +206,13 @@ Termo do campo consolidado só se junta por `trim` e caixa. Asterisco não é re
 declarada no grupo (`equivalentes`). **Antes da Onda 2 em PROD:** responder a V4 com a Veridi (o que `*`/`**`
 significam no nutriente) — a equivalência do G5 ("Clorogênico" = "Clorogênico**") foi aceita só para o DEV.
 
+**Onda 3 (§124)** — os mesmos comandos com `--onda=3`. O PLAN mostra a ação de cada grupo: `MERGE` (G4), `RENAME` (G7,
+G13), `DELETE_UNUSED_AGGREGATE` (Modelo "X") e `BLOCKED` (G6, G11, em revisão com a Veridi). A onda aplica quando todos
+os grupos DECIDIDOS estão PRONTO; o em revisão não conta e nunca é tocado. A planilha ganha a aba RENOMEADOS. A carga
+com pacote absorve o MP-000149 como as outras fusões, mas **não reproduz renomeação nem consolidação**: a base
+reconstruída pelo pacote volta com os nomes e os nutrientes da planilha. Os Modelos "X" são dado do DEV, criados depois
+da carga: o que houver em PROD com esses códigos é outro registro, e o PLAN de PROD lê o que houver lá.
+
 ## 7. Apply
 
 ```

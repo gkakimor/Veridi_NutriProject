@@ -134,7 +134,9 @@ export const CADASTROS_MESTRE_NO_BANCO: readonly CadastroMestreNoBanco[] = [
     colunaNome: "name",
     colunaCodigo: "code",
     sufixosDeId: ["formulationtemplateid"],
-    sufixosDeCodigo: ["formulationtemplatecode"],
+    // `formulation_versions.originTemplateCode` é o retrato do código do Modelo
+    // de onde a Formulação nasceu (proveniência) — MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-3-01.
+    sufixosDeCodigo: ["formulationtemplatecode", "origintemplatecode"],
     colunasNeutras: [...NEUTRAS_COMUNS, "name"],
     motivo: "Biblioteca reutilizável: o modelo é escolhido pelo nome ao criar uma formulação.",
   },

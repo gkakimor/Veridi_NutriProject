@@ -2,9 +2,10 @@
 
 ## 1. Status
 
-`EM_ANALISE` — Onda A (ITEM-DUPLICATE-SANITIZATION-01) e Onda 2 (MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-2-01, §118)
-aplicadas no `veridi_dev` em 2026-09-17. D1 decidida; D3 e parte de D5 do PO e V1–V7 da Veridi seguem abertas para os
-cinco grupos em revisão; PROD não foi lido nem escrito.
+`EM_ANALISE` — Onda A (ITEM-DUPLICATE-SANITIZATION-01), Onda 2 (MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-2-01, §118) e
+Onda 3 (MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-3-01, §124) aplicadas no `veridi_dev` em 2026-09-17. D1 decidida; G4,
+G7, G13 e o Modelo "X" decididos na Onda 3; restam G6 (café verde, D3 e V1) e G11 (piridoxal, V4) em revisão com a
+Veridi; PROD não foi lido nem escrito.
 
 Discovery READ ONLY entregue no chat em 2026-09-17 sobre `origin/main` `0fc49e4` (`release/prod` `5b7c1a3`), lido no
 `veridi_dev` em transação somente leitura. Este documento o persiste junto com a implementação da Onda A.
@@ -167,6 +168,20 @@ Onda B, conforme o PO.
   808, 7 canônicos consolidados, relações FAGRON e CAÇA UMIDADE consolidadas), VERIFY OK; recontagem com G4, G6, G7,
   G11, G13 e o Modelo "X". Planilha `cadastros-duplicados-onda-2-20260918T020738Z.xlsx` em `.local-data/veridi/exports/`.
 
+**Onda 3 — MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-3-01 (2026-09-17), aplicada no `veridi_dev`; PROD intocado.**
+
+- **Evidência:** revisão READ ONLY MASTER-DATA-DUPLICATE-REVIEW-03 (só no chat): ERP, corpus da carga e pacote lado a
+  lado para os seis grupos — MP-000475 e MP-000468 só existem na planilha de preços (`ITEM_FORA_DO_CADASTRO`); nenhuma
+  fonte diz pó × líquido para a maçã; a oliva tem um marcador por registro, fornecedores disjuntos e 22× o preço com o
+  mesmo lote mínimo; o guaraná tem 22% declarado e aplicado só no MP-000393; o café verde tem teor implícito de 50% no
+  MP-000325 e 8%/50%/45% no MP-000348 nas fórmulas legadas; os Modelos "X" eram V1 DRAFT vazias do DEV.
+- **Decisão:** G4 MERGE (MP-000475 ← MP-000149, "Açúcar de maçã · Carboidrato"); G7 e G13 RENAME por nome técnico
+  distinto; Modelo "X" DELETE_UNUSED_AGGREGATE; G6 e G11 BLOCKED à espera da Veridi. Regras em
+  [`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §124.
+- **DEV:** PLAN 4/4 PRONTO + 2 BLOCKED; backup `dev-pre-onda-3-20260918T050711Z.json` com `RESTAURÁVEL: YES`; APPLY 4/4
+  (Itens 808 → 807, Modelos 4 → 2), VERIFY OK; recontagem com G6 e G11 só. Planilha
+  `cadastros-duplicados-onda-3-20260918T050643Z.xlsx` em `.local-data/veridi/exports/`.
+
 ## 17. Histórico de decisões
 
 - 2026-09-17 — Discovery entregue no chat (base `0fc49e4`); persistido neste arquivo na implementação da Onda A.
@@ -192,3 +207,7 @@ Onda B, conforme o PO.
   (`equivalentes` no arquivo de decisão), aceita para o DEV. **V4 segue aberta com a Veridi e tem de ser respondida
   antes de a onda rodar em PROD.** A sílica mantém "Sachê Silica gel 5g" (ME-000021), sem renomear. Sem novo APPLY: o
   DEV foi reconhecido como JÁ SANEADO (8/8) e o VERIFY passou.
+- 2026-09-17 — PO, depois da revisão MASTER-DATA-DUPLICATE-REVIEW-03: G4 é duplicado verdadeiro (canônico MP-000475, o
+  único com fornecedor); G7 e G13 NÃO são duplicados — ganham nome técnico distinto, sem fundir nem mover referência; os
+  dois Modelos "X" são teste e saem inteiros; G6 e G11 continuam em revisão, e a resposta da Veridi não se infere. Onda 3
+  executada no `veridi_dev` no mesmo dia (§124).
