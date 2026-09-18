@@ -7409,6 +7409,9 @@ confirmado em lugar nenhum — recebimento, consumo de produção, amostra e exp
 quantidade se resolve pelo Inventário Físico, que conta o que existe e gera o acerto rastreável. Pendência registrada
 no `BACKLOG.md`.
 
+**Atualizado em 2026-09-18 (§126):** o estorno próprio passou a existir (INTERNAL-CONSUMPTION-REVERSAL-01). O
+parágrafo acima fica como registro da decisão da Fatia 2.
+
 **Tela.** Estoque › Uso e consumo (`/estoque/uso-e-consumo`): item, lote quando houver, quantidade, data, destino/uso,
 observação e o disponível — lido do MESMO cálculo que a gravação confere, para a tela não prometer o que o confirmar
 recusa. Confirmado, mostra quantidade, custo unitário, custo total e origem do custo; sem custo, a frase. Abaixo, o
@@ -7495,6 +7498,9 @@ As opções de destino e de usuário vêm de `GET /reports/inventory/internal-co
 próprios consumos: o cadastro de usuários é só do ADMIN, e ali aparece só quem registrou alguma vez.
 
 **KPIs**, do recorte inteiro e nunca da página: Consumos · Valor total conhecido · Consumos sem custo · Itens distintos.
+
+**Atualizado em 2026-09-18 (§126, R21-a):** indicadores, agrupamentos, tabela, CSV e PDF passaram a ser LÍQUIDOS
+dos estornos. Esta seção descreve o relatório antes do estorno; o que mudou está na §126.
 
 **Custo conhecido.** O valor total soma SÓ os consumos com custo total gravado. `null` nunca vira zero:
 
@@ -7998,3 +8004,93 @@ de sempre), nunca o botão de excluir. Uso surgido entre a prévia e a confirma�
 `20260925093038_master_data_deletion_history` (enum `MasterDataEntityType` e a tabela do rastro). O enum já reserva
 `ITEM`, `PRODUCT` e `INDUSTRIAL_RESOURCE`, sem rota que os aceite: a Fatia 2 fica sem migration, como o discovery
 planejou.
+
+## §126 — Estorno de consumo interno: uma entrada própria, com motivo, que nunca apaga o consumo
+
+INTERNAL-CONSUMPTION-REVERSAL-01 (2026-09-18), decisões P1–P10 do PO no
+[INTERNAL-CONSUMPTION-REVERSAL-DISCOVERY-01](discovery/INTERNAL-CONSUMPTION-REVERSAL-DISCOVERY-01.md). Atualiza a §115
+(que não tinha correção) e a §117 (o R-21 passa a ser líquido).
+
+> **Consumo interno lançado errado se estorna — nunca se edita nem se apaga.** O estorno `ECI-000001` é uma ENTRADA
+> própria do ledger (`INTERNAL_CONSUMPTION_REVERSAL`, tipo e origem), datada no instante do estorno, com motivo e o
+> usuário da sessão. O `CI-` original e a baixa dele ficam intactos; o ledger continua só de acréscimo; nada é
+> retroativo.
+
+**Quem.** `ADMIN` e `QUALITY` (`INTERNAL_CONSUMPTION_REVERSAL_ROLES`, lista própria). Registrar consumo não dá direito a
+estornar: `PRODUCTION`, `PURCHASING`, `COMMERCIAL` e `VIEWER` recebem 403, antes do corpo e da existência do consumo.
+Consumo e estornos são lidos por todo usuário autenticado. Sem aprovação e sem prazo limite.
+
+**Quanto.** Total, parcial e vários estornos, até a quantidade do CI. Já estornado = soma dos estornos; saldo
+estornável = quantidade do CI − já estornado; nenhum dos dois é gravado. Aceita `0 < quantidade ≤ saldo estornável`;
+excedente é 400 `reversal_exceeds_balance`; saldo zero é 400 `nothing_to_reverse`, "Não há quantidade a estornar.".
+Motivo obrigatório, de 3 a 500 caracteres depois do `trim`. O servidor decide; a tela só mostra.
+
+**O que a tela mostrou.** O corpo leva `expectedReversedQuantity`, o já estornado que a tela leu. Diferente do atual,
+409 `reversal_state_changed` sem gravar nada: duplo clique, aba velha ou outra pessoa nunca estornam duas vezes em
+silêncio.
+
+**Concorrência.** Uma transação, nesta ordem: o CI travado (`SELECT … FOR UPDATE`), o escopo do saldo travado
+(`lockStockScope`), inventário aberto, contagem encerrada depois do CI, soma dos estornos, o já estornado que a tela
+mostrou, código, movimento e estorno. Dois estornos do mesmo CI esperam um pelo outro na trava do CI, e o segundo
+relê a soma: ela nunca passa da quantidade original.
+
+**Inventário.** Recusa com 409, citando o código do `INV-`, quando a posição do CI (item, ou item + lote) está num
+Inventário Físico aberto (`position_in_open_count`) ou foi contada num inventário encerrado — sessão ou Contagem
+rápida — com registro válido de `countedAt` DEPOIS do `createdAt` do CI (`position_counted_after_consumption`): a
+contagem já acertou o saldo, e o estorno corrigiria duas vezes. A fronteira é o `createdAt` (a entrada no ledger),
+não o `occurredAt` — consumo de dia passado grava o fim daquele dia. Inventário anterior ao CI, inventário cancelado,
+posição retirada e inventário de outro lote do mesmo item não bloqueiam. Posição que entra num inventário depois do
+estorno vê o movimento dele como movimentação durante o inventário (§16).
+
+**Lote.** A quantidade volta SEMPRE ao escopo do CI — o mesmo lote, sem escolha; campo de lote no corpo é ignorado —,
+mesmo bloqueado ou vencido. A situação do lote não muda: o físico sobe e o disponível continua obedecendo à
+Qualidade e à validade. A tela avisa.
+
+**Item inativo** pode ser estornado: é a anulação de uma saída histórica, não uma entrada operacional nova (a §107
+barra a entrada manual).
+
+**Custo.** CÓPIA do snapshot do CI — unitário, fonte e explicação —, nunca recalculado: custo de recebimento corrigido
+depois não muda o estorno. Total parcial = ROUND_HALF_UP(total do CI × quantidade ÷ quantidade do CI, 4 casas),
+nunca acima do que ainda resta do total; o estorno que zera o saldo leva o resto (total do CI − estornos anteriores),
+e o integral fecha exatamente o total original — nunca `unitCost` de 8 casas × quantidade. CI sem custo (`NO_COST`):
+estorno sem custo, nulo, nunca zero. O movimento de estorno não entra em média, último custo real, custo de OP nem
+CMV (a hierarquia lê só o recebimento).
+
+**Movimento manual posterior.** Ajuste manual de entrada na mesma posição depois do CI não é tratado como correção do
+consumo e não bloqueia: o detalhe do consumo o lista (até 5, com o total) para quem estorna conferir.
+
+**Sem estorno de estorno.** Não existe ação sobre um `ECI-`. Correção posterior é nova operação de domínio ou
+Inventário Físico.
+
+**Leituras.** Lista e detalhe do CI trazem `reversedQuantity`, `reversibleQuantity`, `reversedTotalCost`,
+`netTotalCost`, `reversalStatus` (—, Estornado parcialmente, Estornado) e `reversalCount`; o detalhe
+(`GET /internal-consumptions/:id`) traz `reversals[]` do mais recente para o mais antigo e os avisos do diálogo — item
+inativo, situação e validade do lote, ajustes manuais posteriores.
+
+**Onde aparece.**
+
+- **Uso e consumo**: colunas Estornado e Situação; ação Estornar para `ADMIN` e `QUALITY` quando há saldo estornável.
+  Diálogo "Estornar CI-…": item, lote, data do consumo, destino, quantidade original, já estornado, saldo estornável,
+  custo original e fonte, quantidade a estornar (padrão = saldo), motivo, estornos anteriores e os avisos (lote
+  bloqueado ou vencido, item inativo, ajuste manual posterior). A recusa da API aparece inteira. Sem tela nova.
+- **Extrato de Movimentações**: tipo "Estorno de consumo interno", Entrada, origem "ECI-000001 (estorno de CI-000123)";
+  o movimento de estorno aponta também o CI- que anula.
+- **R-03 Movimentações**: consumo interno e estorno com tipo, sentido, origem e documento — `CI-` e
+  `ECI-… (estorno de CI-…)`, sem link (não há tela própria). A coluna Entrada/Saída vale para todos os tipos, na tela,
+  no CSV e no PDF (no PDF o usuário desce para a linha de detalhe).
+- **Painel**: fora desta regra; pendência DASHBOARD-INTERNAL-CONSUMPTION-01.
+
+**R-21 líquido (decisão R21-a).** O estorno abate o consumo NA DATA DO CI. A linha continua sendo o CI, com Quantidade
+original, Quantidade estornada, Quantidade líquida, Custo total, Custo total líquido e Situação; período, filtros e
+busca continuam pelo CI. Indicadores e resumos por item e por destino são líquidos; o CI estornado por inteiro
+continua listado, marcado, e não conta em Consumos, Sem custo nem Itens distintos — e o grupo todo estornado sai do
+resumo. A ressalva "N consumos com estorno" acompanha os indicadores, na tela e no PDF; recorte só de consumos
+estornados por inteiro mostra só ela. O relatório de um período passado muda quando chega um estorno depois — a
+cronologia fica no extrato. No PDF, a linha principal é a do líquido; custo unitário, custo total, origem do custo e
+usuário descem para o detalhe.
+
+**Migration.** `20260925093039_internal_consumption_reversal`, só aditiva: os dois valores de enum (não usados no
+mesmo arquivo), a tabela `internal_consumption_reversals` — FK RESTRICT para o CI (consumo com estorno não se apaga),
+`inventoryMovementId` NOT NULL `@unique` (a FK 1:1 mora no estorno; o id do estorno nasce antes, para o `sourceId`
+do movimento), autor RESTRICT — e a sequence `internal_consumption_reversal_code_seq`. Model e sequence são ALVO no
+`prod-cleanup`.

@@ -2,9 +2,10 @@
 
 ## 1. Status
 
-`DECIDIDO` — **P1–P4 decididas pelo PO em 2026-09-18** no handoff de INTERNAL-CONSUMPTION-REVERSAL-01, todas com a
-recomendação: estorno próprio (A), ADMIN + QUALITY, R-21 líquido na data do CI (R21-a) e recusa quando a posição foi
-inventariada depois do CI ou está em INV- aberto. P5–P10 valem como recomendadas. Implementação na seção 16.
+`IMPLEMENTADO` — **P1–P4 decididas pelo PO em 2026-09-18** no handoff de INTERNAL-CONSUMPTION-REVERSAL-01, todas com
+a recomendação: estorno próprio (A), ADMIN + QUALITY, R-21 líquido na data do CI (R21-a) e recusa quando a posição foi
+inventariada depois do CI ou está em INV- aberto. P5–P10 valem como recomendadas. **Entregue no mesmo dia** por
+INTERNAL-CONSUMPTION-REVERSAL-01 (§126), na `main` e fora de PROD — seção 16.
 
 Discovery READ ONLY de 2026-09-18 sobre `main` `f14b18f9`, entregue só no chat (o handoff da rodada proibia mexer em doc
 canônica) e persistido aqui na implementação, sobre `02755f39`. O delta `f14b18f9..02755f39` não toca nenhuma área do
@@ -225,10 +226,27 @@ INTERNAL-CONSUMPTION-REVERSAL-01.
 
 ## 16. Implementação
 
-NÃO IMPLEMENTADO.
+**IMPLEMENTADO em 2026-09-18** por INTERNAL-CONSUMPTION-REVERSAL-01 — regra em [`PRODUCT_RULES.md`](../PRODUCT_RULES.md)
+§126, seção própria no [`PROJECT_STATE.md`](../PROJECT_STATE.md). Na `main`, fora de PROD (`release/prod` segue
+`8e824e8f`).
+
+- Migration `20260925093039_internal_consumption_reversal`, só aditiva, como a seção 10 desenhou: os dois valores de
+  enum, a tabela `internal_consumption_reversals` e a sequence `internal_consumption_reversal_code_seq`, ALVO no
+  `prod-cleanup`. A FK 1:1 mora no estorno (`inventoryMovementId` NOT NULL `@unique`, CASCADE como a do CI); o id do
+  estorno nasce antes, para o `sourceId` do movimento.
+- API `POST /internal-consumptions/:id/reversals` com a transação da seção 10, na ordem do handoff; leituras do CI
+  com estornado, saldo, custo líquido e situação; detalhe com `reversals[]` e os avisos, incluindo os ajustes
+  manuais posteriores (até 5, sem bloquear).
+- Custo: além do resto no último, o parcial nunca passa do que resta do total — com total ínfimo e muitos parciais,
+  o arredondamento para cima de cada um deixaria o último negativo.
+- R-21 líquido (R21-a), extrato e R-03 com tipo, sentido, origem e documento; o R-03 ganhou a coluna Entrada/Saída para
+  todos os tipos (tela, CSV e PDF). Painel fora (DASHBOARD-INTERNAL-CONSUMPTION-01); L2 registrado como
+  INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01.
+- Web: colunas Estornado e Situação, ação Estornar e o diálogo em Uso e consumo; ajuda atualizada.
 
 ## 17. Histórico de decisões
 
 - 2026-09-18 — discovery READ ONLY entregue no chat sobre `f14b18f9`, `READY_TO_IMPLEMENT: NO` até P1–P4.
 - 2026-09-18 — PO decide P1–P4 com as recomendações (A, E1, R21-a, recusar nos dois casos) no handoff de
   INTERNAL-CONSUMPTION-REVERSAL-01; P5–P10 como recomendadas; R-03 incluído na fatia; Painel fica como pendência separada.
+- 2026-09-18 — implementado por INTERNAL-CONSUMPTION-REVERSAL-01 (§126); nenhuma decisão mudou.

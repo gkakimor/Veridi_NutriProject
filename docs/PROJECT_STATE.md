@@ -124,6 +124,10 @@ ATIVO em produção e o ponto de recuperação compatível é o backup pós-rele
   rastro append-only e a migration aditiva `20260925093038` —, na `main` e fora de PROD, com seções próprias abaixo. Item,
   Produto e Recurso industrial continuam sem exclusão física (o banco não protege: CASCADE e SET NULL); na fila viva segue
   a Fatia 2 (MASTER-DATA-HARD-DELETE-02);
+- **Uso e consumo — estorno:** FECHADO em 2026-09-18 (INTERNAL-CONSUMPTION-REVERSAL-01, §126), migration aditiva
+  `20260925093039`, na `main` e fora de PROD: o `CI-` lançado errado se estorna (`ECI-`), total ou parcial, com
+  motivo, só por ADMIN e QUALITY, e o R-21 passou a ser líquido na data do CI. Abertos do assunto:
+  INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01, DASHBOARD-INTERNAL-CONSUMPTION-01 e INTERNAL-CONSUMPTION-COST-CENTER-01;
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 
 Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
@@ -6030,7 +6034,8 @@ registra; `VIEWER` lê. É MAIS LARGA que `STOCK_WRITE_ROLES` (ajuste/perda) por
 distribui o material de uso e consumo. Ajuste e perda ficaram como estavam.
 
 **Sem estorno, e não foi inventado.** Nenhum movimento físico confirmado desfaz no sistema. Erro de quantidade se
-resolve pelo Inventário Físico. Pendência no [`BACKLOG.md`](BACKLOG.md).
+resolve pelo Inventário Físico. Pendência no [`BACKLOG.md`](BACKLOG.md). **Atualizado em 2026-09-18:** o estorno
+próprio existe desde INTERNAL-CONSUMPTION-REVERSAL-01 (§126, seção própria abaixo).
 
 **Tela.** Estoque › Uso e consumo (`/estoque/uso-e-consumo`): item, lote quando houver, quantidade, data,
 destino/uso, observação e o disponível lido do MESMO cálculo que a gravação confere. Confirmado, mostra quantidade,
@@ -6574,6 +6579,45 @@ suíte completa, E2E, Playwright nem mutação.
 **De passagem.** O portão web `campo-numerico-guarda` estava vermelho na `main` desde `874b07ed`: o "CNAE principal" do
 Cliente usa teclado numérico e não estava na allowlist. CNAE é identificador, como o CEP — entrou na allowlist com o
 motivo, em commit próprio, só teste.
+
+## Estorno de consumo interno (INTERNAL-CONSUMPTION-REVERSAL-01, 2026-09-18)
+
+**Decisão do PO** (P1–P10 de [INTERNAL-CONSUMPTION-REVERSAL-DISCOVERY-01](discovery/INTERNAL-CONSUMPTION-REVERSAL-DISCOVERY-01.md),
+persistido nesta rodada): estorno próprio, só ADMIN e QUALITY, R-21 líquido na data do CI e recusa quando a posição
+está num inventário aberto ou foi contada depois do CI. Regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §126. Na
+`main`, **fora de PROD** (`release/prod` segue `8e824e8f`), com a migration aditiva
+`20260925093039_internal_consumption_reversal`.
+
+**API.** `POST /internal-consumptions/:id/reversals { quantity, reason, expectedReversedQuantity }` → 201, em
+`internal-consumption-reversal.service.ts`: uma transação com o CI `FOR UPDATE`, `lockStockScope`, as duas guardas de
+inventário (`chaveDaPosicao` exportada do Inventário Físico), a soma dos estornos, o já estornado da tela (409), a
+sequence `ECI-`, a entrada `INTERNAL_CONSUMPTION_REVERSAL` e o registro. Custo copiado do CI, total pró-rata com o
+resto no último (`custoTotalDoEstorno`). Lista e detalhe do CI com estornado, saldo estornável, custo líquido e
+situação; o detalhe com `reversals[]` e os avisos. Extrato e R-03 reconhecem consumo e estorno; o R-03 ganhou a
+coluna Entrada/Saída (tela, CSV e PDF). R-21 líquido: as somas saem do banco pelo bruto e os estornos dos CIs do
+recorte são descontados depois.
+
+**Web.** Estoque › Uso e consumo: colunas Estornado e Situação, ação Estornar (ADMIN e QUALITY, com saldo) e
+`EstornarConsumoDialog`; aviso do estorno confirmado e a lista relida. Origem do extrato, R-03 e R-21 (tela, resumos
+e PDF, com a ressalva dos estornos). Ajuda `estoque.usoEConsumo` e Movimentações falam do estorno.
+
+**Validação.** API: `internal-consumption-reversal.test.ts` (36: total, parcial, vários, excedente, saldo zero,
+concorrência em paralelo e com a trava provada por `pg_stat_activity`, já estornado divergente, cópia do custo,
+custo de recebimento corrigido depois, `NO_COST`, resto do arredondamento com quantidade grande e com total ínfimo,
+mesmo lote, lote bloqueado e vencido, item inativo, ajuste manual posterior, INV aberto, encerrado depois, Contagem
+rápida, anterior, cancelado, posição retirada e outro lote, os seis perfis, motivo, autoria, FK RESTRICT, sequence,
+extrato, R-03 e R-21) e `r21-estorno-liquido.test.ts` (8), com as pastas de relatórios, exportação, estoque,
+exclusão de cadastro e Uso e consumo (33 arquivos, 1.214 testes) em banco de teste exclusivo do worktree. Scripts
+`prod-cleanup-models`, `-sequences`, `-dry-run`, `schema-fk-actions`, `migration-order`, `migration-prefix`,
+`master-data-catalog`, `restore-json-backup-check` e `numeric-precision-matrix` (9 arquivos, 107 testes). Web
+`estorno-consumo-tela.test.tsx` (16), extrato, R-21, PDF e impressão, com `pages/reports`, `pages/print` e os doze
+portões que varrem as telas (32 arquivos, 672 testes) e a pasta `pages/inventory` (17 arquivos, 137 testes).
+Typecheck de shared, API e web; `pnpm validate:migrations:fresh` (88 migrations, sem drift). Sem suíte completa, E2E,
+Playwright nem mutação.
+
+**Backlog lateral** (registrado, não corrigido): INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01 — CI de data passada
+lançado depois de um inventário encerrado baixa duas vezes; DASHBOARD-INTERNAL-CONSUMPTION-01 — o Painel não
+representa Uso e consumo.
 
 ## Próxima prioridade
 
