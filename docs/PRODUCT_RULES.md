@@ -7507,3 +7507,72 @@ nesta fatia — o PDF lê só o CSV, e o R-15 também não leva o seu resumo (RE
 consumo, e esconder o total no relatório não protegeria nada.
 
 **Sem migration.**
+
+## §118 — Onda 2 do saneamento: a decisão nomeia o grupo, e o canônico recebe só o que a decisão escreveu
+
+MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-2-01 (2026-09-17), decisão do PO. Estende a §110 (arquivo de decisão) e a §114
+(ferramenta genérica).
+
+> **Duplicado verdadeiro sai; o que ele sabia fica no canônico, escrito antes na decisão.** A ferramenta calcula, confere
+> com o que a decisão escreveu e só então grava — nunca decide sozinha o que o canônico passa a dizer.
+
+**Quem entra.** Os grupos que o PO aprovou como o MESMO material físico, e só eles:
+
+| Grupo | Canônico | Absorvidos | `declaredNutrient` do canônico |
+|---|---|---|---|
+| G2 Arabinogalactana | MP-000115 | MP-000322 | Fibra Alimentar · Arabinogalactana |
+| G3 Beta-glucana | MP-000118 | MP-000304 | Fibra Alimentar · Beta-glucana |
+| G5 Concentrado de tomate | MP-000347 | MP-000165, MP-000324, MP-000349 | Clorogênico** · Adenosina · Rutina |
+| G8 Fosfato de magnésio dibásico | MP-000204 | MP-000285 | Magnésio · Fósforo |
+| G9 Fosfato de cálcio monobásico | MP-000269 | MP-000283 | Cálcio · Fósforo |
+| G10 Fosfato de cálcio tribásico | MP-000270 | MP-000284 | Cálcio · Fósforo |
+| G15 Membrana de casca de ovo | MP-000312 | MP-000317, MP-000319 | Colágeno · Glicosaminoglicanos · Ácido hialurônico |
+| Sachê de sílica gel 5 g (par nomeado) | ME-000021 | ME-000089 | — |
+
+**Continuam fora**, sem consolidar, renomear nem remover: MP-000149 × MP-000475, MP-000325 × MP-000348, MP-000320 ×
+MP-000468, MP-000014 × MP-000022, MP-000393 × MP-000486 (podem ser materiais diferentes; mesmo nome com material
+diferente não se funde, §114) e o Modelo "X" (FT-000001 × FT-000002).
+
+**O arquivo de decisão é um só** (`scripts/veridi-import/item-duplicate-decisions.ts`, o de-para da §110): a onda entra
+nele com uma linha por absorvido — o grupo de três ou quatro é um grupo, com o mesmo canônico, nome e consolidação em
+todas as linhas. O importador segue a decisão: a carga nunca recria os absorvidos, e o código da planilha deles resolve
+para o canônico. A impressão da Onda A não muda.
+
+**Par nomeado.** A sílica difere por acento ("Silica" × "SÍLICA"), e a regra automática preserva acento — continua
+preservando. O par entra por decisão explícita (`nomeDoAbsorvido`), que o arquivo só aceita para nome que a regra
+automática NÃO junta. O canônico mantém o nome dele: renomear não é desta onda.
+
+**Consolidação no canônico (canonicalUpdates).** Só `declaredNutrient`, e só onde a decisão pede:
+
+- os termos ÚNICOS de todos os registros do grupo, em "A · B · C";
+- a ordem é a do canônico primeiro e depois a dos absorvidos pelo código — o valor de antes é o começo do de depois;
+- `trim`, sem caixa; asterisco final é marcador da planilha, não outro nutriente: "Clorogênico" e "Clorogênico**" são o
+  mesmo termo, e fica a grafia do canônico (o significado do marcador segue como pergunta V4 à Veridi);
+- acento conta, como na regra do nome; termo nenhum é inventado;
+- o valor final está ESCRITO na decisão, e a ferramenta recusa o grupo se o cálculo não der exatamente isso;
+- o PLAN mostra ANTES e DEPOIS, a escrita entra na impressão digital, e o APPLY grava por compare-and-set (só se o
+  canônico ainda tem o valor de antes). Nenhum outro campo do canônico muda; `updatedAt` marca a gravação.
+
+**O que ainda bloqueia o grupo** (além da §114): o critério aprovado escolher outro canônico que não o decidido; campo
+diferente fora da coluna consolidada; Item com o nome do grupo que a decisão não conhece; absorvido com nome diferente do
+declarado no par; grupo pela metade (parte dos absorvidos já saiu); canônico inativo ou código da planilha diferente da
+decisão.
+
+**Relação Item × Fornecedor.** A regra da §110, com o mesmo código da ferramenta de Item: preferencial e histórico além da
+importação bloqueiam; com o mesmo fornecedor dos dois lados, ofertas (com a mesma `sourceKey`) e eventos de homologação
+passam para a relação do canônico e a do absorvido sai; fornecedor que só o absorvido tinha passa com a relação inteira.
+Dois absorvidos levando o mesmo fornecedor novo ao canônico bloqueiam.
+
+**Formulação — inclusive ACTIVE e INACTIVE.** Para material declarado o mesmo, o componente passa ao canônico trocando
+SÓ o Item: quantidade, unidade, base, pureza aplicada e ajustes ficam como estão, e a versão não muda de situação.
+Componente repetido na versão — com o canônico, ou entre dois absorvidos do mesmo grupo — bloqueia.
+
+**Execução.** `master-data-duplicate-sanitization.ts --onda=2`: PLAN somente leitura; a onda só aplica com TODOS os
+grupos PRONTO; backup lógico com `RESTAURÁVEL: YES` antes; APPLY em uma transação por grupo (trava consultiva, `FOR
+UPDATE`, mesma impressão do plano, linhas contadas por escrita, efeito conferido em `pg_stat_xact_user_tables`, VERIFY
+antes do commit), com o resultado gravado em `--resultado`; VERIFY prova absorvidos fora, canônico com o valor decidido,
+relações no canônico, nenhum resíduo e nenhum Item com o nome do par nomeado, e recontagem global. A planilha
+(`cadastros-duplicados-onda-<n>-<carimbo>.xlsx`, abas REMOVIDOS, RESUMO e REVISÃO NECESSÁRIA) sai do APPLY ou do VERIFY
+a partir do resultado gravado. A ferramenta de Item recusa onda com grupo de mais de dois, par nomeado ou consolidação.
+
+**Sem migration**, e sem índice único ainda: MASTER-DATA-NAME-UNIQUENESS-01 continua depois do saneamento completo.

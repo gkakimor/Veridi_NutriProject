@@ -813,10 +813,16 @@ append-only (§95); o cadastro, não. A pergunta a responder: vale um histórico
 campos estruturais (CNPJ, razão social, perfil tributário e outros), para quais campos, quem lê, e como convive com os
 snapshots que os documentos já congelam. Exigiria migration. Quem pode alterar já está decidido (§98).
 
-### MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-2-01 — Onda 2: consolidar os grupos aprovados — P1 · APROVADO, NÃO EXECUTADO
+### MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-2-01 — Onda 2: consolidar os grupos aprovados — P1 · SANEADO NO DEV, FORA DE PROD
 
-Aprovado pelo PO em 2026-09-17, na integração de MASTER-DATA-DUPLICATE-SANITIZATION-01 (§114), **sem execução nesta
-rodada e sem APPLY no DEV**. São nove consolidações, em duas naturezas:
+**Executada no `veridi_dev` em 2026-09-17** (§118; seção própria do `PROJECT_STATE.md`): 8/8 grupos, 11 Itens
+removidos, 7 canônicos com `declaredNutrient` consolidado, duas relações com fornecedor consolidadas; PROD e Railway
+intocados. Pendente: a mesma onda em PROD, com conferência READ ONLY, PLAN em PROD, backup restaurável e aprovação do PO
+antes — o código do ERP sai de sequence por banco, e a decisão confere o código da planilha dos dois lados. O texto
+abaixo é o registro da aprovação.
+
+Aprovado pelo PO em 2026-09-17, na integração de MASTER-DATA-DUPLICATE-SANITIZATION-01 (§114). São nove
+consolidações, em duas naturezas:
 
 | Grupo | Registros | Natureza |
 |---|---|---|
@@ -829,7 +835,7 @@ rodada e sem APPLY no DEV**. São nove consolidações, em duas naturezas:
 | Membrana de casca de ovo | MP-000312 · MP-000317 · MP-000319 | idem (três linhas) |
 | Sachê de sílica gel 5 g | ME-000021 · ME-000089 | **par nomeado**: difere por acento, e o PO declarou duplicado verdadeiro |
 
-**O que a ferramenta de hoje ainda não faz**, e é o trabalho desta capability:
+**O que a ferramenta ainda não fazia** — e passou a fazer nesta capability (§118):
 
 1. **Escrever o campo consolidado no canônico.** A regra do PO para `declaredNutrient` é juntar os valores ÚNICOS na
    forma "A · B · C", sem repetir termo. Hoje o saneamento só move referência e remove — nunca altera o canônico —, e é
@@ -858,8 +864,8 @@ saneamento, para que os três nunca discordem.
 O que precisa acontecer **antes**, e é o motivo de esta capability não ter data:
 
 1. **o saneamento tem de fechar.** O índice não nasce por cima de duplicata existente: o `CREATE UNIQUE INDEX` falha e a
-   migration não aplica. Hoje o `veridi_dev` tem 13 grupos bloqueados (12 de Item, 1 de Modelo de formulação) — cada um
-   é decisão de produto, e a ferramenta recusa escolher sozinha;
+   migration não aplica. Depois da Onda 2 (§118), o `veridi_dev` tem 6 grupos bloqueados (5 de Item em revisão, 1 de
+   Modelo de formulação) — cada um é decisão de produto, e a ferramenta recusa escolher sozinha;
 2. **PROD tem de ser medido**, em conferência READ ONLY: o estado do DEV não prova o de PROD, e os códigos do ERP saem
    de sequence por banco;
 3. **o escopo do Item já está decidido**: o PO fixou em 2026-09-17 que os quatro tipos (RAW_MATERIAL, PACKAGING,

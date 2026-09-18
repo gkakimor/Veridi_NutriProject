@@ -2,8 +2,9 @@
 
 ## 1. Status
 
-`EM_ANALISE` — Onda A decidida pelo PO e aplicada no `veridi_dev` em 2026-09-17 (ITEM-DUPLICATE-SANITIZATION-01).
-D1, D3 e D5 do PO e V1–V7 da Veridi seguem abertas; PROD não foi lido nem escrito.
+`EM_ANALISE` — Onda A (ITEM-DUPLICATE-SANITIZATION-01) e Onda 2 (MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-2-01, §118)
+aplicadas no `veridi_dev` em 2026-09-17. D1 decidida; D3 e parte de D5 do PO e V1–V7 da Veridi seguem abertas para os
+cinco grupos em revisão; PROD não foi lido nem escrito.
 
 Discovery READ ONLY entregue no chat em 2026-09-17 sobre `origin/main` `0fc49e4` (`release/prod` `5b7c1a3`), lido no
 `veridi_dev` em transação somente leitura. Este documento o persiste junto com a implementação da Onda A.
@@ -155,6 +156,17 @@ Onda B, conforme o PO.
   descartável da carga com os mesmos 637 Itens (código, planilha, tipo, nome), 719 relações, 773 ofertas e 1.292
   componentes ACTIVE do DEV saneado.
 
+**Onda 2 — MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-2-01 (2026-09-17), aplicada no `veridi_dev`; PROD intocado.**
+
+- **Decisão:** G2, G3, G5, G8, G9, G10 e G15 (D1) e o par da sílica (parte de D5), no mesmo arquivo de decisão, com o
+  valor final de `declaredNutrient` de cada canônico escrito na decisão; regras em
+  [`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §118.
+- **Ferramenta:** `master-data-duplicate-sanitization.ts --onda=2` (modo de decisão da ferramenta genérica, com a regra
+  de relação Item × Fornecedor desta ferramenta extraída e reaproveitada). A ferramenta de Item recusa a onda.
+- **DEV:** PLAN 8/8 PRONTO, backup `dev-pre-onda-2-20260918T020738Z.json` com `RESTAURÁVEL: YES`, APPLY 8/8 (Itens 819 →
+  808, 7 canônicos consolidados, relações FAGRON e CAÇA UMIDADE consolidadas), VERIFY OK; recontagem com G4, G6, G7,
+  G11, G13 e o Modelo "X". Planilha `cadastros-duplicados-onda-2-20260918T020738Z.xlsx` em `.local-data/veridi/exports/`.
+
 ## 17. Histórico de decisões
 
 - 2026-09-17 — Discovery entregue no chat (base `0fc49e4`); persistido neste arquivo na implementação da Onda A.
@@ -172,3 +184,7 @@ Onda B, conforme o PO.
   (FT-000001 × FT-000002) segue bloqueado até se saber conteúdo, versões, referências, descarte e o impacto da colisão
   de `versionNumber`. A execução é MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-2-01, que precisa de escrita no canônico e
   de par nomeado — nenhuma das duas existe na ferramenta de hoje.
+- 2026-09-17 — Onda 2 executada no `veridi_dev` (MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-2-01, §118): a ferramenta
+  genérica ganhou modo de decisão, consolidação declarada no canônico e par nomeado; 8/8 grupos aplicados. Regra do
+  termo decidida na implementação e escrita na §118: asterisco final é marcador ("Clorogênico" e "Clorogênico**" são o
+  mesmo termo, fica a grafia do canônico) — o significado do marcador continua sendo a pergunta V4.
