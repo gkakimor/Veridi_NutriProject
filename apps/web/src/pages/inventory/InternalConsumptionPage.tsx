@@ -3,9 +3,14 @@ import { Link } from "react-router-dom";
 import type {
   InternalConsumptionAvailabilityDTO,
   InternalConsumptionDTO,
+  InternalConsumptionReversalDTO,
   ItemDTO,
 } from "@veridi/shared";
-import { COST_SOURCE_LABELS, hojeComercial } from "@veridi/shared";
+import {
+  COST_SOURCE_LABELS,
+  INTERNAL_CONSUMPTION_REVERSAL_STATUS_LABELS,
+  hojeComercial,
+} from "@veridi/shared";
 import { FormSection } from "../../components/FormSection";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
@@ -28,9 +33,12 @@ import { formatMoneyPtBr, numericInvalidMessage, parsePtBrNumber } from "../../l
 import { CASAS_QUANTIDADE, OPCOES_QUANTIDADE } from "../../lib/numeric-scales";
 import { formatIntegerPtBr } from "../../lib/numeric-ptbr";
 import { formatQuantity, formatQuantityWithUnit } from "../../lib/quantity";
+import { EstornarConsumoDialog } from "./EstornarConsumoDialog";
 import { LinhaDeMarcacao } from "./inventario-seletores";
 import {
+  QUEM_ESTORNA_CONSUMO_INTERNO,
   QUEM_REGISTRA_CONSUMO_INTERNO,
+  usePodeEstornarConsumo,
   usePodeRegistrarConsumo,
 } from "./internal-consumption-permissions";
 
@@ -54,6 +62,10 @@ const PAGE_SIZE = 20;
  */
 export function InternalConsumptionPage() {
   const podeRegistrar = usePodeRegistrarConsumo();
+  const podeEstornar = usePodeEstornarConsumo();
+  /* O consumo aberto no diálogo de estorno, e o último estorno confirmado. */
+  const [estornando, setEstornando] = useState<InternalConsumptionDTO | null>(null);
+  const [estornado, setEstornado] = useState<InternalConsumptionReversalDTO | null>(null);
 
   const [itens, setItens] = useState<ItemDTO[]>([]);
   const [itemId, setItemId] = useState("");
@@ -211,7 +223,7 @@ export function InternalConsumptionPage() {
       </div>
 
       {/* "Não é ajuste" no subtítulo diz o QUE; quem procura como corrigir
-          um consumo errado precisa saber que o caminho é o Inventário Físico. */}
+          um consumo errado precisa saber que o caminho é o estorno. */}
       <ContextHelp topic={helpTopics["estoque.usoEConsumo"]} />
 
       {!podeRegistrar && (
@@ -362,6 +374,14 @@ export function InternalConsumptionPage() {
       )}
 
       <FormSection title="Consumos registrados">
+        {/* Consumo lançado errado se ESTORNA — nunca se edita nem se apaga.
+            Quem estorna é lista própria: registrar não dá direito a desfazer. */}
+        {!podeEstornar && (
+          <p className="field__hint">
+            Consumo lançado errado é estornado por {QUEM_ESTORNA_CONSUMO_INTERNO}, com motivo.
+          </p>
+        )}
+        {estornado && <EstornoRegistrado estorno={estornado} />}
         <div className="table-container" aria-busy={consulta.loading || undefined}>
           <table className="table">
             <thead>
@@ -371,11 +391,14 @@ export function InternalConsumptionPage() {
                 <th className="col-flex">Item</th>
                 <th className="col-tight">Lote</th>
                 <th className="col-tight is-numeric">Quantidade</th>
+                <th className="col-tight is-numeric">Estornado</th>
+                <th className="col-tight">Situação</th>
                 <th className="col-flex">Destino/uso</th>
                 <th className="col-tight is-numeric">Custo unitário</th>
                 <th className="col-tight is-numeric">Custo total</th>
                 <th className="col-tight">Origem do custo</th>
                 <th className="col-flex">Usuário</th>
+                {podeEstornar && <th className="col-actions" aria-hidden="true" />}
               </tr>
             </thead>
             <tbody>
@@ -401,15 +424,38 @@ export function InternalConsumptionPage() {
                   <td className="col-tight is-numeric">
                     {formatQuantity(consumo.quantity)} {consumo.uomCode}
                   </td>
+                  <td className="col-tight is-numeric">
+                    {consumo.reversalStatus === "NOT_REVERSED"
+                      ? "—"
+                      : `${formatQuantity(consumo.reversedQuantity)} ${consumo.uomCode}`}
+                  </td>
+                  <td className="col-tight">{INTERNAL_CONSUMPTION_REVERSAL_STATUS_LABELS[consumo.reversalStatus]}</td>
                   <td className="col-flex">{consumo.purpose ?? "—"}</td>
                   <td className="col-tight is-numeric">{custoNaLinha(consumo.unitCost)}</td>
                   <td className="col-tight is-numeric">{custoNaLinha(consumo.totalCost)}</td>
                   <td className="col-tight">{COST_SOURCE_LABELS[consumo.costSource]}</td>
                   <td className="col-flex">{consumo.registeredByName}</td>
+                  {podeEstornar && (
+                    <td className="col-actions">
+                      {/* Sem saldo estornável não há o que estornar: a ação some. */}
+                      {consumo.reversalStatus !== "REVERSED" && (
+                        <button
+                          type="button"
+                          className="btn btn--secondary btn--sm"
+                          onClick={() => {
+                            setEstornado(null);
+                            setEstornando(consumo);
+                          }}
+                        >
+                          Estornar
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
 
-              <ListStatusRow colSpan={10} query={consulta} rowCount={consumos.length}>
+              <ListStatusRow colSpan={podeEstornar ? 13 : 12} query={consulta} rowCount={consumos.length}>
                 Nenhum consumo registrado.
               </ListStatusRow>
             </tbody>
@@ -447,7 +493,39 @@ export function InternalConsumptionPage() {
           </div>
         )}
       </FormSection>
+
+      {estornando && (
+        <EstornarConsumoDialog
+          consumoId={estornando.id}
+          consumoCode={estornando.code}
+          onClose={() => setEstornando(null)}
+          onEstornado={(estorno) => {
+            setEstornando(null);
+            setEstornado(estorno);
+            // O saldo do item e a situação da linha mudaram: relê os dois.
+            setRecarga((atual) => atual + 1);
+            consulta.reload();
+          }}
+        />
+      )}
     </>
+  );
+}
+
+/** O estorno confirmado: código, quantidade devolvida e o custo que ele levou. */
+function EstornoRegistrado({ estorno }: { estorno: InternalConsumptionReversalDTO }) {
+  return (
+    <div className="callout" role="status">
+      <p>
+        <strong>{estorno.code}</strong> registrado: {formatQuantity(estorno.quantity)} {estorno.uomCode} devolvidos ao
+        estoque (estorno de {estorno.originalConsumptionCode}).
+      </p>
+      <p>
+        {estorno.totalCost === null
+          ? "Custo não disponível — o consumo original não tinha custo."
+          : `Custo estornado ${formatMoneyPtBr(estorno.totalCost, { scale: 2 })}, copiado do consumo original.`}
+      </p>
+    </div>
   );
 }
 

@@ -191,6 +191,7 @@ describe("R-21 — resumo e agrupamentos do recorte", () => {
       // 15 + 5 + 22,5 — os dois sem custo não viram zero somado.
       knownCostTotal: "42.5",
       distinctItemCount: 3,
+      reversedConsumptionCount: 0,
     });
   });
 
@@ -249,6 +250,7 @@ describe("R-21 — resumo e agrupamentos do recorte", () => {
       missingCostCount: 0,
       knownCostTotal: null,
       distinctItemCount: 0,
+      reversedConsumptionCount: 0,
     });
     expect(dados.byItem).toEqual([]);
     expect(dados.byPurpose).toEqual([]);
@@ -397,16 +399,17 @@ describe("R-21 — CSV com o mesmo recorte", () => {
 
     const { cabecalho, linhas } = lerCsv(resposta.body);
     expect(cabecalho).toEqual([
-      "Data", "Consumo", "Item", "Descrição", "Lote", "Quantidade", "Unidade", "Destino/uso", "Custo unitário",
-      "Custo total", "Origem do custo", "Usuário", "Observação",
+      "Data", "Consumo", "Item", "Descrição", "Lote", "Quantidade original", "Quantidade estornada",
+      "Quantidade líquida", "Unidade", "Destino/uso", "Custo unitário", "Custo total", "Custo total líquido",
+      "Origem do custo", "Situação", "Usuário", "Observação",
     ]);
     // Mesmo recorte do JSON, na mesma ordem — a página da tela não corta o arquivo.
     expect(linhas.map((linha) => linha[1])).toEqual(json.rows.map((linha) => linha.code));
     expect(linhas).toEqual([
-      [diaNoCsv(DIA(4)), `CI-R21T-${MARCA}-05`, detergente.code, detergente.name, "", "1", "kg", ESCRITORIO, "", "",
-        "Sem custo", compras.name, ""],
-      [diaNoCsv(DIA(0)), `CI-R21T-${MARCA}-01`, luva.code, luva.name, "", "10", "un", ESCRITORIO, "1,5", "15",
-        "Real", compras.name, "Reposição do armário"],
+      [diaNoCsv(DIA(4)), `CI-R21T-${MARCA}-05`, detergente.code, detergente.name, "", "1", "0", "1", "kg",
+        ESCRITORIO, "", "", "", "Sem custo", "—", compras.name, ""],
+      [diaNoCsv(DIA(0)), `CI-R21T-${MARCA}-01`, luva.code, luva.name, "", "10", "0", "10", "un", ESCRITORIO, "1,5",
+        "15", "15", "Real", "—", compras.name, "Reposição do armário"],
     ]);
   });
 

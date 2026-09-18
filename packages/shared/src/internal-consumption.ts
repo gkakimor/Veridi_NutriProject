@@ -19,9 +19,16 @@
 
 import type { CostSource } from "./costs.js";
 import type { ItemType } from "./items.js";
+import type { LotStatus } from "./lots.js";
 import type { UserRole } from "./users.js";
 
 export const INTERNAL_CONSUMPTION_CODE_PREFIX = "CI";
+
+/**
+ * ESTORNO DE CONSUMO INTERNO — ECI-000001 (INTERNAL-CONSUMPTION-REVERSAL-01).
+ * "EC" já é Estrutura de Custo.
+ */
+export const INTERNAL_CONSUMPTION_REVERSAL_CODE_PREFIX = "ECI";
 
 /**
  * Quem REGISTRA consumo interno.
@@ -47,6 +54,40 @@ export const INTERNAL_CONSUMPTION_WRITE_ROLES: readonly UserRole[] = [
 export function podeRegistrarConsumoInterno(role: UserRole): boolean {
   return INTERNAL_CONSUMPTION_WRITE_ROLES.some((aceito) => aceito === role);
 }
+
+/**
+ * Quem ESTORNA consumo interno — decisão do PO (INTERNAL-CONSUMPTION-REVERSAL-01, P2).
+ *
+ * Lista PRÓPRIA e menor que a de quem registra: estornar desfaz uma saída já
+ * confirmada e muda o relatório de despesa, então é exceção controlada, com
+ * um segundo olhar — o mesmo precedente de anular arquivo do Rótulo
+ * (Qualidade e Administrador). Compras, Produção, Comercial e consulta não
+ * estornam: quem registrou errado pede o estorno.
+ */
+export const INTERNAL_CONSUMPTION_REVERSAL_ROLES: readonly UserRole[] = ["ADMIN", "QUALITY"];
+
+/** O perfil pode estornar consumo interno? */
+export function podeEstornarConsumoInterno(role: UserRole): boolean {
+  return INTERNAL_CONSUMPTION_REVERSAL_ROLES.some((aceito) => aceito === role);
+}
+
+/** Motivo do estorno: obrigatório, de 3 a 500 caracteres depois do `trim`. */
+export const INTERNAL_CONSUMPTION_REVERSAL_REASON_MIN = 3;
+export const INTERNAL_CONSUMPTION_REVERSAL_REASON_MAX = 500;
+
+/**
+ * Situação do consumo diante dos estornos — DERIVADA da soma, nunca gravada.
+ *
+ * `REVERSED` = estornado por inteiro: continua listado no histórico e no R-21,
+ * mas não conta mais como consumo.
+ */
+export type InternalConsumptionReversalStatus = "NOT_REVERSED" | "PARTIALLY_REVERSED" | "REVERSED";
+
+export const INTERNAL_CONSUMPTION_REVERSAL_STATUS_LABELS: Record<InternalConsumptionReversalStatus, string> = {
+  NOT_REVERSED: "—",
+  PARTIALLY_REVERSED: "Estornado parcialmente",
+  REVERSED: "Estornado",
+};
 
 export interface InternalConsumptionDTO {
   id: string;
@@ -91,6 +132,97 @@ export interface InternalConsumptionDTO {
   registeredByUserId: string;
   registeredByName: string;
   createdAt: string;
+
+  /*
+   * Estornos (INTERNAL-CONSUMPTION-REVERSAL-01). Tudo SOMA dos registros ECI-
+   * no instante da leitura — o CI nunca guarda contador, e nunca é editado.
+   */
+
+  /** Soma das quantidades estornadas; `"0"` sem estorno. */
+  reversedQuantity: string;
+  /**
+   * `quantity − reversedQuantity`: o que ainda pode ser estornado — e, pelo
+   * mesmo número, a quantidade LÍQUIDA do consumo.
+   */
+  reversibleQuantity: string;
+  /** Soma do custo total dos estornos; `null` quando o CI não tem custo. */
+  reversedTotalCost: string | null;
+  /** `totalCost − reversedTotalCost`; `null` quando o CI não tem custo. */
+  netTotalCost: string | null;
+  reversalStatus: InternalConsumptionReversalStatus;
+  reversalCount: number;
+}
+
+/** Um estorno ECI- como a tela, o extrato e o relatório o leem. */
+export interface InternalConsumptionReversalDTO {
+  id: string;
+  /** ECI-000001. */
+  code: string;
+  originalConsumptionId: string;
+  originalConsumptionCode: string;
+
+  /** Sempre positiva, na unidade do CI — a entrada é do movimento. */
+  quantity: string;
+  uomCode: string;
+  reason: string;
+
+  /** CÓPIA do custo unitário do CI; `null` quando ele é `NO_COST`. */
+  unitCost: string | null;
+  /** Pró-rata do total do CI; o estorno que zera o saldo leva o resto. */
+  totalCost: string | null;
+  costSource: CostSource;
+  costDetails: string | null;
+
+  /** O movimento `INTERNAL_CONSUMPTION_REVERSAL` que devolveu a quantidade. */
+  inventoryMovementId: string;
+
+  registeredByUserId: string;
+  registeredByName: string;
+  /** Instante do estorno — o mesmo `occurredAt` da entrada no ledger. */
+  createdAt: string;
+}
+
+/**
+ * Ajuste MANUAL de entrada na mesma posição depois do consumo.
+ *
+ * Só informação para quem vai estornar: o sistema NÃO deduz que ele corrigiu
+ * este consumo e não bloqueia o estorno por causa dele (PO).
+ */
+export interface InternalConsumptionLaterAdjustmentDTO {
+  id: string;
+  quantity: string;
+  occurredAt: string;
+  reason: string | null;
+  createdBy: string | null;
+}
+
+/**
+ * O consumo aberto para estornar: tudo da linha do histórico, os estornos já
+ * feitos e o que a tela precisa AVISAR (item inativo, lote bloqueado ou
+ * vencido, ajuste manual posterior). Nenhum desses avisos bloqueia.
+ */
+export interface InternalConsumptionDetailDTO extends InternalConsumptionDTO {
+  /** Do mais recente para o mais antigo. */
+  reversals: InternalConsumptionReversalDTO[];
+  itemActive: boolean;
+  /** Situação atual do lote do consumo; `null` quando o consumo não tem lote. */
+  lotStatus: LotStatus | null;
+  lotExpired: boolean;
+  /** Até 5, do mais recente para o mais antigo; `laterManualAdjustmentCount` é o total. */
+  laterManualAdjustments: InternalConsumptionLaterAdjustmentDTO[];
+  laterManualAdjustmentCount: number;
+}
+
+export interface CreateInternalConsumptionReversalInput {
+  /** Decimal como string, `0 < quantity ≤ reversibleQuantity`. */
+  quantity: string;
+  reason: string;
+  /**
+   * O "já estornado" que a tela mostrou. Diferente do atual no instante do
+   * confirmar, o servidor responde conflito — duplo clique ou aba velha nunca
+   * estornam duas vezes em silêncio.
+   */
+  expectedReversedQuantity: string;
 }
 
 export interface CreateInternalConsumptionInput {

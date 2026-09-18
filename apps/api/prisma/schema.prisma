@@ -79,6 +79,11 @@ enum InventoryMovementType {
   /// destino e custo proprios — nunca ADJUSTMENT_OUT, que existe para
   /// CORRIGIR o saldo e nao para registrar uso.
   INTERNAL_CONSUMPTION
+  /// Entrada que ESTORNA, total ou parcialmente, um consumo interno (ECI-
+  /// anula CI-). Datada no instante do estorno, nunca retroativa. Nunca
+  /// ADJUSTMENT_IN: o estorno e "lancamento anulado", nao "diferenca de
+  /// inventario".
+  INTERNAL_CONSUMPTION_REVERSAL
   FINISHED_GOOD_PRODUCTION
   SHIPMENT_OUT
 }
@@ -95,6 +100,8 @@ enum InventoryMovementSourceType {
   PRODUCTION_CONSUMPTION
   /// Registro de consumo interno (CI-); `sourceId` guarda o id dele.
   INTERNAL_CONSUMPTION
+  /// Estorno de consumo interno (ECI-); `sourceId` guarda o id do estorno.
+  INTERNAL_CONSUMPTION_REVERSAL
   FINISHED_GOOD_PRODUCTION
   SHIPMENT
 }
@@ -444,6 +451,7 @@ model User {
   cancelledSamples            ProjectSample[]                    @relation("SampleCancelledBy")
   sampleConsumptions          SampleConsumption[]                @relation("SampleConsumptionBy")
   internalConsumptions        InternalConsumption[]              @relation("InternalConsumptionBy")
+  internalConsumptionReversals InternalConsumptionReversal[]     @relation("InternalConsumptionReversalBy")
   createdSupplierItems        SupplierItem[]                     @relation("SupplierItemCreatedBy")
   updatedSupplierItems        SupplierItem[]                     @relation("SupplierItemUpdatedBy")
   supplierItemQualifications  SupplierItemQualificationHistory[] @relation("SupplierItemQualificationBy")
@@ -3354,6 +3362,10 @@ model InventoryMovement {
   /// registro (`inventoryMovementId`), como no consumo de amostra.
   internalConsumption InternalConsumption?
 
+  /// Estorno de consumo interno (ECI-): o registro que gerou a entrada. A FK
+  /// 1:1 mora no estorno (`inventoryMovementId`), pelo mesmo motivo.
+  internalConsumptionReversal InternalConsumptionReversal?
+
   /// Ajuste de inventario com documento (INV-): a posicao que o gerou. A FK
   /// 1:1 mora na posicao (`adjustmentMovementId`); ajuste STOCK_COUNT anterior
   /// ao documento nao tem posicao.
@@ -3435,10 +3447,66 @@ model InternalConsumption {
 
   createdAt DateTime @default(now())
 
+  /// Estornos deste consumo. Estornado e saldo estornavel sao SOMA destes
+  /// registros — nunca um contador guardado aqui.
+  reversals InternalConsumptionReversal[]
+
   @@index([itemId])
   @@index([lotId])
   @@index([occurredAt])
   @@map("internal_consumptions")
+}
+
+/// ESTORNO DE CONSUMO INTERNO (ECI-000001) — INTERNAL-CONSUMPTION-REVERSAL-01.
+///
+/// Anula, total ou parcialmente, um CI- lancado errado. E uma ENTRADA propria
+/// do ledger (`INTERNAL_CONSUMPTION_REVERSAL`), datada no instante do estorno,
+/// com motivo e autoria. O CI original nunca e editado nem apagado, e o
+/// estorno nunca e retroativo. Varios estornos por CI, ate a quantidade dele.
+///
+/// Item, lote e unidade NAO sao copiados: sao os do CI (o estorno volta
+/// sempre ao MESMO lote do consumo).
+model InternalConsumptionReversal {
+  id String @id @default(uuid())
+
+  /// ECI-000001 — sequence `internal_consumption_reversal_code_seq`. "EC" ja e
+  /// Estrutura de Custo.
+  code String @unique
+
+  /// RESTRICT: consumo com estorno nao se apaga.
+  originalConsumptionId String
+  originalConsumption   InternalConsumption @relation(fields: [originalConsumptionId], references: [id], onDelete: Restrict)
+
+  /// Sempre positiva, na unidade do CI — o sinal vem do tipo do movimento.
+  quantity Decimal @db.Decimal(24, 12)
+
+  /// Obrigatorio (3 a 500 caracteres, validado na API).
+  reason String
+
+  /// COPIA do snapshot do CI — o estorno nunca recalcula custo. `null` quando
+  /// o CI e `NO_COST`: ausencia de custo nunca vira R$ 0,00.
+  unitCost    Decimal?   @db.Decimal(20, 8)
+  /// Pro-rata do `totalCost` do CI (ROUND_HALF_UP, 4 casas); o estorno que
+  /// zera o saldo estornavel leva o resto, e a soma fecha o total original.
+  totalCost   Decimal?   @db.Decimal(14, 4)
+  costSource  CostSource
+  costDetails String?
+
+  /// 1:1 com o movimento INTERNAL_CONSUMPTION_REVERSAL do ledger. O
+  /// `@unique` garante no banco que um estorno tem uma entrada so e que uma
+  /// entrada serve um estorno so.
+  inventoryMovementId String            @unique
+  inventoryMovement   InventoryMovement @relation(fields: [inventoryMovementId], references: [id], onDelete: Cascade)
+
+  /// Usuario da sessao — nunca do corpo da requisicao.
+  registeredByUserId       String
+  registeredByUser         User   @relation("InternalConsumptionReversalBy", fields: [registeredByUserId], references: [id])
+  registeredByNameSnapshot String
+
+  createdAt DateTime @default(now())
+
+  @@index([originalConsumptionId])
+  @@map("internal_consumption_reversals")
 }
 
 /// Inventario fisico — tipo do documento INV-. SESSION e o inventario em lote

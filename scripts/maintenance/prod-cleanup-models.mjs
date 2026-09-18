@@ -32,6 +32,9 @@ export const ALVOS = [
   // consumo. A FK dele para o movimento e CASCADE, entao `calcularOrdem()` o
   // remove antes — sem isso a contagem sairia zerada pelo cascade do pai.
   "InternalConsumption",
+  // Estorno de consumo interno (ECI-): aponta o CI com RESTRICT e o movimento
+  // com CASCADE, então `calcularOrdem()` o remove antes dos dois.
+  "InternalConsumptionReversal",
   "Attachment",
 
   // Inventário físico (INV-): registros, achados, posições e a contagem.

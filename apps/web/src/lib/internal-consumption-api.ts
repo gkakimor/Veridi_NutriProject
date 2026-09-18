@@ -1,8 +1,11 @@
 import type {
   CreateInternalConsumptionInput,
+  CreateInternalConsumptionReversalInput,
   InternalConsumptionAvailabilityDTO,
+  InternalConsumptionDetailDTO,
   InternalConsumptionDTO,
   InternalConsumptionListResponse,
+  InternalConsumptionReversalDTO,
 } from "@veridi/shared";
 import { API_URL, apiFetch } from "./api";
 import { parseJsonOrThrow } from "./api-errors";
@@ -54,4 +57,26 @@ export async function createInternalConsumption(
     body: JSON.stringify(input),
   });
   return (await parseJsonOrThrow(response)) as InternalConsumptionDTO;
+}
+
+/**
+ * O consumo aberto para estornar: estornos anteriores e os avisos (item
+ * inativo, lote bloqueado ou vencido, ajuste manual posterior), lidos na hora.
+ */
+export async function getInternalConsumption(id: string): Promise<InternalConsumptionDetailDTO> {
+  const response = await apiFetch(`${API_URL}/internal-consumptions/${id}`);
+  return (await parseJsonOrThrow(response)) as InternalConsumptionDetailDTO;
+}
+
+/** Estorno (INTERNAL-CONSUMPTION-REVERSAL-01). A recusa volta com a mensagem inteira. */
+export async function createInternalConsumptionReversal(
+  id: string,
+  input: CreateInternalConsumptionReversalInput,
+): Promise<InternalConsumptionReversalDTO> {
+  const response = await apiFetch(`${API_URL}/internal-consumptions/${id}/reversals`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return (await parseJsonOrThrow(response)) as InternalConsumptionReversalDTO;
 }

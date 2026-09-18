@@ -58,6 +58,7 @@ zero BLOCKER. O MVP foi entregue; o que está aqui é evolução do produto.
 | 9w | P1 | **MASTER-DATA-HARD-DELETE-02** — exclusão física de Item, Produto + PA e Recurso industrial | **Liberado pelo PO em 2026-09-17** · Fatia 2 do [discovery](discovery/MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01.md), mesmas decisões, nos cadastros com CASCADE no caminho (movimento de estoque, referência de custo, contagem, custo e precificação, tarifa) · o PA sai só junto do Produto e sem uso próprio · **sem migration** (usa o rastro da Fatia 1) · a infraestrutura está na `main` desde 9v: o catálogo do agregado entra em `modules/master-data-deletion/catalogo-de-exclusao.ts`, o caminho em `MASTER_DATA_DELETION_PATHS`, e o enum do rastro já reserva `ITEM`, `PRODUCT` e `INDUSTRIAL_RESOURCE` — o teste de contrato das rotas DELETE muda junto | Implementar | — |
 | 9x | P1 | ~~**CUSTOMER-CNPJ-EDITABLE-HISTORY-01**~~ — dados do CNPJ editáveis, consulta aditiva e histórico | **FECHADO em 2026-09-18, na `main` e fora de PROD** (`release/prod` segue `8e824e8f`) · revê 9s · os dez dados cadastrais do CNPJ viram campos editáveis, na seção logo antes de Observações · consulta ao OpenCNPJ aditiva em todos os campos: vazio nasce marcado, existente só muda com "Substituir", igual aparece para "Confirmar", fonte vazia nunca apaga · "Última consulta" é texto do sistema no rodapé · histórico só de acréscimo por gravação (Edição, Consulta sem diferença, Troca de CNPJ), com origem Manual/OpenCNPJ por campo e "Ver histórico"; sem histórico retroativo · regra global: mesmo espaço vertical entre blocos de todo cadastro (`--block-gap`) · **migration aditiva** `20260925093037` | Publicação quando o PO decidir — PROD precisa das migrations 093036 e 093037 (regras em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §122 e §123, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | 9s |
 | 9y | P2 | **MASTER-DATA-HARD-DELETE-CNPJ-BIRTH-01** — marca estrutural do registro do CNPJ gravado na criação do Cliente | **AGUARDANDO DECISÃO DO PO** (2026-09-18) · o PO decidiu que o registro nascido na mesma criação é filho técnico (sai junto na exclusão física) e que registro posterior é uso real, mas só com prova estrutural; o modelo não a tem, e hoje todo registro do CNPJ bloqueia (`728879c4`) · **menor mudança proposta**: coluna anulável `createdWithCustomerId` em `customer_cnpj_registration_history`, gravada só por `createCustomer` com o id do Cliente que nasce, sem FK e sem backfill (registro antigo segue bloqueando); prova = um registro só, com `createdWithCustomerId` = `customerId` — o evento movido pelo MERGE do saneamento deixa de casar, e booleano ou valor novo em `kind` não detectariam isso · **migration aditiva**, nenhuma tela muda | Decisão do PO sobre a migration | 9v |
+| 9z | P1 | ~~**INTERNAL-CONSUMPTION-REVERSAL-01**~~ — estorno próprio do consumo interno | **FECHADO em 2026-09-18, na `main` e fora de PROD** (`release/prod` segue `8e824e8f`) · P1–P10 decididas pelo PO no [discovery](discovery/INTERNAL-CONSUMPTION-REVERSAL-DISCOVERY-01.md) · §126 · migration aditiva `20260925093039` · estorno `ECI-` total ou parcial, só ADMIN e QUALITY, custo copiado, mesmo lote, recusa com inventário aberto ou contagem posterior · R-21 líquido na data do CI · extrato e R-03 reconhecem consumo e estorno | — (seção própria no [`PROJECT_STATE.md`](PROJECT_STATE.md)) | — |
 | 10 | P2 | **Estabilização final ampla do produto** | Sem ID e sem escopo | Abrir ID e escopo quando 4–8 fecharem | WAVE 4, permissões e WAVE 5 |
 | 11 | — | **DEMO-DATASET-01** — ambiente DEMO com massa fictícia determinística | **AGUARDANDO DEFINIÇÃO DO PO** | Massa fictícia determinística + reset protegido para um futuro ambiente Railway DEMO, e o fluxo `main` → `release/demo` → aprovação → o MESMO SHA em `release/prod`. Nada criado: sem ambiente, sem `release/demo` | PO |
 
@@ -80,6 +81,8 @@ watchlist (E). A estabilização final (10) é o lugar natural para varrê-los.
 | INACTIVE-MARKERS-REPORTS-01 (opcional) — última fatia do cadastro inativo | Registrada em 2026-09-17 com o discovery. As Fatias 1 a 4 fecharam no mesmo dia (INVENTORY-INACTIVE-ITEM-VISIBILITY-01 §107, PRODUCT-INACTIVE-COMMERCIAL-GATE-01 §108, SUPPLIER-ITEM-INACTIVE-GATE-01 §112 e PRODUCTION-INACTIVE-COMPONENT-GATE-01 §116). Só D9 (R-18 abre em "Todos", com a situação) tem recomendação e espera o handoff do PO | [discovery](discovery/MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01.md) |
 | **ITEM-DUPLICATE-SANITIZATION-01** — grupos restantes (2 no DEV: G6 café verde e G11 fosfato de piridoxal) | Ondas 2 (§118) e 3 (§124) resolveram os demais no DEV. G6 e G11 esperam a Veridi: significado de `*`/`**` (V4), teor de clorogênico e as cotações FLORIEN (V1). Registrado em 2026-09-17 com a Onda A | [discovery](discovery/ITEM-DUPLICATE-SANITIZATION-DISCOVERY-01.md) |
 | **ITEM-NAME-STANDARDIZATION-01** — nome do Item MP/ME em MAIÚSCULAS e único sem caixa | Parado em 2026-09-17 no passo de duplicidade: o índice único não nasce enquanto houver grupo repetido (2 no DEV depois da Onda 3; PROD não saneado). Retomar depois das ondas, recontando no DEV e em PROD | [discovery](discovery/ITEM-DUPLICATE-SANITIZATION-DISCOVERY-01.md) |
+| **INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01** — CI de data passada lançado depois de um inventário encerrado baixa duas vezes (MEDIUM) | Registrado em 2026-09-18 (INTERNAL-CONSUMPTION-REVERSAL-01), sem correção por decisão do PO: é o espelho da guarda do estorno na criação do consumo | G |
+| **DASHBOARD-INTERNAL-CONSUMPTION-01** — o Painel não representa Uso e consumo (P2) | Registrado em 2026-09-18 (INTERNAL-CONSUMPTION-REVERSAL-01): card novo ficou fora da fatia por decisão do PO | G |
 | **OPS-BACKUP-01** — backup agendado de PROD (HIGH) | Snapshot do Railway recusado e PITR desligado; o backup lógico JSON é restaurável e provado. Rotina agendada é decisão de infraestrutura | A |
 | COST-VAR-02 — variação de CMV e proteção de margem | Bloqueado: sete decisões do PO e dado real em produção | [`archive/COST-VAR-01…`](archive/COST-VAR-01_AUDITORIA_VARIACAO_CMV.md) |
 | #8E, #8F, #8G · PLAN-DATE-01 · UX-HELP-03 | Melhorias aguardando autorização | B, E |
@@ -992,7 +995,13 @@ qual linha falta. Era assim com "+ Adicionar recurso"; com "+ Adicionar recursos
 branco para preencher) fica mais fácil cair nisso. A pergunta: recusar o salvar apontando a linha (como a bancada da
 Formulação faz com a quantidade), ou avisar quais linhas ficaram de fora.
 
-### INTERNAL-CONSUMPTION-REVERSAL-01 — desfazer um consumo interno registrado — sem posição
+### ~~INTERNAL-CONSUMPTION-REVERSAL-01~~ — desfazer um consumo interno registrado — FECHADO em 2026-09-18
+
+**Fechado em 2026-09-18** por INTERNAL-CONSUMPTION-REVERSAL-01 (§126), com as decisões P1–P10 do PO no
+[discovery](discovery/INTERNAL-CONSUMPTION-REVERSAL-DISCOVERY-01.md): estorno próprio (`ECI-`), entrada
+`INTERNAL_CONSUMPTION_REVERSAL`, total ou parcial, só ADMIN e QUALITY, R-21 líquido na data do CI. Vale só para o
+consumo interno — as outras saídas continuam sem estorno e pedem discovery própria. O texto abaixo registra quando
+era pergunta.
 
 Registrado em 2026-09-17 por INTERNAL-CONSUMPTION-01 (Fatia 2), **sem implementação e por decisão consciente**. O
 consumo interno só CRIA: não há `DELETE`, não há estorno e o registro confirmado não é editado. Isso não é uma falta
@@ -1005,6 +1014,23 @@ ajuste rastreável pela diferença. A pergunta ao PO, quando houver posição: u
 próprio (movimento de entrada ligado ao `CI-` original, com motivo), ou a correção por inventário basta? Se a
 resposta for estorno, ela provavelmente vale para as outras saídas também, e aí é uma decisão de estoque, não de uso
 e consumo.
+
+### INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01 — CI de data passada depois de inventário encerrado baixa duas vezes — MEDIUM, sem posição
+
+Registrado em 2026-09-18 por INTERNAL-CONSUMPTION-REVERSAL-01, **sem correção** por decisão do PO (achado L2 do
+[discovery](discovery/INTERNAL-CONSUMPTION-REVERSAL-DISCOVERY-01.md)). O espelho da guarda do estorno: um consumo
+interno com data passada, registrado DEPOIS de um inventário (sessão ou Contagem rápida) que já contou a falta física
+daquele material, baixa o material de novo — a contagem já tinha ajustado o saldo pela diferença. O estorno recusa
+quando a posição foi contada depois do `createdAt` do CI; a criação do CI não tem a guarda equivalente. A pergunta ao
+PO: recusar (ou avisar) o consumo cuja data é anterior à última contagem encerrada da posição?
+
+### DASHBOARD-INTERNAL-CONSUMPTION-01 — o Painel não representa Uso e consumo — P2, sem posição
+
+Registrado em 2026-09-18 por INTERNAL-CONSUMPTION-REVERSAL-01, **fora da fatia** por decisão do PO (achado L1 do
+discovery). O Painel conta movimentos por tipo (`applyMovementCount`) sem caso para `INTERNAL_CONSUMPTION` nem
+`INTERNAL_CONSUMPTION_REVERSAL`: os dois não entram em card nenhum nem na atividade por dia, e na lista de
+movimentações recentes aparecem com o rótulo do tipo e sem documento de origem. Decidir se o consumo interno ganha
+card próprio (líquido dos estornos, como o R-21) ou entra num card existente.
 
 ### INTERNAL-CONSUMPTION-COST-CENTER-01 — Centro de Custo do consumo interno — sem posição
 

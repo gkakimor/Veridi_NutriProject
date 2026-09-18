@@ -102,6 +102,12 @@ function consumo(sobre: Partial<InternalConsumptionDTO> = {}): InternalConsumpti
     registeredByUserId: "u-1",
     registeredByName: "Ana Compras",
     createdAt: "2026-09-17T18:00:00.000Z",
+    reversedQuantity: "0",
+    reversibleQuantity: "10",
+    reversedTotalCost: "0",
+    netTotalCost: "12.5000",
+    reversalStatus: "NOT_REVERSED",
+    reversalCount: 0,
     ...sobre,
   };
 }

@@ -52,6 +52,8 @@ function movimento(sobre: Partial<InventoryMovementDTO>): InventoryMovementDTO {
     stockCountCode: null,
     internalConsumptionId: null,
     internalConsumptionCode: null,
+    internalConsumptionReversalId: null,
+    internalConsumptionReversalCode: null,
     reason: "Avaria",
     createdBy: "Carla Qualidade",
     createdAt: "2026-09-15T18:00:00.000Z",
@@ -87,5 +89,56 @@ describe("Movimentações — origem do ajuste de inventário", () => {
     expect(within(antigo).queryByRole("link", { name: /INV-/ })).toBeNull();
     // Somente leitura: nenhuma ação de editar ou excluir movimento.
     expect(screen.queryByRole("button", { name: /Editar|Excluir|Estornar/ })).toBeNull();
+  });
+});
+
+describe("Movimentações — consumo interno e o estorno dele (INTERNAL-CONSUMPTION-REVERSAL-01)", () => {
+  it("a baixa é Saída com o CI-; o estorno é Entrada com o ECI- e o CI- que ele anula", async () => {
+    vi.mocked(listInventoryMovements).mockResolvedValue({
+      movements: [
+        movimento({
+          id: "m-est",
+          itemCode: "UC-000004",
+          type: "INTERNAL_CONSUMPTION_REVERSAL",
+          sourceType: "INTERNAL_CONSUMPTION_REVERSAL",
+          sourceId: "eci-1",
+          internalConsumptionId: "ci-123",
+          internalConsumptionCode: "CI-000123",
+          internalConsumptionReversalId: "eci-1",
+          internalConsumptionReversalCode: "ECI-000001",
+          reason: "Quantidade digitada errada",
+        }),
+        movimento({
+          id: "m-ci",
+          itemCode: "UC-000005",
+          type: "INTERNAL_CONSUMPTION",
+          sourceType: "INTERNAL_CONSUMPTION",
+          sourceId: "ci-123",
+          internalConsumptionId: "ci-123",
+          internalConsumptionCode: "CI-000123",
+          reason: null,
+        }),
+      ],
+      page: 1,
+      pageSize: 20,
+      total: 2,
+    });
+    render(
+      <MemoryRouter>
+        <InventoryMovementsPage />
+      </MemoryRouter>,
+    );
+
+    const estorno = (await screen.findByRole("link", { name: /UC-000004/ })).closest("tr") as HTMLElement;
+    expect(within(estorno).getByText("Estorno de consumo interno")).toBeInTheDocument();
+    expect(within(estorno).getByText("Entrada")).toBeInTheDocument();
+    expect(within(estorno).getByText("ECI-000001 (estorno de CI-000123)")).toBeInTheDocument();
+
+    const baixa = screen.getByRole("link", { name: /UC-000005/ }).closest("tr") as HTMLElement;
+    expect(within(baixa).getByText("Consumo interno")).toBeInTheDocument();
+    expect(within(baixa).getByText("Saída")).toBeInTheDocument();
+    expect(within(baixa).getByText("CI-000123")).toBeInTheDocument();
+    // O extrato continua só de leitura: estornar é em Uso e consumo.
+    expect(screen.queryByRole("button", { name: /Estornar/ })).toBeNull();
   });
 });

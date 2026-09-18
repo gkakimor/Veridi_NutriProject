@@ -1,11 +1,12 @@
 import { formatQuantity } from "../../lib/quantity";
 import { useMemo, useState } from "react";
-import type { LotStatus } from "@veridi/shared";
+import type { LotStatus, MovementReportRowDTO } from "@veridi/shared";
 import {
   INVENTORY_MOVEMENT_TYPE_LABELS,
   ITEM_TYPE_LABELS,
   LOT_STATUS_LABELS,
   recusaDoPeriodo,
+  sentidoDoMovimento,
 } from "@veridi/shared";
 import type { InventoryMovementType, ItemType } from "@veridi/shared";
 import {
@@ -272,13 +273,22 @@ export function ExpiryReportPage() {
   );
 }
 
-const MOVEMENT_DOCUMENT_PATHS: Record<string, string> = {
+/**
+ * A tela de cada documento de origem. Consumo interno (CI-) e o estorno dele
+ * (ECI-) não têm tela própria: o código aparece sem link.
+ */
+const MOVEMENT_DOCUMENT_PATHS: Partial<Record<NonNullable<MovementReportRowDTO["documentKind"]>, string>> = {
   RECEIPT: "/compras/recebimentos",
   PRODUCTION_ORDER: "/producao/ordens",
   SHIPMENT: "/comercial/expedicoes",
   PROJECT_SAMPLE: "/comercial/amostras",
   STOCK_COUNT: "/estoque/inventario",
 };
+
+function linkDoDocumento(row: MovementReportRowDTO): string | null {
+  const caminho = row.documentKind ? MOVEMENT_DOCUMENT_PATHS[row.documentKind] : undefined;
+  return caminho && row.documentId ? `${caminho}/${row.documentId}` : null;
+}
 
 /** R-03 — Movimentações. */
 export function MovementsReportPage() {
@@ -341,12 +351,14 @@ export function MovementsReportPage() {
       }
     >
       <ReportTable
-        columns={["Data/Hora", "Tipo", "Item", "Lote", "Quantidade", "Documento", "Motivo", "Usuário"]}
+        columns={["Data/Hora", "Tipo", "Entrada/Saída", "Item", "Lote", "Quantidade", "Documento", "Motivo", "Usuário"]}
         emptyMessage="Nenhuma movimentação no período selecionado."
         rows={(data?.rows ?? []).map((row) => (
           <tr key={row.id}>
             <td>{formatDateTime(row.occurredAt)}</td>
             <td>{INVENTORY_MOVEMENT_TYPE_LABELS[row.type]}</td>
+            {/* O sentido é do tipo — a quantidade é sempre positiva. */}
+            <td>{sentidoDoMovimento(row.type)}</td>
             <td>
               <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
             </td>
@@ -357,14 +369,7 @@ export function MovementsReportPage() {
               {formatQuantity(row.quantity)} {row.unitCode}
             </td>
             <td>
-              <DocLink
-                code={row.documentCode}
-                to={
-                  row.documentKind && row.documentId
-                    ? `${MOVEMENT_DOCUMENT_PATHS[row.documentKind]}/${row.documentId}`
-                    : null
-                }
-              />
+              <DocLink code={row.documentCode} to={linkDoDocumento(row)} />
             </td>
             <td>{row.reason ?? "—"}</td>
             <td>{row.createdBy ?? "—"}</td>

@@ -60,6 +60,11 @@ type MovementWithRelations = InventoryMovement & {
   receiptLine: ReceiptLineChain | null;
   shipmentLine: ShipmentLineChain | null;
   stockCountPosition: { stockCount: { id: string; code: string } } | null;
+  internalConsumptionReversal: {
+    id: string;
+    code: string;
+    originalConsumption: { id: string; code: string };
+  } | null;
 };
 
 const movementInclude = {
@@ -69,6 +74,10 @@ const movementInclude = {
   shipmentLine: { include: { shipment: true } },
   // O ajuste de inventário aponta o documento pela FK 1:1 da posição, não pelo `sourceId`.
   stockCountPosition: { select: { stockCount: { select: { id: true, code: true } } } },
+  // O estorno de consumo interno (ECI-) pela FK 1:1 do estorno — e, com ele, o CI- que anula.
+  internalConsumptionReversal: {
+    select: { id: true, code: true, originalConsumption: { select: { id: true, code: true } } },
+  },
 } as const;
 
 /**
@@ -133,6 +142,8 @@ function toMovementDTO(
   const fromProduction =
     movement.sourceType === "PRODUCTION_CONSUMPTION" || movement.sourceType === "FINISHED_GOOD_PRODUCTION";
   const sourceCode = movement.sourceId ? (sourceCodes.get(movement.sourceId) ?? null) : null;
+  const estorno = movement.internalConsumptionReversal;
+  const consumoDaBaixa = movement.sourceType === "INTERNAL_CONSUMPTION" && sourceCode;
   return {
     id: movement.id,
     itemId: movement.itemId,
@@ -156,9 +167,15 @@ function toMovementDTO(
     productionOrderCode: fromProduction ? sourceCode : null,
     projectSampleId: movement.sourceType === "PROJECT_SAMPLE" && sourceCode ? movement.sourceId : null,
     projectSampleCode: movement.sourceType === "PROJECT_SAMPLE" ? sourceCode : null,
-    internalConsumptionId:
-      movement.sourceType === "INTERNAL_CONSUMPTION" && sourceCode ? movement.sourceId : null,
-    internalConsumptionCode: movement.sourceType === "INTERNAL_CONSUMPTION" ? sourceCode : null,
+    // A baixa aponta o próprio CI-; o estorno aponta o CI- que anula.
+    internalConsumptionId: consumoDaBaixa
+      ? movement.sourceId
+      : (estorno?.originalConsumption.id ?? null),
+    internalConsumptionCode: consumoDaBaixa
+      ? sourceCode
+      : (estorno?.originalConsumption.code ?? null),
+    internalConsumptionReversalId: estorno?.id ?? null,
+    internalConsumptionReversalCode: estorno?.code ?? null,
     stockCountId: movement.stockCountPosition?.stockCount.id ?? null,
     stockCountCode: movement.stockCountPosition?.stockCount.code ?? null,
     reason: movement.reason,

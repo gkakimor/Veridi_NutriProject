@@ -60,10 +60,10 @@ import type {
  *   já aconteceu;
  * - só Item `INTERNAL_CONSUMABLE` (`ITEM_TYPES_DO_CONSUMO_INTERNO`).
  *
- * Correção/estorno NÃO existe nesta fatia, e não foi inventada: o sistema não
- * tem hoje nenhum estorno de movimento físico confirmado — recebimento,
- * consumo de produção, amostra e expedição também não desfazem. Enquanto essa
- * decisão for do PO, só a criação é permitida (`docs/BACKLOG.md`).
+ * Correção é o ESTORNO próprio (INTERNAL-CONSUMPTION-REVERSAL-01,
+ * `internal-consumption-reversal.service.ts`): uma entrada nova, com motivo e
+ * autoria, que nunca edita nem apaga o CI. Estornado e saldo estornável são
+ * SOMA dos estornos, lida aqui junto do registro.
  */
 
 const CODE_SEQUENCE = "internal_consumption_code_seq";
@@ -71,9 +71,49 @@ const CODE_SEQUENCE = "internal_consumption_code_seq";
 export const internalConsumptionInclude = {
   item: true,
   lot: true,
+  // Só o que a soma precisa: a lista e o R-21 leem páginas, e cada CI tem
+  // poucos estornos.
+  reversals: { select: { quantity: true, totalCost: true } },
 } as const;
 
-type ConsumptionWithRelations = InternalConsumption & { item: Item; lot: Lot | null };
+type ConsumptionWithRelations = InternalConsumption & {
+  item: Item;
+  lot: Lot | null;
+  reversals: { quantity: Prisma.Decimal; totalCost: Prisma.Decimal | null }[];
+};
+
+/**
+ * Os números do consumo diante dos estornos — derivados, nunca gravados.
+ *
+ * Custo `null` no CI (`NO_COST`) fica `null` no estornado e no líquido: a
+ * ausência de custo atravessa, nunca vira zero.
+ */
+export function numerosDoEstorno(consumption: {
+  quantity: Prisma.Decimal;
+  totalCost: Prisma.Decimal | null;
+  reversals: { quantity: Prisma.Decimal; totalCost: Prisma.Decimal | null }[];
+}): Pick<
+  InternalConsumptionDTO,
+  "reversedQuantity" | "reversibleQuantity" | "reversedTotalCost" | "netTotalCost" | "reversalStatus" | "reversalCount"
+> {
+  const estornado = consumption.reversals.reduce((soma, estorno) => soma.plus(estorno.quantity), new Decimal(0));
+  const saldo = consumption.quantity.minus(estornado);
+  const custoEstornado =
+    consumption.totalCost === null
+      ? null
+      : consumption.reversals.reduce((soma, estorno) => soma.plus(estorno.totalCost ?? 0), new Decimal(0));
+  return {
+    reversedQuantity: estornado.toString(),
+    reversibleQuantity: saldo.toString(),
+    reversedTotalCost: custoEstornado === null ? null : custoEstornado.toString(),
+    netTotalCost:
+      consumption.totalCost === null || custoEstornado === null
+        ? null
+        : consumption.totalCost.minus(custoEstornado).toString(),
+    reversalStatus: estornado.isZero() ? "NOT_REVERSED" : saldo.isZero() ? "REVERSED" : "PARTIALLY_REVERSED",
+    reversalCount: consumption.reversals.length,
+  };
+}
 
 /** O registro como a tela, o histórico e o relatório R-21 o leem — um mapeamento só. */
 export function internalConsumptionToDTO(consumption: ConsumptionWithRelations): InternalConsumptionDTO {
@@ -100,6 +140,7 @@ export function internalConsumptionToDTO(consumption: ConsumptionWithRelations):
     registeredByUserId: consumption.registeredByUserId,
     registeredByName: consumption.registeredByNameSnapshot,
     createdAt: consumption.createdAt.toISOString(),
+    ...numerosDoEstorno(consumption),
   };
 }
 

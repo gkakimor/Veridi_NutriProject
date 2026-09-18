@@ -20,8 +20,17 @@ export function OrigemDoMovimento({ movimento }: { movimento: InventoryMovementD
   if (movimento.stockCountId) {
     return <EntityLink kind="stockCount" id={movimento.stockCountId} code={movimento.stockCountCode} />;
   }
+  // Estorno de consumo interno (ECI-): o estorno e o CI- que ele anula.
+  if (movimento.internalConsumptionReversalCode) {
+    return (
+      <>
+        {movimento.internalConsumptionReversalCode}
+        {movimento.internalConsumptionCode ? ` (estorno de ${movimento.internalConsumptionCode})` : ""}
+      </>
+    );
+  }
   // Consumo interno (CI-): o código, sem link — o registro vive na lista de
-  // Uso e consumo, e não tem tela própria nesta fatia.
+  // Uso e consumo, e não tem tela própria.
   if (movimento.internalConsumptionCode) return <>{movimento.internalConsumptionCode}</>;
   return <>{INVENTORY_MOVEMENT_SOURCE_LABELS[movimento.sourceType]}</>;
 }

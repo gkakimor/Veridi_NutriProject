@@ -182,6 +182,20 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Movimentações",
     ...REPORT_FILTER_CONTRACTS["R-03"],
     screenPath: "/relatorios/estoque/movimentacoes",
+    // Com "Entrada/Saída" (INTERNAL-CONSUMPTION-REVERSAL-01) a linha não cabe
+    // inteira na folha: o usuário desce para o detalhe, o motivo fica.
+    primaryColumns: [
+      "Data/Hora",
+      "Tipo",
+      "Entrada/Saída",
+      "Item",
+      "Descrição",
+      "Lote",
+      "Quantidade",
+      "Unidade",
+      "Documento",
+      "Motivo",
+    ],
     filterValues: { type: INVENTORY_MOVEMENT_TYPE_LABELS, sourceType: INVENTORY_MOVEMENT_SOURCE_LABELS },
   },
   "R-04": {
@@ -395,19 +409,23 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     ...REPORT_FILTER_CONTRACTS["R-21"],
     screenPath: "/relatorios/estoque/uso-e-consumo",
     // Lote e observação descem para o detalhe: uso e consumo quase nunca
-    // controla lote, e a observação é texto livre.
+    // controla lote, e a observação é texto livre. Com o estorno
+    // (INTERNAL-CONSUMPTION-REVERSAL-01) a linha principal é a do líquido —
+    // original, estornado, líquido, custo total líquido e situação —, e custo
+    // unitário, custo total original, origem do custo e usuário descem também:
+    // na folha em paisagem não sobra largura para o texto livre com os dois.
     primaryColumns: [
       "Data",
       "Consumo",
       "Item",
       "Descrição",
-      "Quantidade",
+      "Quantidade original",
+      "Quantidade estornada",
+      "Quantidade líquida",
       "Unidade",
       "Destino/uso",
-      "Custo unitário",
-      "Custo total",
-      "Origem do custo",
-      "Usuário",
+      "Custo total líquido",
+      "Situação",
     ],
     filterValues: { costSource: COST_SOURCE_LABELS, hasCost: INTERNAL_CONSUMPTION_COST_FILTER_LABELS },
     // KPIs, ressalva do valor parcial e os resumos por item e por destino/uso.

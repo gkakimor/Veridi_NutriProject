@@ -138,6 +138,8 @@ const FORMATO_DA_COLUNA: Record<string, Formato> = {
 
   // Rótulos de situação, tipo e origem.
   Tipo: { width: 60 },
+  // R-03: "Entrada" ou "Saída" — o cabeçalho em caixa alta é uma palavra só.
+  "Entrada/Saída": { width: 60 },
   Status: { width: 62 },
   "Status da OP": { width: 58 },
   Qualidade: { width: 70 },
@@ -179,6 +181,10 @@ const FORMATO_DA_COLUNA: Record<string, Formato> = {
   Quantidade: QUANTIDADE,
   "Quantidade consumida": QUANTIDADE,
   "Quantidade calculada": QUANTIDADE,
+  // R-21 líquido dos estornos (INTERNAL-CONSUMPTION-REVERSAL-01).
+  "Quantidade original": QUANTIDADE,
+  "Quantidade estornada": QUANTIDADE,
+  "Quantidade líquida": QUANTIDADE,
   Necessário: QUANTIDADE,
   "Em compra": QUANTIDADE,
   Falta: QUANTIDADE,
@@ -215,6 +221,7 @@ const FORMATO_DA_COLUNA: Record<string, Formato> = {
   "Custo unitário": { width: 60, align: "right" },
   "Custo do consumo": DINHEIRO,
   "Custo total": DINHEIRO,
+  "Custo total líquido": DINHEIRO,
   // Resumo do R-21: "Custo não disponível" cabe inteiro, sem dobrar a altura da linha.
   "Valor conhecido": { width: 84, align: "right" },
   "Valor previsto": DINHEIRO,
@@ -332,7 +339,10 @@ function ReportSummarySections({ code, summary }: { code: string; summary: Repor
   return (
     <>
       <PdfSection title="Resumo">
-        <PdfDataGrid fields={summary.kpis.map((kpi) => ({ label: kpi.label, value: kpi.value, span: 3 }))} />
+        {/* Sem indicador (R-21 só com consumos estornados por inteiro): só as ressalvas. */}
+        {summary.kpis.length > 0 && (
+          <PdfDataGrid fields={summary.kpis.map((kpi) => ({ label: kpi.label, value: kpi.value, span: 3 }))} />
+        )}
         {(summary.notes ?? []).map((nota) => (
           <PdfNotice key={nota}>{nota}</PdfNotice>
         ))}

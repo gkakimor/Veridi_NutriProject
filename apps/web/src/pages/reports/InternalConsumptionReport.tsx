@@ -3,6 +3,7 @@ import type { CostSource, InternalConsumptionReportFilterOptionsDTO } from "@ver
 import {
   COST_SOURCE_LABELS,
   INTERNAL_CONSUMPTION_COST_FILTER_LABELS,
+  INTERNAL_CONSUMPTION_REVERSAL_STATUS_LABELS,
   SEM_DESTINO_INFORMADO,
   recusaDoPeriodo,
 } from "@veridi/shared";
@@ -19,7 +20,7 @@ import {
 } from "../../lib/reports-api";
 import { ReportPage, ReportPagination, ReportSummaryItem, ReportTable } from "./ReportPage";
 import { ariaDoPeriodoRecusado, diaDoRelatorio } from "./report-period";
-import { avisoDoValorDoUsoEConsumo, custo, indicadoresDoUsoEConsumo } from "./report-summaries";
+import { custo, indicadoresDoUsoEConsumo, ressalvasDoUsoEConsumo } from "./report-summaries";
 import { useFiltrosDigitados } from "./useFiltrosDigitados";
 import { useReport } from "./useReport";
 
@@ -39,6 +40,11 @@ const custoUnitario = (valor: string) => formatMoneyPtBr(valor, { scale: 4 });
  * Todo número vem do servidor, sobre o MESMO recorte da tabela: resumo e
  * agrupamentos são do filtro inteiro, nunca da página aberta. O custo é o
  * gravado no dia de cada consumo — o relatório não o recalcula.
+ *
+ * Estornos (INTERNAL-CONSUMPTION-REVERSAL-01, R21-a): cada linha continua
+ * sendo o consumo, com o original, o estornado, o líquido e a situação; os
+ * números acima da tabela são líquidos, e o estornado por inteiro fica na
+ * lista sem entrar neles.
  */
 export function InternalConsumptionReportPage() {
   const [itemId, setItemId] = useState("");
@@ -93,7 +99,7 @@ export function InternalConsumptionReportPage() {
   }
 
   const resumo = data?.summary;
-  const aviso = resumo ? avisoDoValorDoUsoEConsumo(resumo) : null;
+  const ressalvas = resumo ? ressalvasDoUsoEConsumo(resumo) : [];
 
   return (
     <ReportPage
@@ -102,25 +108,27 @@ export function InternalConsumptionReportPage() {
       reportCode="R-21"
       csvFilters={filters}
       total={data?.total}
-      subtitle="Consumo interno por período, item, destino e usuário — com o custo gravado no dia de cada consumo."
+      subtitle="Consumo interno por período, item, destino e usuário — com o custo gravado no dia de cada consumo, líquido dos estornos."
       loading={loading}
       error={error}
       periodRefusal={periodoRecusado}
       filtersPending={digitados.pendente}
       summary={
         // Sem consumo no recorte não há valor a qualificar: o vazio é dito pela tabela.
-        // Os indicadores são os mesmos do PDF (REPORTS-PDF-SUMMARY-01).
+        // Os indicadores e as ressalvas são os mesmos do PDF (REPORTS-PDF-SUMMARY-01).
+        // Recorte só de consumos estornados por inteiro: só a ressalva dos estornos.
         resumo &&
-        resumo.consumptionCount > 0 && (
+        (resumo.consumptionCount > 0 || ressalvas.length > 0) && (
           <>
-            {indicadoresDoUsoEConsumo(resumo).map((indicador) => (
-              <ReportSummaryItem key={indicador.label} label={indicador.label} value={indicador.value} />
-            ))}
-            {aviso && (
-              <p className="report-summary__note" role="note">
-                {aviso}
+            {resumo.consumptionCount > 0 &&
+              indicadoresDoUsoEConsumo(resumo).map((indicador) => (
+                <ReportSummaryItem key={indicador.label} label={indicador.label} value={indicador.value} />
+              ))}
+            {ressalvas.map((ressalva) => (
+              <p key={ressalva} className="report-summary__note" role="note">
+                {ressalva}
               </p>
-            )}
+            ))}
           </>
         )
       }
@@ -257,12 +265,16 @@ export function InternalConsumptionReportPage() {
           "Data",
           "Consumo",
           "Item",
-          "Quantidade",
+          "Quantidade original",
+          "Quantidade estornada",
+          "Quantidade líquida",
           "Unidade",
           "Destino/uso",
           "Custo unitário",
           "Custo total",
+          "Custo total líquido",
           "Origem do custo",
+          "Situação",
           "Usuário",
         ]}
         emptyMessage="Nenhum consumo para os filtros informados."
@@ -276,11 +288,15 @@ export function InternalConsumptionReportPage() {
               <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
             </td>
             <td className="is-number">{formatQuantity(row.quantity)}</td>
+            <td className="is-number">{formatQuantity(row.reversedQuantity)}</td>
+            <td className="is-number">{formatQuantity(row.reversibleQuantity)}</td>
             <td>{row.uomCode}</td>
             <td>{row.purpose ?? "—"}</td>
             <td className="is-number">{custo(row.unitCost, custoUnitario)}</td>
             <td className="is-number">{custo(row.totalCost, formatBRL)}</td>
+            <td className="is-number">{custo(row.netTotalCost, formatBRL)}</td>
             <td>{COST_SOURCE_LABELS[row.costSource]}</td>
+            <td>{INTERNAL_CONSUMPTION_REVERSAL_STATUS_LABELS[row.reversalStatus]}</td>
             <td>{row.registeredByName}</td>
           </tr>
         ))}

@@ -15,6 +15,7 @@ export type InventoryMovementType =
   | "PRODUCTION_CONSUMPTION"
   | "SAMPLE_CONSUMPTION"
   | "INTERNAL_CONSUMPTION"
+  | "INTERNAL_CONSUMPTION_REVERSAL"
   | "OPENING_BALANCE"
   | "FINISHED_GOOD_PRODUCTION"
   | "SHIPMENT_OUT";
@@ -27,6 +28,7 @@ export const INVENTORY_MOVEMENT_TYPES: readonly InventoryMovementType[] = [
   "PRODUCTION_CONSUMPTION",
   "SAMPLE_CONSUMPTION",
   "INTERNAL_CONSUMPTION",
+  "INTERNAL_CONSUMPTION_REVERSAL",
   "OPENING_BALANCE",
   "FINISHED_GOOD_PRODUCTION",
   "SHIPMENT_OUT",
@@ -40,6 +42,7 @@ export const INVENTORY_MOVEMENT_TYPE_LABELS: Record<InventoryMovementType, strin
   PRODUCTION_CONSUMPTION: "Consumo de produção",
   SAMPLE_CONSUMPTION: "Consumo de amostra",
   INTERNAL_CONSUMPTION: "Consumo interno",
+  INTERNAL_CONSUMPTION_REVERSAL: "Estorno de consumo interno",
   OPENING_BALANCE: "Saldo de abertura (migração)",
   FINISHED_GOOD_PRODUCTION: "Entrada — Produção",
   SHIPMENT_OUT: "Saída — Expedição",
@@ -59,11 +62,22 @@ export const INVENTORY_MOVEMENT_DIRECTION: Record<InventoryMovementType, 1 | -1>
   SAMPLE_CONSUMPTION: -1,
   // Uso e consumo saindo para a própria empresa: saída física real, nunca ajuste.
   INTERNAL_CONSUMPTION: -1,
+  // Estorno de consumo interno: a quantidade que o CI- baixou por engano
+  // volta ao MESMO escopo (item, ou item + lote). Entrada, nunca ajuste.
+  INTERNAL_CONSUMPTION_REVERSAL: 1,
   // Saldo de abertura da migração: entrada física real, uma vez por lote.
   OPENING_BALANCE: 1,
   FINISHED_GOOD_PRODUCTION: 1,
   SHIPMENT_OUT: -1,
 };
+
+/**
+ * "Entrada" ou "Saída", pelo sinal do tipo — o mesmo texto no extrato, no
+ * R-03 e no CSV dele. O sentido nunca vem de quantidade negativa.
+ */
+export function sentidoDoMovimento(type: InventoryMovementType): "Entrada" | "Saída" {
+  return INVENTORY_MOVEMENT_DIRECTION[type] > 0 ? "Entrada" : "Saída";
+}
 
 export type InventoryMovementSourceType =
   | "PROJECT_SAMPLE"
@@ -74,6 +88,7 @@ export type InventoryMovementSourceType =
   | "MANUAL_LOSS"
   | "PRODUCTION_CONSUMPTION"
   | "INTERNAL_CONSUMPTION"
+  | "INTERNAL_CONSUMPTION_REVERSAL"
   | "FINISHED_GOOD_PRODUCTION"
   | "SHIPMENT";
 
@@ -87,6 +102,7 @@ export const INVENTORY_MOVEMENT_SOURCE_LABELS: Record<InventoryMovementSourceTyp
   SHIPMENT: "Expedição",
   PROJECT_SAMPLE: "Amostra / teste",
   INTERNAL_CONSUMPTION: "Consumo interno",
+  INTERNAL_CONSUMPTION_REVERSAL: "Estorno de consumo interno",
   OPENING_BALANCE: "Abertura da migração",
 };
 
@@ -117,9 +133,16 @@ export interface InventoryMovementDTO {
   /** Consumo de amostra — o teste Tn que originou o movimento. */
   projectSampleId: string | null;
   projectSampleCode: string | null;
-  /** Consumo interno — o registro CI- que originou a baixa de uso e consumo. */
+  /**
+   * Consumo interno — o registro CI- que originou a baixa de uso e consumo;
+   * no ESTORNO, o CI- que ele anula. Os dois movimentos do mesmo consumo
+   * apontam o mesmo CI-.
+   */
   internalConsumptionId: string | null;
   internalConsumptionCode: string | null;
+  /** Estorno de consumo interno — o registro ECI- que originou a entrada. */
+  internalConsumptionReversalId: string | null;
+  internalConsumptionReversalCode: string | null;
   /**
    * Ajuste de Inventário Físico ou de Contagem rápida — o documento `INV-` da
    * posição ligada ao movimento. `null` no ajuste `STOCK_COUNT` anterior às

@@ -305,6 +305,12 @@ export async function getMovementsReport(
         productionOutput: { include: { productionOrder: true } },
         shipmentLine: { include: { shipment: true } },
         stockCountPosition: { select: { stockCount: { select: { id: true, code: true } } } },
+        // Consumo interno e o estorno dele: as FKs 1:1 moram nos registros
+        // (INTERNAL-CONSUMPTION-01 e INTERNAL-CONSUMPTION-REVERSAL-01).
+        internalConsumption: { select: { id: true, code: true } },
+        internalConsumptionReversal: {
+          select: { id: true, code: true, originalConsumption: { select: { code: true } } },
+        },
       },
       orderBy: { occurredAt: "desc" },
       ...pageArgs(pagination),
@@ -355,6 +361,17 @@ export async function getMovementsReport(
       documentCode = movement.stockCountPosition.stockCount.code;
       documentKind = "STOCK_COUNT";
       documentId = movement.stockCountPosition.stockCount.id;
+    } else if (movement.internalConsumption) {
+      // Baixa de uso e consumo: o CI-.
+      documentCode = movement.internalConsumption.code;
+      documentKind = "INTERNAL_CONSUMPTION";
+      documentId = movement.internalConsumption.id;
+    } else if (movement.internalConsumptionReversal) {
+      // Estorno: o ECI- e o CI- que ele anula — "ECI-000001 (estorno de CI-000123)".
+      const estorno = movement.internalConsumptionReversal;
+      documentCode = `${estorno.code} (estorno de ${estorno.originalConsumption.code})`;
+      documentKind = "INTERNAL_CONSUMPTION_REVERSAL";
+      documentId = estorno.id;
     } else if (movement.sourceType === "PROJECT_SAMPLE" && movement.sourceId) {
       const sample = samplesById.get(movement.sourceId);
       if (sample) {

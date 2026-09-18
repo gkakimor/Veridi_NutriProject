@@ -285,11 +285,12 @@ listas: alvos, preservados (usuários, sessões, preferências de tela, unidades
 de medida e o calendário produtivo com jornadas e exceções — configuração do
 ambiente, não transação) e o contador anual da OP, esvaziado só com
 `--reset-sequences`. Contagem física, perfil de produção, roteiro e agenda da
-OP, histórico de situação do Cliente, versão do arquivo de rótulo e o rastro da
-exclusão física de cadastro mestre (MASTER-DATA-HARD-DELETE-01, decisão do PO)
-são alvos (PROD-CLEANUP-MODEL-CLASSIFICATION-01). As sequences ficam em
+OP, histórico de situação do Cliente, versão do arquivo de rótulo, o rastro da
+exclusão física de cadastro mestre (MASTER-DATA-HARD-DELETE-01, decisão do PO) e o
+estorno de consumo interno (INTERNAL-CONSUMPTION-REVERSAL-01) são alvos
+(PROD-CLEANUP-MODEL-CLASSIFICATION-01). As sequences ficam em
 `scripts/maintenance/prod-cleanup-sequences.mjs`: `user_code_seq` é
-preservada; as 25 de numeração de negócio só reiniciam com
+preservada; as de numeração de negócio (28 em 2026-09-18) só reiniciam com
 `--reset-sequences`. Abortam também: tabela do `public` sem model ou model sem
 tabela, relação ou sequence fora do `public`, sequence nas duas listas ou
 fantasma (classificada e ausente do banco — apagada ou renomeada), coluna
