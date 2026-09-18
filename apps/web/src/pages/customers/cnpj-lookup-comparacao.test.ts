@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest";
-import type { CnpjLookupCompany, CnpjLookupResult, CustomerCnpjRegistration } from "@veridi/shared";
+import type { CnpjLookupCompany, CustomerCnpjRegistration } from "@veridi/shared";
 import { CNPJ_REGISTRATION_FIELDS } from "@veridi/shared";
 import {
   CAMPOS_DA_CONSULTA_DE_CNPJ,
-  assinaturaDosDadosDoCnpj,
+  DADOS_DO_CNPJ_VAZIOS,
   compararComOCadastro,
   compararDadosDoCnpj,
+  dadosDoCnpjDoFormulario,
+  dadosDoCnpjNoFormulario,
   dadosDoCnpjParaAplicar,
+  linhaSelecionavel,
   selecaoInicial,
-  selecaoInicialDosDadosDoCnpj,
   simNaoOuNaoInformado,
   valoresParaAplicar,
 } from "./cnpj-lookup-fields";
@@ -16,14 +18,17 @@ import type {
   LinhaDaComparacao,
   LinhaDosDadosDoCnpj,
   ValoresDoFormulario,
+  ValoresDosDadosDoCnpj,
 } from "./cnpj-lookup-fields";
 
 /**
- * As regras de comparação da consulta de CNPJ — CUSTOMER-CNPJ-LOOKUP-01.
+ * As regras de comparação da consulta de CNPJ — §111 e §122
+ * (CUSTOMER-CNPJ-LOOKUP-01, CUSTOMER-CNPJ-EDITABLE-HISTORY-01).
  *
- * Sem tela e sem rede: é aqui que se prova "este valor pode substituir
- * aquele?", que é a decisão de negócio da capacidade. A tela só desenha o
- * resultado.
+ * Sem tela e sem rede: é aqui que se prova "a fonte pode trocar este valor?".
+ * A consulta é ADITIVA: completa o vazio (marcado), troca o preenchido só por
+ * escolha ("Substituir", desmarcado), deixa confirmar o equivalente, e nunca
+ * apaga com o vazio da fonte.
  */
 
 const VAZIO: ValoresDoFormulario = {
@@ -79,115 +84,76 @@ describe("comparação Atual × Retornado", () => {
     expect(linhas.map((item) => item.campo)).toEqual([...CAMPOS_DA_CONSULTA_DE_CNPJ]);
   });
 
-  it("cadastro em branco: tudo que a fonte trouxe é aplicável", () => {
+  it("cadastro em branco: tudo que a fonte trouxe completa o cadastro, e nasce marcado", () => {
     const linhas = compararComOCadastro(VAZIO, fonte());
 
-    expect(linhas.every((item) => item.situacao === "aplicavel")).toBe(true);
-    expect(linha(linhas, "legalName").atual).toBe("");
+    expect(linhas.every((item) => item.situacao === "preencher")).toBe(true);
+    expect(selecaoInicial(linhas).size).toBe(CAMPOS_DA_CONSULTA_DE_CNPJ.length);
     expect(linha(linhas, "legalName").retornado).toBe("VERIDI NUTRITION LTDA");
   });
 
-  it("valor diferente vira diferença aplicável, com os dois lados à vista", () => {
-    const linhas = compararComOCadastro(
-      { ...VAZIO, legalName: "VERIDI TESTE LTDA" },
-      fonte(),
-    );
+  it("valor já preenchido e a fonte diferente: 'Substituir', e NÃO nasce marcado", () => {
+    const linhas = compararComOCadastro({ ...VAZIO, legalName: "VERIDI TESTE LTDA" }, fonte());
 
     expect(linha(linhas, "legalName")).toMatchObject({
       rotulo: "Razão Social / Nome",
       atual: "VERIDI TESTE LTDA",
       retornado: "VERIDI NUTRITION LTDA",
-      situacao: "aplicavel",
+      situacao: "substituir",
     });
+    expect(selecaoInicial(linhas).has("legalName")).toBe(false);
   });
 });
 
-describe("o que conta como 'Sem alteração'", () => {
-  it("mesma cidade em caixa e acentuação diferentes não é alteração", () => {
-    // O caso do handoff: "Tatuí" no cadastro, "TATUÍ" na fonte.
+describe("equivalentes: 'Confirmar', selecionável e nunca escondido", () => {
+  it.each([
+    ["mesma cidade em caixa e acento diferentes", { city: "Tatuí" }, { city: "TATUÍ" }, "city"],
+    ["a base pública escreve sem acento", { city: "São Paulo" }, { city: "SAO PAULO" }, "city"],
+    ["espaço sobrando", { street: "  Avenida   Paulista " }, { street: "AVENIDA PAULISTA" }, "street"],
+    ["CEP com e sem máscara", { zipCode: "01310-100" }, { postalCode: "01310100" }, "zipCode"],
+    ["telefone com e sem máscara", { phone: "(11) 98765-4321" }, { phone: "11987654321" }, "phone"],
+    ["e-mail só muda de caixa", { email: "contato@veridi.com.br" }, { email: "CONTATO@VERIDI.COM.BR" }, "email"],
+  ] as const)("%s", (_caso, atual, daFonte, campo) => {
+    const linhas = compararComOCadastro({ ...VAZIO, ...atual }, fonte(daFonte));
+    const item = linha(linhas, campo);
+
+    expect(item.situacao, campo).toBe("confirmar");
+    expect(linhaSelecionavel(item.situacao)).toBe(true);
+    expect(selecaoInicial(linhas).has(campo)).toBe(false);
+  });
+
+  it("confirmar aplica o valor da fonte, no formato do campo", () => {
     const linhas = compararComOCadastro({ ...VAZIO, city: "Tatuí" }, fonte({ city: "TATUÍ" }));
-    expect(linha(linhas, "city").situacao).toBe("igual");
-  });
-
-  it("a base pública escreve sem acento, e isso também não é alteração", () => {
-    const linhas = compararComOCadastro(
-      { ...VAZIO, city: "São Paulo" },
-      fonte({ city: "SAO PAULO" }),
-    );
-    expect(linha(linhas, "city").situacao).toBe("igual");
-  });
-
-  it("espaço sobrando e espaço repetido não são alteração", () => {
-    const linhas = compararComOCadastro(
-      { ...VAZIO, street: "  Avenida   Paulista " },
-      fonte({ street: "AVENIDA PAULISTA" }),
-    );
-    expect(linha(linhas, "street").situacao).toBe("igual");
-  });
-
-  it("CEP com e sem máscara é o mesmo CEP", () => {
-    const linhas = compararComOCadastro(
-      { ...VAZIO, zipCode: "01310-100" },
-      fonte({ postalCode: "01310100" }),
-    );
-    expect(linha(linhas, "zipCode").situacao).toBe("igual");
-  });
-
-  it("telefone com e sem máscara é o mesmo telefone", () => {
-    const linhas = compararComOCadastro(
-      { ...VAZIO, phone: "(11) 98765-4321" },
-      fonte({ phone: "11987654321" }),
-    );
-    expect(linha(linhas, "phone").situacao).toBe("igual");
-  });
-
-  it("e-mail só muda de caixa: mesmo endereço", () => {
-    const linhas = compararComOCadastro(
-      { ...VAZIO, email: "contato@veridi.com.br" },
-      fonte({ email: "CONTATO@VERIDI.COM.BR" }),
-    );
-    expect(linha(linhas, "email").situacao).toBe("igual");
+    expect(valoresParaAplicar(linhas, new Set(["city"]))).toEqual({ city: "TATUÍ" });
   });
 
   it("uma diferença de verdade continua sendo diferença", () => {
-    const linhas = compararComOCadastro(
-      { ...VAZIO, city: "Sorocaba" },
-      fonte({ city: "SAO PAULO" }),
-    );
-    expect(linha(linhas, "city").situacao).toBe("aplicavel");
+    const linhas = compararComOCadastro({ ...VAZIO, city: "Sorocaba" }, fonte({ city: "SAO PAULO" }));
+    expect(linha(linhas, "city").situacao).toBe("substituir");
   });
 });
 
 describe("valor vazio da fonte nunca apaga valor existente", () => {
-  it("campo nulo na fonte não oferece substituição", () => {
+  it("campo nulo na fonte não oferece operação nenhuma", () => {
     const preenchido: ValoresDoFormulario = {
       ...VAZIO,
       tradeName: "Nome que a operação escreveu",
       phone: "(11) 98765-4321",
       complement: "Sala 2",
     };
-    const linhas = compararComOCadastro(
-      preenchido,
-      fonte({ tradeName: null, phone: null, complement: null }),
-    );
+    const linhas = compararComOCadastro(preenchido, fonte({ tradeName: null, phone: null, complement: null }));
 
     for (const campo of ["tradeName", "phone", "complement"]) {
       expect(linha(linhas, campo).situacao, campo).toBe("sem_valor");
       expect(linha(linhas, campo).retornado, campo).toBe("");
+      expect(linhaSelecionavel(linha(linhas, campo).situacao), campo).toBe(false);
     }
-
-    // A prova final: nem marcada por padrão, nem aplicável em hipótese nenhuma.
-    const marcados = selecaoInicial(linhas);
-    expect(marcados.has("tradeName")).toBe(false);
-    const aplicar = valoresParaAplicar(linhas, new Set(["tradeName", "phone", "complement"]));
-    expect(aplicar).toEqual({});
+    // Nem marcando à força: a linha sem valor não aplica.
+    expect(valoresParaAplicar(linhas, new Set(["tradeName", "phone", "complement"]))).toEqual({});
   });
 
   it("string vazia e só espaços valem o mesmo que ausente", () => {
-    const linhas = compararComOCadastro(
-      { ...VAZIO, tradeName: "Fantasia atual" },
-      fonte({ tradeName: "   " }),
-    );
+    const linhas = compararComOCadastro({ ...VAZIO, tradeName: "Fantasia atual" }, fonte({ tradeName: "   " }));
     expect(linha(linhas, "tradeName").situacao).toBe("sem_valor");
   });
 });
@@ -198,30 +164,19 @@ describe("o que o cadastro não guardaria não é oferecido", () => {
     const item = linha(linhas, "zipCode");
 
     expect(item.situacao).toBe("nao_aplicavel");
-    // O valor continua à vista: quem consultou vê o que está deixando de usar.
     expect(item.retornado).toBe("0131010");
     expect(item.motivo).toBe("A fonte devolveu um CEP incompleto.");
-    expect(selecaoInicial(linhas).has("zipCode")).toBe(false);
+    expect(valoresParaAplicar(linhas, new Set(["zipCode"]))).toEqual({});
   });
 
-  it("UF que o cadastro não reconhece não se aplica", () => {
-    const linhas = compararComOCadastro(VAZIO, fonte({ state: "XX" }));
+  it("UF desconhecida, telefone inválido e e-mail inválido não se aplicam", () => {
+    const linhas = compararComOCadastro(VAZIO, fonte({ state: "XX", phone: "1012345678", email: "SEM EMAIL" }));
     expect(linha(linhas, "state").situacao).toBe("nao_aplicavel");
-  });
-
-  it("telefone que a validação do Cliente recusaria não se aplica", () => {
-    // DDD 10 não existe: o "Salvar" devolveria "Informe um telefone com DDD".
-    const linhas = compararComOCadastro(VAZIO, fonte({ phone: "1012345678" }));
     expect(linha(linhas, "phone").situacao).toBe("nao_aplicavel");
-  });
-
-  it("e-mail em formato inválido não se aplica", () => {
-    const linhas = compararComOCadastro(VAZIO, fonte({ email: "SEM EMAIL" }));
     expect(linha(linhas, "email").situacao).toBe("nao_aplicavel");
   });
 
   it("texto mais longo do que o campo aceita não se aplica, e o motivo diz o limite", () => {
-    // O complemento do Cliente aceita 100; a fonte pode devolver até 200.
     const linhas = compararComOCadastro(VAZIO, fonte({ complement: "A".repeat(150) }));
     const item = linha(linhas, "complement");
 
@@ -232,30 +187,28 @@ describe("o que o cadastro não guardaria não é oferecido", () => {
 
   it("no limite exato ainda cabe", () => {
     const linhas = compararComOCadastro(VAZIO, fonte({ complement: "A".repeat(100) }));
-    expect(linha(linhas, "complement").situacao).toBe("aplicavel");
+    expect(linha(linhas, "complement").situacao).toBe("preencher");
   });
 });
 
 describe("seleção e aplicação", () => {
-  it("toda diferença aplicável começa marcada; o resto, não", () => {
+  it("só o que completa nasce marcado; substituir, confirmar, sem valor e não aplicável, não", () => {
     const linhas = compararComOCadastro(
-      { ...VAZIO, city: "SAO PAULO" },
+      { ...VAZIO, city: "SAO PAULO", number: "999" },
       fonte({ tradeName: null, state: "XX" }),
     );
     const marcados = selecaoInicial(linhas);
 
     expect(marcados.has("legalName")).toBe(true);
-    // Igual, sem valor e não aplicável ficam de fora.
-    expect(marcados.has("city")).toBe(false);
-    expect(marcados.has("tradeName")).toBe(false);
-    expect(marcados.has("state")).toBe(false);
+    expect(marcados.has("number")).toBe(false); // substituir
+    expect(marcados.has("city")).toBe(false); // confirmar
+    expect(marcados.has("tradeName")).toBe(false); // sem valor
+    expect(marcados.has("state")).toBe(false); // não aplicável
   });
 
-  it("aplicar devolve só o que foi marcado", () => {
-    const linhas = compararComOCadastro(VAZIO, fonte());
-    const aplicar = valoresParaAplicar(linhas, new Set(["legalName", "city"]));
-
-    expect(aplicar).toEqual({ legalName: "VERIDI NUTRITION LTDA", city: "SAO PAULO" });
+  it("substituição explícita aplica o valor da fonte por cima do existente", () => {
+    const linhas = compararComOCadastro({ ...VAZIO, number: "999" }, fonte());
+    expect(valoresParaAplicar(linhas, new Set(["number"]))).toEqual({ number: "1000" });
   });
 
   it("o valor aplicado é o do campo — CEP e telefone com a máscara da tela", () => {
@@ -264,9 +217,7 @@ describe("seleção e aplicação", () => {
 
     expect(aplicar.zipCode).toBe("01310-100");
     expect(aplicar.phone).toBe("(11) 98765-4321");
-    // O texto NÃO é reescrito: vai como a fonte publicou.
     expect(aplicar.legalName).toBe("VERIDI NUTRITION LTDA");
-    expect(aplicar.state).toBe("SP");
   });
 
   it("nada marcado, nada aplicado", () => {
@@ -276,31 +227,24 @@ describe("seleção e aplicação", () => {
 });
 
 /* ------------------------------------------------------------------------ */
-/* Dados cadastrais do CNPJ — CUSTOMER-CNPJ-PERSISTED-DATA-01, §119.         */
+/* Dados cadastrais do CNPJ — §119 e §122.                                   */
 /* ------------------------------------------------------------------------ */
 
-const CONSULTADO_EM = "2026-09-17T12:30:00.000Z";
-
-/** O bloco que o formulário já tem para o CNPJ — o da consulta anterior. */
-function dadosAtuais(overrides: Partial<CustomerCnpjRegistration> = {}): CustomerCnpjRegistration {
+/** Os dados como o formulário os guarda: texto por campo. */
+function formulario(overrides: Partial<ValoresDosDadosDoCnpj> = {}): ValoresDosDadosDoCnpj {
   return {
-    mainCnaeCode: "1099699",
+    mainCnaeCode: "1099-6/99",
     mainCnaeDescription: "Fabricação de outros produtos alimentícios",
     legalNature: "Sociedade Empresária Limitada",
     companySize: "Empresa de Pequeno Porte (EPP)",
     openedAt: "2019-03-08",
     establishmentType: "HEADQUARTERS",
-    simplesOptIn: true,
-    meiOptIn: false,
+    simplesOptIn: "true",
+    meiOptIn: "false",
     registrationStatus: "Ativa",
     registrationStatusDate: "2020-01-15",
-    consultedAt: "2026-01-10T10:00:00.000Z",
     ...overrides,
   };
-}
-
-function resultado(overrides: Partial<CnpjLookupCompany> = {}): CnpjLookupResult {
-  return { provider: "OPEN_CNPJ", consultedAt: CONSULTADO_EM, cnpj: "11444777000161", company: fonte(overrides) };
 }
 
 function dado(linhas: LinhaDosDadosDoCnpj[], campo: string): LinhaDosDadosDoCnpj {
@@ -318,132 +262,113 @@ describe("Sim / Não / Não informado", () => {
   });
 });
 
-describe("dados cadastrais: Atual × Retornado", () => {
+describe("dados cadastrais: texto do formulário × contrato", () => {
+  const gravados: CustomerCnpjRegistration = {
+    mainCnaeCode: "1099699",
+    mainCnaeDescription: "Fabricação de outros produtos alimentícios",
+    legalNature: "Sociedade Empresária Limitada",
+    companySize: null,
+    openedAt: "2019-03-08",
+    establishmentType: "BRANCH",
+    simplesOptIn: false,
+    meiOptIn: null,
+    registrationStatus: "Ativa",
+    registrationStatusDate: null,
+    lastConsultedAt: "2026-09-17T12:30:00.000Z",
+  };
+
+  it("vai e volta sem perder nada: CNAE com máscara na tela, dígitos no contrato; null continua null", () => {
+    const naTela = dadosDoCnpjNoFormulario(gravados);
+    expect(naTela).toMatchObject({ mainCnaeCode: "1099-6/99", simplesOptIn: "false", meiOptIn: "", companySize: "" });
+
+    const { lastConsultedAt: _metadado, ...valores } = gravados;
+    expect(dadosDoCnpjDoFormulario(naTela)).toEqual(valores);
+  });
+
+  it("sem dados gravados, todos os campos começam vazios", () => {
+    expect(dadosDoCnpjNoFormulario(null)).toEqual(DADOS_DO_CNPJ_VAZIOS);
+    expect(Object.values(dadosDoCnpjDoFormulario(DADOS_DO_CNPJ_VAZIOS)).every((valor) => valor === null)).toBe(true);
+  });
+});
+
+describe("dados cadastrais: Atual × Retornado, aditivo", () => {
   it("compara os dez dados cadastrais, na ordem do contrato", () => {
-    const linhas = compararDadosDoCnpj(null, fonte());
+    const linhas = compararDadosDoCnpj(DADOS_DO_CNPJ_VAZIOS, fonte());
     expect(linhas.map((item) => item.campo)).toEqual([...CNPJ_REGISTRATION_FIELDS]);
   });
 
-  it("sem consulta anterior: tudo que a fonte trouxe é aplicável, e o atual fica vazio", () => {
-    const linhas = compararDadosDoCnpj(null, fonte());
-    expect(linhas.every((item) => item.situacao === "aplicavel")).toBe(true);
-    expect(linhas.every((item) => item.atual === "")).toBe(true);
-  });
+  it("tudo vazio: tudo que a fonte trouxe completa, marcado, com datas em pt-BR e CNAE com máscara", () => {
+    const linhas = compararDadosDoCnpj(DADOS_DO_CNPJ_VAZIOS, fonte());
 
-  it("datas em pt-BR, CNAE com máscara, Matriz/Filial por extenso", () => {
-    const linhas = compararDadosDoCnpj(null, fonte());
+    expect(linhas.every((item) => item.situacao === "preencher" && item.atual === "")).toBe(true);
+    expect(selecaoInicial(linhas).size).toBe(10);
     expect(dado(linhas, "openedAt").retornado).toBe("08/03/2019");
-    expect(dado(linhas, "registrationStatusDate").retornado).toBe("15/01/2020");
     expect(dado(linhas, "mainCnaeCode").retornado).toBe("1099-6/99");
     expect(dado(linhas, "establishmentType").retornado).toBe("Matriz");
     expect(dado(linhas, "simplesOptIn").retornado).toBe("Sim");
     expect(dado(linhas, "meiOptIn").retornado).toBe("Não");
   });
 
-  it("mesma consulta de novo: tudo 'Sem alteração'", () => {
-    const linhas = compararDadosDoCnpj(dadosAtuais(), fonte());
-    expect(linhas.map((item) => [item.campo, item.situacao])).toEqual(
-      CNPJ_REGISTRATION_FIELDS.map((campo) => [campo, "igual"]),
-    );
-    expect(selecaoInicialDosDadosDoCnpj(linhas).size).toBe(0);
+  it("mesmos valores: todos 'Confirmar', nenhum marcado", () => {
+    const linhas = compararDadosDoCnpj(formulario(), fonte());
+    expect(linhas.every((item) => item.situacao === "confirmar")).toBe(true);
+    expect(selecaoInicial(linhas).size).toBe(0);
   });
 
-  it("situação em outra caixa é a mesma situação", () => {
-    const linhas = compararDadosDoCnpj(dadosAtuais(), fonte({ registrationStatus: "ATIVA" }));
-    expect(dado(linhas, "registrationStatus").situacao).toBe("igual");
-  });
-
-  it("Simples: Sim → Não é diferença útil, marcada por padrão", () => {
-    const linhas = compararDadosDoCnpj(dadosAtuais({ simplesOptIn: true }), fonte({ simplesOptIn: false }));
-    expect(dado(linhas, "simplesOptIn")).toMatchObject({ atual: "Sim", retornado: "Não", situacao: "aplicavel" });
-    expect(selecaoInicialDosDadosDoCnpj(linhas).has("simplesOptIn")).toBe(true);
-  });
-
-  it("Simples não informado no cadastro e Sim na fonte: aplicável", () => {
-    const linhas = compararDadosDoCnpj(dadosAtuais({ simplesOptIn: null }), fonte({ simplesOptIn: true }));
-    expect(dado(linhas, "simplesOptIn")).toMatchObject({
-      atual: "Não informado",
-      retornado: "Sim",
-      situacao: "aplicavel",
+  it("porte preenchido e a fonte diferente: 'Substituir', desmarcado", () => {
+    const linhas = compararDadosDoCnpj(formulario({ companySize: "Microempresa (ME)" }), fonte());
+    expect(dado(linhas, "companySize")).toMatchObject({
+      atual: "Microempresa (ME)",
+      retornado: "Empresa de Pequeno Porte (EPP)",
+      situacao: "substituir",
     });
+    expect(selecaoInicial(linhas).has("companySize")).toBe(false);
   });
 
-  it("MEI Sim no cadastro e não informado na fonte: não apaga — 'Não informado pela fonte'", () => {
-    const linhas = compararDadosDoCnpj(dadosAtuais({ meiOptIn: true }), fonte({ meiOptIn: null }));
+  it("Simples Sim no cadastro e Não na fonte: substituir; Não informado e Sim: preencher", () => {
+    const linhas = compararDadosDoCnpj(
+      formulario({ simplesOptIn: "true", meiOptIn: "" }),
+      fonte({ simplesOptIn: false, meiOptIn: true }),
+    );
+    expect(dado(linhas, "simplesOptIn")).toMatchObject({ atual: "Sim", retornado: "Não", situacao: "substituir" });
+    expect(dado(linhas, "meiOptIn")).toMatchObject({ atual: "", retornado: "Sim", situacao: "preencher" });
+  });
+
+  it("MEI Sim no cadastro e não informado na fonte: '—', sem operação — não apaga", () => {
+    const linhas = compararDadosDoCnpj(formulario({ meiOptIn: "true" }), fonte({ meiOptIn: null }));
     expect(dado(linhas, "meiOptIn")).toMatchObject({ atual: "Sim", retornado: "", situacao: "sem_valor" });
   });
 
-  it("MEI Não dos dois lados é 'Sem alteração' — false é valor, não ausência", () => {
-    const linhas = compararDadosDoCnpj(dadosAtuais({ meiOptIn: false }), fonte({ meiOptIn: false }));
-    expect(dado(linhas, "meiOptIn").situacao).toBe("igual");
-  });
-
-  it("porte que a fonte não informou fica como 'sem valor'", () => {
-    const linhas = compararDadosDoCnpj(dadosAtuais(), fonte({ companySize: null }));
-    expect(dado(linhas, "companySize").situacao).toBe("sem_valor");
+  it("CNAE digitado com máscara é o mesmo código da fonte", () => {
+    const linhas = compararDadosDoCnpj(formulario({ mainCnaeCode: "1099-6/99" }), fonte({ mainCnaeCode: "1099699" }));
+    expect(dado(linhas, "mainCnaeCode").situacao).toBe("confirmar");
   });
 });
 
 describe("aplicar os dados cadastrais", () => {
-  it("sem diferença nenhuma o bloco ainda é aplicado — com a data DESTA consulta", () => {
-    const atual = dadosAtuais();
-    const linhas = compararDadosDoCnpj(atual, fonte());
+  it("só o marcado vai para o formulário, já no texto do campo", () => {
+    const linhas = compararDadosDoCnpj(
+      formulario({ companySize: "Microempresa (ME)", legalNature: "" }),
+      fonte({ companySize: "Demais" }),
+    );
 
-    const aplicado = dadosDoCnpjParaAplicar(atual, resultado(), linhas, selecaoInicialDosDadosDoCnpj(linhas));
-
-    expect(aplicado).toEqual({ ...atual, consultedAt: CONSULTADO_EM });
-  });
-
-  it("vazio da fonte não apaga: o porte que já estava fica", () => {
-    const atual = dadosAtuais();
-    const r = resultado({ companySize: null, simplesOptIn: null });
-    const linhas = compararDadosDoCnpj(atual, r.company);
-
-    const aplicado = dadosDoCnpjParaAplicar(atual, r, linhas, selecaoInicialDosDadosDoCnpj(linhas));
-
-    expect(aplicado.companySize).toBe("Empresa de Pequeno Porte (EPP)");
-    // O Simples que era Sim continua Sim: "não informado" não vira "Não".
-    expect(aplicado.simplesOptIn).toBe(true);
-  });
-
-  it("marcado vem da fonte; desmarcado fica como estava", () => {
-    const atual = dadosAtuais();
-    const r = resultado({ companySize: "Demais", registrationStatus: "Baixada" });
-    const linhas = compararDadosDoCnpj(atual, r.company);
-
-    const aplicado = dadosDoCnpjParaAplicar(atual, r, linhas, new Set(["registrationStatus"]));
-
-    expect(aplicado.registrationStatus).toBe("Baixada");
-    expect(aplicado.companySize).toBe("Empresa de Pequeno Porte (EPP)");
-  });
-
-  it("sem bloco anterior: aplica o que a fonte trouxe, e o que ela não trouxe fica null", () => {
-    const r = resultado({ meiOptIn: null, legalNature: null });
-    const linhas = compararDadosDoCnpj(null, r.company);
-
-    const aplicado = dadosDoCnpjParaAplicar(null, r, linhas, selecaoInicialDosDadosDoCnpj(linhas));
-
-    expect(aplicado).toMatchObject({
-      mainCnaeCode: "1099699",
-      establishmentType: "HEADQUARTERS",
-      simplesOptIn: true,
-      meiOptIn: null,
-      legalNature: null,
-      openedAt: "2019-03-08",
-      consultedAt: CONSULTADO_EM,
+    // Natureza jurídica vazia: marcada por padrão; o porte, só se a pessoa marcar.
+    expect(dadosDoCnpjParaAplicar(linhas, selecaoInicial(linhas), fonte({ companySize: "Demais" }))).toEqual({
+      legalNature: "Sociedade Empresária Limitada",
+    });
+    expect(dadosDoCnpjParaAplicar(linhas, new Set(["companySize"]), fonte({ companySize: "Demais" }))).toEqual({
+      companySize: "Demais",
     });
   });
-});
 
-describe("assinatura do bloco", () => {
-  it("não depende da ordem das chaves, e muda com a data da consulta", () => {
-    const atual = dadosAtuais();
-    const reordenado = Object.fromEntries(Object.entries(atual).reverse()) as CustomerCnpjRegistration;
+  it("Sim/Não e CNAE chegam ao formulário no formato dos campos", () => {
+    const linhas = compararDadosDoCnpj(DADOS_DO_CNPJ_VAZIOS, fonte());
+    const aplicado = dadosDoCnpjParaAplicar(linhas, selecaoInicial(linhas), fonte());
+    expect(aplicado).toMatchObject({ simplesOptIn: "true", meiOptIn: "false", mainCnaeCode: "1099-6/99", openedAt: "2019-03-08" });
+  });
 
-    expect(assinaturaDosDadosDoCnpj(reordenado)).toBe(assinaturaDosDadosDoCnpj(atual));
-    expect(assinaturaDosDadosDoCnpj({ ...atual, consultedAt: CONSULTADO_EM })).not.toBe(
-      assinaturaDosDadosDoCnpj(atual),
-    );
-    expect(assinaturaDosDadosDoCnpj(null)).toBe(assinaturaDosDadosDoCnpj(undefined));
+  it("linha sem valor na fonte não aplica, nem marcada", () => {
+    const linhas = compararDadosDoCnpj(formulario(), fonte({ companySize: null }));
+    expect(dadosDoCnpjParaAplicar(linhas, new Set(["companySize"]), fonte({ companySize: null }))).toEqual({});
   });
 });

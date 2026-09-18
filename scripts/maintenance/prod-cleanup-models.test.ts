@@ -103,6 +103,7 @@ describe("classificação dos models do prod-cleanup", () => {
         "ProductionOrderPlanningSnapshot",
         "ProductionOrderSchedule",
         "CustomerStatusHistory",
+        "CustomerCnpjRegistrationHistory",
         "ItemLabelFileVersion",
       ]),
     );

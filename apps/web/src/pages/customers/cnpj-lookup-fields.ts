@@ -1,12 +1,14 @@
 import type {
   CnpjEstablishmentType,
   CnpjLookupCompany,
-  CnpjLookupResult,
   CnpjRegistrationField,
+  CnpjRegistrationValue,
+  CnpjRegistrationValues,
   CustomerCnpjRegistration,
 } from "@veridi/shared";
 import {
   BR_STATE_CODES,
+  CNPJ_ESTABLISHMENT_TYPES,
   CNPJ_ESTABLISHMENT_TYPE_LABELS,
   CNPJ_REGISTRATION_FIELDS,
   CUSTOMER_FIELD_MAX_LENGTHS,
@@ -14,31 +16,36 @@ import {
   formatCnaeCode,
   isValidBrPhone,
   isValidEmail,
+  maskCnaeInput,
   maskZipCodeInput,
+  normalizeCnaeCode,
   normalizePhone,
   normalizeZipCode,
 } from "@veridi/shared";
 import { formatDate } from "../../lib/dates";
 
 /**
- * A comparação Atual × Retornado da consulta de CNPJ — CUSTOMER-CNPJ-LOOKUP-01.
+ * A comparação Atual × Retornado da consulta de CNPJ — §111 e §122
+ * (CUSTOMER-CNPJ-LOOKUP-01, CUSTOMER-CNPJ-EDITABLE-HISTORY-01).
  *
- * Módulo puro de propósito: é aqui que mora a decisão de negócio ("este valor
- * pode substituir aquele?"), e ela se prova sem montar tela nenhuma.
+ * Módulo puro de propósito: é aqui que mora a decisão de negócio ("o que a
+ * fonte pode trocar?"), e ela se prova sem montar tela nenhuma.
  *
- * Três regras mandam, nesta ordem:
+ * A consulta é ADITIVA. O OpenCNPJ sugere; quem cadastra decide:
  *
- * 1. **Valor vazio da fonte nunca apaga valor existente.** Não é escolha do
- *    usuário — a substituição simplesmente não é oferecida.
- * 2. **O que a fonte devolveu só é oferecido se o campo puder guardá-lo.** Um
- *    telefone com DDD inexistente, um CEP com 7 dígitos, uma UF que não é do
- *    Brasil ou um complemento mais longo do que o campo aceita seriam
- *    recusados no "Salvar" — aplicá-los entrega ao operador um erro que ele
- *    não causou. A linha aparece assim mesmo, com o valor visível e o motivo,
- *    em vez de sumir sem explicação.
- * 3. **Normalizar é só para COMPARAR.** O que a tela mostra e o que ela aplica
- *    é o valor da fonte no formato do próprio campo — nada é reescrito em
- *    silêncio para "ficar bonito".
+ * 1. **Atual vazio, fonte com valor que o campo guarda**: marcado por padrão —
+ *    completar o cadastro é o caso comum.
+ * 2. **Atual preenchido, fonte diferente**: NÃO marcado. Trocar é
+ *    "Substituir", escolha explícita de quem cadastra.
+ * 3. **Equivalentes**: os dois à vista, e a linha pode ser marcada para
+ *    "Confirmar" pela fonte — nunca escondida só por serem iguais.
+ * 4. **Fonte vazia**: "—", sem operação nenhuma. Vazio da fonte NUNCA apaga.
+ * 5. **O que o campo não guardaria** (CEP incompleto, UF desconhecida, telefone
+ *    inválido, texto acima do limite) aparece com o valor e o motivo, sem caixa
+ *    — aplicar algo que o "Salvar" recusaria é entregar um erro que ninguém pediu.
+ *
+ * Normalizar é só para COMPARAR: o que a tela mostra e aplica é o valor da
+ * fonte no formato do próprio campo, sem reescrita silenciosa.
  */
 
 /** Os campos do cadastro que a consulta sabe preencher. */
@@ -82,10 +89,8 @@ interface DefinicaoDeCampo {
  * Forma canônica de texto livre: sem espaço sobrando, sem caixa e sem acento.
  *
  * Caixa e acento saem porque a base pública escreve tudo em maiúsculas e sem
- * acentuação — "TATUI" e "Tatuí" são a MESMA cidade, e tratá-los como
- * diferentes faria a tela marcar por padrão uma substituição que só piora o
- * cadastro. Isto não muda o que se mostra nem o que se aplica: é só a resposta
- * à pergunta "mudou?".
+ * acentuação — "TATUI" e "Tatuí" são a MESMA cidade. Isto não muda o que se
+ * mostra nem o que se aplica: é só a resposta à pergunta "mudou?".
  */
 function textoCanonico(valor: string): string {
   return valor
@@ -209,21 +214,42 @@ export const DEFINICOES_DA_CONSULTA_DE_CNPJ: Record<CampoDaConsultaDeCnpj, Defin
     },
     // E-mail não tem caixa significativa na prática, e a base pública grava
     // tudo em maiúsculas: "CONTATO@X.COM.BR" e "contato@x.com.br" é o mesmo
-    // endereço, e trocar um pelo outro não é atualizar cadastro nenhum.
+    // endereço.
     canonico: (valor) => valor.trim().toLowerCase(),
   },
 };
 
 /** O desfecho de UMA linha da comparação. */
 export type SituacaoDaLinha =
-  /** A fonte trouxe algo diferente, e o campo aceita: dá para aplicar. */
-  | "aplicavel"
-  /** A fonte trouxe o mesmo valor do formulário. */
-  | "igual"
-  /** A fonte não informou este campo. */
+  /** Atual vazio e a fonte traz valor que o campo guarda: completar, marcado por padrão. */
+  | "preencher"
+  /** Atual preenchido e a fonte traz outro valor: trocar só por escolha explícita. */
+  | "substituir"
+  /** Atual e fonte equivalentes: dá para confirmar pela fonte. */
+  | "confirmar"
+  /** A fonte não informou este campo: nada a fazer, e nada se apaga. */
   | "sem_valor"
   /** A fonte informou, mas o cadastro não guardaria aquilo. */
   | "nao_aplicavel";
+
+/** As situações que aceitam escolha — e o verbo da caixa de cada uma. */
+export const VERBO_DA_ESCOLHA = {
+  preencher: "Aplicar",
+  substituir: "Substituir",
+  confirmar: "Confirmar",
+} as const;
+
+export type SituacaoSelecionavel = keyof typeof VERBO_DA_ESCOLHA;
+
+export function linhaSelecionavel(situacao: SituacaoDaLinha): situacao is SituacaoSelecionavel {
+  return situacao === "preencher" || situacao === "substituir" || situacao === "confirmar";
+}
+
+/** A situação de uma linha em que a fonte informou algo que o campo guarda. */
+function situacaoComFonte(atualVazio: boolean, equivalentes: boolean): SituacaoSelecionavel {
+  if (atualVazio) return "preencher";
+  return equivalentes ? "confirmar" : "substituir";
+}
 
 export interface LinhaDaComparacao {
   campo: CampoDaConsultaDeCnpj;
@@ -233,7 +259,7 @@ export interface LinhaDaComparacao {
   /** O que a fonte devolveu, no formato do campo. `""` quando não informou. */
   retornado: string;
   situacao: SituacaoDaLinha;
-  /** Só em `nao_aplicavel`: por que a substituição não é oferecida. */
+  /** Só em `nao_aplicavel`: por que a linha não aceita escolha. */
   motivo?: string;
 }
 
@@ -241,11 +267,10 @@ export interface LinhaDaComparacao {
 export type ValoresDoFormulario = Record<CampoDaConsultaDeCnpj, string>;
 
 /**
- * A comparação inteira, na ordem em que a tela mostra.
+ * A comparação dos campos do cadastro, na ordem em que a tela mostra.
  *
  * `atual` vem do FORMULÁRIO, nunca do registro salvo: quem editou a razão
- * social e ainda não salvou precisa comparar contra o que está vendo, senão a
- * tela discute com um valor que já não existe em lugar nenhum.
+ * social e ainda não salvou compara contra o que está vendo.
  */
 export function compararComOCadastro(
   atual: ValoresDoFormulario,
@@ -257,62 +282,51 @@ export function compararComOCadastro(
     const daFonte = (company[definicao.origem] ?? "").trim();
     const base = { campo, rotulo: definicao.rotulo, atual: noFormulario };
 
-    // Regra 1: o que a fonte não informou não tem como apagar o que existe.
     if (daFonte === "") {
       return { ...base, retornado: "", situacao: "sem_valor" as const };
     }
 
-    // Regra 2: só se oferece o que o campo guardaria.
     const preparado = definicao.paraOCampo(daFonte);
     if (!preparado.cabe) {
-      return {
-        ...base,
-        retornado: daFonte,
-        situacao: "nao_aplicavel" as const,
-        motivo: preparado.motivo,
-      };
+      return { ...base, retornado: daFonte, situacao: "nao_aplicavel" as const, motivo: preparado.motivo };
     }
 
-    // Regra 3: normalizar é só para responder "mudou?".
-    const situacao =
-      definicao.canonico(preparado.valor) === definicao.canonico(noFormulario)
-        ? ("igual" as const)
-        : ("aplicavel" as const);
-
-    return { ...base, retornado: preparado.valor, situacao };
+    const equivalentes = definicao.canonico(preparado.valor) === definicao.canonico(noFormulario);
+    return {
+      ...base,
+      retornado: preparado.valor,
+      situacao: situacaoComFonte(noFormulario.trim() === "", equivalentes),
+    };
   });
 }
 
 /**
- * A seleção inicial: toda diferença aplicável começa marcada.
+ * A seleção inicial: SÓ o que completa o cadastro.
  *
- * É o caso comum — quem consultou quer os dados. Desmarcar uma linha é um
- * clique; remarcar onze seria trabalho manual para o caso que quase sempre
- * acontece. "Quero atualizar o endereço, mas não o telefone" continua
- * atendido, porque cada linha é independente.
+ * Valor já preenchido nunca nasce marcado para troca — a fonte é sugestão, e
+ * quem decide substituir é a pessoa, linha a linha.
  */
-export function selecaoInicial(linhas: LinhaDaComparacao[]): Set<CampoDaConsultaDeCnpj> {
-  return new Set(
-    linhas.filter((linha) => linha.situacao === "aplicavel").map((linha) => linha.campo),
-  );
+export function selecaoInicial<Campo extends string>(
+  linhas: readonly { campo: Campo; situacao: SituacaoDaLinha }[],
+): Set<Campo> {
+  return new Set(linhas.filter((linha) => linha.situacao === "preencher").map((linha) => linha.campo));
 }
 
-/** O que aplicar ao formulário — só o que foi marcado, e só o que é aplicável. */
+/** O que aplicar ao formulário — só o que foi marcado, e só em linha que aceita escolha. */
 export function valoresParaAplicar(
   linhas: LinhaDaComparacao[],
   selecionados: ReadonlySet<CampoDaConsultaDeCnpj>,
 ): Partial<ValoresDoFormulario> {
   const valores: Partial<ValoresDoFormulario> = {};
   for (const linha of linhas) {
-    if (linha.situacao !== "aplicavel") continue;
-    if (!selecionados.has(linha.campo)) continue;
+    if (!linhaSelecionavel(linha.situacao) || !selecionados.has(linha.campo)) continue;
     valores[linha.campo] = linha.retornado;
   }
   return valores;
 }
 
 /* ------------------------------------------------------------------------ */
-/* Dados cadastrais do CNPJ — CUSTOMER-CNPJ-PERSISTED-DATA-01, §119.         */
+/* Dados cadastrais do CNPJ — §119 e §122.                                   */
 /* ------------------------------------------------------------------------ */
 
 /**
@@ -325,17 +339,65 @@ export function simNaoOuNaoInformado(valor: boolean | null | undefined): string 
   return "Não informado";
 }
 
-type ValorDoDadoDoCnpj = string | boolean | null;
+/** Os dados cadastrais como o formulário os guarda: o texto de cada campo, `""` = vazio. */
+export type ValoresDosDadosDoCnpj = Record<CnpjRegistrationField, string>;
+
+export const DADOS_DO_CNPJ_VAZIOS = Object.fromEntries(
+  CNPJ_REGISTRATION_FIELDS.map((campo) => [campo, ""]),
+) as ValoresDosDadosDoCnpj;
+
+/**
+ * Texto do campo → valor do contrato. Simples e MEI: `"true"`, `"false"` ou
+ * `""` (não informado); Matriz/Filial: o enum ou `""`; CNAE: só os dígitos.
+ */
+export function valorDoCampoDoCnpj(campo: CnpjRegistrationField, texto: string): CnpjRegistrationValue {
+  const limpo = texto.trim();
+  if (limpo === "") return null;
+  if (campo === "mainCnaeCode") return normalizeCnaeCode(limpo) || null;
+  if (campo === "simplesOptIn" || campo === "meiOptIn") {
+    return limpo === "true" ? true : limpo === "false" ? false : null;
+  }
+  if (campo === "establishmentType") {
+    return (CNPJ_ESTABLISHMENT_TYPES as readonly string[]).includes(limpo) ? limpo : null;
+  }
+  return limpo;
+}
+
+/** Valor do contrato → texto do campo (o CNAE com a máscara de digitação). */
+export function textoDoCampoDoCnpj(
+  campo: CnpjRegistrationField,
+  valor: CnpjRegistrationValue | undefined,
+): string {
+  if (valor === null || valor === undefined) return "";
+  if (typeof valor === "boolean") return valor ? "true" : "false";
+  return campo === "mainCnaeCode" ? maskCnaeInput(valor) : valor;
+}
+
+/** O que o Cliente tem gravado, nos textos do formulário. */
+export function dadosDoCnpjNoFormulario(
+  dados: CustomerCnpjRegistration | null | undefined,
+): ValoresDosDadosDoCnpj {
+  return Object.fromEntries(
+    CNPJ_REGISTRATION_FIELDS.map((campo) => [campo, textoDoCampoDoCnpj(campo, dados?.[campo])]),
+  ) as ValoresDosDadosDoCnpj;
+}
+
+/** O formulário no contrato do POST/PATCH. */
+export function dadosDoCnpjDoFormulario(valores: ValoresDosDadosDoCnpj): CnpjRegistrationValues {
+  return Object.fromEntries(
+    CNPJ_REGISTRATION_FIELDS.map((campo) => [campo, valorDoCampoDoCnpj(campo, valores[campo] ?? "")]),
+  ) as CnpjRegistrationValues;
+}
 
 interface DefinicaoDeDadoDoCnpj {
   rotulo: string;
-  /** Como a tela escreve o valor. Texto ausente é `""` (a tabela mostra "—"). */
-  exibir: (valor: ValorDoDadoDoCnpj) => string;
+  /** Como a tela escreve o valor (comparação e histórico). Vazio é `""`. */
+  exibir: (valor: CnpjRegistrationValue) => string;
   /** A forma canônica usada SÓ para responder "é o mesmo valor?". */
-  canonico: (valor: ValorDoDadoDoCnpj) => string;
+  canonico: (valor: CnpjRegistrationValue) => string;
 }
 
-const textoDoDado = (valor: ValorDoDadoDoCnpj) => (typeof valor === "string" ? valor : "");
+const textoDoDado = (valor: CnpjRegistrationValue) => (typeof valor === "string" ? valor : "");
 
 const TEXTO_DO_CNPJ: Omit<DefinicaoDeDadoDoCnpj, "rotulo"> = {
   exibir: textoDoDado,
@@ -349,7 +411,7 @@ const DIA_DO_CNPJ: Omit<DefinicaoDeDadoDoCnpj, "rotulo"> = {
 };
 
 const SIM_OU_NAO_DO_CNPJ: Omit<DefinicaoDeDadoDoCnpj, "rotulo"> = {
-  exibir: (valor) => simNaoOuNaoInformado(typeof valor === "boolean" ? valor : null),
+  exibir: (valor) => (typeof valor === "boolean" ? simNaoOuNaoInformado(valor) : ""),
   canonico: (valor) => String(valor),
 };
 
@@ -381,108 +443,67 @@ export const DEFINICOES_DOS_DADOS_DO_CNPJ: Record<CnpjRegistrationField, Definic
 export interface LinhaDosDadosDoCnpj {
   campo: CnpjRegistrationField;
   rotulo: string;
-  /** O que o formulário tem AGORA para este CNPJ, já escrito para a tela. */
+  /** O que o formulário tem AGORA, escrito para a tela. `""` quando vazio. */
   atual: string;
   /** O que a fonte devolveu, escrito para a tela. `""` quando não informou. */
   retornado: string;
   situacao: Exclude<SituacaoDaLinha, "nao_aplicavel">;
 }
 
-/** O valor tratado como "a fonte não informou" — inclusive o campo que a API antiga nem mandava. */
-function informado(valor: ValorDoDadoDoCnpj | undefined): valor is string | boolean {
+/** "A fonte não informou" — inclusive o campo que uma API antiga nem mandava. */
+function informado(valor: CnpjRegistrationValue | undefined): valor is string | boolean {
   if (valor === null || valor === undefined) return false;
   return typeof valor !== "string" || valor.trim() !== "";
 }
 
 /**
  * Atual × Retornado dos dados cadastrais, com as MESMAS regras dos campos do
- * cadastro: diferença útil é aplicável (e nasce marcada), equivalente é "Sem
- * alteração", e o que a fonte não informou não apaga o que existe.
- *
- * `atual` é o bloco que vale para o CNPJ da tela — `null` quando não há, ou
- * quando o que havia era de outro CNPJ e foi descartado.
+ * cadastro — a consulta é aditiva aqui também. `atuais` são os textos do
+ * formulário agora (editáveis, possivelmente ainda não salvos).
  */
 export function compararDadosDoCnpj(
-  atual: CustomerCnpjRegistration | null,
+  atuais: ValoresDosDadosDoCnpj,
   company: CnpjLookupCompany,
 ): LinhaDosDadosDoCnpj[] {
   return CNPJ_REGISTRATION_FIELDS.map((campo) => {
     const definicao = DEFINICOES_DOS_DADOS_DO_CNPJ[campo];
-    const noFormulario = atual ? atual[campo] : null;
-    const daFonte = company[campo] as ValorDoDadoDoCnpj | undefined;
-    const base = { campo, rotulo: definicao.rotulo, atual: atual ? definicao.exibir(noFormulario) : "" };
+    const atual = valorDoCampoDoCnpj(campo, atuais[campo] ?? "");
+    const daFonte = company[campo] as CnpjRegistrationValue | undefined;
+    const base = { campo, rotulo: definicao.rotulo, atual: definicao.exibir(atual) };
 
     if (!informado(daFonte)) return { ...base, retornado: "", situacao: "sem_valor" as const };
 
-    const igual =
-      informado(noFormulario) && definicao.canonico(daFonte) === definicao.canonico(noFormulario);
+    const equivalentes = atual !== null && definicao.canonico(daFonte) === definicao.canonico(atual);
     return {
       ...base,
       retornado: definicao.exibir(daFonte),
-      situacao: igual ? ("igual" as const) : ("aplicavel" as const),
+      situacao: situacaoComFonte(atual === null, equivalentes),
     };
   });
 }
 
-/** A seleção inicial dos dados cadastrais: toda diferença começa marcada. */
-export function selecaoInicialDosDadosDoCnpj(
-  linhas: LinhaDosDadosDoCnpj[],
-): Set<CnpjRegistrationField> {
-  return new Set(
-    linhas.filter((linha) => linha.situacao === "aplicavel").map((linha) => linha.campo),
-  );
-}
-
-/**
- * O bloco que "Aplicar" deixa no formulário.
- *
- * SEMPRE um bloco, mesmo sem diferença nenhuma: a consulta aplicada confirma
- * que os dados foram revistos naquela data, e é o `consultedAt` dela que vira
- * a "Última consulta CNPJ" quando o cadastro for salvo.
- *
- * Campo a campo: o que foi marcado vem da fonte; o resto — equivalente, não
- * informado pela fonte ou desmarcado — fica como estava no formulário. Vazio
- * da fonte nunca apaga.
- */
+/** Os dados cadastrais marcados, já nos textos do formulário. */
 export function dadosDoCnpjParaAplicar(
-  atual: CustomerCnpjRegistration | null,
-  resultado: CnpjLookupResult,
   linhas: LinhaDosDadosDoCnpj[],
   selecionados: ReadonlySet<CnpjRegistrationField>,
-): CustomerCnpjRegistration {
-  const daFonte = new Set(
-    linhas
-      .filter((linha) => linha.situacao === "aplicavel" && selecionados.has(linha.campo))
-      .map((linha) => linha.campo),
-  );
-  const campos = Object.fromEntries(
-    CNPJ_REGISTRATION_FIELDS.map((campo) => [
-      campo,
-      daFonte.has(campo) ? (resultado.company[campo] ?? null) : (atual?.[campo] ?? null),
-    ]),
-  ) as Pick<CustomerCnpjRegistration, CnpjRegistrationField>;
-  return { ...campos, consultedAt: resultado.consultedAt };
-}
-
-/**
- * Assinatura do bloco para responder "mudou?": valores na ordem fixa dos
- * campos, e não o JSON do objeto — o bloco que volta da API e o que a tela
- * monta ao aplicar têm as chaves em ordens diferentes.
- */
-export function assinaturaDosDadosDoCnpj(bloco: CustomerCnpjRegistration | null | undefined): string {
-  if (!bloco) return "null";
-  return JSON.stringify([
-    ...CNPJ_REGISTRATION_FIELDS.map((campo) => bloco[campo] ?? null),
-    bloco.consultedAt,
-  ]);
+  company: CnpjLookupCompany,
+): Partial<ValoresDosDadosDoCnpj> {
+  const valores: Partial<ValoresDosDadosDoCnpj> = {};
+  for (const linha of linhas) {
+    if (!linhaSelecionavel(linha.situacao) || !selecionados.has(linha.campo)) continue;
+    valores[linha.campo] = textoDoCampoDoCnpj(linha.campo, company[linha.campo]);
+  }
+  return valores;
 }
 
 /** O que o diálogo entrega ao formulário quando a pessoa aplica a consulta. */
 export interface AplicacaoDaConsultaDeCnpj {
-  /** Só os campos do cadastro marcados — podem ser nenhum. */
+  /** Os campos do cadastro marcados — podem ser nenhum. */
   valores: Partial<ValoresDoFormulario>;
-  /** O bloco dos dados cadastrais, sempre presente, com o instante da consulta. */
-  dadosDoCnpj: CustomerCnpjRegistration;
-  /** O CNPJ consultado, normalizado: é a ele que o bloco pertence. */
+  /** Os dados cadastrais marcados — podem ser nenhum. */
+  dadosDoCnpj: Partial<ValoresDosDadosDoCnpj>;
+  /** Instante da consulta: vira a "Última consulta CNPJ" quando o cadastro for salvo. */
+  consultedAt: string;
+  /** O CNPJ consultado, normalizado. */
   cnpj: string;
 }

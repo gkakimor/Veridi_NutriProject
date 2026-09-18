@@ -1,8 +1,9 @@
 import { useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type {
+  CnpjRegistrationField,
+  CnpjRegistrationValueSource,
   CreateCustomerInput,
-  CustomerCnpjRegistration,
   CustomerDTO,
   CustomerTaxProfile,
   PaymentInstrument,
@@ -10,7 +11,10 @@ import type {
 } from "@veridi/shared";
 import {
   BR_STATE_CODES,
+  CNPJ_ESTABLISHMENT_TYPES,
   CNPJ_ESTABLISHMENT_TYPE_LABELS,
+  CNPJ_REGISTRATION_FIELDS,
+  CNPJ_REGISTRATION_TEXT_MAX_LENGTHS,
   CUSTOMER_EDIT_ROLES,
   CUSTOMER_STATUS_CHANGE_ROLES,
   CUSTOMER_STATUS_LABELS,
@@ -24,16 +28,18 @@ import {
   PAYMENT_INSTRUMENT_LABELS,
   QUOTE_PAYMENT_METHOD_LABELS,
   USER_ROLE_LABELS,
+  ehDiaCivil,
   formatBrPhone,
-  formatCnaeCode,
   formatCnpj,
   isValidBrPhone,
   isValidCnpj,
   isValidEmail,
+  maskCnaeInput,
   maskCnpjInput,
   maskPhoneInput,
   maskZipCodeInput,
   formatZipCode,
+  normalizeCnaeCode,
   normalizeCnpj,
   normalizeZipCode,
 } from "@veridi/shared";
@@ -44,7 +50,7 @@ import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
 import { assinaturaDoFormulario } from "../../lib/dirty-fields";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
-import { formatDate, formatDateTime } from "../../lib/dates";
+import { formatDateTime } from "../../lib/dates";
 import { isCompleteZipCode, lookupCep } from "../../lib/cep-api";
 import { erroDoDecimal } from "../../lib/decimal-field";
 import { erroDeInteiro, lerInteiroOpcional } from "../../lib/integer-input";
@@ -57,12 +63,20 @@ import {
 import { IntegerField, PercentField } from "../../components/NumericField";
 import { customerStatusBadgeClass } from "./customer-status-badge";
 import { CnpjLookupDialog } from "./CnpjLookupDialog";
+import { CnpjRegistrationHistoryDialog } from "./CnpjRegistrationHistoryDialog";
 import {
   CAMPOS_DA_CONSULTA_DE_CNPJ,
-  assinaturaDosDadosDoCnpj,
+  DADOS_DO_CNPJ_VAZIOS,
+  DEFINICOES_DOS_DADOS_DO_CNPJ,
+  dadosDoCnpjDoFormulario,
+  dadosDoCnpjNoFormulario,
   simNaoOuNaoInformado,
 } from "./cnpj-lookup-fields";
-import type { AplicacaoDaConsultaDeCnpj, ValoresDoFormulario } from "./cnpj-lookup-fields";
+import type {
+  AplicacaoDaConsultaDeCnpj,
+  ValoresDoFormulario,
+  ValoresDosDadosDoCnpj,
+} from "./cnpj-lookup-fields";
 
 /** "Comercial e Administrador" — lido da mesma lista que a API aplica. */
 const PERFIS_QUE_MUDAM_A_SITUACAO = CUSTOMER_STATUS_CHANGE_ROLES.map(
@@ -107,7 +121,11 @@ const DECIMAIS: readonly string[] = [
   "defaultMonthlyInterestPercent",
 ];
 
-interface FormState {
+/**
+ * O formulário inteiro, em texto. Os dez dados cadastrais do CNPJ (§119, §122)
+ * são campos como os outros: editáveis, e comparados pela mesma assinatura.
+ */
+interface FormState extends ValoresDosDadosDoCnpj {
   legalName: string;
   tradeName: string;
   cnpj: string;
@@ -131,15 +149,31 @@ interface FormState {
   defaultMonthlyInterestPercent: string;
 }
 
+/** A consulta de CNPJ aplicada nesta edição: vira a "Última consulta CNPJ" no Salvar. */
+interface ConsultaAplicada {
+  consultedAt: string;
+  /** CNPJ consultado, normalizado. */
+  cnpj: string;
+}
+
 /**
- * Dados cadastrais do CNPJ no formulário (§119): o bloco e o CNPJ a que ele
- * pertence. Fora do `FormState` porque não é campo digitável — chega do
- * registro salvo ou de uma consulta aplicada, e só assim muda.
+ * Os dados cadastrais limpos pela troca do CNPJ (§122): de que número eram, e
+ * o que devolver se o número voltar — enquanto ninguém mexeu nos campos.
  */
-interface DadosDoCnpjNaTela {
-  bloco: CustomerCnpjRegistration | null;
-  /** CNPJ normalizado dono do bloco; `null` quando não há bloco. */
-  cnpj: string | null;
+interface TrocaDeCnpj {
+  de: string;
+  valores: ValoresDosDadosDoCnpj;
+  origens: OrigemDosDadosDoCnpj;
+  consulta: ConsultaAplicada | null;
+  restauravel: boolean;
+}
+
+/** De onde veio o valor de cada dado cadastral mexido nesta edição. */
+type OrigemDosDadosDoCnpj = Partial<Record<CnpjRegistrationField, CnpjRegistrationValueSource>>;
+
+/** Só os dados cadastrais do formulário. */
+function dadosDoCnpjDoForm(form: FormState): ValoresDosDadosDoCnpj {
+  return Object.fromEntries(CNPJ_REGISTRATION_FIELDS.map((campo) => [campo, form[campo]])) as ValoresDosDadosDoCnpj;
 }
 
 /** Percentual da API ("30.0000") no texto que o `PercentField` edita ("30"). */
@@ -292,9 +326,11 @@ function initialState(customer: CustomerDTO | null): FormState {
         ? String(customer.defaultInstallmentIntervalDays)
         : "",
       defaultMonthlyInterestPercent: percentualNoCampo(customer.defaultMonthlyInterestPercent),
+      ...dadosDoCnpjNoFormulario(customer.cnpjRegistration),
     };
   }
   return {
+    ...DADOS_DO_CNPJ_VAZIOS,
     legalName: "",
     tradeName: "",
     cnpj: "",
@@ -334,10 +370,24 @@ function validateField(field: keyof FormState, value: string): string | null {
   if (field === "zipCode" && !isCompleteZipCode(trimmed)) {
     return "CEP deve ter 8 dígitos.";
   }
+  if (field === "mainCnaeCode" && normalizeCnaeCode(trimmed).length !== 7) {
+    return "CNAE deve ter 7 dígitos.";
+  }
+  if ((field === "openedAt" || field === "registrationStatusDate") && !ehDiaCivil(trimmed)) {
+    return "Data inválida.";
+  }
   return null;
 }
 
-const VALIDATED_FIELDS: (keyof FormState)[] = ["email", "phone", "cnpj", "zipCode"];
+const VALIDATED_FIELDS: (keyof FormState)[] = [
+  "email",
+  "phone",
+  "cnpj",
+  "zipCode",
+  "mainCnaeCode",
+  "openedAt",
+  "registrationStatusDate",
+];
 
 export function useCustomerForm({
   mode,
@@ -362,40 +412,43 @@ export function useCustomerForm({
   const [clientErrors, setClientErrors] = useState<Record<string, string>>({});
   const [cepStatus, setCepStatus] = useState<CepStatus>("idle");
 
-  /** O bloco dos dados cadastrais do CNPJ e o número dono dele (§119). */
-  const [dadosDoCnpj, setDadosDoCnpj] = useState<DadosDoCnpjNaTela>(() => ({
-    bloco: customer?.cnpjRegistration ?? null,
-    cnpj: customer?.cnpj ? normalizeCnpj(customer.cnpj) : null,
-  }));
-
-  /**
-   * TROCA DE CNPJ (§119): o bloco só vale para o número a que pertence. Com
-   * outro CNPJ na tela ele deixa de valer — some da seção, sai da comparação e
-   * não vai no "Salvar", que o descarta —, e o cadastro diz por quê. Volta a
-   * valer se o número voltar a ser o dele: máscara e dígito apagado e
-   * redigitado não são troca de empresa. Consultar o CNPJ novo e aplicar põe o
-   * bloco DELE no lugar.
+  /*
+   * Dados cadastrais do CNPJ (§119, §122). Os valores moram no `form`; aqui
+   * fica o que o `form` não diz:
+   *
+   * - de onde veio cada valor mexido nesta edição (Manual ou OpenCNPJ), para o
+   *   histórico registrar a origem POR CAMPO no Salvar;
+   * - a consulta aplicada, cuja data vira a "Última consulta CNPJ" no Salvar —
+   *   mesmo quando nada mudou;
+   * - o CNPJ dono dos valores e, depois de uma troca de CNPJ, o que foi limpo.
    */
+  const cnpjSalvo = mode === "edit" && customer?.cnpj ? normalizeCnpj(customer.cnpj) : null;
+  const [origemDosDadosDoCnpj, setOrigemDosDadosDoCnpj] = useState<OrigemDosDadosDoCnpj>({});
+  const [consultaAplicada, setConsultaAplicada] = useState<ConsultaAplicada | null>(null);
+  const [trocaDeCnpj, setTrocaDeCnpj] = useState<TrocaDeCnpj | null>(null);
+  /** O CNPJ a que os dados cadastrais na tela pertencem; `null` antes de haver um. */
+  const cnpjDosDados = useRef<string | null>(cnpjSalvo);
+
   const cnpjNaTela = form.cnpj.trim() ? normalizeCnpj(form.cnpj) : null;
-  const dadosDoCnpjVigentes =
-    dadosDoCnpj.bloco !== null && dadosDoCnpj.cnpj === cnpjNaTela ? dadosDoCnpj.bloco : null;
-  const dadosDoCnpjDescartados = dadosDoCnpj.bloco !== null && dadosDoCnpjVigentes === null;
-  /** O bloco que o registro tem gravado — a referência de "mudou?" no Salvar. */
-  const dadosDoCnpjSalvos = mode === "edit" ? (customer?.cnpjRegistration ?? null) : null;
-  const dadosDoCnpjPendentes =
-    assinaturaDosDadosDoCnpj(dadosDoCnpjVigentes) !== assinaturaDosDadosDoCnpj(dadosDoCnpjSalvos);
+  /** A última consulta que vale para o CNPJ da tela: a aplicada agora, ou a gravada. */
+  const ultimaConsultaDoCnpj =
+    consultaAplicada && consultaAplicada.cnpj === cnpjNaTela
+      ? consultaAplicada.consultedAt
+      : cnpjNaTela !== null && cnpjNaTela === cnpjSalvo
+        ? (customer?.cnpjRegistration?.lastConsultedAt ?? null)
+        : null;
 
   /**
    * O cadastro como ele está na tela, em forma comparável.
    *
-   * Só os campos que a pessoa edita, mais o bloco dos dados cadastrais do CNPJ
-   * que vale agora — aplicar uma consulta, ainda que sem diferença, muda a data
-   * dela, e sair sem salvar perderia isso. A SITUAÇÃO COMERCIAL fica de fora
-   * porque não é campo: ela é derivada do histórico do cliente pelo servidor,
-   * muda sozinha, e contá-la faria a tela se declarar alterada sem ninguém ter
-   * tocado em nada. O código também não está aqui — nasce no servidor.
+   * Os campos que a pessoa edita — os dados cadastrais do CNPJ inclusive — e a
+   * consulta aplicada: aplicar uma consulta, ainda que sem diferença, muda a
+   * data dela, e sair sem salvar perderia isso. A SITUAÇÃO COMERCIAL fica de
+   * fora porque não é campo: ela é derivada do histórico do cliente pelo
+   * servidor, muda sozinha, e contá-la faria a tela se declarar alterada sem
+   * ninguém ter tocado em nada. O código também não está aqui — nasce no servidor.
    */
-  const assinaturaAtual = `${assinaturaDoFormulario(form, DECIMAIS)}|${assinaturaDosDadosDoCnpj(dadosDoCnpjVigentes)}`;
+  const assinaturaAtual = `${assinaturaDoFormulario(form, DECIMAIS)}|${consultaAplicada?.consultedAt ?? ""}`;
 
   /*
    * A referência da comparação: o formulário como ele abriu. Criar parte dos
@@ -583,17 +636,88 @@ export function useCustomerForm({
     return mensagem === null;
   }
 
+  /** O que foi substituído não carrega o erro do valor anterior. */
+  function limparErros(campos: readonly string[]) {
+    if (campos.length === 0) return;
+    const limpar = (anterior: Record<string, string>) => {
+      const next = { ...anterior };
+      for (const campo of campos) delete next[campo];
+      return next;
+    };
+    setClientErrors(limpar);
+    setFieldErrors(limpar);
+  }
+
   /**
-   * Aplica ao formulário SÓ os campos que a pessoa marcou no diálogo — e,
-   * sempre, o bloco dos dados cadastrais do CNPJ com a data da consulta.
+   * O CNPJ mudou no campo — §122, troca de CNPJ.
+   *
+   * Os dados cadastrais pertencem a UM CNPJ. Troca REAL — um CNPJ completo e
+   * válido diferente do dono dos dados, ou o campo apagado — os limpa na hora,
+   * e a seção diz por quê; o "Salvar" leva a limpeza, que o histórico registra
+   * como "CNPJ alterado". Número pela metade ainda não é outro CNPJ: apagar e
+   * redigitar um dígito não limpa nada. Voltar ao número anterior, sem ninguém
+   * ter mexido nos campos, devolve o que era dele.
+   */
+  function setCnpj(raw: string) {
+    const masked = maskCnpjInput(raw);
+    setField("cnpj", masked);
+
+    const novo = masked.trim() ? normalizeCnpj(masked) : null;
+    if (novo !== null && !isValidCnpj(novo)) return;
+    const dono = cnpjDosDados.current;
+    if (novo === dono) return;
+    cnpjDosDados.current = novo;
+    // O primeiro número adota o que já estiver digitado: não havia dono a trocar.
+    if (dono === null) return;
+
+    if (trocaDeCnpj?.restauravel && novo === trocaDeCnpj.de) {
+      const devolver = trocaDeCnpj;
+      setForm((prev) => ({ ...prev, ...devolver.valores }));
+      setOrigemDosDadosDoCnpj(devolver.origens);
+      setConsultaAplicada(devolver.consulta);
+      setTrocaDeCnpj(null);
+      return;
+    }
+
+    const valores = dadosDoCnpjDoForm(form);
+    const temDados =
+      CNPJ_REGISTRATION_FIELDS.some((campo) => valores[campo].trim() !== "") || consultaAplicada !== null;
+    // Sem nada a limpar, a troca anterior (se houve) continua sendo a que conta.
+    if (!temDados) return;
+
+    setTrocaDeCnpj({
+      de: dono,
+      valores,
+      origens: origemDosDadosDoCnpj,
+      consulta: consultaAplicada,
+      restauravel: true,
+    });
+    setForm((prev) => ({ ...prev, ...DADOS_DO_CNPJ_VAZIOS }));
+    setOrigemDosDadosDoCnpj({});
+    setConsultaAplicada(null);
+    limparErros(CNPJ_REGISTRATION_FIELDS);
+  }
+
+  /** Edição à mão de um dado cadastral: a origem do valor passa a ser Manual (§122). */
+  function setDadoDoCnpj(campo: CnpjRegistrationField, valor: string) {
+    setField(campo, campo === "mainCnaeCode" ? maskCnaeInput(valor) : valor);
+    setOrigemDosDadosDoCnpj((prev) => ({ ...prev, [campo]: "MANUAL" }));
+    if (trocaDeCnpj?.restauravel) setTrocaDeCnpj({ ...trocaDeCnpj, restauravel: false });
+  }
+
+  /**
+   * Aplica ao formulário SÓ o que a pessoa marcou no diálogo — e registra a
+   * consulta, mesmo sem nada marcado.
    *
    * Não grava nada: escreve no estado da tela, e o cadastro continua exigindo
-   * "Salvar". Os campos não marcados ficam exatamente como estavam — inclusive
-   * os que a fonte trouxe e a pessoa recusou.
+   * "Salvar". O que não foi marcado fica exatamente como estava — inclusive o
+   * que a fonte trouxe e a pessoa recusou, e todo valor que ela não mandou
+   * substituir.
    *
-   * O bloco entra mesmo sem diferença nenhuma (§119): a consulta aplicada
-   * confirma que os dados foram revistos naquela data, e é essa data que vira a
-   * "Última consulta CNPJ" no Salvar. Ele passa a pertencer ao CNPJ consultado.
+   * A consulta entra mesmo sem diferença nenhuma (§122): ela confirma que os
+   * dados foram conferidos naquela data, e é essa data que vira a "Última
+   * consulta CNPJ" no Salvar. Os dados cadastrais aplicados ganham a origem
+   * OpenCNPJ; editar um deles depois, antes de salvar, a torna Manual.
    *
    * O endereço aplicado passa a ser MANUAL (`addressZip` vazio), e é o certo:
    * ele não veio de uma consulta de CEP, e pode ser uma mistura deliberada —
@@ -602,22 +726,20 @@ export function useCustomerForm({
    * bloco que ela não respondeu. Como manual, o CEP digitado depois apenas
    * COMPLETA o que estiver vazio, e nada do que foi aplicado é sobrescrito.
    */
-  function aplicarConsultaDeCnpj({ valores, dadosDoCnpj: bloco, cnpj }: AplicacaoDaConsultaDeCnpj) {
-    setDadosDoCnpj({ bloco, cnpj: normalizeCnpj(cnpj) });
-
+  function aplicarConsultaDeCnpj({ valores, dadosDoCnpj, consultedAt, cnpj }: AplicacaoDaConsultaDeCnpj) {
+    const consultado = normalizeCnpj(cnpj);
+    const camposDoCnpj = Object.keys(dadosDoCnpj) as CnpjRegistrationField[];
     const campos = Object.keys(valores) as (keyof ValoresDoFormulario)[];
-    if (campos.length === 0) return;
 
-    setForm((prev) => ({ ...prev, ...valores }));
-
-    // O que foi substituído não carrega o erro do valor anterior.
-    const limpar = (anterior: Record<string, string>) => {
-      const next = { ...anterior };
-      for (const campo of campos) delete next[campo];
-      return next;
-    };
-    setClientErrors(limpar);
-    setFieldErrors(limpar);
+    setForm((prev) => ({ ...prev, ...valores, ...dadosDoCnpj }));
+    setOrigemDosDadosDoCnpj((prev) => ({
+      ...prev,
+      ...Object.fromEntries(camposDoCnpj.map((campo) => [campo, "OPEN_CNPJ"])),
+    }));
+    setConsultaAplicada({ consultedAt, cnpj: consultado });
+    cnpjDosDados.current = consultado;
+    if (trocaDeCnpj?.restauravel) setTrocaDeCnpj({ ...trocaDeCnpj, restauravel: false });
+    limparErros([...campos, ...camposDoCnpj]);
 
     if (valores.zipCode !== undefined) typedZip.current = normalizeZipCode(valores.zipCode);
     if (campos.some((campo) => campo === "zipCode" || CEP_OWNED_FIELDS.includes(campo as AddressField))) {
@@ -634,6 +756,11 @@ export function useCustomerForm({
     for (const field of VALIDATED_FIELDS) {
       const message = validateField(field, form[field]);
       if (message) nextClientErrors[field] = message;
+    }
+    // Dado cadastral do CNPJ sem CNPJ não tem a quem pertencer (§119).
+    const temDadoDoCnpj = CNPJ_REGISTRATION_FIELDS.some((campo) => form[campo].trim() !== "");
+    if (temDadoDoCnpj && cnpjNaTela === null && !nextClientErrors["cnpj"]) {
+      nextClientErrors["cnpj"] = "Informe o CNPJ para registrar os dados cadastrais do CNPJ.";
     }
     if (Object.keys(nextClientErrors).length > 0) {
       setClientErrors(nextClientErrors);
@@ -674,18 +801,38 @@ export function useCustomerForm({
     const taxProfileChanged = form.taxProfile !== taxProfileInForce;
 
     /*
-     * Dados cadastrais do CNPJ (§119) só viajam quando mudaram em relação ao
-     * gravado: consulta aplicada (o bloco, com o CNPJ consultado) ou bloco
-     * descartado pela troca do CNPJ (`null`). Sem mudança a chave nem vai —
-     * outra pessoa pode ter salvo uma consulta nova com esta tela aberta, e
-     * devolver o bloco antigo apagaria a dela.
+     * Dados cadastrais do CNPJ (§122) viajam inteiros quando algum mudou em
+     * relação ao gravado, ou quando uma consulta foi aplicada — aí a data dela
+     * vira a "Última consulta CNPJ", mesmo sem mudança de valor. `sources` diz a
+     * origem de cada campo alterado: OpenCNPJ o que veio da consulta e não foi
+     * mexido depois; Manual todo o resto. Sem nada disso a chave nem vai: outra
+     * pessoa pode ter gravado esses dados com esta tela aberta.
      */
-    const dadosDoCnpjDoCorpo = dadosDoCnpjPendentes
-      ? {
-          cnpjRegistration:
-            dadosDoCnpjVigentes && cnpjNaTela ? { ...dadosDoCnpjVigentes, cnpj: cnpjNaTela } : null,
-        }
-      : {};
+    const valoresDoCnpj = dadosDoCnpjDoFormulario(form);
+    const salvosDoCnpj = dadosDoCnpjDoFormulario(
+      dadosDoCnpjNoFormulario(mode === "edit" ? customer?.cnpjRegistration : null),
+    );
+    const alteradosDoCnpj = CNPJ_REGISTRATION_FIELDS.filter(
+      (campo) => valoresDoCnpj[campo] !== salvosDoCnpj[campo],
+    );
+    const consultaDoCnpjDaTela =
+      consultaAplicada && consultaAplicada.cnpj === cnpjNaTela ? consultaAplicada : null;
+    const dadosDoCnpjDoCorpo =
+      cnpjNaTela !== null && (alteradosDoCnpj.length > 0 || consultaDoCnpjDaTela !== null)
+        ? {
+            cnpjRegistration: {
+              cnpj: cnpjNaTela,
+              ...valoresDoCnpj,
+              ...(consultaDoCnpjDaTela ? { consultedAt: consultaDoCnpjDaTela.consultedAt } : {}),
+              sources: Object.fromEntries(
+                alteradosDoCnpj.map((campo) => [
+                  campo,
+                  consultaDoCnpjDaTela ? (origemDosDadosDoCnpj[campo] ?? "MANUAL") : "MANUAL",
+                ]),
+              ),
+            },
+          }
+        : {};
 
     const payload = {
       legalName: form.legalName.trim(),
@@ -720,7 +867,8 @@ export function useCustomerForm({
       if (err instanceof ApiValidationError) {
         const nextFieldErrors: Record<string, string> = {};
         for (const issue of err.issues) {
-          nextFieldErrors[issue.path] = issue.message;
+          // Os dados cadastrais do CNPJ são campos do próprio formulário.
+          nextFieldErrors[issue.path.replace(/^cnpjRegistration\./, "")] = issue.message;
         }
         setFieldErrors(nextFieldErrors);
         setError("Corrija os campos destacados.");
@@ -751,9 +899,12 @@ export function useCustomerForm({
     handleSubmit,
     validarCnpjParaConsulta,
     aplicarConsultaDeCnpj,
-    dadosDoCnpjVigentes,
-    dadosDoCnpjDescartados,
-    dadosDoCnpjPendentes,
+    setCnpj,
+    setDadoDoCnpj,
+    /** O CNPJ cujos dados cadastrais a troca limpou — o aviso da seção. */
+    cnpjDosDadosLimpos: trocaDeCnpj?.de ?? null,
+    ultimaConsultaDoCnpj,
+    consultaDoCnpjPendente: consultaAplicada !== null,
     errorFor,
     mode,
     customer,
@@ -866,71 +1017,66 @@ function ValorConsultado({
   );
 }
 
-/** A frase da seção dos dados cadastrais do CNPJ no formulário. */
+/** O título e a frase da seção dos dados cadastrais do CNPJ (§119, §122). */
+const DADOS_DO_CNPJ_TITULO = "Dados cadastrais do CNPJ";
 const DADOS_DO_CNPJ_SUBTITULO =
-  "Obtidos pela consulta de CNPJ e registrados ao salvar. Para atualizar, use “Consultar CNPJ”. Não definem o perfil tributário.";
+  "Preencha à mão ou com “Consultar CNPJ”: a consulta completa o que estiver vazio e só troca o que você escolher. Não definem o perfil tributário.";
 
 /**
- * Dados cadastrais do CNPJ (§119) — sempre SOMENTE LEITURA, no formulário e na
- * consulta: vêm da consulta de CNPJ aplicada, e é por ela que se atualizam.
- *
- * Sem bloco, tudo fica "—" — inclusive Simples e MEI, porque sem consulta não
- * há fonte para dizer "não informado". Com bloco, Simples e MEI dizem Sim, Não
- * ou Não informado, e `null` nunca aparece como "Não".
+ * O rodapé da seção: a "Última consulta CNPJ", que é do SISTEMA — texto, não
+ * campo —, e a ação discreta "Ver histórico".
  */
-function DadosCadastraisDoCnpj({
-  dados,
-  subtitulo,
-  descartados = false,
-  pendentes = false,
+function RodapeDosDadosDoCnpj({
+  ultimaConsulta,
+  pendente = false,
+  onVerHistorico,
 }: {
-  dados: CustomerCnpjRegistration | null;
-  subtitulo: string;
-  /** O bloco era de outro CNPJ: a troca do número o descartou. */
-  descartados?: boolean;
-  /** Consulta aplicada e ainda não salva. */
-  pendentes?: boolean;
+  ultimaConsulta: string | null;
+  /** Consulta aplicada ao formulário e ainda não salva. */
+  pendente?: boolean;
+  /** Ausente quando o cliente ainda não existe: não há histórico a ver. */
+  onVerHistorico?: () => void;
 }) {
-  const simOuNao = (valor: boolean | null) => (dados ? simNaoOuNaoInformado(valor) : null);
-  const dia = (valor: string | null | undefined) => (valor ? formatDate(valor) : null);
   return (
-    <FormSection title="Dados cadastrais do CNPJ" subtitle={subtitulo}>
-      {descartados && (
-        <p className="callout" role="status">
-          O CNPJ foi alterado. Os dados cadastrais do CNPJ anterior deixaram de valer e não
-          serão salvos. Use “Consultar CNPJ” para buscar os do novo número.
-        </p>
+    <div className="dados-do-cnpj__rodape">
+      <p className="field__hint">
+        {ultimaConsulta ? `Última consulta: ${formatDateTime(ultimaConsulta)}` : "Nenhuma consulta de CNPJ aplicada."}
+        {pendente && " — aplicada ao formulário; só fica registrada quando você salvar."}
+      </p>
+      {onVerHistorico && (
+        <button type="button" className="btn btn--ghost btn--sm" onClick={onVerHistorico}>
+          Ver histórico
+        </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * Os dados cadastrais do CNPJ em CONSULTA — os mesmos rótulos do formulário,
+ * com os valores no lugar dos campos. Simples e MEI dizem Sim, Não ou Não
+ * informado; `null` nunca aparece como "Não".
+ */
+function DadosCadastraisDoCnpjEmConsulta({ customer }: { customer: CustomerDTO }) {
+  const [historicoAberto, setHistoricoAberto] = useState(false);
+  const dados = customer.cnpjRegistration ?? null;
+  const exibir = (campo: CnpjRegistrationField) => {
+    if (campo === "simplesOptIn" || campo === "meiOptIn") return simNaoOuNaoInformado(dados?.[campo]);
+    return DEFINICOES_DOS_DADOS_DO_CNPJ[campo].exibir(dados?.[campo] ?? null) || null;
+  };
+  return (
+    <FormSection title={DADOS_DO_CNPJ_TITULO} subtitle="Não definem o perfil tributário.">
       <dl className="definition-list">
-        <ValorConsultado rotulo="CNAE principal" valor={formatCnaeCode(dados?.mainCnaeCode)} />
-        <ValorConsultado rotulo="Descrição do CNAE" valor={dados?.mainCnaeDescription ?? null} />
-        <ValorConsultado rotulo="Natureza jurídica" valor={dados?.legalNature ?? null} />
-        <ValorConsultado rotulo="Porte" valor={dados?.companySize ?? null} />
-        <ValorConsultado rotulo="Data de abertura" valor={dia(dados?.openedAt)} />
-        <ValorConsultado
-          rotulo="Matriz/Filial"
-          valor={
-            dados?.establishmentType
-              ? CNPJ_ESTABLISHMENT_TYPE_LABELS[dados.establishmentType]
-              : null
-          }
-        />
-        <ValorConsultado rotulo="Simples" valor={simOuNao(dados?.simplesOptIn ?? null)} />
-        <ValorConsultado rotulo="MEI" valor={simOuNao(dados?.meiOptIn ?? null)} />
-        <ValorConsultado rotulo="Situação na RFB" valor={dados?.registrationStatus ?? null} />
-        <ValorConsultado rotulo="Data da situação" valor={dia(dados?.registrationStatusDate)} />
-        <ValorConsultado
-          rotulo="Última consulta CNPJ"
-          valor={dados ? formatDateTime(dados.consultedAt) : null}
-        />
+        {CNPJ_REGISTRATION_FIELDS.map((campo) => (
+          <ValorConsultado key={campo} rotulo={DEFINICOES_DOS_DADOS_DO_CNPJ[campo].rotulo} valor={exibir(campo)} />
+        ))}
       </dl>
-      {pendentes && dados && (
-        <p className="field__hint" role="status">
-          Consulta aplicada ao formulário. Os dados só ficam registrados quando você salvar.
-        </p>
-      )}
-      {!dados && !descartados && (
-        <p className="field__hint">Nenhuma consulta de CNPJ aplicada a este cadastro.</p>
+      <RodapeDosDadosDoCnpj
+        ultimaConsulta={dados?.lastConsultedAt ?? null}
+        onVerHistorico={() => setHistoricoAberto(true)}
+      />
+      {historicoAberto && (
+        <CnpjRegistrationHistoryDialog customer={customer} onClose={() => setHistoricoAberto(false)} />
       )}
     </FormSection>
   );
@@ -971,11 +1117,6 @@ function CustomerConsultaFields({ customer }: { customer: CustomerDTO }) {
         </dl>
       </FormSection>
 
-      <DadosCadastraisDoCnpj
-        dados={customer.cnpjRegistration ?? null}
-        subtitulo="Obtidos pela consulta de CNPJ. Não definem o perfil tributário."
-      />
-
       <FormSection title="Contato">
         <dl className="definition-list">
           <ValorConsultado rotulo="Email" valor={customer.email} />
@@ -1009,6 +1150,8 @@ function CustomerConsultaFields({ customer }: { customer: CustomerDTO }) {
           />
         </dl>
       </FormSection>
+
+      <DadosCadastraisDoCnpjEmConsulta customer={customer} />
 
       <FormSection title="Observações">
         <dl className="definition-list">
@@ -1049,9 +1192,11 @@ export function CustomerFormFields({
   readOnly,
   validarCnpjParaConsulta,
   aplicarConsultaDeCnpj,
-  dadosDoCnpjVigentes,
-  dadosDoCnpjDescartados,
-  dadosDoCnpjPendentes,
+  setCnpj,
+  setDadoDoCnpj,
+  cnpjDosDadosLimpos,
+  ultimaConsultaDoCnpj,
+  consultaDoCnpjPendente,
 }: CustomerFormController) {
   /*
    * O diálogo de "Consultar CNPJ" (CUSTOMER-CNPJ-LOOKUP-01). Aberto é o CNPJ
@@ -1059,6 +1204,8 @@ export function CustomerFormFields({
    * garante que a consulta é sobre o que estava na tela no clique.
    */
   const [consultaDeCnpj, setConsultaDeCnpj] = useState<string | null>(null);
+  /** O histórico dos dados cadastrais do CNPJ (§122), em diálogo. */
+  const [historicoAberto, setHistoricoAberto] = useState(false);
 
   if (readOnly && customer) return <CustomerConsultaFields customer={customer} />;
 
@@ -1135,7 +1282,7 @@ export function CustomerFormFields({
               autoCapitalize="characters"
               placeholder="00.000.000/0000-00"
               value={form.cnpj}
-              onChange={(event) => setField("cnpj", maskCnpjInput(event.target.value))}
+              onChange={(event) => setCnpj(event.target.value)}
               {...fieldProps("cnpj")}
             />
             {/* Assistência de preenchimento: consultar não altera o cadastro,
@@ -1190,15 +1337,6 @@ export function CustomerFormFields({
           </div>
         </div>
       </FormSection>
-
-      {/* Logo abaixo do CNPJ: é dele que estes dados são, e é o "Consultar
-          CNPJ" dali que os atualiza. */}
-      <DadosCadastraisDoCnpj
-        dados={dadosDoCnpjVigentes}
-        subtitulo={DADOS_DO_CNPJ_SUBTITULO}
-        descartados={dadosDoCnpjDescartados}
-        pendentes={dadosDoCnpjPendentes}
-      />
 
       <FormSection title="Contato">
         <div className="field-grid-2">
@@ -1441,6 +1579,151 @@ export function CustomerFormFields({
         </div>
       </FormSection>
 
+      {/* Dados cadastrais do CNPJ (§119, §122): campos do cadastro, EDITÁVEIS,
+          logo antes de Observações. A consulta de CNPJ só sugere; a "Última
+          consulta" é do sistema e fica no rodapé, como texto. */}
+      <FormSection title={DADOS_DO_CNPJ_TITULO} subtitle={DADOS_DO_CNPJ_SUBTITULO}>
+        {cnpjDosDadosLimpos && (
+          <p className="callout" role="status">
+            O CNPJ mudou: os dados cadastrais do CNPJ anterior ({formatCnpj(cnpjDosDadosLimpos)}) foram
+            limpos e, ao salvar, a limpeza entra no histórico. Consulte o novo CNPJ ou preencha à mão.
+          </p>
+        )}
+        <div className="field-grid-2">
+          <div className="field">
+            <label htmlFor="customer-cnae-code">CNAE principal</label>
+            <input
+              id="customer-cnae-code"
+              type="text"
+              inputMode="numeric"
+              placeholder="0000-0/00"
+              value={form.mainCnaeCode}
+              onChange={(event) => setDadoDoCnpj("mainCnaeCode", event.target.value)}
+              {...fieldProps("mainCnaeCode")}
+            />
+            {fieldError("mainCnaeCode")}
+          </div>
+
+          <div className="field">
+            <label htmlFor="customer-cnae-description">Descrição do CNAE</label>
+            <input
+              id="customer-cnae-description"
+              type="text"
+              maxLength={CNPJ_REGISTRATION_TEXT_MAX_LENGTHS.mainCnaeDescription}
+              value={form.mainCnaeDescription}
+              onChange={(event) => setDadoDoCnpj("mainCnaeDescription", event.target.value)}
+              {...fieldProps("mainCnaeDescription")}
+            />
+            {fieldError("mainCnaeDescription")}
+          </div>
+
+          <div className="field">
+            <label htmlFor="customer-legal-nature">Natureza jurídica</label>
+            <input
+              id="customer-legal-nature"
+              type="text"
+              maxLength={CNPJ_REGISTRATION_TEXT_MAX_LENGTHS.legalNature}
+              value={form.legalNature}
+              onChange={(event) => setDadoDoCnpj("legalNature", event.target.value)}
+              {...fieldProps("legalNature")}
+            />
+            {fieldError("legalNature")}
+          </div>
+
+          <div className="field">
+            <label htmlFor="customer-company-size">Porte</label>
+            <input
+              id="customer-company-size"
+              type="text"
+              maxLength={CNPJ_REGISTRATION_TEXT_MAX_LENGTHS.companySize}
+              value={form.companySize}
+              onChange={(event) => setDadoDoCnpj("companySize", event.target.value)}
+              {...fieldProps("companySize")}
+            />
+            {fieldError("companySize")}
+          </div>
+
+          <div className="field">
+            <label htmlFor="customer-opened-at">Data de abertura</label>
+            <input
+              id="customer-opened-at"
+              type="date"
+              value={form.openedAt}
+              onChange={(event) => setDadoDoCnpj("openedAt", event.target.value)}
+              {...fieldProps("openedAt")}
+            />
+            {fieldError("openedAt")}
+          </div>
+
+          {/* `<select>` nativo com "Não informado" explícito: vazio não é
+              Matriz nem Filial, e Simples/MEI vazio não é "Não". */}
+          <div className="field">
+            <label htmlFor="customer-establishment-type">Matriz/Filial</label>
+            <select
+              id="customer-establishment-type"
+              value={form.establishmentType}
+              onChange={(event) => setDadoDoCnpj("establishmentType", event.target.value)}
+              {...fieldProps("establishmentType")}
+            >
+              <option value="">Não informado</option>
+              {CNPJ_ESTABLISHMENT_TYPES.map((tipo) => (
+                <option key={tipo} value={tipo}>
+                  {CNPJ_ESTABLISHMENT_TYPE_LABELS[tipo]}
+                </option>
+              ))}
+            </select>
+            {fieldError("establishmentType")}
+          </div>
+
+          {(["simplesOptIn", "meiOptIn"] as const).map((campo) => (
+            <div className="field" key={campo}>
+              <label htmlFor={`customer-${campo}`}>{DEFINICOES_DOS_DADOS_DO_CNPJ[campo].rotulo}</label>
+              <select
+                id={`customer-${campo}`}
+                value={form[campo]}
+                onChange={(event) => setDadoDoCnpj(campo, event.target.value)}
+                {...fieldProps(campo)}
+              >
+                <option value="">Não informado</option>
+                <option value="true">Sim</option>
+                <option value="false">Não</option>
+              </select>
+              {fieldError(campo)}
+            </div>
+          ))}
+
+          <div className="field">
+            <label htmlFor="customer-registration-status">Situação na RFB</label>
+            <input
+              id="customer-registration-status"
+              type="text"
+              maxLength={CNPJ_REGISTRATION_TEXT_MAX_LENGTHS.registrationStatus}
+              value={form.registrationStatus}
+              onChange={(event) => setDadoDoCnpj("registrationStatus", event.target.value)}
+              {...fieldProps("registrationStatus")}
+            />
+            {fieldError("registrationStatus")}
+          </div>
+
+          <div className="field">
+            <label htmlFor="customer-registration-status-date">Data da situação</label>
+            <input
+              id="customer-registration-status-date"
+              type="date"
+              value={form.registrationStatusDate}
+              onChange={(event) => setDadoDoCnpj("registrationStatusDate", event.target.value)}
+              {...fieldProps("registrationStatusDate")}
+            />
+            {fieldError("registrationStatusDate")}
+          </div>
+        </div>
+        <RodapeDosDadosDoCnpj
+          ultimaConsulta={ultimaConsultaDoCnpj}
+          pendente={consultaDoCnpjPendente}
+          {...(mode === "edit" && customer ? { onVerHistorico: () => setHistoricoAberto(true) } : {})}
+        />
+      </FormSection>
+
       <FormSection title="Observações">
         <div className="field">
           <label htmlFor="customer-notes">Notas internas</label>
@@ -1465,13 +1748,16 @@ export function CustomerFormFields({
       <CnpjLookupDialog
         cnpj={consultaDeCnpj}
         valoresAtuais={valoresDaConsultaDeCnpj(form)}
-        dadosDoCnpjAtuais={dadosDoCnpjVigentes}
+        dadosDoCnpjAtuais={dadosDoCnpjDoForm(form)}
         onClose={() => setConsultaDeCnpj(null)}
         onApply={(aplicacao) => {
           aplicarConsultaDeCnpj(aplicacao);
           setConsultaDeCnpj(null);
         }}
       />
+    )}
+    {historicoAberto && customer && (
+      <CnpjRegistrationHistoryDialog customer={customer} onClose={() => setHistoricoAberto(false)} />
     )}
     </>
   );

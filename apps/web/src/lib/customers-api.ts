@@ -1,5 +1,6 @@
 import type {
   CreateCustomerInput,
+  CustomerCnpjRegistrationHistoryResponse,
   CustomerCommercialStatus,
   CustomerDTO,
   CustomerListResponse,
@@ -53,6 +54,14 @@ export async function createCustomer(
     body: JSON.stringify(input),
   });
   return (await parseJsonOrThrow(response)) as CustomerDTO;
+}
+
+/** Histórico dos dados cadastrais do CNPJ (§122), do mais recente para o mais antigo. */
+export async function getCustomerCnpjRegistrationHistory(
+  id: string,
+): Promise<CustomerCnpjRegistrationHistoryResponse> {
+  const response = await apiFetch(`${API_URL}/customers/${id}/cnpj-registration-history`);
+  return (await parseJsonOrThrow(response)) as CustomerCnpjRegistrationHistoryResponse;
 }
 
 export async function updateCustomer(

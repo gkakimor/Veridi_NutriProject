@@ -144,6 +144,7 @@ export const ALVOS = [
   "Item",
   "Supplier",
   "CustomerStatusHistory",
+  "CustomerCnpjRegistrationHistory",
   "Customer",
   "IndustrialResourceRate",
   "IndustrialResource",

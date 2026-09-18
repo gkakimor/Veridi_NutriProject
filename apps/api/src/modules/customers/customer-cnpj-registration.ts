@@ -1,29 +1,43 @@
-import type { Customer } from "@prisma/client";
-import type { CustomerCnpjRegistration } from "@veridi/shared";
-import { normalizeCnpj } from "@veridi/shared";
+import { z } from "zod";
+import type { Customer, CustomerCnpjRegistrationHistory, Prisma, User } from "@prisma/client";
+import type {
+  CnpjRegistrationEventKind,
+  CnpjRegistrationField,
+  CnpjRegistrationFieldChange,
+  CnpjRegistrationValue,
+  CustomerCnpjRegistration,
+  CustomerCnpjRegistrationEventDTO,
+} from "@veridi/shared";
+import {
+  CNPJ_REGISTRATION_CHANGE_SOURCES,
+  CNPJ_REGISTRATION_FIELDS,
+  normalizeCnpj,
+} from "@veridi/shared";
+import { getPrisma } from "../../db/prisma.js";
 import { diaDaColunaDeData, marcadorDoDiaCivil } from "../../lib/business-day.js";
 import type { CreateCustomerInput, UpdateCustomerInput } from "./customers.schemas.js";
 
 /**
- * Dados cadastrais do CNPJ no Cliente — CUSTOMER-CNPJ-PERSISTED-DATA-01, §119.
+ * Dados cadastrais do CNPJ no Cliente — §119 e §122
+ * (CUSTOMER-CNPJ-PERSISTED-DATA-01, CUSTOMER-CNPJ-EDITABLE-HISTORY-01).
  *
- * O bloco é o retrato de UMA consulta aplicada e salva, e pertence ao CNPJ que
- * o Cliente tem. Três regras, todas aqui, no servidor:
+ * Os dez campos são do cadastro e EDITÁVEIS; a consulta de CNPJ só os sugere.
+ * O que este módulo garante, no servidor:
  *
- * 1. o bloco é gravado INTEIRO (as onze colunas de uma vez) ou limpo inteiro —
- *    nunca uma coluna solta, que misturaria consultas diferentes sob uma data;
- * 2. bloco de um CNPJ não é gravado sob outro: o `cnpj` consultado tem de ser
- *    o que o Cliente terá depois da gravação;
- * 3. trocar o CNPJ sem mandar bloco novo DESCARTA o bloco do CNPJ anterior —
- *    CNAE, porte e Simples de outra empresa não podem continuar parecendo
- *    válidos só porque ninguém lembrou de limpá-los.
+ * 1. os dados pertencem ao CNPJ que o Cliente tem: o bloco enviado com outro
+ *    CNPJ é recusado, e trocar o CNPJ LIMPA os dados do número anterior;
+ * 2. toda gravação que muda os dados, aplica uma consulta ou limpa por troca de
+ *    CNPJ deixa UM evento no histórico, na mesma transação, com a mudança
+ *    campo a campo e a origem de cada uma — e nunca "A → A";
+ * 3. a "Última consulta CNPJ" é do sistema: só muda quando uma consulta é
+ *    aplicada e salva, e volta a nulo quando o CNPJ muda.
  *
  * Consultar (`GET /cnpj-lookup/:cnpj`) não passa por aqui e não grava nada.
  */
 
-/** Frase da recusa da regra 2 — no campo CNPJ, que é onde a pessoa corrige. */
+/** Frase da recusa do bloco de outro CNPJ — no campo CNPJ, que é onde a pessoa corrige. */
 export const DADOS_DO_CNPJ_DE_OUTRO_NUMERO_MESSAGE =
-  "Os dados cadastrais aplicados são de outro CNPJ. Consulte o CNPJ do cadastro novamente.";
+  "Os dados cadastrais enviados são de outro CNPJ. Confira o CNPJ do cadastro e consulte de novo.";
 
 export class CnpjRegistrationMismatchError extends Error {
   constructor() {
@@ -56,85 +70,219 @@ type ColunasDosDadosDoCnpj = Pick<
   | "cnpjLastConsultedAt"
 >;
 
-const BLOCO_VAZIO: ColunasDosDadosDoCnpj = {
-  cnpjMainCnaeCode: null,
-  cnpjMainCnaeDescription: null,
-  cnpjLegalNature: null,
-  cnpjCompanySize: null,
-  cnpjOpenedAt: null,
-  cnpjEstablishmentType: null,
-  cnpjSimplesOptIn: null,
-  cnpjMeiOptIn: null,
-  cnpjRegistrationStatus: null,
-  cnpjRegistrationStatusDate: null,
-  cnpjLastConsultedAt: null,
+/** Para `select` de quem precisa do bloco gravado. */
+export const colunasDosDadosDoCnpjSelect = {
+  cnpjMainCnaeCode: true,
+  cnpjMainCnaeDescription: true,
+  cnpjLegalNature: true,
+  cnpjCompanySize: true,
+  cnpjOpenedAt: true,
+  cnpjEstablishmentType: true,
+  cnpjSimplesOptIn: true,
+  cnpjMeiOptIn: true,
+  cnpjRegistrationStatus: true,
+  cnpjRegistrationStatusDate: true,
+  cnpjLastConsultedAt: true,
+} as const satisfies Record<keyof ColunasDosDadosDoCnpj, true>;
+
+const COLUNA: Record<CnpjRegistrationField, Exclude<keyof ColunasDosDadosDoCnpj, "cnpjLastConsultedAt">> = {
+  mainCnaeCode: "cnpjMainCnaeCode",
+  mainCnaeDescription: "cnpjMainCnaeDescription",
+  legalNature: "cnpjLegalNature",
+  companySize: "cnpjCompanySize",
+  openedAt: "cnpjOpenedAt",
+  establishmentType: "cnpjEstablishmentType",
+  simplesOptIn: "cnpjSimplesOptIn",
+  meiOptIn: "cnpjMeiOptIn",
+  registrationStatus: "cnpjRegistrationStatus",
+  registrationStatusDate: "cnpjRegistrationStatusDate",
 };
 
-type BlocoDeEntrada = NonNullable<CreateCustomerInput["cnpjRegistration"]>;
+/** Os dois campos que são DATA CIVIL: `YYYY-MM-DD` no contrato, meia-noite UTC na coluna. */
+const DIAS_CIVIS: ReadonlySet<CnpjRegistrationField> = new Set(["openedAt", "registrationStatusDate"]);
 
-function colunasDoBloco(bloco: BlocoDeEntrada): ColunasDosDadosDoCnpj {
-  return {
-    cnpjMainCnaeCode: bloco.mainCnaeCode,
-    cnpjMainCnaeDescription: bloco.mainCnaeDescription,
-    cnpjLegalNature: bloco.legalNature,
-    cnpjCompanySize: bloco.companySize,
-    // Datas civis: a meia-noite UTC que marca o dia, como toda data-só do sistema.
-    cnpjOpenedAt: bloco.openedAt ? marcadorDoDiaCivil(bloco.openedAt) : null,
-    cnpjEstablishmentType: bloco.establishmentType,
-    cnpjSimplesOptIn: bloco.simplesOptIn,
-    cnpjMeiOptIn: bloco.meiOptIn,
-    cnpjRegistrationStatus: bloco.registrationStatus,
-    cnpjRegistrationStatusDate: bloco.registrationStatusDate
-      ? marcadorDoDiaCivil(bloco.registrationStatusDate)
-      : null,
-    // O instante da consulta aplicada — o `consultedAt` do resultado, não o do Salvar.
-    cnpjLastConsultedAt: new Date(bloco.consultedAt),
-  };
+type ValoresCadastrais = Record<CnpjRegistrationField, CnpjRegistrationValue>;
+
+const VAZIOS = Object.fromEntries(
+  CNPJ_REGISTRATION_FIELDS.map((campo) => [campo, null]),
+) as ValoresCadastrais;
+
+/** O que a linha tem gravado, no formato do contrato. */
+function valoresGravados(colunas: ColunasDosDadosDoCnpj): ValoresCadastrais {
+  return Object.fromEntries(
+    CNPJ_REGISTRATION_FIELDS.map((campo) => {
+      const bruto = colunas[COLUNA[campo]];
+      return [campo, bruto instanceof Date ? diaDaColunaDeData(bruto) : (bruto ?? null)];
+    }),
+  ) as ValoresCadastrais;
+}
+
+function colunasDosValores(valores: ValoresCadastrais): Omit<ColunasDosDadosDoCnpj, "cnpjLastConsultedAt"> {
+  return Object.fromEntries(
+    CNPJ_REGISTRATION_FIELDS.map((campo) => {
+      const valor = valores[campo];
+      const coluna = DIAS_CIVIS.has(campo) && typeof valor === "string" ? marcadorDoDiaCivil(valor) : valor;
+      return [COLUNA[campo], coluna];
+    }),
+  ) as Omit<ColunasDosDadosDoCnpj, "cnpjLastConsultedAt">;
+}
+
+function temAlgumDado(colunas: ColunasDosDadosDoCnpj): boolean {
+  return (
+    colunas.cnpjLastConsultedAt !== null ||
+    CNPJ_REGISTRATION_FIELDS.some((campo) => colunas[COLUNA[campo]] !== null)
+  );
+}
+
+/** A mudança de UM campo, tipada e validada — é isto que o JSON `changes` guarda. */
+const valorCadastralSchema = z.union([z.string(), z.boolean(), z.null()]);
+
+const mudancasSchema = z.array(
+  z
+    .object({
+      field: z.enum(CNPJ_REGISTRATION_FIELDS),
+      before: valorCadastralSchema,
+      after: valorCadastralSchema,
+      source: z.enum(CNPJ_REGISTRATION_CHANGE_SOURCES),
+    })
+    .strict(),
+);
+
+export interface EventoDosDadosDoCnpj {
+  kind: CnpjRegistrationEventKind;
+  cnpj: string | null;
+  previousCnpj: string | null;
+  consultedAt: Date | null;
+  changes: CnpjRegistrationFieldChange[];
+}
+
+export interface PlanoDosDadosDoCnpj {
+  /** As colunas a gravar; `{}` quando nada muda. */
+  data: Partial<ColunasDosDadosDoCnpj>;
+  /** O evento do histórico; `null` quando nada aconteceu com os dados. */
+  evento: EventoDosDadosDoCnpj | null;
 }
 
 /**
- * O que gravar do bloco, dado o CNPJ que a linha tem hoje (`null` na criação).
+ * O que a gravação faz com os dados cadastrais do CNPJ, dado o que a linha tem
+ * hoje (`null` na criação).
  *
- * Devolve `{}` quando o bloco não é tocado, as onze colunas quando é gravado ou
- * limpo, e lança `CnpjRegistrationMismatchError` quando o bloco é de outro CNPJ.
+ * A comparação é contra o GRAVADO: só o valor que efetivamente muda vira
+ * mudança no histórico, com a origem de `sources` (ausente = MANUAL). Valor
+ * limpo pela troca de CNPJ tem origem `CNPJ_CHANGED` — não é edição manual.
+ * Lança `CnpjRegistrationMismatchError` quando o bloco é de outro CNPJ.
  */
-export function dadosDoCnpjParaGravar(
-  cnpjGravado: string | null,
+export function planejarDadosDoCnpj(
+  gravado: ({ cnpj: string | null } & ColunasDosDadosDoCnpj) | null,
   input: CreateCustomerInput | UpdateCustomerInput,
-): Partial<ColunasDosDadosDoCnpj> {
+): PlanoDosDadosDoCnpj {
   // `input.cnpj` já chega normalizado pelo Zod; `null` é o CNPJ apagado. O
   // gravado passa pela mesma normalização: máscara não é troca de número.
-  const gravado = cnpjGravado ? normalizeCnpj(cnpjGravado) : null;
-  const cnpjFinal = input.cnpj !== undefined ? input.cnpj : gravado;
+  const cnpjGravado = gravado?.cnpj ? normalizeCnpj(gravado.cnpj) : null;
+  const cnpjFinal = input.cnpj !== undefined ? input.cnpj : cnpjGravado;
   const bloco = input.cnpjRegistration;
 
-  if (bloco === null) return BLOCO_VAZIO;
-
-  if (bloco !== undefined) {
-    if (cnpjFinal === null || bloco.cnpj !== cnpjFinal) throw new CnpjRegistrationMismatchError();
-    return colunasDoBloco(bloco);
+  if (bloco !== undefined && (cnpjFinal === null || bloco.cnpj !== cnpjFinal)) {
+    throw new CnpjRegistrationMismatchError();
   }
 
-  // Sem bloco: só a troca do CNPJ mexe nele — e descarta o do número anterior.
-  return cnpjFinal !== gravado ? BLOCO_VAZIO : {};
+  const antes = gravado ? valoresGravados(gravado) : VAZIOS;
+  // Troca real de CNPJ com dados gravados: o que era do número anterior sai.
+  const limpaPorTroca = gravado !== null && cnpjFinal !== cnpjGravado && temAlgumDado(gravado);
+  const depois: ValoresCadastrais = bloco
+    ? (Object.fromEntries(CNPJ_REGISTRATION_FIELDS.map((campo) => [campo, bloco[campo]])) as ValoresCadastrais)
+    : limpaPorTroca
+      ? VAZIOS
+      : antes;
+
+  const changes: CnpjRegistrationFieldChange[] = [];
+  for (const campo of CNPJ_REGISTRATION_FIELDS) {
+    if (antes[campo] === depois[campo]) continue;
+    const source =
+      limpaPorTroca && depois[campo] === null ? "CNPJ_CHANGED" : (bloco?.sources?.[campo] ?? "MANUAL");
+    changes.push({ field: campo, before: antes[campo], after: depois[campo], source });
+  }
+
+  const consultedAt = bloco?.consultedAt ? new Date(bloco.consultedAt) : null;
+  const kind: CnpjRegistrationEventKind | null = limpaPorTroca
+    ? "CNPJ_CHANGED"
+    : changes.length > 0
+      ? "EDIT"
+      : consultedAt
+        ? "CONSULTATION"
+        : null;
+
+  if (kind === null) return { data: {}, evento: null };
+
+  // A última consulta é a mais recente aplicada — e nenhuma, depois de trocar o CNPJ.
+  const ultimaAnterior = limpaPorTroca ? null : (gravado?.cnpjLastConsultedAt ?? null);
+  const ultimaConsulta =
+    consultedAt && (!ultimaAnterior || consultedAt > ultimaAnterior) ? consultedAt : ultimaAnterior;
+
+  return {
+    data: { ...colunasDosValores(depois), cnpjLastConsultedAt: ultimaConsulta },
+    evento: {
+      kind,
+      cnpj: cnpjFinal,
+      previousCnpj: kind === "CNPJ_CHANGED" ? cnpjGravado : null,
+      consultedAt,
+      changes,
+    },
+  };
 }
 
-/** O bloco gravado, para a DTO — `null` quando nenhuma consulta foi aplicada e salva. */
-export function dadosDoCnpjDTO(customer: ColunasDosDadosDoCnpj): CustomerCnpjRegistration | null {
-  if (!customer.cnpjLastConsultedAt) return null;
+/** Grava o evento — sempre dentro da transação que grava o Cliente. */
+export async function registrarEventoDosDadosDoCnpj(
+  tx: Prisma.TransactionClient,
+  customerId: string,
+  evento: EventoDosDadosDoCnpj,
+  actor: User,
+): Promise<void> {
+  await tx.customerCnpjRegistrationHistory.create({
+    data: {
+      customerId,
+      kind: evento.kind,
+      cnpj: evento.cnpj,
+      previousCnpj: evento.previousCnpj,
+      consultedAt: evento.consultedAt,
+      // Validado na escrita: só a forma conhecida entra no JSON.
+      changes: mudancasSchema.parse(evento.changes),
+      changedByUserId: actor.id,
+      changedByNameSnapshot: actor.name,
+    },
+  });
+}
+
+function toEventoDTO(linha: CustomerCnpjRegistrationHistory): CustomerCnpjRegistrationEventDTO {
   return {
-    mainCnaeCode: customer.cnpjMainCnaeCode,
-    mainCnaeDescription: customer.cnpjMainCnaeDescription,
-    legalNature: customer.cnpjLegalNature,
-    companySize: customer.cnpjCompanySize,
-    openedAt: customer.cnpjOpenedAt ? diaDaColunaDeData(customer.cnpjOpenedAt) : null,
-    establishmentType: customer.cnpjEstablishmentType,
-    simplesOptIn: customer.cnpjSimplesOptIn,
-    meiOptIn: customer.cnpjMeiOptIn,
-    registrationStatus: customer.cnpjRegistrationStatus,
-    registrationStatusDate: customer.cnpjRegistrationStatusDate
-      ? diaDaColunaDeData(customer.cnpjRegistrationStatusDate)
-      : null,
-    consultedAt: customer.cnpjLastConsultedAt.toISOString(),
+    id: linha.id,
+    kind: linha.kind,
+    occurredAt: linha.changedAt.toISOString(),
+    userName: linha.changedByNameSnapshot,
+    cnpj: linha.cnpj,
+    previousCnpj: linha.previousCnpj,
+    consultedAt: linha.consultedAt?.toISOString() ?? null,
+    // Validado também na leitura: a Web recebe sempre a mesma forma.
+    changes: mudancasSchema.parse(linha.changes),
+  };
+}
+
+/** O histórico do Cliente, do mais recente para o mais antigo. */
+export async function listarHistoricoDosDadosDoCnpj(
+  customerId: string,
+): Promise<CustomerCnpjRegistrationEventDTO[]> {
+  const linhas = await getPrisma().customerCnpjRegistrationHistory.findMany({
+    where: { customerId },
+    orderBy: [{ changedAt: "desc" }, { id: "desc" }],
+  });
+  return linhas.map(toEventoDTO);
+}
+
+/** Os dados gravados, para a DTO — `null` quando não há dado nenhum nem consulta. */
+export function dadosDoCnpjDTO(colunas: ColunasDosDadosDoCnpj): CustomerCnpjRegistration | null {
+  if (!temAlgumDado(colunas)) return null;
+  return {
+    ...(valoresGravados(colunas) as CustomerCnpjRegistration),
+    lastConsultedAt: colunas.cnpjLastConsultedAt?.toISOString() ?? null,
   };
 }

@@ -813,7 +813,7 @@
   margin: 0 auto;
   display: grid;
   grid-template-columns: minmax(auto, 100%);
-  gap: var(--sp-5);
+  gap: var(--block-gap);
 }
 
 .modal-fullscreen__foot {
@@ -856,6 +856,26 @@
   border-radius: var(--radius);
   box-shadow: var(--shadow-1);
   padding: var(--sp-6);
+}
+
+/*
+ * Espaço entre blocos de cadastro — UMA regra, para todos (§123,
+ * CUSTOMER-CNPJ-EDITABLE-HISTORY-01).
+ *
+ * Seção seguida de seção ganha o respiro de uma linha. Vale em todo formulário
+ * e página que monta os blocos com `FormSection` (ou `.form-section`), sem
+ * margem espalhada tela a tela. Onde o container já separa os filhos por `gap`
+ * — a coluna do modal e o corpo do documento —, a margem somaria ao `gap` e
+ * sai: lá o espaço já é o mesmo `--block-gap`. O espaço ENTRE CAMPOS, dentro
+ * da seção, não muda.
+ */
+.form-section + .form-section {
+  margin-top: var(--block-gap);
+}
+
+.modal-fullscreen__form-wrap > .form-section + .form-section,
+.doc-body > .form-section + .form-section {
+  margin-top: 0;
 }
 
 .form-section h3 {
@@ -1434,7 +1454,7 @@
      estica o container, o `.table-container` infla junto e o scroll dele
      nunca engata — a tabela some para fora da tela sem barra nenhuma. */
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--sp-5);
+  gap: var(--block-gap);
 }
 
 .doc-actions {
@@ -3944,8 +3964,19 @@ button.help-flow__box:focus-visible {
   white-space: normal;
 }
 
-/* Situação cadastral, CNAE, porte: informativo, e visivelmente separado dos
-   campos que se aplicam. */
+/* A escolha de cada linha, com o verbo à vista — "Aplicar", "Substituir",
+   "Confirmar" (§122): a caixa sozinha não diz se ela completa ou troca. */
+.cnpj-lookup__escolha {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* Dados cadastrais do CNPJ: a segunda tabela, separada da dos campos do
+   cadastro. */
 .cnpj-lookup__complemento {
   display: grid;
   gap: var(--sp-2);
@@ -3960,8 +3991,8 @@ button.help-flow__box:focus-visible {
   color: var(--ink-2);
 }
 
-/* 390px: cada campo vira um cartão — rótulo, atual e retornado empilhados,
-   com a caixa de aplicar abrindo, como na consulta assistida. */
+/* 390px: cada campo vira um cartão — rótulo, atual, retornado e a escolha
+   empilhados. */
 @media (max-width: 640px) {
   .table--cnpj-lookup thead {
     display: block;
@@ -3978,8 +4009,8 @@ button.help-flow__box:focus-visible {
 
   .table--cnpj-lookup tr {
     display: grid;
-    grid-template-columns: auto 1fr;
-    gap: var(--sp-1) var(--sp-3);
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-1);
     padding: var(--sp-3) var(--sp-4);
     border-bottom: 1px solid var(--line);
   }
@@ -3987,12 +4018,6 @@ button.help-flow__box:focus-visible {
   .table--cnpj-lookup td {
     padding: 0;
     border-bottom: 0;
-    grid-column: 2;
-  }
-
-  .table--cnpj-lookup td.table__select {
-    grid-column: 1;
-    grid-row: 1 / span 3;
   }
 
   .table--cnpj-lookup td.col-flex::before {
@@ -4009,6 +4034,27 @@ button.help-flow__box:focus-visible {
   .table--cnpj-lookup td.col-flex[data-label="Campo"]::before {
     content: none;
   }
+}
+
+/* Rodapé dos dados cadastrais do CNPJ (§122): a "Última consulta", que é do
+   sistema — texto discreto, não campo —, e a ação "Ver histórico". */
+.dados-do-cnpj__rodape {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+
+.dados-do-cnpj__rodape .field__hint {
+  margin: 0;
+}
+
+/* Histórico: os valores quebram linha em vez de espremer a coluna. */
+.table--cnpj-history td.col-flex {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* Ação auxiliar de um campo — "Consultar CNPJ" ao lado do número digitado.

@@ -13,7 +13,13 @@ import {
   tocaCondicaoPadrao,
 } from "../../lib/payment-condition.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
-import { dadosDoCnpjDTO, dadosDoCnpjParaGravar } from "./customer-cnpj-registration.js";
+import type { PlanoDosDadosDoCnpj } from "./customer-cnpj-registration.js";
+import {
+  colunasDosDadosDoCnpjSelect,
+  dadosDoCnpjDTO,
+  planejarDadosDoCnpj,
+  registrarEventoDosDadosDoCnpj,
+} from "./customer-cnpj-registration.js";
 import { CustomerNotFoundError, DuplicateCnpjError } from "./customers.errors.js";
 import {
   fatosComerciaisInclude,
@@ -173,39 +179,47 @@ export async function createCustomer(
   // Antes de consumir código: condição parcelada sem parcelas não nasce, nem
   // dado cadastral de um CNPJ sob outro (§119).
   const condicaoPadrao = tocaCondicaoPadrao(input) ? condicaoPadraoParaGravar(null, input) : {};
-  const dadosDoCnpj = dadosDoCnpjParaGravar(null, input);
+  const dadosDoCnpj = planejarDadosDoCnpj(null, input);
 
   const prisma = getPrisma();
   const code = await nextSequenceCode(prisma, CODE_SEQUENCE, CUSTOMER_CODE_PREFIX);
 
   try {
-    const customer = await prisma.customer.create({
-      data: {
-        code,
-        legalName: input.legalName,
-        ...(input.tradeName !== undefined ? { tradeName: input.tradeName } : {}),
-        ...(input.cnpj !== undefined ? { cnpj: input.cnpj } : {}),
-        ...(input.email !== undefined ? { email: input.email } : {}),
-        ...(input.phone !== undefined ? { phone: input.phone } : {}),
-        // Ausente: o default do banco (NOT_INFORMED) decide, como para o
-        // importador legado e para toda linha anterior à coluna.
-        ...(input.taxProfile !== undefined ? { taxProfile: input.taxProfile } : {}),
-        ...dadosDoCnpj,
-        ...addressData(input),
-        ...(input.notes !== undefined ? { notes: input.notes } : {}),
-        ...(input.businessLotSuffix !== undefined
-          ? { businessLotSuffix: input.businessLotSuffix }
-          : {}),
-        ...(input.defaultPaymentInstrument !== undefined
-          ? { defaultPaymentInstrument: input.defaultPaymentInstrument }
-          : {}),
-        ...condicaoPadrao,
-        createdByUserId: actor.id,
-        createdByNameSnapshot: actor.name,
-        updatedByUserId: actor.id,
-        updatedByNameSnapshot: actor.name,
-      },
-      include: bloqueioVigenteInclude,
+    // O cliente e o primeiro evento do histórico dos dados do CNPJ (§122)
+    // nascem juntos, ou nenhum dos dois.
+    const customer = await prisma.$transaction(async (tx) => {
+      const criado = await tx.customer.create({
+        data: {
+          code,
+          legalName: input.legalName,
+          ...(input.tradeName !== undefined ? { tradeName: input.tradeName } : {}),
+          ...(input.cnpj !== undefined ? { cnpj: input.cnpj } : {}),
+          ...(input.email !== undefined ? { email: input.email } : {}),
+          ...(input.phone !== undefined ? { phone: input.phone } : {}),
+          // Ausente: o default do banco (NOT_INFORMED) decide, como para o
+          // importador legado e para toda linha anterior à coluna.
+          ...(input.taxProfile !== undefined ? { taxProfile: input.taxProfile } : {}),
+          ...dadosDoCnpj.data,
+          ...addressData(input),
+          ...(input.notes !== undefined ? { notes: input.notes } : {}),
+          ...(input.businessLotSuffix !== undefined
+            ? { businessLotSuffix: input.businessLotSuffix }
+            : {}),
+          ...(input.defaultPaymentInstrument !== undefined
+            ? { defaultPaymentInstrument: input.defaultPaymentInstrument }
+            : {}),
+          ...condicaoPadrao,
+          createdByUserId: actor.id,
+          createdByNameSnapshot: actor.name,
+          updatedByUserId: actor.id,
+          updatedByNameSnapshot: actor.name,
+        },
+        include: bloqueioVigenteInclude,
+      });
+      if (dadosDoCnpj.evento) {
+        await registrarEventoDosDadosDoCnpj(tx, criado.id, dadosDoCnpj.evento, actor);
+      }
+      return criado;
     });
     return toCustomerDTO(customer);
   } catch (error) {
@@ -234,27 +248,28 @@ export async function updateCustomer(
   try {
     const customer = await getPrisma().$transaction(async (tx) => {
       /*
-       * Condição padrão e dados cadastrais do CNPJ são blocos: o PATCH parcial
-       * se resolve contra o que está GRAVADO — "parcelado com parcelas" e "o
-       * bloco é do CNPJ que o Cliente terá" valem para o estado que a gravação
-       * produz. A trava da linha impede que dois PATCHes válidos cada um, lidos
-       * antes um do outro, gravem juntos um parcelado sem parcelas, ou o bloco
-       * de um CNPJ sob o número que o outro acabou de trocar.
+       * Condição padrão e dados cadastrais do CNPJ se resolvem contra o que está
+       * GRAVADO — "parcelado com parcelas", "os dados são do CNPJ que o Cliente
+       * terá" e o que o histórico registra como mudança valem para o estado que
+       * a gravação produz. A trava da linha impede que dois PATCHes válidos cada
+       * um, lidos antes um do outro, gravem juntos um parcelado sem parcelas, os
+       * dados de um CNPJ sob o número que o outro acabou de trocar, ou dois
+       * eventos que descrevem o mesmo "antes".
        */
       const tocaDadosDoCnpj = input.cnpj !== undefined || input.cnpjRegistration !== undefined;
       let condicaoPadrao = {};
-      let dadosDoCnpj = {};
+      let dadosDoCnpj: PlanoDosDadosDoCnpj = { data: {}, evento: null };
       if (tocaCondicaoPadrao(input) || tocaDadosDoCnpj) {
         await tx.$queryRaw`SELECT id FROM customers WHERE id = ${id} FOR UPDATE`;
         const gravado = await tx.customer.findUniqueOrThrow({
           where: { id },
-          select: { ...padraoDePagamentoSelect, cnpj: true },
+          select: { ...padraoDePagamentoSelect, ...colunasDosDadosDoCnpjSelect, cnpj: true },
         });
         if (tocaCondicaoPadrao(input)) condicaoPadrao = condicaoPadraoParaGravar(gravado, input);
-        if (tocaDadosDoCnpj) dadosDoCnpj = dadosDoCnpjParaGravar(gravado.cnpj, input);
+        if (tocaDadosDoCnpj) dadosDoCnpj = planejarDadosDoCnpj(gravado, input);
       }
 
-      return tx.customer.update({
+      const alterado = await tx.customer.update({
         where: { id },
         data: {
           ...(input.legalName !== undefined ? { legalName: input.legalName } : {}),
@@ -263,7 +278,7 @@ export async function updateCustomer(
           ...(input.email !== undefined ? { email: input.email } : {}),
           ...(input.phone !== undefined ? { phone: input.phone } : {}),
           ...(input.taxProfile !== undefined ? { taxProfile: input.taxProfile } : {}),
-          ...dadosDoCnpj,
+          ...dadosDoCnpj.data,
           ...addressData(input),
           ...(input.notes !== undefined ? { notes: input.notes } : {}),
           ...(input.businessLotSuffix !== undefined
@@ -279,6 +294,12 @@ export async function updateCustomer(
         },
         include: bloqueioVigenteInclude,
       });
+      // O evento do histórico (§122) na mesma transação: sem Cliente alterado,
+      // sem evento; sem evento, a alteração volta.
+      if (dadosDoCnpj.evento) {
+        await registrarEventoDosDadosDoCnpj(tx, id, dadosDoCnpj.evento, actor);
+      }
+      return alterado;
     });
     return toCustomerDTO(customer);
   } catch (error) {

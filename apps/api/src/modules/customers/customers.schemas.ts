@@ -4,7 +4,9 @@ import {
   BR_STATE_CODES,
   CNAE_CODE_PATTERN,
   CNPJ_ESTABLISHMENT_TYPES,
+  CNPJ_REGISTRATION_FIELDS,
   CNPJ_REGISTRATION_TEXT_MAX_LENGTHS,
+  CNPJ_REGISTRATION_VALUE_SOURCES,
   CUSTOMER_COMMERCIAL_STATUSES,
   CUSTOMER_FIELD_MAX_LENGTHS,
   CUSTOMER_STATUSES,
@@ -131,17 +133,21 @@ const simOuNaoCadastral = z
 const FOLGA_DO_RELOGIO_MS = 60_000;
 
 /**
- * Dados cadastrais do CNPJ — CUSTOMER-CNPJ-PERSISTED-DATA-01, §119.
+ * Dados cadastrais do CNPJ — §119 e §122 (CUSTOMER-CNPJ-EDITABLE-HISTORY-01).
  *
- * Um BLOCO, e inteiro: toda chave é obrigatória (com `null` para "não
- * informado"), porque o bloco troca o anterior de uma vez — chave ausente
- * seria ambígua entre "não mexe" e "a fonte não informou". Chave desconhecida
- * (payload cru do provedor, por exemplo) é descartada e não chega ao banco.
+ * Os dez campos vão sempre inteiros — toda chave é obrigatória, com `null`
+ * para vazio: chave ausente seria ambígua entre "não mexe" e "apague". O
+ * service compara com o gravado e só o que mudou vira mudança no histórico.
+ * Chave desconhecida (payload cru do provedor, por exemplo) é descartada e não
+ * chega ao banco.
  *
- * O `cnpj` é o número CONSULTADO. Se ele é o do Cliente é pergunta do service,
- * que conhece o CNPJ gravado.
+ * `cnpj` é o número a que os dados pertencem; se ele é o do Cliente é pergunta
+ * do service, que conhece o CNPJ gravado. `consultedAt` só vem quando uma
+ * consulta foi aplicada nesta edição, e `sources` diz a origem de cada campo
+ * alterado: `OPEN_CNPJ` sem consulta aplicada é recusa — a origem não se
+ * declara sem a consulta que a sustenta.
  */
-const cnpjRegistrationSchema = z.object({
+const camposDoBlocoDoCnpj = z.object({
   cnpj: requiredCnpjSchema,
   mainCnaeCode: z
     .string()
@@ -163,18 +169,35 @@ const cnpjRegistrationSchema = z.object({
   registrationStatus: textoCadastralDoCnpj(CNPJ_REGISTRATION_TEXT_MAX_LENGTHS.registrationStatus),
   registrationStatusDate: diaCivilCadastralDoCnpj,
   consultedAt: z
-    .string({
-      required_error: "Data da consulta é obrigatória",
-      invalid_type_error: "Data da consulta é obrigatória",
-    })
+    .string({ invalid_type_error: "Data da consulta inválida" })
     .datetime({ offset: true, message: "Data da consulta inválida" })
     .refine((valor) => Date.parse(valor) <= Date.now() + FOLGA_DO_RELOGIO_MS, {
       message: "Data da consulta no futuro",
-    }),
+    })
+    .optional(),
+  sources: z
+    .record(
+      z.enum(CNPJ_REGISTRATION_FIELDS, { errorMap: () => ({ message: "Campo desconhecido" }) }),
+      z.enum(CNPJ_REGISTRATION_VALUE_SOURCES, {
+        errorMap: () => ({ message: "Origem inválida (use MANUAL ou OPEN_CNPJ)" }),
+      }),
+    )
+    .optional(),
 });
 
-/** Objeto troca o bloco inteiro, `null` limpa, ausente não mexe (salvo troca de CNPJ, no service). */
-const cnpjRegistrationField = cnpjRegistrationSchema.nullable().optional();
+const cnpjRegistrationSchema = camposDoBlocoDoCnpj.superRefine((bloco, ctx) => {
+  const declaraConsulta = Object.values(bloco.sources ?? {}).includes("OPEN_CNPJ");
+  if (declaraConsulta && !bloco.consultedAt) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["sources"],
+      message: "Origem OpenCNPJ exige a consulta aplicada (consultedAt)",
+    });
+  }
+});
+
+/** Ausente não mexe (salvo troca de CNPJ, no service); não existe `null`: limpar é mandar os campos vazios. */
+const cnpjRegistrationField = cnpjRegistrationSchema.optional();
 
 export const createCustomerSchema = z.object({
   legalName: z

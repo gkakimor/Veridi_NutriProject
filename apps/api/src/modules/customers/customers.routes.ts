@@ -1,6 +1,10 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import type { ZodError } from "zod";
-import type { CustomerStatusAction, CustomerStatusHistoryResponse } from "@veridi/shared";
+import type {
+  CustomerCnpjRegistrationHistoryResponse,
+  CustomerStatusAction,
+  CustomerStatusHistoryResponse,
+} from "@veridi/shared";
 import { CUSTOMER_EDIT_ROLES, CUSTOMER_STATUS_CHANGE_ROLES } from "@veridi/shared";
 import { exigirPerfil } from "../../lib/current-user.js";
 import {
@@ -16,6 +20,7 @@ import {
 import { changeCustomerStatus, listCustomerStatusHistory } from "./customer-status.js";
 import {
   CnpjRegistrationMismatchError,
+  listarHistoricoDosDadosDoCnpj,
   respostaDaRecusaDosDadosDoCnpj,
 } from "./customer-cnpj-registration.js";
 import {
@@ -39,7 +44,8 @@ function formatZodError(error: ZodError) {
 
 /**
  * `GET /customers`, `GET /customers/:id`, `POST /customers`,
- * `PATCH /customers/:id`, `GET /customers/:id/status-history` e as quatro
+ * `PATCH /customers/:id`, `GET /customers/:id/status-history`,
+ * `GET /customers/:id/cnpj-registration-history` (§122) e as quatro
  * ações de situação cadastral (§95): `POST /customers/:id/block`,
  * `/unblock`, `/deactivate` e `/activate`, todas com motivo obrigatório.
  *
@@ -197,6 +203,21 @@ export const customersRoutes: FastifyPluginAsync = async (app) => {
     if (!customer) return reply.status(404).send({ error: "not_found" });
     const response: CustomerStatusHistoryResponse = {
       events: await listCustomerStatusHistory(id),
+    };
+    return reply.send(response);
+  });
+
+  /**
+   * Histórico dos dados cadastrais do CNPJ (§122), do mais recente para o mais
+   * antigo. Leitura aberta a toda sessão, como o cadastro e o histórico de
+   * situação: quem consulta o Cliente vê de onde veio cada dado.
+   */
+  app.get("/customers/:id/cnpj-registration-history", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const customer = await getCustomerById(id);
+    if (!customer) return reply.status(404).send({ error: "not_found" });
+    const response: CustomerCnpjRegistrationHistoryResponse = {
+      events: await listarHistoricoDosDadosDoCnpj(id),
     };
     return reply.send(response);
   });

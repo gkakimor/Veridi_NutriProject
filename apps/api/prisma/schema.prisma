@@ -458,6 +458,7 @@ model User {
   createdCustomers            Customer[]                         @relation("CustomerCreatedBy")
   updatedCustomers            Customer[]                         @relation("CustomerUpdatedBy")
   customerStatusChanges       CustomerStatusHistory[]            @relation("CustomerStatusChangedBy")
+  customerCnpjRegistrationChanges CustomerCnpjRegistrationHistory[] @relation("CustomerCnpjRegistrationChangedBy")
   createdIndustrialRates      IndustrialResourceRate[]           @relation("IndustrialResourceRateCreatedBy")
   createdItemCostReferences   ItemCostReference[]                @relation("ItemCostReferenceCreatedBy")
   createdStockCounts          StockCount[]                       @relation("StockCountCreatedBy")
@@ -2446,15 +2447,16 @@ model Customer {
   /// importador legado inclusive.
   taxProfile CustomerTaxProfile @default(NOT_INFORMED)
 
-  /// DADOS CADASTRAIS DO CNPJ (PRODUCT_RULES §119) — o retrato que a consulta
-  /// de CNPJ APLICADA e SALVA deixou. Bloco: gravado inteiro a partir de uma
-  /// consulta, trocado inteiro pela seguinte e descartado (tudo NULL) quando o
-  /// `cnpj` muda — pertence sempre ao `cnpj` desta linha. Consultar nao grava
-  /// nada; so o POST/PATCH do cadastro grava. NULL = nao informado pela fonte
-  /// (Simples/MEI NULL nao e "Nao"). `cnpjLastConsultedAt` NULL = nenhuma
-  /// consulta aplicada, e ai o bloco inteiro e NULL. Nada daqui define
-  /// `taxProfile` (§83). Datas de abertura e da situacao sao DATA CIVIL
-  /// guardada como a meia-noite UTC que marca o dia.
+  /// DADOS CADASTRAIS DO CNPJ (PRODUCT_RULES §119, §122) — campos EDITAVEIS
+  /// do cadastro, que a consulta de CNPJ so SUGERE (aditiva: completa o vazio,
+  /// troca o preenchido so por escolha explicita). Pertencem sempre ao `cnpj`
+  /// desta linha: trocar o CNPJ os limpa (tudo NULL). Consultar nao grava
+  /// nada; so o POST/PATCH do cadastro grava, e cada gravacao que os muda deixa
+  /// um evento em `customer_cnpj_registration_history`. NULL = vazio
+  /// (Simples/MEI NULL nao e "Nao"). `cnpjLastConsultedAt` e metadado do
+  /// sistema: a ultima consulta aplicada e salva, nunca digitada. Nada daqui
+  /// define `taxProfile` (§83). Datas de abertura e da situacao sao DATA
+  /// CIVIL guardada como a meia-noite UTC que marca o dia.
   cnpjMainCnaeCode           String?
   cnpjMainCnaeDescription    String?
   cnpjLegalNature            String?
@@ -2535,6 +2537,7 @@ model Customer {
   productionOrders ProductionOrder[]
   projects         Project[]
   statusHistory    CustomerStatusHistory[]
+  cnpjRegistrationHistory CustomerCnpjRegistrationHistory[]
 
   @@index([active])
   @@index([externalCode])
@@ -2574,6 +2577,49 @@ model CustomerStatusHistory {
 
   @@index([customerId, changedAt])
   @@map("customer_status_history")
+}
+
+/// Tipo do evento do historico dos dados cadastrais do CNPJ (PRODUCT_RULES
+/// §122): EDIT = campos mudaram (a mao e/ou pela consulta); CONSULTATION =
+/// consulta aplicada sem mudanca de valor, os dados foram conferidos pela
+/// fonte; CNPJ_CHANGED = o CNPJ mudou e os dados do numero anterior foram limpos.
+enum CustomerCnpjRegistrationEventKind {
+  EDIT
+  CONSULTATION
+  CNPJ_CHANGED
+}
+
+/// Historico dos dados cadastrais do CNPJ do Cliente (PRODUCT_RULES §122) —
+/// APPEND-ONLY. Cada gravacao do cadastro que muda esses dados, aplica uma
+/// consulta de CNPJ ou troca o CNPJ com dados grava UMA linha, na mesma
+/// transacao que muda o Cliente; nenhuma linha e alterada nem apagada.
+/// `changes` e a lista das mudancas por campo — { field, before, after,
+/// source } com source MANUAL, OPEN_CNPJ ou CNPJ_CHANGED —, montada e lida
+/// pelo Zod da API; nunca o payload do provedor. Comeca vazio: cliente que ja
+/// tinha dados nao ganha historico retroativo. `Cascade` so porque Cliente
+/// nao tem exclusao fisica — a mesma escolha dos outros historicos.
+model CustomerCnpjRegistrationHistory {
+  id String @id @default(uuid())
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  kind         CustomerCnpjRegistrationEventKind
+  /// CNPJ a que os dados pertencem depois do evento; NULL = CNPJ apagado.
+  cnpj         String?
+  /// So em CNPJ_CHANGED: o CNPJ anterior, dono dos dados que foram limpos.
+  previousCnpj String?
+  /// Instante da consulta OpenCNPJ aplicada neste evento, quando houve.
+  consultedAt  DateTime?
+  changes      Json
+
+  changedAt             DateTime @default(now())
+  changedByUserId       String?
+  changedByUser         User?    @relation("CustomerCnpjRegistrationChangedBy", fields: [changedByUserId], references: [id])
+  changedByNameSnapshot String?
+
+  @@index([customerId, changedAt])
+  @@map("customer_cnpj_registration_history")
 }
 
 /// Definicao comercial/industrial do produto fabricado pela Veridi.
