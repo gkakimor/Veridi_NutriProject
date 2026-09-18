@@ -33,7 +33,8 @@ import { uniqueCnpj } from "../../test-support/br-documents.js";
  *  2. a prévia diz se pode e por quê, fonte por fonte, sem gravar nada;
  *  3. qualquer uso bloqueia: RESTRICT, CASCADE, SET NULL, id sem chave, código
  *     copiado, JSON, histórico, proveniência — e a V1 já trabalhada;
- *  4. sem uso, sai o agregado inteiro (a V1 técnica junto), com rastro
+ *  4. sem uso, sai o agregado inteiro (a V1 técnica, ou o registro do CNPJ
+ *     marcado como da criação do Cliente, junto), com rastro
  *     append-only e retrato mínimo; motivo é obrigatório; o nome fica livre;
  *  5. a transação trava, reconta e confere o efeito real: clique duplo é 404,
  *     OC gravada no meio bloqueia, e efeito fora do agregado desfaz tudo.
@@ -523,22 +524,25 @@ describe("filhos técnicos — a V1 como a criação a deixou", () => {
 // ─────────────────────────────────────────────────────────────── Cliente × histórico do CNPJ
 
 /**
- * Decisão do PO (2026-09-18): o registro dos dados do CNPJ nascido NA criação
- * do Cliente é filho técnico; registro posterior é uso real. Só sai junto com
- * prova ESTRUTURAL de nascimento — "primeiro evento", hora parecida ou
- * `updatedAt` = `createdAt` não provam —, e o modelo atual não tem essa
- * prova: o evento não guarda marca nenhuma da criação. Até ela existir, todo
- * registro bloqueia, e nenhum sai em silêncio.
+ * Decisão do PO (2026-09-18), com a marca estrutural de
+ * CUSTOMER-CNPJ-CREATION-HISTORY-MARKER-01: o registro dos dados do CNPJ
+ * gravado NA criação do Cliente — e só ele — leva `createdWithCustomerId` = o
+ * próprio Cliente, e é filho técnico: sai junto. Registro sem a marca (legado,
+ * ou de alteração: EDIT, CONSULTATION, CNPJ_CHANGED) ou com a marca de OUTRO
+ * Cliente (movido pelo saneamento) é uso real e bloqueia. Hora, ordem e `xmin`
+ * não entram na conta.
  */
 describe("Cliente e o histórico dos dados do CNPJ", () => {
   const FONTE = "Histórico dos dados cadastrais do CNPJ";
+  const DA_CRIACAO = "Registro dos dados do CNPJ feito na criação";
+  const DE_OUTRO = "Histórico dos dados cadastrais do CNPJ de outro cliente";
   const CONSULTA = "2026-09-17T12:30:00.000Z";
 
   const eventos = (customerId: string) =>
     getPrisma().customerCnpjRegistrationHistory.findMany({
       where: { customerId },
-      orderBy: { changedAt: "asc" },
-      select: { id: true, kind: true },
+      orderBy: [{ changedAt: "asc" }, { id: "asc" }],
+      select: { id: true, kind: true, createdWithCustomerId: true },
     });
 
   async function alterado(id: string, payload: Record<string, unknown>): Promise<void> {
@@ -547,11 +551,12 @@ describe("Cliente e o histórico dos dados do CNPJ", () => {
   }
 
   /** Bloqueado: a razão na prévia, 409 na exclusão, e NADA apagado — Cliente, registros e rastro. */
-  async function confereBloqueado(customerId: string, registros: number): Promise<void> {
+  async function confereBloqueado(customerId: string, bloqueantes: number, trecho: string): Promise<void> {
     const check = await previa("CUSTOMER", customerId);
     expect(check.canDelete).toBe(false);
     expect(check.removedTogether).toEqual([]);
-    expect(check.references).toEqual([expect.objectContaining({ source: FONTE, count: registros })]);
+    expect(check.references).toEqual([expect.objectContaining({ source: FONTE, count: bloqueantes })]);
+    expect(check.references[0]!.reason).toContain(trecho);
     const antes = await eventos(customerId);
     expect(await recusado("CUSTOMER", customerId)).toEqual([FONTE]);
     expect(await getPrisma().customer.count({ where: { id: customerId } })).toBe(1);
@@ -572,28 +577,66 @@ describe("Cliente e o histórico dos dados do CNPJ", () => {
     expect(rastro).toEqual([
       expect.objectContaining({ id: resultado.historyId, entityType: "CUSTOMER", entityCode: criado.code, reason: MOTIVO }),
     ]);
+    expect(rastro[0]!.snapshot).toMatchObject({ removidosJunto: [] });
   });
 
   it.each([
-    ["digitado à mão", (cnpj: string) => blocoDoCnpj(cnpj, { legalNature: "Sociedade Limitada" })],
+    ["digitado à mão", (cnpj: string) => blocoDoCnpj(cnpj, { legalNature: "Sociedade Limitada" }), "EDIT"],
     [
       "aplicado do OpenCNPJ antes do primeiro Salvar",
       (cnpj: string) =>
         blocoDoCnpj(cnpj, { legalNature: "Sociedade Limitada", consultedAt: CONSULTA, sources: { legalNature: "OPEN_CNPJ" } }),
+      "EDIT",
     ],
-  ])("registro gravado na criação (%s): sem prova estrutural de nascimento, bloqueia — e nada sai", async (_caso, bloco) => {
+    [
+      "OpenCNPJ antes do primeiro Salvar, sem diferença — só a consulta",
+      (cnpj: string) => blocoDoCnpj(cnpj, { consultedAt: CONSULTA }),
+      "CONSULTATION",
+    ],
+  ])("registro gravado na criação (%s): marcado com o próprio Cliente, é filho técnico — sai junto, com rastro", async (_caso, bloco, kind) => {
     const cnpj = uniqueCnpj();
     const criado = await cliente({ cnpj, cnpjRegistration: bloco(cnpj) });
-    expect((await eventos(criado.id)).map((evento) => evento.kind)).toEqual(["EDIT"]);
-    await confereBloqueado(criado.id, 1);
+    const [registro, ...outros] = await eventos(criado.id);
+    expect(outros).toEqual([]);
+    expect(registro).toMatchObject({ kind, createdWithCustomerId: criado.id });
+
+    const check = await previa("CUSTOMER", criado.id);
+    expect(check).toMatchObject({ canDelete: true, references: [], removedTogether: [{ source: DA_CRIACAO, count: 1 }] });
+    const resultado = await excluido("CUSTOMER", criado.id);
+
+    // O Cliente e o registro da criação saem juntos (CASCADE conferido pelo pg_stat).
+    expect(await getPrisma().customer.count({ where: { id: criado.id } })).toBe(0);
+    expect(await getPrisma().customerCnpjRegistrationHistory.count({ where: { id: registro!.id } })).toBe(0);
+    // O rastro permanece: uma linha, com o registro só como tabela e quantidade.
+    const rastro = await getPrisma().masterDataDeletionHistory.findMany({ where: { entityId: criado.id } });
+    expect(rastro).toEqual([
+      expect.objectContaining({ id: resultado.historyId, entityType: "CUSTOMER", entityCode: criado.code, reason: MOTIVO }),
+    ]);
+    expect(rastro[0]!.snapshot).toMatchObject({
+      removidosJunto: [{ tabela: "customer_cnpj_registration_history", linhas: 1 }],
+    });
+    expect(JSON.stringify(rastro[0]!.snapshot)).not.toContain("Sociedade Limitada");
   });
 
-  it("registro da criação + EDIT posterior: bloqueia, com os dois registros", async () => {
+  it("legado: registro da criação gravado ANTES da marca (NULL, sem backfill) bloqueia — e nada sai", async () => {
+    const cnpj = uniqueCnpj();
+    const criado = await cliente({ cnpj, cnpjRegistration: blocoDoCnpj(cnpj, { legalNature: "Sociedade Limitada" }) });
+    await getPrisma().customerCnpjRegistrationHistory.updateMany({
+      where: { customerId: criado.id },
+      data: { createdWithCustomerId: null },
+    });
+    await confereBloqueado(criado.id, 1, "sem a marca da criação");
+  });
+
+  it("registro da criação + EDIT posterior: o posterior nunca é marcado, e bloqueia", async () => {
     const cnpj = uniqueCnpj();
     const criado = await cliente({ cnpj, cnpjRegistration: blocoDoCnpj(cnpj, { legalNature: "Sociedade Limitada" }) });
     await alterado(criado.id, { cnpjRegistration: blocoDoCnpj(cnpj, { legalNature: "Sociedade Anônima" }) });
-    expect((await eventos(criado.id)).map((evento) => evento.kind)).toEqual(["EDIT", "EDIT"]);
-    await confereBloqueado(criado.id, 2);
+    expect(await eventos(criado.id)).toEqual([
+      expect.objectContaining({ kind: "EDIT", createdWithCustomerId: criado.id }),
+      expect.objectContaining({ kind: "EDIT", createdWithCustomerId: null }),
+    ]);
+    await confereBloqueado(criado.id, 1, "sem a marca da criação");
   });
 
   it("registro da criação + CONSULTATION posterior: bloqueia", async () => {
@@ -602,16 +645,60 @@ describe("Cliente e o histórico dos dados do CNPJ", () => {
     await alterado(criado.id, {
       cnpjRegistration: blocoDoCnpj(cnpj, { legalNature: "Sociedade Limitada", consultedAt: CONSULTA }),
     });
-    expect((await eventos(criado.id)).map((evento) => evento.kind)).toEqual(["EDIT", "CONSULTATION"]);
-    await confereBloqueado(criado.id, 2);
+    expect(await eventos(criado.id)).toEqual([
+      expect.objectContaining({ kind: "EDIT", createdWithCustomerId: criado.id }),
+      expect.objectContaining({ kind: "CONSULTATION", createdWithCustomerId: null }),
+    ]);
+    await confereBloqueado(criado.id, 1, "sem a marca da criação");
   });
 
   it("CNPJ trocado (CNPJ_CHANGED): bloqueia", async () => {
     const cnpj = uniqueCnpj();
     const criado = await cliente({ cnpj, cnpjRegistration: blocoDoCnpj(cnpj, { legalNature: "Sociedade Limitada" }) });
     await alterado(criado.id, { cnpj: uniqueCnpj() });
-    expect((await eventos(criado.id)).map((evento) => evento.kind)).toEqual(["EDIT", "CNPJ_CHANGED"]);
-    await confereBloqueado(criado.id, 2);
+    expect(await eventos(criado.id)).toEqual([
+      expect.objectContaining({ kind: "EDIT", createdWithCustomerId: criado.id }),
+      expect.objectContaining({ kind: "CNPJ_CHANGED", createdWithCustomerId: null }),
+    ]);
+    await confereBloqueado(criado.id, 1, "sem a marca da criação");
+  });
+
+  it.each([
+    ["digitado à mão", (cnpj: string) => blocoDoCnpj(cnpj, { legalNature: "Sociedade Limitada" })],
+    [
+      "aplicado do OpenCNPJ",
+      (cnpj: string) =>
+        blocoDoCnpj(cnpj, { legalNature: "Sociedade Limitada", consultedAt: CONSULTA, sources: { legalNature: "OPEN_CNPJ" } }),
+    ],
+  ])("PRIMEIRO registro gravado depois da criação (%s): alteração nunca marca, e bloqueia", async (_caso, bloco) => {
+    const cnpj = uniqueCnpj();
+    const criado = await cliente({ cnpj });
+    expect(await eventos(criado.id)).toEqual([]);
+    await alterado(criado.id, { cnpjRegistration: bloco(cnpj) });
+    expect(await eventos(criado.id)).toEqual([expect.objectContaining({ kind: "EDIT", createdWithCustomerId: null })]);
+    await confereBloqueado(criado.id, 1, "sem a marca da criação");
+  });
+
+  it("registro movido para outro Cliente (o MERGE move customerId, nunca a marca): deixa de ser técnico e bloqueia", async () => {
+    const cnpj = uniqueCnpj();
+    const absorvido = await cliente({ cnpj, cnpjRegistration: blocoDoCnpj(cnpj, { legalNature: "Sociedade Limitada" }) });
+    const canonico = await cliente();
+    // O que o MERGE do saneamento faz com a referência: só o ponteiro muda.
+    const movidos = await getPrisma().customerCnpjRegistrationHistory.updateMany({
+      where: { customerId: absorvido.id },
+      data: { customerId: canonico.id },
+    });
+    expect(movidos.count).toBe(1);
+    expect(await eventos(canonico.id)).toEqual([expect.objectContaining({ createdWithCustomerId: absorvido.id })]);
+
+    await confereBloqueado(canonico.id, 1, "criação de outro cliente");
+
+    // Enquanto o absorvido existir, a marca dele em registro de OUTRO Cliente
+    // também é referência a ele: sai nem um nem outro.
+    const checkDoAbsorvido = await previa("CUSTOMER", absorvido.id);
+    expect(checkDoAbsorvido.canDelete).toBe(false);
+    expect(checkDoAbsorvido.references).toEqual([expect.objectContaining({ source: DE_OUTRO, count: 1 })]);
+    expect(await recusado("CUSTOMER", absorvido.id)).toEqual([DE_OUTRO]);
   });
 });
 
@@ -792,14 +879,17 @@ describe("transação — trava, recontagem e efeito real", () => {
    * dispara para o registro alvo (WHEN): vizinhos da suíte que apagam a mesma
    * tabela não o acionam.
    */
+  const APELIDO_DA_TABELA = { suppliers: "sup", customers: "cli", customer_cnpj_registration_history: "hcnpj" } as const;
+
   async function comGatilhoFora(
-    tabelaDoAlvo: "suppliers" | "customers",
+    tabelaDoAlvo: keyof typeof APELIDO_DA_TABELA,
     alvoId: string,
     escritaFora: string,
     corpo: () => Promise<void>,
   ): Promise<void> {
     const prisma = getPrisma();
-    const funcao = `hd_efeito_inesperado_${tabelaDoAlvo}_${marca.replace(/[^a-z0-9]/g, "")}`;
+    // Nome curto: identificador do PostgreSQL passa de 63 caracteres e é cortado.
+    const funcao = `hd_efeito_inesperado_${APELIDO_DA_TABELA[tabelaDoAlvo]}_${marca.replace(/[^a-z0-9]/g, "")}`;
     const gatilho = `${funcao}_trg`;
     await prisma.$executeRawUnsafe(
       `CREATE FUNCTION "${funcao}"() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -860,5 +950,71 @@ describe("transação — trava, recontagem e efeito real", () => {
     expect((await prisma.supplier.findUniqueOrThrow({ where: { id: testemunha.id } })).notes).toBeNull();
 
     await excluido("CUSTOMER", alvo.id);
+  });
+
+  it("Cliente com o registro técnico: o CASCADE dele é o previsto, e qualquer efeito além desfaz tudo", async () => {
+    const cnpj = uniqueCnpj();
+    const alvo = await cliente({ cnpj, cnpjRegistration: blocoDoCnpj(cnpj, { legalNature: "Sociedade Limitada" }) });
+    const [registro, ...outros] = await getPrisma().customerCnpjRegistrationHistory.findMany({
+      where: { customerId: alvo.id },
+    });
+    expect(outros).toEqual([]);
+    expect(registro!.createdWithCustomerId).toBe(alvo.id);
+    const testemunha = await fornecedor();
+    const prisma = getPrisma();
+    // O gatilho dispara quando o CASCADE leva o registro da criação.
+    await comGatilhoFora(
+      "customer_cnpj_registration_history",
+      registro!.id,
+      `UPDATE suppliers SET notes = 'tocado pelo gatilho' WHERE id = '${testemunha.id}'`,
+      () => abortada("CUSTOMER", alvo.id, "suppliers"),
+    );
+    expect(await prisma.customer.count({ where: { id: alvo.id } })).toBe(1);
+    expect(await prisma.customerCnpjRegistrationHistory.count({ where: { id: registro!.id } })).toBe(1);
+    expect(await prisma.masterDataDeletionHistory.count({ where: { entityId: alvo.id } })).toBe(0);
+    expect((await prisma.supplier.findUniqueOrThrow({ where: { id: testemunha.id } })).notes).toBeNull();
+
+    // Sem o gatilho, sai com o registro: o efeito real é o previsto.
+    await excluido("CUSTOMER", alvo.id);
+    expect(await prisma.customerCnpjRegistrationHistory.count({ where: { id: registro!.id } })).toBe(0);
+  });
+
+  it("Cliente × registro do CNPJ novo: a alteração gravada durante a exclusão faz a recontagem sob trava recusar", async () => {
+    const cnpj = uniqueCnpj();
+    const criado = await cliente({ cnpj, cnpjRegistration: blocoDoCnpj(cnpj, { legalNature: "Sociedade Limitada" }) });
+    let soltar!: () => void;
+    const segurando = new Promise<void>((resolve) => (soltar = resolve));
+    let avisarAberta!: () => void;
+    const aberta = new Promise<void>((resolve) => (avisarAberta = resolve));
+
+    // O registro posterior (sem a marca, como toda alteração) nasce numa
+    // transação que ainda não confirmou: o INSERT segura o Cliente em FOR KEY
+    // SHARE, e a exclusão (FOR UPDATE) espera por ela.
+    const transacaoDoRegistro = getPrisma().$transaction(
+      async (tx) => {
+        await tx.customerCnpjRegistrationHistory.create({
+          data: { customerId: criado.id, kind: "EDIT", cnpj, changes: [] },
+        });
+        avisarAberta();
+        await segurando;
+      },
+      { timeout: 30_000 },
+    );
+    await aberta;
+
+    const exclusao = excluir(admin, "CUSTOMER", criado.id);
+    await esperarTrava("%FROM \"customers\"%FOR UPDATE%");
+    soltar();
+    await transacaoDoRegistro;
+
+    const resposta = await exclusao;
+    expect(resposta.statusCode, resposta.body).toBe(409);
+    expect(resposta.json()).toMatchObject({ error: MASTER_DATA_IN_USE_ERROR });
+    expect((resposta.json() as { references: { source: string }[] }).references.map((r) => r.source)).toEqual([
+      "Histórico dos dados cadastrais do CNPJ",
+    ]);
+    expect(await getPrisma().customer.count({ where: { id: criado.id } })).toBe(1);
+    expect(await getPrisma().customerCnpjRegistrationHistory.count({ where: { customerId: criado.id } })).toBe(2);
+    expect(await getPrisma().masterDataDeletionHistory.count({ where: { entityId: criado.id } })).toBe(0);
   });
 });

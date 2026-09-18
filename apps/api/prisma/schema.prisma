@@ -2605,13 +2605,22 @@ enum CustomerCnpjRegistrationEventKind {
 /// `changes` e a lista das mudancas por campo — { field, before, after,
 /// source } com source MANUAL, OPEN_CNPJ ou CNPJ_CHANGED —, montada e lida
 /// pelo Zod da API; nunca o payload do provedor. Comeca vazio: cliente que ja
-/// tinha dados nao ganha historico retroativo. `Cascade` so porque Cliente
-/// nao tem exclusao fisica — a mesma escolha dos outros historicos.
+/// tinha dados nao ganha historico retroativo. `Cascade` e a mesma escolha dos
+/// outros historicos: a exclusao fisica do Cliente (§125) so deixa o CASCADE
+/// levar a linha marcada da criacao — qualquer outra bloqueia antes do DELETE.
 model CustomerCnpjRegistrationHistory {
   id String @id @default(uuid())
 
   customerId String
   customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  /// Marca estrutural de nascimento (§125, CUSTOMER-CNPJ-CREATION-HISTORY-MARKER-01):
+  /// o id do Cliente em cuja CRIACAO esta linha foi gravada. So `createCustomer`
+  /// preenche, com o id do Cliente que nasce, na mesma transacao; alteracao
+  /// nunca marca. Sem FK, sem default e sem backfill: linha antiga fica NULL.
+  /// O MERGE do saneamento move `customerId` e NUNCA esta coluna — ela guarda
+  /// o Cliente ORIGINAL da criacao.
+  createdWithCustomerId String?
 
   kind         CustomerCnpjRegistrationEventKind
   /// CNPJ a que os dados pertencem depois do evento; NULL = CNPJ apagado.

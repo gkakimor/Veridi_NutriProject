@@ -1,7 +1,14 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { AGREGADOS } from "./catalogo-de-exclusao.js";
 import type { Linha } from "./filhos-tecnicos.js";
-import { REGRAS_DA_V1, julgarFilhosTecnicos, julgarV1 } from "./filhos-tecnicos.js";
+import {
+  FONTE_DO_HISTORICO_DO_CNPJ,
+  REGRAS_DA_V1,
+  julgarFilhosTecnicos,
+  julgarHistoricoDoCnpj,
+  julgarV1,
+} from "./filhos-tecnicos.js";
 import type { ChaveReal, ColunaReal } from "./master-data-deletion.service.js";
 import { agruparPorFonte, conferirCatalogo, efeitoEsperado, efeitoInesperado } from "./master-data-deletion.service.js";
 import { retratoDaExclusao } from "./retrato-da-exclusao.js";
@@ -145,38 +152,167 @@ describe("julgarV1 — a V1 como a criação a deixou", () => {
   });
 });
 
-describe("Cliente — o registro do CNPJ, sem prova estrutural de nascimento", () => {
+/**
+ * CUSTOMER-CNPJ-CREATION-HISTORY-MARKER-01: o registro dos dados do CNPJ
+ * gravado NA criação do Cliente é filho técnico pela marca estrutural
+ * `createdWithCustomerId` — e só por ela.
+ */
+describe("Cliente — o registro do CNPJ da criação, pela marca estrutural", () => {
   const CLIENTE = AGREGADOS.CUSTOMER;
+  const HISTORICO = "customer_cnpj_registration_history";
+  const ID = "cliente-1";
+  const OUTRO = "cliente-2";
+  let sequencia = 0;
 
-  it("é referência do catálogo (CASCADE), nunca linha interna: nenhum registro sai junto", () => {
-    expect(CLIENTE.internas).toEqual([]);
+  /** Um registro como `to_jsonb` o lê; por padrão, o da criação, marcado. */
+  const registro = (extra: Linha = {}): Linha => ({
+    id: `h${++sequencia}`,
+    customerId: ID,
+    createdWithCustomerId: ID,
+    kind: "EDIT",
+    cnpj: "11222333000181",
+    previousCnpj: null,
+    consultedAt: null,
+    changes: [],
+    changedAt: "2026-09-18T10:00:00.000",
+    changedByUserId: "u1",
+    changedByNameSnapshot: "Fulano",
+    ...extra,
+  });
+  const historico = (...registros: Linha[]) => new Map<string, Linha[]>([[HISTORICO, registros]]);
+
+  it("o histórico é tabela do agregado (sai por CASCADE); a marca em OUTRO Cliente é referência declarada", () => {
+    expect(CLIENTE.internas).toEqual([
+      { tabela: HISTORICO, coluna: "customerId", pai: "customers", rotulo: "Registro dos dados do CNPJ feito na criação" },
+    ]);
     expect(CLIENTE.referencias).toContainEqual(
-      expect.objectContaining({
-        tipo: "fk",
-        tabela: "customer_cnpj_registration_history",
-        coluna: "customerId",
-        alvo: "customers",
-        acao: "c",
-        fonte: "Histórico dos dados cadastrais do CNPJ",
-      }),
+      expect.objectContaining({ tipo: "id", tabela: HISTORICO, coluna: "createdWithCustomerId", alvo: "customers" }),
     );
-    expect(julgarFilhosTecnicos("CUSTOMER", new Map())).toEqual([]);
+    expect(CLIENTE.referencias.some((r) => r.tabela === HISTORICO && r.coluna === "customerId")).toBe(false);
   });
 
-  it("o efeito esperado do Cliente é só ele e o rastro — um CASCADE no histórico do CNPJ desfaz tudo", () => {
-    const esperado = efeitoEsperado(CLIENTE, new Map());
+  it("conferirCatalogo: a chave CASCADE do histórico é o vínculo da interna; banco sem a marca ou com outra ação bloqueia", () => {
+    const chaves: ChaveReal[] = [
+      ...CLIENTE.referencias
+        .filter((referencia) => referencia.tipo === "fk")
+        .map((referencia) => ({
+          tabela: referencia.tabela,
+          coluna: referencia.coluna,
+          alvo: (referencia as { alvo: string }).alvo,
+          acao: (referencia as { acao: string }).acao,
+        })),
+      { tabela: HISTORICO, coluna: "customerId", alvo: "customers", acao: "c" },
+    ];
+    const colunas: ColunaReal[] = CLIENTE.referencias.map((r) => ({ tabela: r.tabela, coluna: r.coluna, tipo: "text" }));
+    expect(conferirCatalogo(CLIENTE, chaves, colunas)).toEqual([]);
+
+    const semMarca = colunas.filter((coluna) => coluna.coluna !== "createdWithCustomerId");
+    expect(conferirCatalogo(CLIENTE, chaves, semMarca).map((problema) => problema.reason)).toEqual([
+      "customer_cnpj_registration_history.createdWithCustomerId está no catálogo da exclusão e não existe mais no banco.",
+    ]);
+    const restrita = chaves.map((chave) => (chave.tabela === HISTORICO ? { ...chave, acao: "r" } : chave));
+    expect(conferirCatalogo(CLIENTE, restrita, colunas).map((problema) => problema.reason)).toEqual([
+      "customer_cnpj_registration_history.customerId → customers é RESTRICT no banco e CASCADE no catálogo.",
+    ]);
+  });
+
+  it("sem histórico nenhum, nada a julgar", () => {
+    expect(julgarFilhosTecnicos("CUSTOMER", ID, new Map())).toEqual([]);
+    expect(julgarFilhosTecnicos("CUSTOMER", ID, historico())).toEqual([]);
+  });
+
+  it("o registro marcado com o PRÓPRIO Cliente é filho técnico — qualquer que seja o tipo do evento", () => {
+    for (const kind of ["EDIT", "CONSULTATION"]) {
+      expect(julgarFilhosTecnicos("CUSTOMER", ID, historico(registro({ kind })))).toEqual([]);
+    }
+  });
+
+  it("registro sem a marca (legado ou alteração) bloqueia, sozinho ou ao lado do técnico", () => {
+    for (const kind of ["EDIT", "CONSULTATION", "CNPJ_CHANGED"]) {
+      const [sozinho] = julgarHistoricoDoCnpj(ID, historico(registro({ kind, createdWithCustomerId: null })));
+      expect(sozinho).toMatchObject({ source: FONTE_DO_HISTORICO_DO_CNPJ, count: 1 });
+      expect(sozinho!.reason).toContain("sem a marca da criação");
+    }
+    const comTecnico = julgarHistoricoDoCnpj(ID, historico(registro(), registro({ createdWithCustomerId: null })));
+    expect(comTecnico).toEqual([expect.objectContaining({ source: FONTE_DO_HISTORICO_DO_CNPJ, count: 1 })]);
+  });
+
+  it("marca de OUTRO Cliente (registro movido pelo saneamento) bloqueia — não é técnico de quem o recebeu", () => {
+    const [movido] = julgarHistoricoDoCnpj(ID, historico(registro({ createdWithCustomerId: OUTRO })));
+    expect(movido).toMatchObject({ source: FONTE_DO_HISTORICO_DO_CNPJ, count: 1 });
+    expect(movido!.reason).toContain("criação de outro cliente");
+    // Ao lado do próprio técnico, também.
+    expect(julgarHistoricoDoCnpj(ID, historico(registro(), registro({ createdWithCustomerId: OUTRO })))).toEqual([
+      expect.objectContaining({ count: 1 }),
+    ]);
+  });
+
+  it("dois registros marcados como da criação bloqueiam: a criação grava um só", () => {
+    const [dobro] = julgarHistoricoDoCnpj(ID, historico(registro(), registro()));
+    expect(dobro).toMatchObject({ source: FONTE_DO_HISTORICO_DO_CNPJ, count: 2 });
+    expect(dobro!.reason).toContain("a criação grava um só");
+  });
+
+  it("linha sem a coluna da marca (catálogo à frente do banco) bloqueia", () => {
+    const semColuna = Object.fromEntries(
+      Object.entries(registro()).filter(([coluna]) => coluna !== "createdWithCustomerId"),
+    );
+    expect(julgarHistoricoDoCnpj(ID, historico(semColuna))).toEqual([
+      expect.objectContaining({ source: FONTE_DO_HISTORICO_DO_CNPJ, count: 1 }),
+    ]);
+  });
+
+  it("nenhuma heurística: hora, ordem, menor id e tipo não mudam nada — só a marca decide", () => {
+    // O sem marca vem PRIMEIRO, com o MENOR id e a MESMA hora da criação; o
+    // marcado vem depois, anos mais tarde, com id maior.
+    const falsoPrimeiro = registro({ id: "a0", createdWithCustomerId: null, changedAt: "2026-09-18T10:00:00.000" });
+    const marcadoTardio = registro({ id: "z9", kind: "CONSULTATION", changedAt: "2031-01-01T00:00:00.000" });
+    expect(julgarHistoricoDoCnpj(ID, historico(falsoPrimeiro))).toHaveLength(1);
+    expect(julgarHistoricoDoCnpj(ID, historico(marcadoTardio))).toEqual([]);
+    expect(julgarHistoricoDoCnpj(ID, historico(marcadoTardio, falsoPrimeiro))).toEqual(
+      julgarHistoricoDoCnpj(ID, historico(falsoPrimeiro, marcadoTardio)),
+    );
+
+    // E no código: o juiz só lê `customerId` e `createdWithCustomerId` da linha.
+    const fonte = readFileSync(new URL("./filhos-tecnicos.ts", import.meta.url), "utf8");
+    const corpo = fonte.slice(
+      fonte.indexOf("export function julgarHistoricoDoCnpj"),
+      fonte.indexOf("export function julgarFilhosTecnicos"),
+    );
+    expect(corpo.length).toBeGreaterThan(0);
+    expect(new Set([...corpo.matchAll(/registro\["(\w+)"\]/g)].map((m) => m[1]))).toEqual(
+      new Set(["customerId", "createdWithCustomerId"]),
+    );
+    expect(corpo).not.toMatch(/changedAt|createdAt|xmin|\.sort\(|new Date|Date\.|\bkind\b/);
+  });
+
+  it("efeito esperado com o registro técnico: o Cliente, UM registro do histórico e o rastro — CASCADE a mais desfaz tudo", () => {
+    const esperado = efeitoEsperado(CLIENTE, historico(registro()));
     expect(Object.fromEntries(esperado)).toEqual({
       customers: { ins: 0, upd: 0, del: 1 },
+      customer_cnpj_registration_history: { ins: 0, upd: 0, del: 1 },
       master_data_deletion_history: { ins: 1, upd: 0, del: 0 },
     });
     const depois = new Map([
       ["customers", { ins: 0, upd: 0, del: 1 }],
-      ["customer_cnpj_registration_history", { ins: 0, upd: 0, del: 1 }],
+      ["customer_cnpj_registration_history", { ins: 0, upd: 0, del: 2 }],
       ["master_data_deletion_history", { ins: 1, upd: 0, del: 0 }],
     ]);
     expect(efeitoInesperado(new Map(), depois, esperado)).toEqual({
-      customer_cnpj_registration_history: { ins: 0, upd: 0, del: 1 },
+      customer_cnpj_registration_history: { ins: 0, upd: 0, del: 2 },
     });
+    // Sem histórico, o esperado é só o Cliente e o rastro.
+    expect(Object.fromEntries(efeitoEsperado(CLIENTE, historico()))).toEqual({
+      customers: { ins: 0, upd: 0, del: 1 },
+      master_data_deletion_history: { ins: 1, upd: 0, del: 0 },
+    });
+  });
+
+  it("o retrato leva o registro técnico só como tabela e quantidade, nunca o conteúdo", () => {
+    const raiz: Linha = { id: ID, code: "CLI-000001", legalName: "ACME LTDA", cnpj: "11222333000181", active: true };
+    const retrato = retratoDaExclusao("CUSTOMER", raiz, historico(registro({ changes: [{ field: "legalNature" }] })));
+    expect(retrato.removidosJunto).toEqual([{ tabela: HISTORICO, linhas: 1 }]);
+    expect(JSON.stringify(retrato)).not.toContain("legalNature");
   });
 });
 

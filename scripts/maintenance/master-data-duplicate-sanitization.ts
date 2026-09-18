@@ -315,8 +315,11 @@ export async function lerCatalogo(
     ORDER BY 1, 2`);
 
   const comFk = new Set(fks.map((fk) => `${fk.tabela}.${fk.coluna}`));
+  // Marca de ORIGEM (o Cliente da criação no histórico do CNPJ): não é
+  // referência que se move nem resíduo — fica fora do catálogo, com ou sem FK.
+  const imoveis = new Set(cadastro.origensImoveis ?? []);
   const catalogo: ColunaDeReferencia[] = fks
-    .filter((fk) => fk.alvo === cadastro.tabela)
+    .filter((fk) => fk.alvo === cadastro.tabela && !imoveis.has(`${fk.tabela}.${fk.coluna}`))
     .map((fk) => ({ tabela: fk.tabela, coluna: fk.coluna, tipo: "fk", aoApagar: fk.aoApagar }));
 
   const casa = (coluna: string, sufixos: readonly string[]): boolean =>
@@ -324,6 +327,7 @@ export async function lerCatalogo(
 
   for (const { tabela, coluna, tipo } of colunas) {
     if (tabela === cadastro.tabela) continue;
+    if (imoveis.has(`${tabela}.${coluna}`)) continue;
     const textual = ["text", "character varying", "uuid"].includes(tipo);
     if (tipo === "json" || tipo === "jsonb") catalogo.push({ tabela, coluna, tipo: "json" });
     else if (textual && casa(coluna, cadastro.sufixosDeId) && !comFk.has(`${tabela}.${coluna}`)) {
@@ -1795,6 +1799,9 @@ async function executarGrupo(
       if (grupo.relacoes !== undefined && eDaRelacao(referencia)) continue;
       if (referencia.tipo === "json" || referencia.tipo === "codigo") {
         throw new Error(`ABORTADO: ${referencia.tabela}.${referencia.coluna} não se move (${referencia.tipo}).`);
+      }
+      if ((cadastro.origensImoveis ?? []).includes(`${referencia.tabela}.${referencia.coluna}`)) {
+        throw new Error(`ABORTADO: ${referencia.tabela}.${referencia.coluna} guarda a origem da linha e nunca se move.`);
       }
       const mexidas = await tx.$executeRawUnsafe(
         `UPDATE ${ident(referencia.tabela)} SET ${ident(referencia.coluna)} = $1

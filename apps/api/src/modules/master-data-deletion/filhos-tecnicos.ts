@@ -9,9 +9,8 @@ import type { MasterDataDeletionReferenceDTO, MasterDataEntityType } from "@veri
  * bloqueia.
  *
  * O registro dos dados do CNPJ gravado na criação do Cliente também é filho
- * técnico por decisão do PO (2026-09-18) — mas a prova tem de ser estrutural,
- * e o modelo atual não a oferece; até ela existir, ele é referência comum no
- * catálogo e bloqueia (`catalogo-de-exclusao.ts`).
+ * técnico por decisão do PO (2026-09-18), com prova ESTRUTURAL: a marca
+ * `createdWithCustomerId`, que só a criação grava (`julgarHistoricoDoCnpj`).
  *
  * Funções puras sobre as linhas lidas (`to_jsonb`) — o serviço lê, trava e
  * decide; aqui só se julga.
@@ -232,8 +231,61 @@ export function julgarV1(regra: RegraDaV1, internos: Internos): MasterDataDeleti
   return bloqueios;
 }
 
+export const TABELA_DO_HISTORICO_DO_CNPJ = "customer_cnpj_registration_history";
+export const FONTE_DO_HISTORICO_DO_CNPJ = "Histórico dos dados cadastrais do CNPJ";
+
+/**
+ * O registro dos dados do CNPJ gravado NA criação do Cliente
+ * (CUSTOMER-CNPJ-CREATION-HISTORY-MARKER-01, decisão do PO de 2026-09-18).
+ *
+ * Filho técnico é o registro com `customerId` E `createdWithCustomerId`
+ * iguais ao Cliente — a marca que só `createCustomer` grava, com o id do
+ * Cliente que nasce — e um só, porque a criação grava um só. Todo o resto
+ * bloqueia:
+ *  - registro sem a marca: gravado numa alteração (EDIT, CONSULTATION,
+ *    CNPJ_CHANGED) ou antes de a marca existir — histórico real;
+ *  - registro com a marca de OUTRO Cliente: o MERGE do saneamento move
+ *    `customerId` e nunca a marca, então o registro trazido de outro cadastro
+ *    nunca vira filho técnico de quem o recebeu;
+ *  - mais de um registro marcado.
+ *
+ * A decisão é só a marca: hora, ordem dos eventos, menor id ou `xmin` não
+ * entram na conta. Sem a coluna (catálogo à frente do banco), nenhum registro
+ * tem marca, e todos bloqueiam.
+ */
+export function julgarHistoricoDoCnpj(customerId: string, internos: Internos): MasterDataDeletionReferenceDTO[] {
+  const registros = internos.get(TABELA_DO_HISTORICO_DO_CNPJ) ?? [];
+  const marca = (registro: Linha): unknown => registro["createdWithCustomerId"] ?? null;
+  const daCriacao = registros.filter((registro) => registro["customerId"] === customerId && marca(registro) === customerId);
+  const semMarca = registros.filter((registro) => marca(registro) === null);
+  const deOutro = registros.filter((registro) => !daCriacao.includes(registro) && !semMarca.includes(registro));
+
+  const razoes: string[] = [];
+  if (semMarca.length > 0) {
+    razoes.push(
+      `O cliente tem ${semMarca.length} registro(s) dos dados do CNPJ sem a marca da criação — gravado(s) numa alteração (edição, consulta ou troca de CNPJ) ou antes de a criação passar a ser marcada: é histórico real.`,
+    );
+  }
+  if (deOutro.length > 0) {
+    razoes.push(
+      `${deOutro.length} registro(s) dos dados do CNPJ nasceu(ram) na criação de outro cliente e veio(vieram) para este no saneamento de duplicidades: é histórico, não filho técnico.`,
+    );
+  }
+  const marcadosDemais = daCriacao.length > 1 ? daCriacao.length : 0;
+  if (marcadosDemais > 0) {
+    razoes.push(`Há ${marcadosDemais} registros marcados como da criação, e a criação grava um só: nenhum sai junto.`);
+  }
+  if (razoes.length === 0) return [];
+  return [bloqueio(FONTE_DO_HISTORICO_DO_CNPJ, razoes.join(" "), semMarca.length + deOutro.length + marcadosDemais)];
+}
+
 /** Os filhos técnicos do agregado: o que bloqueia (vazio = todos provados). */
-export function julgarFilhosTecnicos(tipo: MasterDataEntityType, internos: Internos): MasterDataDeletionReferenceDTO[] {
+export function julgarFilhosTecnicos(
+  tipo: MasterDataEntityType,
+  idDaRaiz: string,
+  internos: Internos,
+): MasterDataDeletionReferenceDTO[] {
+  if (tipo === "CUSTOMER") return julgarHistoricoDoCnpj(idDaRaiz, internos);
   const regra = REGRAS_DA_V1[tipo];
   return regra ? julgarV1(regra, internos) : [];
 }
