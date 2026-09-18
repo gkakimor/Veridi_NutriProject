@@ -1032,6 +1032,33 @@ aquisição* por causa disso —, e a escolha entre "somar dentro de
 `actualUnitCost`" e "colunas separadas" é rodada própria. Nada a decidir aqui, e
 nada a implementar.
 
+**RAW-MATERIAL-EXTERNAL-ENRICHMENT — enriquecimento externo da Matéria-prima —
+DESCARTADO pelo PO em 2026-09-17.** O cadastro de Matéria-prima não é enriquecido
+por fonte externa, e nem o Open Food Facts nem a ANVISA são integrados a ele. Não
+se abre item de backlog nem discovery para isso. A decisão saiu do POC
+ADHOC-RAW-MATERIAL-ENRICHMENT-POC-01: somente leitura, fora do repositório e já
+removido, testou as duas fontes gratuitas contra cinco matérias-primas reais do
+cadastro. Nenhuma delas traz o que a ficha da matéria-prima precisa — pureza, forma
+química, CoA, fornecedor, especificação técnica —, porque esse dado vem do
+fornecedor, não de base pública:
+
+- **Open Food Facts** é base de produto de prateleira. A busca de texto livre
+  devolveu potes de marca e, mais de uma vez, a substância errada (ácido cítrico
+  para ácido ascórbico, L-glutamina para L-triptofano). Só a taxonomia de
+  ingredientes e aditivos identificou a substância — nome traduzido, número E,
+  Wikidata —, o que é referência, não cadastro. Serve a Produto Acabado e a dado
+  de varejo.
+- **ANVISA — Dados Abertos** (`DADOS_ABERTOS_ALIMENTO.csv`) registra produto, não
+  insumo: dez colunas regulatórias (empresa, produto, processo, categoria,
+  registro, vencimento, situação) e nenhum match de alta confiança nas cinco
+  matérias-primas. "Creatina Monohidratada" aparece com esse nome exato em vários
+  registros ativos, todos *Suplementos alimentares* de marca. Serve a dado
+  regulatório de Produto.
+
+O aproveitamento dessas fontes no cadastro de **Produto** ficou registrado como
+discovery futuro em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md) ("Dados externos
+do Produto"), fora da fila viva e sem compromisso.
+
 ---
 
 ## Próximo gate

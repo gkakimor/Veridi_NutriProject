@@ -75,6 +75,22 @@ fluxo formal de recall permanece futuro.
 **Extração documental automática** — parsing de PDF, importação de XML,
 extração de laudo de fornecedor, extração de XML de NF, normalização.
 
+**Dados externos do Produto** — discovery futuro, não compromisso. Vale para o
+cadastro de **Produto**, nunca para o de Matéria-prima: o enriquecimento externo
+da Matéria-prima foi descartado pelo PO (RAW-MATERIAL-EXTERNAL-ENRICHMENT,
+[BACKLOG.md](BACKLOG.md), seção F), e o POC que embasou a decisão já mapeou o que
+cada fonte entrega:
+
+- **ANVISA — Dados Abertos** (`dados.anvisa.gov.br`, `DADOS_ABERTOS_ALIMENTO.csv`):
+  registro, situação, vencimento, categoria regulatória e empresa detentora do
+  produto registrado. Gratuita, mas sem API REST e sem CORS — é o download do
+  arquivo inteiro, em ISO-8859-1, atualizado quase todo dia.
+- **Open Food Facts / GS1**: dado de varejo do Produto Acabado — GTIN, marca,
+  quantidade, ingredientes, imagem. Open Food Facts é aberto (ODbL), mas a busca
+  de texto livre é aproximada e não tem CORS; a leitura por código de barras não
+  foi testada. GS1 não foi avaliado por ser pago; o código GS1 no armazém está em
+  "Armazém / WMS".
+
 ---
 
 ## Armazém / WMS
