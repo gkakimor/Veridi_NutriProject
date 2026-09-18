@@ -285,8 +285,9 @@ listas: alvos, preservados (usuários, sessões, preferências de tela, unidades
 de medida e o calendário produtivo com jornadas e exceções — configuração do
 ambiente, não transação) e o contador anual da OP, esvaziado só com
 `--reset-sequences`. Contagem física, perfil de produção, roteiro e agenda da
-OP, histórico de situação do Cliente e versão do arquivo de rótulo são alvos
-(PROD-CLEANUP-MODEL-CLASSIFICATION-01). As sequences ficam em
+OP, histórico de situação do Cliente, versão do arquivo de rótulo e o rastro da
+exclusão física de cadastro mestre (MASTER-DATA-HARD-DELETE-01, decisão do PO)
+são alvos (PROD-CLEANUP-MODEL-CLASSIFICATION-01). As sequences ficam em
 `scripts/maintenance/prod-cleanup-sequences.mjs`: `user_code_seq` é
 preservada; as 25 de numeração de negócio só reiniciam com
 `--reset-sequences`. Abortam também: tabela do `public` sem model ou model sem
@@ -316,3 +317,47 @@ e a de `Attachment` saem; o objeto no R2 (ou no disco local) e o arquivo no
 volume ficam, e o plano diz isso. Apagar objeto de storage é outra
 responsabilidade, com rodada própria.
 
+---
+
+## 10. Dados de PROD na publicação — política permanente
+
+Decisão do PO em 2026-09-18 (adendo de MASTER-DATA-HARD-DELETE-01). Vale para toda publicação e toda migration.
+
+**PROD é a fonte de verdade.** Uma versão nova muda SCHEMA, COMPORTAMENTO e FUNCIONALIDADES — nunca substitui o dado
+real da Veridi. Clientes, Fornecedores, Itens, Produtos, Formulações, Modelos, Pedidos, Compras, Lotes, Movimentos,
+Custos, Históricos, Arquivos, relacionamentos e configurações operacionais existentes em PROD são preservados, salvo ação
+explicitamente aprovada pelo PO. O DEV não é fonte para PROD:
+
+- não copiar base DEV → PROD;
+- não sincronizar cadastros do DEV sobre PROD;
+- não reaplicar a carga inicial sobre PROD.
+
+**Migrations** aprovadas se aplicam normalmente. Preferir mudança aditiva, anulável e compatível com o dado existente.
+Campo novo sem dado real fica nulo/vazio: nada de backfill inventado.
+
+**Exclusão física de cadastro mestre** ([`PRODUCT_RULES.md`](PRODUCT_RULES.md) §125) é ferramenta operacional para
+corrigir cadastro criado por engano, não ferramenta de migração: nenhuma release exclui cadastro existente só porque a
+funcionalidade existe.
+
+**Numa release normal NÃO se executa:** `prod-cleanup --apply`, reset, `TRUNCATE`, seed destrutivo, carga inicial nem
+saneamento genérico. Cada um desses exige autorização específica do PO.
+
+**Exceção já autorizada: o saneamento de duplicidades.** O PO comunicou à Veridi que os cadastros duplicados serão
+saneados — é a única limpeza destrutiva previamente autorizada nesta etapa. Mesmo ela não assume que PROD é igual ao DEV:
+código (`MP-000xxx`) e id do DEV não garantem o mesmo estado em PROD. Antes de qualquer APPLY em PROD, nesta ordem:
+
+1. discovery READ ONLY;
+2. identificar os grupos reais de PROD;
+3. PLAN em PROD;
+4. auditar todas as referências;
+5. comparar com as decisões das Ondas A, 2 e 3;
+6. bloquear divergências — dado, referência, histórico, fornecedor, Formulação ou movimento diferente do DEV volta ao
+   PO, nunca se força a decisão do DEV;
+7. gerar backup;
+8. provar `RESTAURÁVEL: YES`;
+9. apresentar o plano ao PO;
+10. só com a aprovação: APPLY;
+11. VERIFY;
+12. gerar a planilha final dos registros removidos e consolidados.
+
+Exceção destrutiva é sempre explícita, planejada, auditável e aprovada.

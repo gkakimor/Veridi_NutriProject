@@ -3,7 +3,8 @@
 ## 1. Status
 
 `DECIDIDO` — **D1–D6 decididas pelo PO em 2026-09-17**; **D4 e D5 implementadas** em PRODUCTION-PROFILE-ARCHIVE-01
-(§121) e USER-LAST-ADMIN-GUARD-01 (§120), 2026-09-17, seção 16; o resto não. Capabilities liberadas na fila viva do
+(§121) e USER-LAST-ADMIN-GUARD-01 (§120), 2026-09-17, e **D1, D2, D3 e D6 na Fatia 1** — MASTER-DATA-HARD-DELETE-01
+(§125), 2026-09-18 —, seção 16; a Fatia 2 não. Capabilities liberadas na fila viva do
 [`BACKLOG.md`](../BACKLOG.md): Fatia 0 — PRODUCTION-PROFILE-ARCHIVE-01 e USER-LAST-ADMIN-GUARD-01; Fatia 1 —
 MASTER-DATA-HARD-DELETE-01; Fatia 2 — MASTER-DATA-HARD-DELETE-02.
 
@@ -352,7 +353,19 @@ MASTER-DATA-HARD-DELETE-01 e, sobre ela, MASTER-DATA-HARD-DELETE-02.
   ponto de leitura 3 da seção 12 foi confirmado pelo PO no handoff: o padrão do Produto em perfil arquivado fica, com
   aviso, e a aplicação automática o trata como fora de ACTIVE — a OP nova nasce sem cópia, sem troca de roteiro. Versões
   e cópias nas OPs intocadas.
-- Fatia 1 e Fatia 2: `NÃO IMPLEMENTADO`.
+- **Fatia 1 — MASTER-DATA-HARD-DELETE-01** (2026-09-18, [`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §125), na `main` e
+  fora de PROD, com a única migration da iniciativa (`20260925093038_master_data_deletion_history`, aditiva; o enum do
+  rastro já reserva Item, Produto e Recurso, e a Fatia 2 segue sem migration): Fornecedor,
+  Cliente, os três Modelos e o Perfil de Produção. `GET <cadastro>/:id/deletion-check` e `DELETE <cadastro>/:id` com
+  motivo, só ADMIN (403 antes do corpo e da existência); catálogo explícito por agregado — raiz, internas, FK de qualquer
+  ação, id sem FK, código e nome copiados, e as referências às VERSÕES —, conferido contra o `pg_constraint` a cada
+  execução, com redes por sufixo e varredura de toda coluna JSON (o F3 da seção 6 fechou aqui); transação com `FOR UPDATE`, recontagem, rastro, DELETE e `pg_stat_xact_user_tables`, com rollback em efeito
+  inesperado; rastro append-only com retrato por lista branca, ALVO no `prod-cleanup` (ponto 4 da seção 12 decidido pelo
+  PO). Os pontos 1 e 2 da seção 12 valeram como escritos. **Leitura aplicada**: o registro dos dados do CNPJ gravado na
+  criação do Cliente (§122, posterior a este documento) é filho técnico com prova de nascimento — um evento, que não é
+  troca de CNPJ, num Cliente nunca regravado —; qualquer outro evento bloqueia. O Perfil recusado oferece o Arquivar da
+  Fatia 0.
+- Fatia 2: `NÃO IMPLEMENTADO`.
 
 ## 17. Histórico de decisões
 
@@ -364,3 +377,6 @@ MASTER-DATA-HARD-DELETE-01 e, sobre ela, MASTER-DATA-HARD-DELETE-02.
 - 2026-09-17 — D5 implementada por USER-LAST-ADMIN-GUARD-01 (§120), sem migration.
 - 2026-09-17 — D4 implementada por PRODUCTION-PROFILE-ARCHIVE-01 (§121), sem migration; o handoff confirmou o ponto de
   leitura 3 da seção 12.
+- 2026-09-18 — Fatia 1 implementada por MASTER-DATA-HARD-DELETE-01 (§125), com a migration aditiva do rastro; o PO
+  classificou o rastro como ALVO do `prod-cleanup`; leitura aplicada sobre o registro do CNPJ da criação do Cliente
+  (seção 16).

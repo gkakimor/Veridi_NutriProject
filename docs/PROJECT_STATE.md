@@ -117,12 +117,13 @@ ATIVO em produção e o ponto de recuperação compatível é o backup pós-rele
   nome ou código;
 - **Exclusão física de cadastro mestre:** discovery `DECIDIDO`
   ([MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01](discovery/MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01.md), D1–D6 do PO em
-  2026-09-17). Hoje nenhum cadastro mestre sai por exclusão física pela API ou pela tela, e o banco não protege a exclusão
-  (CASCADE e SET NULL em Item, Produto, Cliente, Recurso e Modelos). Decidido: só ADMIN exclui; qualquer uso, referência
-  ou histórico real bloqueia, com falha fechada; rastro append-only; FKs mantidas, com a segurança na aplicação; Perfil de
-  Produção arquivável; nunca zero ADMIN ativo. A Fatia 0 fechou em 2026-09-17, na `main` e fora de PROD:
-  USER-LAST-ADMIN-GUARD-01 (§120) e PRODUCTION-PROFILE-ARCHIVE-01 (§121), com seções próprias abaixo; na fila viva
-  seguem a Fatia 1 (MASTER-DATA-HARD-DELETE-01) e a Fatia 2 (MASTER-DATA-HARD-DELETE-02);
+  2026-09-17): só ADMIN exclui; qualquer uso, referência ou histórico real bloqueia, com falha fechada; rastro
+  append-only; FKs mantidas, com a segurança na aplicação; Perfil de Produção arquivável; nunca zero ADMIN ativo. A Fatia 0
+  fechou em 2026-09-17 — USER-LAST-ADMIN-GUARD-01 (§120) e PRODUCTION-PROFILE-ARCHIVE-01 (§121) — e a Fatia 1 em
+  2026-09-18 — MASTER-DATA-HARD-DELETE-01 (§125): Fornecedor, Cliente, os três Modelos e o Roteiro de Produção, com o
+  rastro append-only e a migration aditiva `20260925093038` —, na `main` e fora de PROD, com seções próprias abaixo. Item,
+  Produto e Recurso industrial continuam sem exclusão física (o banco não protege: CASCADE e SET NULL); na fila viva segue
+  a Fatia 2 (MASTER-DATA-HARD-DELETE-02);
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 
 Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
@@ -6522,6 +6523,54 @@ pulado sem ele), `importer.test.ts` (24: base nova, APPLY duas vezes sobre a bas
 reprovando) e os vizinhos da ferramenta e da revisão (7 arquivos, 167). Mutação (extra): 4 mutantes no pipeline, 4
 derrubados. Typecheck avulso sem erro novo. Sem E2E, Playwright nem suíte completa; PROD e Railway intocados.
 
+## Exclusão física de cadastro mestre, Fatia 1 (MASTER-DATA-HARD-DELETE-01, 2026-09-18)
+
+**Decisão do PO** (D1, D2, D3 e D6 de [MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01](discovery/MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01.md),
+Fatia 1): cadastro criado por engano, nunca usado e sem referência real sai por exclusão física, só pelo Administrador,
+com rastro append-only. Fornecedor, Cliente, os três Modelos e o Roteiro de Produção; Item, Produto e Recurso ficam para
+MASTER-DATA-HARD-DELETE-02. Regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §125. Na `main`, fora de PROD
+(`release/prod` segue `8e824e8f`), com a migration aditiva `20260925093038_master_data_deletion_history`.
+
+**API.** Módulo `master-data-deletion`: prévia `GET <cadastro>/:id/deletion-check` (transação somente leitura) e
+`DELETE <cadastro>/:id` com `{ reason }`, nos caminhos de `MASTER_DATA_DELETION_PATHS` (`@veridi/shared`); só ADMIN,
+403 antes do corpo e da existência; 400 sem motivo; 409 `master_data_in_use` com as referências; 404 no inexistente e na
+segunda exclusão. Catálogo explícito por agregado (`catalogo-de-exclusao.ts`) conferido contra o `pg_constraint` a cada
+execução, com redes por sufixo e varredura de toda coluna JSON; filhos técnicos (`filhos-tecnicos.ts`): a V1 como a
+criação a deixou e o registro do CNPJ da criação do Cliente. Transação com retrato de `pg_stat_xact_user_tables`,
+`FOR UPDATE`, recontagem, rastro, DELETE e conferência do efeito real — efeito inesperado desfaz tudo (409
+`master_data_delete_aborted`). Rastro `master_data_deletion_history` com retrato por lista branca e autor RESTRICT; ALVO
+no `prod-cleanup`. O enum do rastro já reserva `ITEM`, `PRODUCT` e `INDUSTRIAL_RESOURCE` para a Fatia 2, que assim fica
+sem migration, como o discovery planejou.
+
+**Web.** `ExclusaoDefinitivaDialog` (prévia → motivo obrigatório; ou as referências e a saída Inativar/Arquivar) sobre
+`lib/master-data-deletion-api.ts`. "Excluir definitivamente" só para ADMIN: menu da linha de Fornecedores e Clientes, e
+ao lado do Arquivar nos Modelos de formulação, de estrutura de custo e de política de preço e no Roteiro.
+
+**Leitura aplicada.** O registro dos dados do CNPJ gravado na criação do Cliente (§122, posterior ao discovery) é filho
+técnico com prova de nascimento; outro evento, ou o Cliente regravado depois, bloqueia. O PO pode revertê-la para
+bloqueio.
+
+**Dados.** Nenhum cadastro real do `veridi_dev` foi excluído (adendo do PO): toda exclusão dos testes é de fixture
+sintética no banco de teste do worktree. A migration entra no `veridi_dev` pelo `pnpm db:migrate` do checkout principal
+na integração. PROD, Railway e `release/prod` intocados.
+
+**Validação.** API `modules/master-data-deletion` (3 arquivos, 82 testes: 403 dos cinco perfis antes do corpo, prévia
+sem escrita, RESTRICT/CASCADE/SET NULL/id sem FK/versão/código/nome/JSON/históricos bloqueando, V1 técnica dos quatro
+agregados versionados saindo junto e V1 trabalhada/ativada/com V2 bloqueando, registro do CNPJ da criação, motivo, rastro
+e retrato, nome livre, 404 na segunda exclusão e no clique duplo, OC gravada sob a trava, gatilho fora do agregado
+desfazendo tudo, catálogo × `pg_constraint` real, rotas DELETE conhecidas e rastro sem alteração no código), em banco de
+teste exclusivo do worktree; scripts `prod-cleanup-models`, `-dry-run`, `-sequences`, `migration-order`,
+`migration-prefix`, `schema-fk-actions`, `restore-json-backup-check` e `apply-migrations` (8 arquivos, 68 testes). Web
+`components/exclusao-definitiva.test.tsx` (7), `pages/suppliers/fornecedor-exclusao-definitiva.test.tsx` (4) e
+`pages/cost-templates/modelo-exclusao-definitiva.test.tsx` (4), com `pages/suppliers`, `pages/customers`,
+`pages/formulation-templates`, `pages/cost-templates`, `pages/planning` e os doze portões que varrem as telas (55
+arquivos, 786 testes). Typecheck de shared, API e web; `pnpm validate:migrations:fresh` (87 migrations, sem drift). Sem
+suíte completa, E2E, Playwright nem mutação.
+
+**De passagem.** O portão web `campo-numerico-guarda` estava vermelho na `main` desde `874b07ed`: o "CNAE principal" do
+Cliente usa teclado numérico e não estava na allowlist. CNAE é identificador, como o CEP — entrou na allowlist com o
+motivo, em commit próprio, só teste.
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a
@@ -6656,6 +6705,14 @@ Railway; desde 2026-09-14 18:04Z publica só a partir de `release/prod` — push
 (pacote técnico final, 4 clientes `NAO_IMPORTAR`): 76 clientes, 113 fornecedores, 816 itens, 173 produtos, 161
 formulações e 182 projetos — o que o DEV reproduz. Implantação em [`DEPLOY.md`](DEPLOY.md); limpeza de produção e
 prova de backup em `scripts/maintenance/`.
+
+**Política permanente de dados na publicação** (PO, 2026-09-18): PROD é a fonte de verdade. Uma versão nova muda
+schema, comportamento e funcionalidades, nunca substitui o dado real da Veridi — nada de copiar o DEV, sincronizar
+cadastro do DEV ou reaplicar a carga inicial; migration aditiva e anulável, sem backfill inventado; `prod-cleanup
+--apply`, reset, `TRUNCATE`, seed destrutivo e saneamento genérico só com autorização específica do PO; a exclusão física
+de cadastro mestre (§125) não é ferramenta de migração. A única limpeza destrutiva já autorizada é o saneamento de
+duplicidades, e mesmo ela passa por discovery READ ONLY, PLAN e backup restaurável em PROD e aprovação do PO antes do
+APPLY — a decisão do DEV nunca é forçada sobre PROD. Texto inteiro em [`DEPLOY.md`](DEPLOY.md) §10.
 
 **Publicação de homologação em 2026-09-16** (HOMOLOGATION-RELEASE-RAILWAY-01, registro em
 [`RELEASES.md`](RELEASES.md)): `release/prod` `2400def` → `3159180` → `5b7c1a3`, tag
