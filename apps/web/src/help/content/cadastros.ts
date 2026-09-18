@@ -630,7 +630,7 @@ export const cadastrosTopics = {
     ],
     notes: [
       "Usuário não é excluído em nenhuma hipótese. A saída de alguém da operação se resolve inativando, e as sessões abertas caem imediatamente.",
-      "Criar, editar, inativar usuário e trocar senha são ações do perfil administrador. Nada impede um administrador de inativar a si mesmo nem de inativar o último administrador — confira antes de salvar.",
+      "Criar, editar, inativar usuário e trocar senha são ações do perfil administrador. O sistema mantém sempre pelo menos um administrador ativo, e ninguém inativa a si mesmo nem retira de si o perfil Administrador — outro administrador faz isso.",
       "A troca de senha não avisa ninguém. O sistema não envia e-mail: a pessoa descobre porque foi desconectada e a senha anterior parou de funcionar.",
       "Deixar a senha em branco na edição mantém a senha atual. Preencher o campo é o que dispara a troca.",
       "O perfil vale onde há controle por área declarado: administração de usuários, recursos industriais e documentos controlados são do administrador; liberação de lote, bloqueio e decisão de laudo são de Qualidade; estrutura de custos, precificação, projetos, orçamentos e alteração de preço faturado são do Comercial; modelos de estrutura de custo e de formulação e a execução de amostras são da Produção; Item x Fornecedor é de Compras. Fora desses pontos, o registro do autor continua acontecendo mesmo onde não há restrição de perfil.",

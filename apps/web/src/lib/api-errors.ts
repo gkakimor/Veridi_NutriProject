@@ -198,6 +198,13 @@ const ERROR_MESSAGES: Record<string, string> = {
   // §116: o backend nomeia a formulação e cada componente; este só cobre resposta sem mensagem.
   inactive_component:
     "A formulação usa item inativo — reative o item no cadastro para continuar.",
+  // §120: a API manda a frase pronta; estes cobrem resposta sem mensagem.
+  last_active_admin:
+    "Não é possível concluir. O sistema precisa manter pelo menos um administrador ativo.",
+  self_deactivation:
+    "Não é possível concluir. Você não pode inativar o próprio usuário — outro administrador deve fazer isso.",
+  self_demotion:
+    "Não é possível concluir. Você não pode retirar de si mesmo o perfil Administrador — outro administrador deve fazer isso.",
 };
 
 /** Mensagem por status quando a resposta não traz nada aproveitável. */

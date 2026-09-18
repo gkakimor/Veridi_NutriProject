@@ -2,7 +2,8 @@
 
 ## 1. Status
 
-`DECIDIDO` — **D1–D6 decididas pelo PO em 2026-09-17**; nada implementado. Capabilities liberadas na fila viva do
+`DECIDIDO` — **D1–D6 decididas pelo PO em 2026-09-17**; **D5 implementada** em USER-LAST-ADMIN-GUARD-01 (2026-09-17,
+§120, seção 16), o resto não. Capabilities liberadas na fila viva do
 [`BACKLOG.md`](../BACKLOG.md): Fatia 0 — PRODUCTION-PROFILE-ARCHIVE-01 e USER-LAST-ADMIN-GUARD-01; Fatia 1 —
 MASTER-DATA-HARD-DELETE-01; Fatia 2 — MASTER-DATA-HARD-DELETE-02.
 
@@ -338,7 +339,13 @@ MASTER-DATA-HARD-DELETE-01 e, sobre ela, MASTER-DATA-HARD-DELETE-02.
 
 ## 16. Implementação
 
-`NÃO IMPLEMENTADO`.
+- **Fatia 0, D5 — USER-LAST-ADMIN-GUARD-01** (2026-09-17, [`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §120), na `main` e
+  fora de PROD, sem migration: `PATCH /users/:id` recusa inativar ou rebaixar o último ADMIN ativo (409
+  `last_active_admin`) e recusa o usuário da sessão inativando a si mesmo (`self_deactivation`) ou retirando de si o
+  perfil Administrador (`self_demotion`), mesmo havendo outro ADMIN. A edição corre numa transação que começa travando
+  as linhas de ADMIN ativo (`FOR NO KEY UPDATE`, ordem de id), como a seção 13 pedia, e a revogação das sessões do
+  inativado entrou nela. Reset de senha e `user:bootstrap-admin` intocados.
+- PRODUCTION-PROFILE-ARCHIVE-01, Fatia 1 e Fatia 2: `NÃO IMPLEMENTADO`.
 
 ## 17. Histórico de decisões
 
@@ -347,3 +354,4 @@ MASTER-DATA-HARD-DELETE-01 e, sobre ela, MASTER-DATA-HARD-DELETE-02.
   inalterado.
 - 2026-09-17 — D1–D6 decididas pelo PO; documento persistido no fechamento, sem código nem migration; Fatias 0, 1 e 2
   liberadas na fila viva.
+- 2026-09-17 — D5 implementada por USER-LAST-ADMIN-GUARD-01 (§120), sem migration.

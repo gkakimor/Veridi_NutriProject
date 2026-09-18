@@ -67,6 +67,12 @@ import { ambienteComBancoDeTeste } from "./src/test-support/banco-de-teste.js";
  * desfeita que tira do retrato os Pedidos, Expedições e OCs abertos que não são
  * dele — com vizinho escrevendo ao lado, essa escrita esperaria a trava dele.
  *
+ * `users-guarda-do-administrador.test.ts` (USER-LAST-ADMIN-GUARD-01): "o
+ * último ADMIN ativo" é do banco inteiro, e todo arquivo que usa
+ * `buildTestApp("ADMIN")` cria um administrador ativo. O arquivo tira do
+ * conjunto os ADMIN que encontra, monta o dele caso a caso e os devolve no fim
+ * — com vizinho ao lado, o "único" nunca seria único.
+ *
  * Só entra aqui arquivo que dependa de estado global de forma inevitável.
  * Todo o resto continua em paralelo, no `vitest.config.ts`.
  */
@@ -85,6 +91,7 @@ export default defineConfig(({ mode }) => ({
       "src/modules/controlled-documents/controlled-documents.test.ts",
       "src/modules/production-calendar/production-calendar.test.ts",
       "src/modules/production-schedules/production-schedules.test.ts",
+      "src/modules/users/users-guarda-do-administrador.test.ts",
     ],
     // Um worker, um arquivo por vez: nenhum vizinho escrevendo no banco
     // enquanto um agregado global é medido.
