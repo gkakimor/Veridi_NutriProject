@@ -7131,7 +7131,7 @@ letras: "Dados obtidos de fonte pública. Confira as informações antes de
 salvar."
 
 **O fluxo, inteiro.** Cliente → **Consultar CNPJ** → escolher a fonte →
-consultar → comparar Atual × Retornado → marcar o que aplicar → **Aplicar
+consultar → comparar Atual × fonte → marcar o que aplicar → **Aplicar
 consulta ao cadastro** → **Salvar**. Vale igual na criação (sem id) e na edição.
 
 **Quando o botão consulta.** Só com CNPJ preenchido e aprovado pelo validador
@@ -7157,7 +7157,7 @@ payload cru, stack ou detalhe do provedor. Não há proxy genérico.
 **Somente leitura.** A consulta não grava nada no domínio Veridi: nem cadastro,
 nem histórico, nem payload. O que o Cliente passou a guardar dela — os dados
 cadastrais do CNPJ (§119) — chega ao banco pelo "Salvar" do cadastro, nunca
-pela consulta.
+pela consulta; o histórico dessas alterações (§122) também nasce no "Salvar".
 
 **Comparação.** Contra o **estado do formulário**, não contra o último valor
 salvo — quem editou um campo e ainda não salvou compara com o que está vendo.
@@ -7165,13 +7165,15 @@ Normalizar é **só para comparar** (espaços, caixa, acento, máscara de CEP e
 telefone); o que a tela mostra e aplica é o valor da fonte no formato do
 próprio campo, sem reescrita silenciosa.
 
-**Seleção por linha.**
+**Seleção por linha — aditiva desde a §122.** A fonte completa o que está
+vazio; o que o cadastro já tem só muda por escolha explícita.
 
 | Retorno | O que a tela faz |
 |---|---|
-| Diferente e utilizável | Marcado por padrão; a pessoa pode desmarcar |
-| Equivalente ao que está na tela | "Sem alteração", sem caixa |
-| Vazio ou ausente | "Não informado pela fonte" — **nunca** apaga o que existe |
+| Utilizável, e o campo está vazio | Marcado por padrão ("Aplicar"); a pessoa pode desmarcar |
+| Utilizável e diferente do que o campo já tem | Atual e fonte lado a lado, **desmarcado** ("Substituir"); só troca se a pessoa marcar |
+| Equivalente ao que está na tela | Os dois à vista, "Igual ao atual", com "Confirmar" desmarcado — a linha não some |
+| Vazio ou ausente | "—" e "Não informado pela fonte", sem caixa — **nunca** apaga o que existe |
 | Informado, mas o campo não guardaria (CEP incompleto, UF desconhecida, telefone inválido, texto acima do limite) | Aparece com o valor e o motivo, sem caixa |
 
 **Campos que a consulta preenche.** Razão social, nome fantasia, CEP,
@@ -7182,8 +7184,8 @@ informada pela Veridi, jamais deduzida de CNAE, porte ou natureza jurídica),
 forma e condição de pagamento (§99), notas internas, situação cadastral (§95),
 bloqueios e qualquer outro atributo comercial. Situação na Receita, abertura,
 CNAE, natureza jurídica, porte, matriz/filial, Simples e MEI são os dados
-cadastrais do CNPJ (§119): guardados no Cliente, somente leitura, e nenhum
-define o perfil tributário.
+cadastrais do CNPJ (§119): guardados no Cliente, editáveis à mão (§122), e
+nenhum define o perfil tributário.
 
 **Cancelar não muda nada.** Fechar, cancelar ou sair com Escape deixa o
 formulário exatamente como estava.
@@ -7607,6 +7609,9 @@ a partir do resultado gravado. A ferramenta de Item recusa onda com grupo de mai
 
 CUSTOMER-CNPJ-PERSISTED-DATA-01 (2026-09-17), sobre o handoff do PO. Evolui a
 §111 sem integração nova: Web → API → `CnpjLookupService` → OpenCNPJ, como antes.
+**Revista pela §122** (2026-09-18): os dados viraram campos editáveis, a
+consulta ficou aditiva e as alterações ganharam histórico — os parágrafos
+marcados abaixo já dizem a regra nova.
 
 > **O que a consulta aplicada disse sobre a empresa fica no cadastro — do CNPJ
 > que foi consultado, e só dele.**
@@ -7632,23 +7637,27 @@ vira `null`: letra fora de S/N, data que não existe, CNAE fora de sete dígitos
 texto acima do teto do cadastro, porte "Não informado". Nenhuma chave crua chega
 à Web nem ao banco.
 
-**Bloco.** Os dados são gravados inteiros, a partir de uma consulta, e trocados
-inteiros pela seguinte — nunca uma coluna solta, que misturaria consultas sob
-uma data só. Sem consulta aplicada e salva, o bloco inteiro é nulo.
+**Bloco (revisto pela §122).** Cada campo é editável à mão; a consulta completa
+o que está vazio e só troca o que a pessoa escolher; a gravação compara campo a
+campo com o que está gravado. Sem dado nenhum e sem consulta aplicada, o bloco
+inteiro é nulo.
 
 **Fluxo.** Consultar → comparar → **Aplicar consulta ao cadastro** → formulário
 alterado → **Salvar**. Consultar não grava; aplicar não grava; sair sem salvar
 não grava (a guarda de alterações pergunta antes); Cancelar no diálogo não muda
 nada, nem a data. Vale na criação e na edição.
 
-**Comparação.** Os dados cadastrais entram no Atual × Retornado com as regras da
-§111: diferença útil nasce marcada, equivalente é "Sem alteração", ausente é
+**Comparação (revista pela §122).** Os dados cadastrais entram no Atual × fonte
+com as regras aditivas da §111: campo vazio nasce marcado, preenchido e diferente
+nasce desmarcado ("Substituir"), equivalente aparece para confirmar, ausente é
 "Não informado pela fonte" e **vazio da fonte não apaga** o que o cadastro tem.
 Aplicar leva da fonte o que foi marcado e mantém o resto como estava.
 
 **A data mesmo sem diferença.** Aplicar a consulta registra a data dela mesmo
 quando nada mudou: a consulta sem alteração ainda confirma que os dados foram
 revistos naquele dia. Por isso "Aplicar" fica disponível com zero diferenças.
+No histórico (§122), essa gravação é o evento "Dados conferidos via OpenCNPJ",
+sem linha de campo.
 
 **Troca de CNPJ.** O bloco pertence ao CNPJ do Cliente. Trocar o número (mudança
 real do CNPJ normalizado — máscara não conta) faz os dados do anterior deixarem
@@ -7657,11 +7666,13 @@ número os devolve; consultar e aplicar o CNPJ novo põe os dele. No servidor, o
 bloco cujo CNPJ não é o que o Cliente terá é recusado (400, no campo CNPJ), e o
 PATCH que troca o CNPJ sem bloco novo limpa o do número anterior, com a linha
 travada. Razão social, nome fantasia, endereço, contato, pagamento, perfil
-tributário e notas não pertencem ao CNPJ e ficam.
+tributário e notas não pertencem ao CNPJ e ficam. Desde a §122 a limpeza entra no
+histórico como troca de CNPJ, com origem "CNPJ alterado" em cada campo limpo.
 
-**Na tela.** Seção "Dados cadastrais do CNPJ", logo abaixo da Identificação,
-somente leitura no formulário e na consulta, com datas em pt-BR; atualiza-se
-pela ação "Consultar CNPJ". Os campos comerciais continuam editáveis.
+**Na tela (revista pela §122).** Seção "Dados cadastrais do CNPJ" no fluxo normal
+do formulário, logo antes de Observações: editável no formulário, somente leitura
+na consulta, datas em pt-BR, e a última consulta no rodapé da seção, como
+informação do sistema.
 
 **Não define nada.** Nenhum desses dados define o perfil tributário (§83),
 bloqueia fluxo ou calcula imposto. Pagamento (§99), situação cadastral (§95),
@@ -7770,3 +7781,76 @@ desarquivar. Planejar, programar, liberar, separar, consumir, apontar e concluir
 
 **Sem migration.** `archivedAt` e `archivedBy` já existiam em `production_profiles`, e a lista já escondia o
 arquivado — faltava a ação.
+
+## §122 — Dados cadastrais do CNPJ: editáveis, consulta aditiva e histórico
+
+CUSTOMER-CNPJ-EDITABLE-HISTORY-01 (2026-09-18), handoff do PO. Revê a §119 (bloco somente leitura, trocado inteiro pela
+consulta) e a seleção por linha da §111.
+
+> **A consulta sugere; quem decide é a pessoa, e o que muda fica registrado.** O OpenCNPJ completa o que está vazio, só
+> troca o que alguém escolher trocar e nunca apaga; toda alteração gravada entra no histórico, com a origem de cada
+> campo.
+
+**A. OpenCNPJ é fonte aditiva.** Vale para a consulta inteira: Razão social, Nome fantasia, CEP, Logradouro, Número,
+Complemento, Bairro, Cidade, UF, Telefone, E-mail e os dez dados cadastrais do CNPJ. Campo vazio no cadastro com valor
+utilizável na fonte nasce marcado ("Aplicar").
+
+**B. Informação existente só é substituída por escolha explícita.** Campo preenchido com valor diferente mostra "Atual"
+e "OpenCNPJ" lado a lado, com "Substituir" desmarcado. Valor equivalente também aparece, com "Confirmar" desmarcado — a
+linha não some. Fonte vazia mostra "—", sem caixa: nada do cadastro é apagado por ausência na fonte. "Aplicar consulta ao
+cadastro" só muda o formulário; o "Salvar" é o único ato que grava; Cancelar não muda nada.
+
+**C. Dados cadastrais do CNPJ são editáveis.** CNAE principal (máscara `1099-6/99`, sete dígitos), Descrição do CNAE,
+Natureza jurídica, Porte, Data de abertura, Matriz/Filial (Matriz, Filial ou Não informado), Simples e MEI (Sim, Não ou
+Não informado — `null` nunca vira Não), Situação na RFB e Data da situação (as datas em campo de data). A seção fica no
+fluxo normal do formulário, logo antes de Observações. Dado sem CNPJ não é gravado: o bloco pertence ao CNPJ que o
+Cliente terá (§119), e o servidor recusa o de outro número (400 no campo CNPJ).
+
+**D. Última consulta é metadado do sistema.** "Última consulta: 18/09/2026, 01:43" é texto no rodapé da seção, não
+campo. Muda só quando uma consulta aplicada é salva — é o `consultedAt` do resultado, recusado no futuro, e nunca anda
+para trás —, inclusive quando a consulta não trouxe diferença nenhuma; volta a vazio quando o CNPJ muda.
+
+**E. Alterações possuem histórico.** Tabela própria, `customer_cnpj_registration_history`, só de acréscimo: nenhuma rota
+edita ou apaga evento, e a linha só sai junto com o Cliente. Um evento por gravação, na mesma transação do cadastro, com
+Cliente, CNPJ do momento, data e hora, usuário (e o nome dele no momento), tipo, `consultedAt` quando houver e as
+alterações por campo — Campo, Valor anterior, Valor novo, Origem —, em JSON validado ao gravar e ao ler. Nunca guarda o
+payload bruto do OpenCNPJ, segredo ou credencial. Cobre os dez dados cadastrais do CNPJ; razão social, endereço e
+contato não entram nele.
+
+| Tipo | Quando | O que registra |
+|---|---|---|
+| Edição (`EDIT`) | Algum dado mudou em relação ao gravado | Uma linha por campo alterado, com a origem de cada um |
+| Consulta (`CONSULTATION`) | Consulta aplicada e salva sem diferença nenhuma | Só o evento: "Dados conferidos via OpenCNPJ" e a data da consulta — nunca linha "A → A" |
+| Troca de CNPJ (`CNPJ_CHANGED`) | O CNPJ mudou e o anterior tinha dados | CNPJ anterior e novo; cada campo limpo com origem "CNPJ alterado", e os valores novos, se vieram junto, com a origem deles |
+
+**Origem por campo.** Manual ou OpenCNPJ, campo a campo. Aplicado da consulta e depois editado à mão antes de salvar é
+Manual; gravação mista guarda a origem de cada campo. A comparação é contra o valor GRAVADO: campo que não mudou não gera
+linha. Origem OpenCNPJ sem a data da consulta é recusada.
+
+**Sem histórico retroativo.** Cliente que já tinha dados cadastrais do CNPJ fica como está, sem evento inventado; o
+histórico começa na primeira gravação depois desta capacidade.
+
+**Na tela.** "Ver histórico", no rodapé da seção (edição e consulta do Cliente), abre o diálogo com o mais recente
+primeiro: Data/hora, Usuário, Origem, Campo, Anterior, Novo. A troca de CNPJ mostra também a linha do número. Ler é
+aberto a quem lê o Cliente; gravar continua com `CUSTOMER_EDIT_ROLES` (§98).
+
+**Migration aditiva** (`20260925093037_customer_cnpj_registration_history`): enum e tabela novos, sem backfill; as
+colunas de `customers` e a migration da §119 ficam intocadas.
+
+## §123 — Espaço vertical padrão entre os blocos de cadastro
+
+CUSTOMER-CNPJ-EDITABLE-HISTORY-01 (2026-09-18), regra global de UX do PO.
+
+> **Blocos de cadastro sempre têm o mesmo respiro entre si** — cerca de uma linha —, definido num lugar só.
+
+**Onde mora.** O token `--block-gap` (`tokens.css`, igual a `--sp-5`) e uma regra central em `components.css`:
+`.form-section + .form-section { margin-top: var(--block-gap) }`. Onde as seções vivem num contêiner com `gap` — a coluna
+dos formulários em tela cheia (`.modal-fullscreen__form-wrap`) e o corpo das páginas de documento (`.doc-body`) —, o
+`gap` usa o mesmo token e a margem do irmão zera: o espaço não soma.
+
+**Vale para** Cliente, Fornecedor, Item, Produto, Modelos (custo, precificação e formulação), Roteiro de Produção,
+Recurso industrial e toda tela que monta blocos com `FormSection`. O espaço entre os campos, dentro do bloco, não muda.
+
+**Proibido.** Margem vertical avulsa numa seção, por tela, em CSS ou `style`: quem quiser outro respiro muda o token. Um
+portão de teste confere o contrato — regra, token e exceções no CSS, nenhuma margem concorrente, e os blocos dos
+cadastros contíguos.
