@@ -3,8 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { CORPUS_DIR, corpusAvailable } from "../veridi-data/corpus.js";
 import { assertImportEnvironment, hasApplyFlag } from "./environment.js";
-import { DECISOES_DE_DUPLICATAS } from "./item-duplicate-decisions.js";
-import { impressaoDasDecisoes } from "./item-duplicates.js";
+import { impressaoDaCarga } from "./item-duplicates.js";
 import { readOverrides } from "./overrides.js";
 import { WORKBOOKS_DO_ESCOPO, runPipeline } from "./pipeline.js";
 import {
@@ -68,7 +67,7 @@ export async function applyImport(): Promise<void> {
     generatedAt: string;
     sources: SourceFileManifest[];
     reviewPackage?: CarimboDoPacote | null;
-    duplicateDecisions?: { groups: number; fingerprint: string };
+    duplicateDecisions?: { groups: number; renames?: number; fingerprint: string };
     readyForLoad?: boolean;
   };
   const differences = diffManifests(plan.sources, buildSourceManifest());
@@ -115,7 +114,7 @@ export async function applyImport(): Promise<void> {
     process.exit(1);
   }
 
-  if (plan.duplicateDecisions?.fingerprint !== impressaoDasDecisoes(DECISOES_DE_DUPLICATAS)) {
+  if (plan.duplicateDecisions?.fingerprint !== impressaoDaCarga()) {
     console.error(
       "ABORTADO: a decisão de duplicatas de Item (item-duplicate-decisions.ts) não é a mesma que o PLAN usou.\n" +
         "  Rode de novo: pnpm veridi:import:plan -- --devolucao=<pacote-revisao.json>",

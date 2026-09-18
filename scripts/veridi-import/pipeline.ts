@@ -45,8 +45,13 @@ import type {
   ProdutoRevisado,
 } from "./master-data-review.js";
 import type { Overrides } from "./overrides.js";
-import { absorvidosPorCodigoDaPlanilha } from "./item-duplicates.js";
-import type { DecisaoDeDuplicata } from "./item-duplicates.js";
+import {
+  CONJUNTO_DO_ARQUIVO,
+  absorvidosPorCodigoDaPlanilha,
+  conjuntoDeFusoes,
+  decisoesDaCarga,
+} from "./item-duplicates.js";
+import type { ConjuntoDeDecisoes, DecisaoDeDuplicata } from "./item-duplicates.js";
 
 /**
  * Migração Veridi — o mesmo código roda em PLAN (dry-run) e em APPLY.
@@ -191,8 +196,11 @@ export interface PipelineContext {
    * Duplicatas de Item absorvidas. Ausente, vale o arquivo de decisão
    * versionado (`item-duplicate-decisions.ts`) — a mesma decisão que a
    * ferramenta de saneamento aplica no banco. Só a carga com pacote usa.
+   * Ponto de teste: só fusões, sem renomeação.
    */
   duplicatas?: readonly DecisaoDeDuplicata[];
+  /** Ponto de teste: o conjunto inteiro de decisões no lugar do arquivo (vence `duplicatas`). */
+  conjunto?: ConjuntoDeDecisoes;
 }
 
 /**
@@ -504,9 +512,16 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
    * planilha dela resolve para o canônico — fórmula e oferta inclusas. Base que
    * ainda tem a duplicata, ou canônico fora da carga, reprova o plano. Sem
    * pacote, o caminho de desenvolvimento segue como era.
+   *
+   * Desde ITEM-IMPORT-WAVE-3-CONSISTENCY-01 a carga também escreve o que a
+   * decisão escreveu no saneamento: o `declaredNutrient` consolidado no
+   * canônico e o nome técnico da renomeação — na criação E ao completar, para
+   * que reexecutar nunca devolva o nome ou o nutriente da planilha.
    */
+  const conjunto =
+    ctx.conjunto ?? (ctx.duplicatas ? conjuntoDeFusoes(ctx.duplicatas) : CONJUNTO_DO_ARQUIVO);
   const absorvidos = review
-    ? absorvidosPorCodigoDaPlanilha(ctx.duplicatas)
+    ? absorvidosPorCodigoDaPlanilha(conjunto.fusoes)
     : new Map<string, DecisaoDeDuplicata>();
   const absorvidosDaCarga: { item: ItemRevisado; decisao: DecisaoDeDuplicata; conflito: boolean }[] = [];
   let duplicataBloqueia = false;
@@ -531,6 +546,13 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
     for (const chave of excluidos) {
       findings.add("ITEM_REVIEW_NOT_IMPORTED", "Item", chave, "marcado NAO_IMPORTAR na revisao");
       domains.items.skipped += 1;
+    }
+    // Consolidação e renomeação conferidas contra o pacote ANTES de qualquer
+    // escrita: pacote que a decisão já não descreve reprova, nunca é adivinhado.
+    const carga = decisoesDaCarga(lidos, conjunto);
+    for (const { codigoPlanilha, mensagem } of carga.divergencias) {
+      findings.add("ITEM_DUPLICATE_DECISION_MISMATCH", "Item", chaveDoItem(codigoPlanilha), mensagem);
+      duplicataBloqueia = true;
     }
     for (const item of lidos) {
       const decisao = absorvidos.get(item.externalCode);
@@ -557,12 +579,21 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
         domains.items.skipped += 1;
         continue;
       }
+      const ajuste = carga.ajustes.get(item.externalCode);
+      if (ajuste) {
+        findings.add(
+          "ITEM_DUPLICATE_DECISION_APPLIED",
+          "Item",
+          item.key,
+          `${ajuste.descricao} — grupo ${ajuste.grupo} (Onda ${ajuste.onda})`,
+        );
+      }
       const data = {
-        name: item.name,
+        name: ajuste?.name ?? item.name,
         type: item.type,
         unitCode: item.unitCode,
         sourceName: item.sourceName,
-        declaredNutrient: item.declaredNutrient,
+        declaredNutrient: ajuste?.declaredNutrient ?? item.declaredNutrient,
         family: item.family as never,
         defaultPurityPercent: item.defaultPurityPercent,
         packagingSubtype: item.packagingSubtype as never,
@@ -623,6 +654,23 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
         item.key,
         `duplicata absorvida por ${decisao.canonico.codigo} (grupo ${decisao.grupo}) — nao criada; formula e oferta resolvem para o canonico`,
       );
+    }
+
+    // A renomeação descreve o Item pelos dois códigos: nesta base, o da planilha
+    // tem de ser o do ERP que a decisão diz — como o canônico, acima.
+    for (const [planilha, decidido] of carga.renomeacaoPorPlanilha) {
+      const id = itemIdByExternal.get(planilha);
+      if (!id || isPlanned(id)) continue;
+      const gravado = await prisma.item.findUnique({ where: { id }, select: { code: true } });
+      if (gravado && gravado.code !== decidido.codigo) {
+        findings.add(
+          "ITEM_DUPLICATE_DECISION_MISMATCH",
+          "Item",
+          chaveDoItem(planilha),
+          `o Item da planilha ${planilha} e ${gravado.code} nesta base, e o grupo ${decidido.grupo} (Onda ${decidido.onda}) diz ${decidido.codigo}`,
+        );
+        duplicataBloqueia = true;
+      }
     }
   } else {
   for (const item of items) {

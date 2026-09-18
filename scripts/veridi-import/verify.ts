@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import fs from "node:fs";
 import path from "node:path";
 import { assertImportEnvironment } from "./environment.js";
+import { divergenciasNaBase } from "./item-duplicates.js";
 import { OUT_DIR, PLAN_FILE, ensureOutputDirs } from "./sources.js";
 
 /**
@@ -165,6 +166,21 @@ async function main(): Promise<void> {
       name: "Itens e projetos legados preservam o código da planilha",
       ok: legacyRecordsWithoutExternalCode.every((count) => count === 0),
       detail: `${legacyRecordsWithoutExternalCode[0]} item(ns) e ${legacyRecordsWithoutExternalCode[1]} projeto(s) sem externalCode`,
+    });
+
+    // O que a carga aplica do arquivo de decisão de duplicatas está na base:
+    // absorvido fora, nutriente consolidado, nome técnico da renomeação. Base
+    // carregada antes das ondas (PROD hoje) acusa aqui até o saneamento rodar lá.
+    const decisionMismatches = divergenciasNaBase(
+      await prisma.item.findMany({ select: { code: true, name: true, declaredNutrient: true } }),
+    );
+    checks.push({
+      name: "Decisões de duplicata de Item refletidas (fusão, consolidação, renomeação)",
+      ok: decisionMismatches.length === 0,
+      detail:
+        decisionMismatches.length === 0
+          ? "0 divergência"
+          : `${decisionMismatches.length} divergência(s): ${decisionMismatches.join("; ")}`,
     });
 
     /* ── Estoque: importar master data não movimenta ─────── */

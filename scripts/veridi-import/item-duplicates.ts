@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { consolidarTermos } from "../maintenance/master-data-catalog.js";
 import {
   DECISOES_DE_DUPLICATAS,
   EXCLUSOES_DE_AGREGADO,
@@ -502,4 +503,251 @@ export function decisaoDoCodigo(conjunto: ConjuntoDeDecisoes = CONJUNTO_DO_ARQUI
   for (const d of conjunto.exclusoes) for (const { codigo } of d.excluir) marcar(codigo, d.onda, d.grupo, "exclusão");
   for (const d of conjunto.revisoes) for (const codigo of d.codigos) marcar(codigo, d.onda, d.grupo, "revisão");
   return mapa;
+}
+
+/* ------------------------------------------------------------------ *
+ * A carga reproduz as decisões (ITEM-IMPORT-WAVE-3-CONSISTENCY-01)
+ *
+ * O que a carga com pacote aplica: fusão (o absorvido não nasce),
+ * consolidação no canônico e renomeação. Exclusão de agregado não: o
+ * Modelo "X" era dado do DEV, e a carga nunca cria Modelo. Grupo em
+ * revisão também não: nasce do pacote como está, nada se decide no
+ * lugar da Veridi.
+ * ------------------------------------------------------------------ */
+
+/** O que a carga lê de um Item aprovado no pacote para conferir a decisão. */
+export interface ItemDoPacote {
+  externalCode: string;
+  name: string;
+  declaredNutrient: string | null;
+}
+
+/** O que uma decisão escreve por cima do pacote num Item que a carga cria ou completa. */
+export interface AjusteDaCarga {
+  onda: string;
+  grupo: string;
+  /** Nome técnico novo (renomeação). */
+  name?: string;
+  /** Valor consolidado no canônico (fusão com `consolidar`). */
+  declaredNutrient?: string;
+  /** O que mudou em relação ao pacote, em texto — vai para o finding. */
+  descricao: string;
+}
+
+/** Código do ERP que a renomeação descreve, conferido na base depois da escrita. */
+export interface CodigoDaRenomeacao {
+  codigo: string;
+  onda: string;
+  grupo: string;
+}
+
+export interface DecisoesDaCarga {
+  /** Código da planilha → fusão: o absorvido não nasce e resolve para o canônico. */
+  absorvidos: Map<string, DecisaoDeDuplicata>;
+  /** Código da planilha → o que a decisão escreve por cima do pacote. */
+  ajustes: Map<string, AjusteDaCarga>;
+  /** Código da planilha → código do ERP de quem a renomeação decide (renomeado ou mantido). */
+  renomeacaoPorPlanilha: Map<string, CodigoDaRenomeacao>;
+  /** A decisão já não descreve o pacote: cada uma reprova a carga — nada é adivinhado. */
+  divergencias: { codigoPlanilha: string; mensagem: string }[];
+}
+
+/**
+ * Grupos de fusão de TODAS as ondas. `gruposDeFusao` junta pelo nome do grupo, e
+ * o nome só é único dentro da onda.
+ */
+function gruposDeTodasAsOndas(fusoes: readonly DecisaoDeDuplicata[]): GrupoDeDecisao[] {
+  const ondas = [...new Set(fusoes.map((f) => f.onda))];
+  return ondas.flatMap((onda) => gruposDeFusao(fusoes.filter((f) => f.onda === onda)));
+}
+
+/**
+ * As decisões aplicadas aos Itens aprovados no pacote, sem banco.
+ *
+ *  - **consolidação**: o valor que a regra da ferramenta (`consolidarTermos`)
+ *    calcula a partir do PACOTE — canônico primeiro, absorvidos pelo código do
+ *    ERP — tem de ser o escrito na decisão; é o escrito que vai para o canônico;
+ *  - **renomeação**: o nome do pacote tem de ser exatamente o `de` da decisão; o
+ *    `para` vai para o Item. O mantido tem de continuar com o nome do grupo;
+ *  - **colisão**: depois da renomeação, o nome do grupo fica só com quem a
+ *    decisão mantém, e cada nome novo fica com um Item só — a mesma chave do
+ *    saneamento (`trim` + sem caixa).
+ *
+ * Item decidido fora da carga não é divergência: renomear não cria ninguém, e
+ * canônico ausente já reprova no laço dos absorvidos.
+ */
+export function decisoesDaCarga(
+  itens: readonly ItemDoPacote[],
+  conjunto: ConjuntoDeDecisoes = CONJUNTO_DO_ARQUIVO,
+): DecisoesDaCarga {
+  const valido = conjuntoValidado(conjunto);
+  const absorvidos = absorvidosPorCodigoDaPlanilha(valido.fusoes);
+  const porPlanilha = new Map(itens.map((item) => [item.externalCode, item]));
+  const ajustes = new Map<string, AjusteDaCarga>();
+  const renomeacaoPorPlanilha = new Map<string, CodigoDaRenomeacao>();
+  const divergencias: DecisoesDaCarga["divergencias"] = [];
+
+  for (const grupo of gruposDeTodasAsOndas(valido.fusoes)) {
+    if (!grupo.consolidar) continue;
+    const canonico = porPlanilha.get(grupo.canonico.codigoPlanilha);
+    if (!canonico) continue;
+    const ordem = [...grupo.absorvidos].sort((a, b) => a.codigo.localeCompare(b.codigo));
+    const { valor } = consolidarTermos(
+      [canonico.declaredNutrient, ...ordem.map((a) => porPlanilha.get(a.codigoPlanilha)?.declaredNutrient)],
+      grupo.consolidar.equivalentes ?? {},
+    );
+    const esperado = grupo.consolidar.declaredNutrient;
+    if (valor !== esperado) {
+      const fora = ordem.filter((a) => !porPlanilha.has(a.codigoPlanilha)).map((a) => a.codigo);
+      divergencias.push({
+        codigoPlanilha: grupo.canonico.codigoPlanilha,
+        mensagem:
+          `declaredNutrient de ${grupo.canonico.codigo} consolidado pelo pacote da "${valor ?? ""}", e o grupo ` +
+          `${grupo.grupo} (Onda ${grupo.onda}) espera "${esperado}"` +
+          (fora.length > 0 ? ` — fora da carga: ${fora.join(", ")}` : ""),
+      });
+      continue;
+    }
+    ajustes.set(grupo.canonico.codigoPlanilha, {
+      onda: grupo.onda,
+      grupo: grupo.grupo,
+      declaredNutrient: esperado,
+      descricao: `declaredNutrient consolidado "${esperado}" (pacote: "${canonico.declaredNutrient ?? ""}")`,
+    });
+  }
+
+  for (const decisao of valido.renomeacoes) {
+    const ref = `grupo ${decisao.grupo} (Onda ${decisao.onda})`;
+    for (const r of decisao.renomear) {
+      renomeacaoPorPlanilha.set(r.codigoPlanilha, { codigo: r.codigo, onda: decisao.onda, grupo: decisao.grupo });
+      const item = porPlanilha.get(r.codigoPlanilha);
+      if (!item) continue;
+      if (item.name !== r.de) {
+        divergencias.push({
+          codigoPlanilha: r.codigoPlanilha,
+          mensagem: `o pacote chama ${r.codigo} de "${item.name}", e o ${ref} renomeia de "${r.de}"`,
+        });
+        continue;
+      }
+      ajustes.set(r.codigoPlanilha, {
+        onda: decisao.onda,
+        grupo: decisao.grupo,
+        name: r.para,
+        descricao: `renomeado de "${r.de}" para "${r.para}"`,
+      });
+    }
+    for (const m of decisao.manter) {
+      renomeacaoPorPlanilha.set(m.codigoPlanilha, { codigo: m.codigo, onda: decisao.onda, grupo: decisao.grupo });
+      const item = porPlanilha.get(m.codigoPlanilha);
+      if (item && nomeNormalizado(item.name) !== nomeNormalizado(m.nome)) {
+        divergencias.push({
+          codigoPlanilha: m.codigoPlanilha,
+          mensagem: `o pacote chama ${m.codigo} de "${item.name}", e o ${ref} o mantem com "${m.nome}"`,
+        });
+      }
+    }
+  }
+
+  // Nome final de cada Item que nasce, pela chave do saneamento.
+  const donosDoNome = new Map<string, string[]>();
+  for (const item of itens) {
+    if (absorvidos.has(item.externalCode)) continue;
+    const chave = nomeNormalizado(ajustes.get(item.externalCode)?.name ?? item.name);
+    donosDoNome.set(chave, [...(donosDoNome.get(chave) ?? []), item.externalCode]);
+  }
+  for (const decisao of valido.renomeacoes) {
+    const ref = `grupo ${decisao.grupo} (Onda ${decisao.onda})`;
+    const decididos = new Set([...decisao.renomear, ...decisao.manter].map((lado) => lado.codigoPlanilha));
+    for (const planilha of donosDoNome.get(nomeNormalizado(decisao.nome)) ?? []) {
+      if (decididos.has(planilha)) continue;
+      divergencias.push({
+        codigoPlanilha: planilha,
+        mensagem: `a planilha ${planilha} tem o nome do ${ref}, "${decisao.nome}", e nao esta na decisao: a colisao continuaria`,
+      });
+    }
+    for (const r of decisao.renomear) {
+      if (!ajustes.has(r.codigoPlanilha)) continue;
+      const outros = (donosDoNome.get(nomeNormalizado(r.para)) ?? []).filter((p) => p !== r.codigoPlanilha);
+      if (outros.length > 0) {
+        divergencias.push({
+          codigoPlanilha: r.codigoPlanilha,
+          mensagem: `o nome novo de ${r.codigo}, "${r.para}", ja e o nome da planilha ${outros.join(", ")} nesta carga`,
+        });
+      }
+    }
+  }
+
+  return { absorvidos, ajustes, renomeacaoPorPlanilha, divergencias };
+}
+
+/**
+ * Impressão do que a CARGA aplica — fusões (com consolidação e par nomeado) e
+ * renomeações. O `import-plan.json` guarda esta, e o APPLY recusa se o arquivo
+ * de decisão mudou depois do PLAN. Exclusão e revisão ficam fora: a carga não
+ * as executa.
+ */
+export function impressaoDaCarga(conjunto: ConjuntoDeDecisoes = CONJUNTO_DO_ARQUIVO): string {
+  const valido = conjuntoValidado(conjunto);
+  const forma = {
+    fusoes: impressaoDasDecisoes(valido.fusoes),
+    renomeacoes: valido.renomeacoes.map((d) => [
+      d.onda,
+      d.grupo,
+      nomeNormalizado(d.nome),
+      d.renomear.map((r) => [r.codigo, r.codigoPlanilha, r.de, r.para]),
+      d.manter.map((m) => [m.codigo, m.codigoPlanilha, m.nome]),
+    ]),
+  };
+  return createHash("sha256").update(JSON.stringify(forma)).digest("hex");
+}
+
+/** Um Item como está na base — o que a conferência depois do APPLY lê. */
+export interface ItemNaBase {
+  code: string;
+  name: string;
+  declaredNutrient: string | null;
+}
+
+/**
+ * A base reflete o que a carga aplica? Absorvido fora, canônico com o valor
+ * consolidado, renomeado com o nome técnico e mantido com o nome do grupo.
+ * Registro ausente não conta: a carga só cria o que o pacote aprova. Vazio =
+ * base de acordo com o arquivo de decisão.
+ */
+export function divergenciasNaBase(
+  itens: readonly ItemNaBase[],
+  conjunto: ConjuntoDeDecisoes = CONJUNTO_DO_ARQUIVO,
+): string[] {
+  const valido = conjuntoValidado(conjunto);
+  const porCodigo = new Map(itens.map((item) => [item.code, item]));
+  const divergencias: string[] = [];
+  for (const d of valido.fusoes) {
+    if (porCodigo.has(d.absorvido.codigo)) {
+      divergencias.push(`${d.absorvido.codigo} ainda existe, e o grupo ${d.grupo} (Onda ${d.onda}) o absorveu em ${d.canonico.codigo}`);
+    }
+  }
+  for (const grupo of gruposDeTodasAsOndas(valido.fusoes)) {
+    const canonico = porCodigo.get(grupo.canonico.codigo);
+    if (grupo.consolidar && canonico && canonico.declaredNutrient !== grupo.consolidar.declaredNutrient) {
+      divergencias.push(
+        `${grupo.canonico.codigo} tem declaredNutrient "${canonico.declaredNutrient ?? ""}", e o grupo ${grupo.grupo} ` +
+          `(Onda ${grupo.onda}) consolidou "${grupo.consolidar.declaredNutrient}"`,
+      );
+    }
+  }
+  for (const d of valido.renomeacoes) {
+    for (const r of d.renomear) {
+      const item = porCodigo.get(r.codigo);
+      if (item && item.name !== r.para) {
+        divergencias.push(`${r.codigo} se chama "${item.name}", e o grupo ${d.grupo} (Onda ${d.onda}) o renomeou para "${r.para}"`);
+      }
+    }
+    for (const m of d.manter) {
+      const item = porCodigo.get(m.codigo);
+      if (item && nomeNormalizado(item.name) !== nomeNormalizado(m.nome)) {
+        divergencias.push(`${m.codigo} se chama "${item.name}", e o grupo ${d.grupo} (Onda ${d.onda}) o mantém com "${m.nome}"`);
+      }
+    }
+  }
+  return divergencias;
 }

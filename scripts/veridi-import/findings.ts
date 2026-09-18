@@ -82,6 +82,10 @@ export const SEVERITY_BY_CODE: Record<string, FindingSeverity> = {
   ITEM_DUPLICATE_ABSORBED: "INFO",
   ITEM_DUPLICATE_ABSORBED_CONFLICT: "BLOCKING",
   ITEM_DUPLICATE_CANONICAL_UNRESOLVED: "BLOCKING",
+  // Consolidação e renomeação da decisão (ITEM-IMPORT-WAVE-3-CONSISTENCY-01):
+  // aplicar é transformação conhecida; pacote que a decisão já não descreve reprova.
+  ITEM_DUPLICATE_DECISION_APPLIED: "INFO",
+  ITEM_DUPLICATE_DECISION_MISMATCH: "BLOCKING",
   STOCK_LEGACY_CODE_ABSORBED: "REVIEW",
 
   PRODUCT_REVIEW_WITHOUT_NAME: "BLOCKING",
