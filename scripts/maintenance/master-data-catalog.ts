@@ -35,6 +35,13 @@ export interface CadastroMestreNoBanco {
    * Minúsculas; comparados com o nome da coluna sem caixa.
    */
   sufixosDeId: readonly string[];
+  /**
+   * `tabela.coluna` que casa com um sufixo de id mas NÃO é referência que se
+   * move: guarda a ORIGEM da linha — o cadastro em cuja criação ela nasceu. O
+   * MERGE nunca a reescreve e o VERIFY não a cobra como resíduo
+   * (CUSTOMER-CNPJ-CREATION-HISTORY-MARKER-01).
+   */
+  origensImoveis?: readonly string[];
   /** Sufixos de coluna que guardam o CÓDIGO deste cadastro (snapshot histórico). */
   sufixosDeCodigo: readonly string[];
   /**
@@ -86,6 +93,11 @@ export const CADASTROS_MESTRE_NO_BANCO: readonly CadastroMestreNoBanco[] = [
     colunaNome: "legalName",
     colunaCodigo: "code",
     sufixosDeId: ["customerid"],
+    // A marca de nascimento do registro do CNPJ (§125) é o Cliente ORIGINAL da
+    // criação: o MERGE move o `customerId` do registro e nunca ela — senão o
+    // registro trazido do absorvido viraria filho técnico do canônico e sairia
+    // junto na exclusão física dele.
+    origensImoveis: ["customer_cnpj_registration_history.createdWithCustomerId"],
     sufixosDeCodigo: ["customercode"],
     colunasNeutras: [...NEUTRAS_COMUNS, "legalName", "externalCode"],
     motivo: "Cadastro comercial; a razão social é a identidade do cliente no catálogo.",

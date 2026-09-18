@@ -31,11 +31,11 @@ import { retratoDaExclusao } from "./retrato-da-exclusao.js";
  *     apontada e espera, e quem muda o cadastro espera também);
  *  2. confere o catálogo contra o `pg_constraint` — chave que chega sem estar
  *     no catálogo, ou que mudou de ação, bloqueia (falha fechada);
- *  3. julga os filhos técnicos — a V1 como a criação a deixou (o registro do
- *     CNPJ da criação do Cliente espera prova estrutural e, até lá, é
- *     referência como qualquer outro);
+ *  3. julga os filhos técnicos — a V1 como a criação a deixou, e o registro do
+ *     CNPJ gravado na criação do Cliente, pela marca `createdWithCustomerId`;
  *  4. conta cada referência declarada e as redes: coluna sem chave com sufixo
- *     de id, código ou nome, e toda coluna JSON do schema.
+ *     de id, código ou nome, e toda coluna JSON do schema. Linha de tabela
+ *     interna que é deste agregado não é referência a ele — é parte dele.
  *
  * A exclusão, numa transação: retrato de `pg_stat_xact_user_tables`, trava,
  * recontagem, 409 se houver qualquer uso, rastro append-only, DELETE da raiz
@@ -259,8 +259,21 @@ async function contarReferencias(
     tabela === agregado.tabela ? [id] : (lido.internos.get(tabela) ?? []).map((linha) => String(linha["id"]));
   const idsInternos = [...lido.internos.values()].flat().map((linha) => String(linha["id"]));
 
-  const porId = (tabela: string, coluna: string, alvos: readonly string[]) =>
-    contar(db, `SELECT count(*)::int AS n FROM ${ident(tabela)} WHERE ${ident(coluna)}::text = ANY($1::text[])`, alvos);
+  // Referência declarada numa tabela interna (a marca da criação no histórico
+  // do CNPJ) conta só as linhas de FORA do agregado: as dele são julgadas
+  // pelos filhos técnicos.
+  const porId = (tabela: string, coluna: string, alvos: readonly string[]) => {
+    const doAgregado = (lido.internos.get(tabela) ?? []).map((linha) => String(linha["id"]));
+    return doAgregado.length === 0
+      ? contar(db, `SELECT count(*)::int AS n FROM ${ident(tabela)} WHERE ${ident(coluna)}::text = ANY($1::text[])`, alvos)
+      : contar(
+          db,
+          `SELECT count(*)::int AS n FROM ${ident(tabela)}
+           WHERE ${ident(coluna)}::text = ANY($1::text[]) AND id::text <> ALL($2::text[])`,
+          alvos,
+          doAgregado,
+        );
+  };
   const porCodigo = (tabela: string, coluna: string) =>
     contar(db, `SELECT count(*)::int AS n FROM ${ident(tabela)} WHERE ${ident(coluna)}::text = $1`, codigo);
   const porNome = (tabela: string, coluna: string) =>
@@ -373,7 +386,7 @@ async function avaliar(db: Banco, agregado: AgregadoExcluivel, id: string, trava
   const colunas = await lerColunasReais(db);
   const referencias = agruparPorFonte([
     ...(await contarReferencias(db, agregado, lido, chaves, colunas)),
-    ...julgarFilhosTecnicos(agregado.tipo, lido.internos),
+    ...julgarFilhosTecnicos(agregado.tipo, id, lido.internos),
     ...conferirCatalogo(agregado, chaves, colunas),
   ]);
 

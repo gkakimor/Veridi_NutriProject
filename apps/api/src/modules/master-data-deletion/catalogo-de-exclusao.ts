@@ -181,14 +181,21 @@ const CLIENTE: AgregadoExcluivel = {
   colunasDeNome: ["legalName", "tradeName"],
   /*
    * Decisão do PO (2026-09-18): o registro dos dados do CNPJ nascido na MESMA
-   * criação do Cliente é filho técnico; registro posterior é uso real. Mas só
-   * sai junto com PROVA ESTRUTURAL de nascimento, e o modelo atual não a tem:
-   * o evento não guarda nenhuma marca da criação, e carimbo de hora, "primeiro
-   * evento" ou `updatedAt` = `createdAt` são heurística (o MERGE do saneamento
-   * move eventos de outro Cliente sem tocar este). Até a marca existir, todo
-   * registro do CNPJ é referência e bloqueia — falha fechada.
+   * criação do Cliente é filho técnico; registro posterior é uso real. A prova
+   * é ESTRUTURAL — a marca `createdWithCustomerId`, que só a criação grava
+   * (CUSTOMER-CNPJ-CREATION-HISTORY-MARKER-01). Por isso o histórico é tabela
+   * do agregado: `julgarHistoricoDoCnpj` só deixa sair o registro marcado com
+   * o próprio Cliente; sem marca, com a de outro Cliente ou marcado em dobro,
+   * bloqueia. Hora, "primeiro evento" e `xmin` nunca provam nada.
    */
-  internas: [],
+  internas: [
+    {
+      tabela: "customer_cnpj_registration_history",
+      coluna: "customerId",
+      pai: "customers",
+      rotulo: "Registro dos dados do CNPJ feito na criação",
+    },
+  ],
   chavesInternas: [],
   referencias: [
     {
@@ -259,14 +266,17 @@ const CLIENTE: AgregadoExcluivel = {
       ),
     },
     {
-      tipo: "fk",
-      acao: "c",
+      // A marca da criação em registro que está em OUTRO Cliente (o MERGE do
+      // saneamento move `customerId`, nunca a marca). Os registros deste
+      // Cliente não contam aqui: são do agregado, e quem os julga é
+      // `julgarHistoricoDoCnpj`.
+      tipo: "id",
       alvo: "customers",
       ...PARA_CLIENTE(
-        "Histórico dos dados cadastrais do CNPJ",
-        "O cliente tem registro dos dados cadastrais do CNPJ, e o sistema ainda não distingue o registro feito na criação dos posteriores: todo registro conta como histórico.",
+        "Histórico dos dados cadastrais do CNPJ de outro cliente",
+        "Registro dos dados do CNPJ de outro cliente guarda este como o cliente em cuja criação nasceu — é histórico.",
         "customer_cnpj_registration_history",
-        "customerId",
+        "createdWithCustomerId",
       ),
     },
     {

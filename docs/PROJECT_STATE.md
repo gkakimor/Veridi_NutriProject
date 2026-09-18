@@ -121,7 +121,9 @@ ATIVO em produção e o ponto de recuperação compatível é o backup pós-rele
   append-only; FKs mantidas, com a segurança na aplicação; Perfil de Produção arquivável; nunca zero ADMIN ativo. A Fatia 0
   fechou em 2026-09-17 — USER-LAST-ADMIN-GUARD-01 (§120) e PRODUCTION-PROFILE-ARCHIVE-01 (§121) — e a Fatia 1 em
   2026-09-18 — MASTER-DATA-HARD-DELETE-01 (§125): Fornecedor, Cliente, os três Modelos e o Roteiro de Produção, com o
-  rastro append-only e a migration aditiva `20260925093038` —, na `main` e fora de PROD, com seções próprias abaixo. Item,
+  rastro append-only e a migration aditiva `20260925093038` —, na `main` e fora de PROD, com seções próprias abaixo. A
+  Fatia 1 fechou de vez com CUSTOMER-CNPJ-CREATION-HISTORY-MARKER-01 (migration aditiva `20260925093040`): o registro
+  do CNPJ gravado na criação do Cliente sai junto pela marca estrutural `createdWithCustomerId`. Item,
   Produto e Recurso industrial continuam sem exclusão física (o banco não protege: CASCADE e SET NULL); na fila viva segue
   a Fatia 2 (MASTER-DATA-HARD-DELETE-02);
 - **Uso e consumo — estorno:** FECHADO em 2026-09-18 (INTERNAL-CONSUMPTION-REVERSAL-01, §126), migration aditiva
@@ -6551,17 +6553,23 @@ sem migration, como o discovery planejou.
 `lib/master-data-deletion-api.ts`. "Excluir definitivamente" só para ADMIN: menu da linha de Fornecedores e Clientes, e
 ao lado do Arquivar nos Modelos de formulação, de estrutura de custo e de política de preço e no Roteiro.
 
-**Registro do CNPJ da criação (ajuste final do PO, 2026-09-18).** Decisão: histórico de CNPJ nascido na mesma criação do
-Cliente é filho técnico; histórico posterior é uso real — mas só sai junto com prova estrutural de nascimento, sem
-heurística. A auditoria mostrou que o modelo não tem essa prova (o evento não guarda marca da criação; o PATCH grava
-Cliente e evento na mesma transação; o MERGE do saneamento move eventos entre Clientes; `updatedAt` = `createdAt` e
-`xmin` não provam), então a regra por carimbo saiu (`728879c4`) e todo registro do CNPJ bloqueia, o da criação
-inclusive, sem apagar nada. A menor mudança que habilita a exceção — coluna anulável `createdWithCustomerId`, gravada
-só pela criação, migration aditiva sem backfill — espera o PO (MASTER-DATA-HARD-DELETE-CNPJ-BIRTH-01).
+**Registro do CNPJ da criação (CUSTOMER-CNPJ-CREATION-HISTORY-MARKER-01, 2026-09-18).** Decisão do PO: histórico de
+CNPJ nascido na mesma criação do Cliente é filho técnico; histórico posterior é uso real — só com prova estrutural, sem
+heurística (a regra por carimbo saiu em `728879c4`: o evento não guardava marca, e `updatedAt` = `createdAt`, ordem e
+`xmin` não provam). A prova é a coluna anulável `createdWithCustomerId` em `customer_cnpj_registration_history`
+(migration aditiva `20260925093040`, sem FK, sem default, sem backfill): `createCustomer` a grava com o id do Cliente que
+nasce (`registrarEventoDosDadosDoCnpj(..., "CRIACAO_DO_CLIENTE")`), e o PATCH nunca. Na exclusão, o histórico é tabela
+interna do agregado do Cliente; `julgarHistoricoDoCnpj` (`filhos-tecnicos.ts`) só deixa sair o registro com `customerId`
+e `createdWithCustomerId` iguais ao Cliente, e um só — ele aparece em `removedTogether` e o CASCADE entra no efeito
+esperado. Sem marca (legado ou alteração), marca de outro Cliente ou dois marcados bloqueia; a marca em registro de
+OUTRO Cliente é referência declarada, contada fora das linhas do próprio agregado. No saneamento (§114) a coluna é
+`origensImoveis` do Cliente: fora do catálogo de referências móveis e do resíduo do VERIFY, com o APPLY recusando plano
+que a mova — o MERGE move `customerId` e nunca a marca, e o registro movido bloqueia a exclusão do canônico.
 
 **Dados.** Nenhum cadastro real do `veridi_dev` foi excluído (adendo do PO): toda exclusão dos testes é de fixture
-sintética no banco de teste do worktree. A migration entra no `veridi_dev` pelo `pnpm db:migrate` do checkout principal
-na integração. PROD, Railway e `release/prod` intocados.
+sintética no banco de teste do worktree. As migrations entram no `veridi_dev` pelo `pnpm db:migrate` do checkout
+principal na integração; o `veridi_dev` não tem registro do CNPJ nenhum, logo nenhum registro antigo a marcar. PROD,
+Railway e `release/prod` intocados — PROD precisa das migrations 093038 e 093040 quando o PO publicar.
 
 **Validação.** API `modules/master-data-deletion` (3 arquivos, 86 testes: 403 dos cinco perfis antes do corpo, prévia
 sem escrita, RESTRICT/CASCADE/SET NULL/id sem FK/versão/código/nome/JSON/históricos bloqueando, V1 técnica dos quatro
@@ -6575,6 +6583,18 @@ teste exclusivo do worktree; scripts `prod-cleanup-models`, `-dry-run`, `-sequen
 `pages/formulation-templates`, `pages/cost-templates`, `pages/planning` e os doze portões que varrem as telas (55
 arquivos, 786 testes). Typecheck de shared, API e web; `pnpm validate:migrations:fresh` (87 migrations, sem drift). Sem
 suíte completa, E2E, Playwright nem mutação.
+
+**Validação da marca.** API `modules/master-data-deletion` e `modules/customers` (12 arquivos, 281 testes: sem histórico
+sai só o Cliente; o registro da criação — digitado, do OpenCNPJ antes do primeiro Salvar, ou só a consulta — nasce
+marcado e sai junto, com o rastro; legado NULL, EDIT, CONSULTATION e CNPJ_CHANGED posteriores e o primeiro registro
+gravado por PATCH bloqueiam; registro movido para outro Cliente bloqueia os dois; dois marcados bloqueiam; hora, ordem e
+tipo não mudam o julgamento, e o juiz só lê as duas colunas; gatilho no CASCADE do registro técnico desfaz tudo;
+registro gravado durante a exclusão faz a recontagem sob trava recusar); scripts
+`master-data-duplicate-cnpj-marker.test.ts` (MERGE real move `customerId` e nunca a marca, VERIFY limpo, `consultarExclusao`
+do canônico recusa; plano adulterado aborta) com os vizinhos do catálogo, das ondas, `prod-cleanup-models`, migrations e
+backup (11 arquivos, 161 testes; `apply-migrations` caiu uma vez na limpeza do banco descartável, "permission denied to
+terminate process", e passou sozinho). Typecheck de shared, API e web; `pnpm validate:migrations:fresh` (89, sem drift).
+Mutação por script (extra): 9 mutantes, 9 derrubados. Sem suíte completa, E2E nem Playwright.
 
 **De passagem.** O portão web `campo-numerico-guarda` estava vermelho na `main` desde `874b07ed`: o "CNAE principal" do
 Cliente usa teclado numérico e não estava na allowlist. CNAE é identificador, como o CEP — entrou na allowlist com o

@@ -216,8 +216,10 @@ export async function createCustomer(
         },
         include: bloqueioVigenteInclude,
       });
+      // Só aqui o registro nasce marcado como da criação (§125) — inclusive o
+      // do OpenCNPJ aplicado antes do primeiro Salvar.
       if (dadosDoCnpj.evento) {
-        await registrarEventoDosDadosDoCnpj(tx, criado.id, dadosDoCnpj.evento, actor);
+        await registrarEventoDosDadosDoCnpj(tx, criado.id, dadosDoCnpj.evento, actor, "CRIACAO_DO_CLIENTE");
       }
       return criado;
     });
@@ -295,9 +297,10 @@ export async function updateCustomer(
         include: bloqueioVigenteInclude,
       });
       // O evento do histórico (§122) na mesma transação: sem Cliente alterado,
-      // sem evento; sem evento, a alteração volta.
+      // sem evento; sem evento, a alteração volta. Alteração nunca marca a
+      // criação (§125), nem sendo o primeiro registro do Cliente.
       if (dadosDoCnpj.evento) {
-        await registrarEventoDosDadosDoCnpj(tx, id, dadosDoCnpj.evento, actor);
+        await registrarEventoDosDadosDoCnpj(tx, id, dadosDoCnpj.evento, actor, "ALTERACAO_DO_CLIENTE");
       }
       return alterado;
     });

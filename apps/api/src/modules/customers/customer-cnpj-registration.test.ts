@@ -692,3 +692,52 @@ describe("quem grava", () => {
     expect(await linhasDoHistorico(cliente.id)).toEqual([]);
   });
 });
+
+/**
+ * A marca estrutural de nascimento (§125, CUSTOMER-CNPJ-CREATION-HISTORY-MARKER-01):
+ * só a criação do Cliente grava `createdWithCustomerId`, com o id do Cliente
+ * que nasce; alteração nunca marca. A marca é do banco — a leitura do
+ * histórico não muda.
+ */
+describe("a marca da criação", () => {
+  const app = buildTestApp("COMMERCIAL");
+
+  it.each([
+    ["digitado", (cnpj: string) => bloco(cnpj, { legalNature: "Sociedade Limitada" }), "EDIT"],
+    ["OpenCNPJ aplicado antes do primeiro Salvar", (cnpj: string) => blocoDaConsulta(cnpj), "EDIT"],
+    ["só a consulta, sem diferença", (cnpj: string) => bloco(cnpj, { consultedAt: CONSULTA }), "CONSULTATION"],
+  ])("criação com dados (%s): o registro nasce marcado com o próprio Cliente", async (_caso, dados, kind) => {
+    const cnpj = uniqueCnpj();
+    const cliente = await criado(app, { cnpj, cnpjRegistration: dados(cnpj) });
+    const linhas = await linhasDoHistorico(cliente.id);
+    expect(linhas).toEqual([expect.objectContaining({ kind, customerId: cliente.id, createdWithCustomerId: cliente.id })]);
+    // A leitura do histórico segue o mesmo contrato: a marca não vai para a tela.
+    const [evento] = await historico(app, cliente.id);
+    expect(Object.keys(evento!).sort()).toEqual(
+      ["changes", "cnpj", "consultedAt", "id", "kind", "occurredAt", "previousCnpj", "userName"].sort(),
+    );
+  });
+
+  it("alteração nunca marca: nem o PRIMEIRO registro do Cliente, nem a consulta aplicada depois, nem a troca de CNPJ", async () => {
+    const cnpj = uniqueCnpj();
+    const cliente = await criado(app, { cnpj });
+    await alterado(app, cliente.id, { cnpjRegistration: bloco(cnpj, { legalNature: "Sociedade Limitada" }) });
+    await alterado(app, cliente.id, { cnpjRegistration: blocoDaConsulta(cnpj) });
+    await alterado(app, cliente.id, { cnpj: uniqueCnpj() });
+
+    const linhas = await linhasDoHistorico(cliente.id);
+    expect(linhas.map((linha) => linha.kind)).toEqual(["EDIT", "EDIT", "CNPJ_CHANGED"]);
+    expect(linhas.map((linha) => linha.createdWithCustomerId)).toEqual([null, null, null]);
+  });
+
+  it("a marca da criação não muda depois: alterações só acrescentam registros sem marca", async () => {
+    const cnpj = uniqueCnpj();
+    const cliente = await criado(app, { cnpj, cnpjRegistration: bloco(cnpj, { legalNature: "Sociedade Limitada" }) });
+    const [daCriacao] = await linhasDoHistorico(cliente.id);
+    await alterado(app, cliente.id, { cnpjRegistration: bloco(cnpj, { legalNature: "Sociedade Anônima" }) });
+
+    const linhas = await linhasDoHistorico(cliente.id);
+    expect(linhas[0]).toEqual(daCriacao);
+    expect(linhas.map((linha) => linha.createdWithCustomerId)).toEqual([cliente.id, null]);
+  });
+});

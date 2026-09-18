@@ -7350,6 +7350,13 @@ conflito material protege, e é por isso que a ferramenta nunca decide sozinha.
 referências, remove-se o absorvido e a remoção fica registrada na planilha. Inativar mantém o nome ocupado e o lixo
 histórico — a mesma decisão D2 da §110, agora valendo para os nove cadastros.
 
+**Marca de origem não se move** (CUSTOMER-CNPJ-CREATION-HISTORY-MARKER-01, 2026-09-18). `createdWithCustomerId`, no
+histórico dos dados do CNPJ, termina no sufixo de id do Cliente, mas não é referência: guarda o Cliente ORIGINAL em cuja
+criação o registro nasceu (§125). O MERGE move o `customerId` do registro do absorvido para o canônico e **nunca** a
+marca — a coluna fica fora do catálogo de referências móveis e do resíduo do VERIFY (`origensImoveis`, em
+`master-data-catalog.ts`), e o APPLY recusa plano que a mova. Por isso o registro trazido do absorvido nunca vira filho
+técnico do canônico: ele bloqueia a exclusão física do canônico.
+
 ## §115 — Consumo interno: usar o material é uma saída, não um acerto de saldo
 
 INTERNAL-CONSUMPTION-01 (2026-09-17), decisão do PO no handoff. Fatia 2 de Uso e consumo — a Fatia 1 é o tipo de Item
@@ -7950,7 +7957,8 @@ segunda exclusão e o clique duplo — é 404. Caminhos: `/suppliers`, `/custome
 Por cadastro: **Fornecedor** — relação Item × Fornecedor, Ordem de Compra (inclusive o código e o nome copiados nela),
 Recebimento e Lote. **Cliente** — Projeto, Pedido, Recebimento de material do cliente, Lote de propriedade, Produto
 private label, Ordem de Produção, posição de inventário, código e nome copiados em Orçamento, Pedido, OP, Faturamento,
-Estrutura de custo, Cálculo de custo e Amostra, escopo de contagem de estoque e os dois históricos. **Modelos** — o que
+Estrutura de custo, Cálculo de custo e Amostra, escopo de contagem de estoque e os dois históricos (o do CNPJ, salvo o
+registro da criação — ver Filhos técnicos). **Modelos** — o que
 nasceu deles. **Roteiro** — Produto com a versão como padrão (a referência é à VERSÃO) e a cópia na OP
 (`sourceProfileId`/`sourceVersionId`, sem chave, com código e nome copiados).
 
@@ -7966,14 +7974,17 @@ toda coluna JSON do schema é varrida: o que o catálogo ainda não nomeia conta
   modo de cálculo) vale como está. Toda coluna da tabela de versões é classificada; coluna nova sem classificação
   bloqueia. Conteúdo lançado na V1 é rascunho trabalhado e bloqueia (seção 12 do discovery);
 - o **registro dos dados cadastrais do CNPJ** gravado na MESMA criação do Cliente (§122). **Decisão do PO (2026-09-18):
-  histórico de CNPJ nascido na mesma criação do Cliente é filho técnico; histórico posterior é uso real.** Ele só sai
-  junto com prova ESTRUTURAL de nascimento — "primeiro evento", hora próxima, diferença de segundos, menor id ou
-  `updatedAt` = `createdAt` não provam —, e o modelo atual não tem essa prova: o evento não guarda marca da criação, o
-  PATCH grava Cliente e evento na mesma transação, e o MERGE do saneamento move eventos de um Cliente para outro. **Por
-  isso, hoje, todo registro do CNPJ bloqueia** — o da criação inclusive, digitado ou aplicado do OpenCNPJ antes do
-  primeiro Salvar — e nenhum é apagado. Registro posterior (EDIT, CONSULTATION, CNPJ_CHANGED) bloqueia sempre. A marca
-  que habilita a exceção espera o PO: coluna anulável `createdWithCustomerId` no histórico, gravada só pela criação,
-  sem backfill (MASTER-DATA-HARD-DELETE-CNPJ-BIRTH-01).
+  histórico de CNPJ nascido na mesma criação do Cliente é filho técnico; histórico posterior é uso real** — e só com
+  prova ESTRUTURAL de nascimento: "primeiro evento", hora próxima, diferença de segundos, menor id, `updatedAt` =
+  `createdAt` ou `xmin` não provam nada. A prova é a marca `createdWithCustomerId` (CUSTOMER-CNPJ-CREATION-HISTORY-MARKER-01):
+  só a criação do Cliente a grava, com o id do Cliente que nasce, na mesma transação — o registro digitado e o do
+  OpenCNPJ aplicado antes do primeiro Salvar, seja Edição ou só Consulta. Alteração nunca marca, nem quando é o
+  primeiro registro do Cliente. **Filho técnico é só o registro com `customerId` E `createdWithCustomerId` iguais ao
+  Cliente, e um só**: sai junto, por CASCADE, conferido no efeito real e mostrado em "sai junto". Bloqueia: registro sem
+  a marca — posterior (EDIT, CONSULTATION, CNPJ_CHANGED) ou legado, gravado antes da marca, que fica NULL sem backfill —;
+  registro com a marca de outro Cliente (trazido pelo saneamento, §114); mais de um registro marcado; e, enquanto o
+  Cliente existir, registro de OUTRO Cliente que o guarde como o da criação. Registro técnico mais qualquer evento
+  posterior não sai.
 
 Arquivado ou inativo não bloqueia por si: o cadastro criado por engano, já arquivado e sem uso, pode sair.
 
@@ -8000,10 +8011,11 @@ destrutivo. Liberado, diz "Esta ação remove definitivamente um cadastro criado
 Motivo da exclusão. Bloqueado, lista as referências que impedem e oferece a saída normal (Inativar ou Arquivar, pelo gesto
 de sempre), nunca o botão de excluir. Uso surgido entre a prévia e a confirmação vira a explicação.
 
-**FKs intocadas (D6).** CASCADE, SET NULL e RESTRICT ficam como estão; a segurança é da aplicação. Migration só aditiva:
-`20260925093038_master_data_deletion_history` (enum `MasterDataEntityType` e a tabela do rastro). O enum já reserva
-`ITEM`, `PRODUCT` e `INDUSTRIAL_RESOURCE`, sem rota que os aceite: a Fatia 2 fica sem migration, como o discovery
-planejou.
+**FKs intocadas (D6).** CASCADE, SET NULL e RESTRICT ficam como estão; a segurança é da aplicação. Migrations só
+aditivas: `20260925093038_master_data_deletion_history` (enum `MasterDataEntityType` e a tabela do rastro) e
+`20260925093040_customer_cnpj_history_creation_marker` (a coluna anulável `createdWithCustomerId`, sem FK, sem default e
+sem backfill). O enum já reserva `ITEM`, `PRODUCT` e `INDUSTRIAL_RESOURCE`, sem rota que os aceite: a Fatia 2 fica sem
+migration, como o discovery planejou.
 
 ## §126 — Estorno de consumo interno: uma entrada própria, com motivo, que nunca apaga o consumo
 

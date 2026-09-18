@@ -30,7 +30,9 @@ import type { CreateCustomerInput, UpdateCustomerInput } from "./customers.schem
  *    CNPJ deixa UM evento no histórico, na mesma transação, com a mudança
  *    campo a campo e a origem de cada uma — e nunca "A → A";
  * 3. a "Última consulta CNPJ" é do sistema: só muda quando uma consulta é
- *    aplicada e salva, e volta a nulo quando o CNPJ muda.
+ *    aplicada e salva, e volta a nulo quando o CNPJ muda;
+ * 4. o evento gravado na CRIAÇÃO do Cliente leva a marca estrutural
+ *    `createdWithCustomerId` (§125); o de alteração, nunca.
  *
  * Consultar (`GET /cnpj-lookup/:cnpj`) não passa por aqui e não grava nada.
  */
@@ -231,16 +233,28 @@ export function planejarDadosDoCnpj(
   };
 }
 
+/**
+ * Onde o evento nasce. Só a CRIAÇÃO do Cliente marca o registro com
+ * `createdWithCustomerId` — a prova estrutural de nascimento que a exclusão
+ * física exige para tratá-lo como filho técnico (§125,
+ * CUSTOMER-CNPJ-CREATION-HISTORY-MARKER-01). Alteração nunca marca, nem quando
+ * é o primeiro registro do Cliente.
+ */
+export type OrigemDoEventoDosDadosDoCnpj = "CRIACAO_DO_CLIENTE" | "ALTERACAO_DO_CLIENTE";
+
 /** Grava o evento — sempre dentro da transação que grava o Cliente. */
 export async function registrarEventoDosDadosDoCnpj(
   tx: Prisma.TransactionClient,
   customerId: string,
   evento: EventoDosDadosDoCnpj,
   actor: User,
+  origem: OrigemDoEventoDosDadosDoCnpj,
 ): Promise<void> {
   await tx.customerCnpjRegistrationHistory.create({
     data: {
       customerId,
+      // A marca é o PRÓPRIO Cliente que nasce, na transação que o cria.
+      createdWithCustomerId: origem === "CRIACAO_DO_CLIENTE" ? customerId : null,
       kind: evento.kind,
       cnpj: evento.cnpj,
       previousCnpj: evento.previousCnpj,

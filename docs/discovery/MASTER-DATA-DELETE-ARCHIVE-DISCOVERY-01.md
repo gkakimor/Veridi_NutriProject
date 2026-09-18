@@ -363,9 +363,11 @@ MASTER-DATA-HARD-DELETE-01 e, sobre ela, MASTER-DATA-HARD-DELETE-02.
   inesperado; rastro append-only com retrato por lista branca, ALVO no `prod-cleanup` (ponto 4 da seção 12 decidido pelo
   PO). Os pontos 1 e 2 da seção 12 valeram como escritos. **Registro do CNPJ da criação** (§122, posterior a este
   documento): o PO decidiu em 2026-09-18 que ele é filho técnico e que registro posterior é uso real, com prova
-  estrutural de nascimento; o modelo atual não a tem, então todo registro do CNPJ bloqueia até a marca
-  `createdWithCustomerId` (proposta, migration aditiva) ser aprovada. O Perfil recusado oferece o Arquivar da
-  Fatia 0.
+  estrutural de nascimento. A prova veio com CUSTOMER-CNPJ-CREATION-HISTORY-MARKER-01 (2026-09-18, segunda migration
+  da iniciativa, `20260925093040`, aditiva): a coluna `createdWithCustomerId`, gravada só pela criação do Cliente; o
+  histórico virou tabela interna do Cliente, e só o registro marcado com o próprio Cliente, e um só, sai junto — o
+  resto bloqueia, e o saneamento nunca move a marca (§114). O Perfil recusado oferece o Arquivar da Fatia 0. **Fatia 1
+  fechada.**
 - Fatia 2: `NÃO IMPLEMENTADO`.
 
 ## 17. Histórico de decisões
@@ -384,3 +386,6 @@ MASTER-DATA-HARD-DELETE-01 e, sobre ela, MASTER-DATA-HARD-DELETE-02.
 - 2026-09-18 — ajuste final: o PO decidiu o registro do CNPJ da criação (filho técnico, só com prova estrutural); o
   modelo não prova, a regra por carimbo saiu e todo registro do CNPJ bloqueia até a marca proposta ser aprovada
   (MASTER-DATA-HARD-DELETE-CNPJ-BIRTH-01).
+- 2026-09-18 — marca aprovada e implementada por CUSTOMER-CNPJ-CREATION-HISTORY-MARKER-01 (§125 e §114, migration
+  aditiva `20260925093040`, sem FK, sem default e sem backfill): o registro da criação marcado sai junto, o resto
+  bloqueia, e o MERGE do saneamento move `customerId` e nunca a marca. MASTER-DATA-HARD-DELETE-01 fechada de vez.
