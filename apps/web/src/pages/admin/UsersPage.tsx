@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { UserDTO, UserRole } from "@veridi/shared";
+import type { UserDTO, UserListResponse, UserRole } from "@veridi/shared";
 import { USER_ROLES, USER_ROLE_LABELS } from "@veridi/shared";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { FormSection } from "../../components/FormSection";
@@ -24,8 +24,10 @@ type Mode = { kind: "closed" } | { kind: "create" } | { kind: "edit"; user: User
  */
 export function UsersPage() {
   const { user: currentUser } = useAuth();
-  const [users, setUsers] = useState<UserDTO[]>([]);
-  const [total, setTotal] = useState(0);
+  // A resposta inteira, não linhas e total em estados soltos: a guarda do
+  // administrador abaixo precisa saber, do MESMO retorno, se a lista veio completa.
+  const [lista, setLista] = useState<UserListResponse | null>(null);
+  const users = lista?.users ?? [];
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>({ kind: "closed" });
@@ -42,10 +44,7 @@ export function UsersPage() {
     setLoading(true);
     setError(null);
     listUsers({ pageSize: 100 })
-      .then((result) => {
-        setUsers(result.users);
-        setTotal(result.total);
-      })
+      .then(setLista)
       .catch((err: unknown) =>
         setError(err instanceof Error ? err.message : "Falha ao carregar usuários"),
       )
@@ -83,7 +82,9 @@ export function UsersPage() {
    * do que a página traz, a conta da tela mentiria, e aí fica só a da API.
    */
   const adminsAtivos =
-    total <= users.length ? users.filter((u) => u.role === "ADMIN" && u.active).length : null;
+    lista !== null && lista.total <= lista.users.length
+      ? lista.users.filter((u) => u.role === "ADMIN" && u.active).length
+      : null;
   const editado = mode.kind === "edit" ? mode.user : null;
   const ehProprio = editado !== null && editado.id === currentUser?.id;
   const ehUltimoAdmin =
