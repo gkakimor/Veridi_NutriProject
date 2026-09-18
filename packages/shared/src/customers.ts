@@ -1,6 +1,9 @@
 /** Contratos do módulo de Clientes, consumidos por `apps/api` e `apps/web`. */
 
-import type { CnpjLookupCompany, CnpjRegistrationField } from "./cnpj-lookup.js";
+import type {
+  CustomerCnpjRegistration,
+  CustomerCnpjRegistrationInput,
+} from "./customer-cnpj-registration.js";
 import type { CustomerCommercialStatusDTO } from "./customer-commercial-status.js";
 import type { CustomerBlockDTO, CustomerStatus } from "./customer-status.js";
 import type { CustomerPaymentDefaultsDTO, PaymentInstrument } from "./payment.js";
@@ -110,34 +113,6 @@ export interface CustomerAddress {
 }
 
 /**
- * Dados cadastrais do CNPJ — CUSTOMER-CNPJ-PERSISTED-DATA-01, §119.
- *
- * O retrato que uma consulta de CNPJ APLICADA e SALVA deixou no Cliente: CNAE,
- * natureza jurídica, porte, abertura, matriz/filial, Simples, MEI e situação
- * na Receita, com o instante da consulta. É um BLOCO: nasce inteiro de uma
- * consulta, é trocado inteiro pela seguinte, e pertence ao CNPJ que o Cliente
- * tem — trocar o CNPJ o descarta.
- *
- * Os campos têm os mesmos nomes e tipos do contrato da consulta, e a mesma
- * leitura de `null`: não informado pela fonte. Simples e MEI `null` NÃO são
- * "Não". Nada aqui define o perfil tributário (§83).
- */
-export type CustomerCnpjRegistration = Pick<CnpjLookupCompany, CnpjRegistrationField> & {
-  /** Instante da consulta aplicada (o `consultedAt` do resultado) — a "Última consulta CNPJ". */
-  consultedAt: string;
-};
-
-/**
- * O bloco no corpo do POST/PATCH do Cliente: os dados e o CNPJ que foi
- * consultado. O servidor recusa o bloco cujo CNPJ não é o que o Cliente terá
- * depois da gravação — dado cadastral de um CNPJ não fica guardado sob outro.
- */
-export interface CustomerCnpjRegistrationInput extends CustomerCnpjRegistration {
-  /** CNPJ consultado, normalizado (o `cnpj` do resultado da consulta). */
-  cnpj: string;
-}
-
-/**
  * O Cliente carrega o pagamento padrão (`CustomerPaymentDefaultsDTO`, seis
  * campos, todos `null` quando não informado) — sugestão para novos orçamentos.
  */
@@ -152,8 +127,8 @@ export interface CustomerDTO extends CustomerPaymentDefaultsDTO {
   /** Nunca `null`: sem classificação é `NOT_INFORMED` (§83). */
   taxProfile: CustomerTaxProfile;
   /**
-   * Dados cadastrais do CNPJ (§119) — sempre do `cnpj` acima. `null` quando
-   * nenhuma consulta foi aplicada e salva para ele.
+   * Dados cadastrais do CNPJ (§119, §122) — sempre do `cnpj` acima. `null`
+   * quando não há dado nenhum nem consulta aplicada.
    */
   cnpjRegistration: CustomerCnpjRegistration | null;
   street: string | null;
@@ -210,8 +185,8 @@ export interface CreateCustomerInput {
   phone?: string;
   /** Ausente vira `NOT_INFORMED`. `null` é recusado — não existe "limpar". */
   taxProfile?: CustomerTaxProfile;
-  /** Consulta de CNPJ aplicada (§119). Ausente ou `null`: sem dados cadastrais do CNPJ. */
-  cnpjRegistration?: CustomerCnpjRegistrationInput | null;
+  /** Dados cadastrais do CNPJ (§122). Ausente: sem dados cadastrais. */
+  cnpjRegistration?: CustomerCnpjRegistrationInput;
   street?: string;
   number?: string;
   complement?: string;
@@ -253,11 +228,11 @@ export interface UpdateCustomerInput {
   /** Ausente não mexe no perfil gravado. */
   taxProfile?: CustomerTaxProfile;
   /**
-   * Dados cadastrais do CNPJ (§119), como bloco: objeto troca o bloco inteiro,
-   * `null` limpa. Ausente não mexe — salvo quando o `cnpj` muda, e aí o bloco
-   * do CNPJ anterior é descartado.
+   * Dados cadastrais do CNPJ (§122): os dez campos como a tela os tem, e o
+   * servidor grava e registra no histórico só o que mudou. Ausente não mexe —
+   * salvo quando o `cnpj` muda, e aí os dados do CNPJ anterior são limpos.
    */
-  cnpjRegistration?: CustomerCnpjRegistrationInput | null;
+  cnpjRegistration?: CustomerCnpjRegistrationInput;
   street?: string;
   number?: string;
   complement?: string;

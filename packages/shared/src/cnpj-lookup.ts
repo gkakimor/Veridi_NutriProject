@@ -78,6 +78,19 @@ export function formatCnaeCode(code: string | null | undefined): string | null {
     : code;
 }
 
+/** Só os dígitos do CNAE digitado, até sete: `1099-6/99` → `1099699`. */
+export function normalizeCnaeCode(value: string): string {
+  return value.replace(/\D/g, "").slice(0, 7);
+}
+
+/** Máscara de digitação do CNAE: `1099`, `1099-6`, `1099-6/9`, `1099-6/99`. */
+export function maskCnaeInput(value: string): string {
+  const digitos = normalizeCnaeCode(value);
+  if (digitos.length <= 4) return digitos;
+  if (digitos.length === 5) return `${digitos.slice(0, 4)}-${digitos.slice(4)}`;
+  return `${digitos.slice(0, 4)}-${digitos.slice(4, 5)}/${digitos.slice(5)}`;
+}
+
 /**
  * Os dados cadastrais que a consulta devolve, já normalizados.
  *

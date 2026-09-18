@@ -35,6 +35,7 @@ export * from "./pricing-math.js";
 export * from "./pricing-model.js";
 export * from "./cnpj.js";
 export * from "./cnpj-lookup.js";
+export * from "./customer-cnpj-registration.js";
 export * from "./contact.js";
 export * from "./br-states.js";
 export * from "./suppliers.js";

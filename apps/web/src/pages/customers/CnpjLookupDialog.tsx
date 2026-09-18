@@ -1,10 +1,5 @@
 import { useId, useState } from "react";
-import type {
-  CnpjLookupProvider,
-  CnpjLookupResult,
-  CnpjRegistrationField,
-  CustomerCnpjRegistration,
-} from "@veridi/shared";
+import type { CnpjLookupProvider, CnpjLookupResult, CnpjRegistrationField } from "@veridi/shared";
 import {
   CNPJ_LOOKUP_DISCLAIMER,
   CNPJ_LOOKUP_PROVIDERS,
@@ -12,16 +7,16 @@ import {
   DEFAULT_CNPJ_LOOKUP_PROVIDER,
   formatCnpj,
 } from "@veridi/shared";
-import { BulkSelectionCheckbox } from "../../components/BulkSelection";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { formatDateTime } from "../../lib/dates";
 import { lookupCnpj } from "../../lib/cnpj-lookup-api";
 import {
+  VERBO_DA_ESCOLHA,
   compararComOCadastro,
   compararDadosDoCnpj,
   dadosDoCnpjParaAplicar,
+  linhaSelecionavel,
   selecaoInicial,
-  selecaoInicialDosDadosDoCnpj,
   valoresParaAplicar,
 } from "./cnpj-lookup-fields";
 import type {
@@ -30,28 +25,27 @@ import type {
   LinhaDaComparacao,
   LinhaDosDadosDoCnpj,
   ValoresDoFormulario,
+  ValoresDosDadosDoCnpj,
 } from "./cnpj-lookup-fields";
 
 /**
- * Consultar CNPJ — CUSTOMER-CNPJ-LOOKUP-01, com os dados cadastrais de
- * CUSTOMER-CNPJ-PERSISTED-DATA-01 (§119).
+ * Consultar CNPJ — §111 e §122 (CUSTOMER-CNPJ-LOOKUP-01,
+ * CUSTOMER-CNPJ-EDITABLE-HISTORY-01).
  *
  * Duas etapas dentro do mesmo diálogo:
  *
  * 1. **Fonte** — qual base consultar, e o botão que consulta. A fonte fica
- *    explícita mesmo havendo uma só: o conceito de provedor é do produto, não
- *    um detalhe de implementação, e quando o SERPRO existir ele entra nesta
- *    lista sem que a tela mude de forma. Fonte que ainda não responde não
- *    aparece aqui, nem desabilitada.
- * 2. **Comparação** — Atual × Retornado, campo a campo, com a caixa de aplicar
- *    em cada diferença: primeiro os campos do cadastro, depois os dados
- *    cadastrais do CNPJ (CNAE, porte, Simples, MEI, situação…).
+ *    explícita mesmo havendo uma só: o conceito de provedor é do produto, e
+ *    quando o SERPRO existir ele entra nesta lista sem que a tela mude.
+ * 2. **Comparação** — Atual × Retornado, campo a campo: primeiro os campos do
+ *    cadastro, depois os dados cadastrais do CNPJ. A consulta é ADITIVA: só o
+ *    que completa um campo vazio nasce marcado; trocar o que já existe é
+ *    "Substituir", e o equivalente pode ser marcado para "Confirmar".
  *
- * Nada é aplicado sozinho, e NADA é gravado: "Aplicar consulta ao cadastro"
- * mexe no estado do formulário — os campos marcados e o bloco dos dados
- * cadastrais com a data desta consulta, mesmo quando nada mudou — e o
- * cadastro continua exigindo "Salvar". Cancelar, fechar no ✕ e Escape saem
- * sem tocar em campo nenhum nem na data da consulta.
+ * Nada é gravado: "Aplicar consulta ao cadastro" mexe no estado do formulário
+ * — os campos marcados e a data desta consulta, mesmo sem nada marcado — e o
+ * cadastro continua exigindo "Salvar". Cancelar, ✕ e Escape saem sem tocar em
+ * nada, nem na data.
  */
 
 type Etapa = "fonte" | "resultado";
@@ -62,40 +56,35 @@ type Situacao =
   /** CNPJ não encontrado ou fonte indisponível — o cadastro manual segue de pé. */
   | { tipo: "recado"; texto: string };
 
-/** O que a coluna "OpenCNPJ" mostra quando não há o que aplicar. */
-function recadoDaLinha(linha: LinhaDaComparacao | LinhaDosDadosDoCnpj): string {
-  if (linha.situacao === "sem_valor") return "Não informado pela fonte";
-  if (linha.situacao === "igual") return "Sem alteração";
-  return "motivo" in linha ? (linha.motivo ?? "") : "";
+type Linha = LinhaDaComparacao | LinhaDosDadosDoCnpj;
+
+/** O que aparece embaixo do valor da fonte, quando há o que dizer. */
+function recadoDaLinha(linha: Linha): string | null {
+  switch (linha.situacao) {
+    case "sem_valor":
+      return "Não informado pela fonte";
+    case "confirmar":
+      return "Igual ao atual";
+    case "nao_aplicavel":
+      return "motivo" in linha ? (linha.motivo ?? null) : null;
+    default:
+      return null;
+  }
 }
 
-/** Uma linha da tabela Atual × Retornado — a mesma para os dois grupos. */
+/** Uma linha Atual × Retornado — a mesma para os dois grupos. */
 function LinhaDaTabela({
   linha,
   marcada,
   onAlternar,
-  idDoMotivo,
 }: {
-  linha: LinhaDaComparacao | LinhaDosDadosDoCnpj;
+  linha: Linha;
   marcada: boolean;
   onAlternar: () => void;
-  idDoMotivo: string;
 }) {
-  const aplicavel = linha.situacao === "aplicavel";
   const recado = recadoDaLinha(linha);
   return (
     <tr>
-      <td className="table__select table__select--bulk">
-        {aplicavel ? (
-          <BulkSelectionCheckbox
-            label={`Aplicar ${linha.rotulo}`}
-            checked={marcada}
-            onChange={onAlternar}
-          />
-        ) : (
-          <span className="sr-only">{`${linha.rotulo}: ${recado}`}</span>
-        )}
-      </td>
       <td className="col-flex" data-label="Campo">
         {linha.rotulo}
       </td>
@@ -104,19 +93,24 @@ function LinhaDaTabela({
       </td>
       <td className="col-flex" data-label="Retornado">
         {/* O valor SEMPRE aparece quando a fonte informou — inclusive quando
-            não dá para aplicar. Esconder o que a fonte disse deixaria a pessoa
-            sem saber o que ela está deixando de usar. */}
-        {linha.situacao === "sem_valor" ? (
-          <span className="cell-sub">{recado}</span>
+            não dá para aplicar: esconder o que a fonte disse deixaria a
+            pessoa sem saber o que está deixando de usar. */}
+        <div>{linha.retornado.trim() === "" ? "—" : linha.retornado}</div>
+        {recado && <div className="cell-sub">{recado}</div>}
+      </td>
+      <td className="col-flex cnpj-lookup__acao" data-label="Ação">
+        {linhaSelecionavel(linha.situacao) ? (
+          <label className="cnpj-lookup__escolha">
+            <input
+              type="checkbox"
+              aria-label={`${VERBO_DA_ESCOLHA[linha.situacao]} ${linha.rotulo}`}
+              checked={marcada}
+              onChange={onAlternar}
+            />
+            <span aria-hidden="true">{VERBO_DA_ESCOLHA[linha.situacao]}</span>
+          </label>
         ) : (
-          <>
-            <div>{linha.retornado}</div>
-            {!aplicavel && (
-              <div className="cell-sub" id={idDoMotivo}>
-                {recado}
-              </div>
-            )}
-          </>
+          <span className="sr-only">{`${linha.rotulo}: nada a aplicar`}</span>
         )}
       </td>
     </tr>
@@ -128,15 +122,22 @@ function CabecalhoDaComparacao({ fonte }: { fonte: string }) {
   return (
     <thead>
       <tr>
-        <th className="table__select table__select--bulk">
-          <span className="sr-only">Aplicar</span>
-        </th>
         <th className="col-flex">Campo</th>
         <th className="col-flex">Atual</th>
         <th className="col-flex">{fonte}</th>
+        <th className="col-flex">Ação</th>
       </tr>
     </thead>
   );
+}
+
+function alternar<T>(campo: T) {
+  return (atual: ReadonlySet<T>) => {
+    const proximo = new Set(atual);
+    if (proximo.has(campo)) proximo.delete(campo);
+    else proximo.add(campo);
+    return proximo;
+  };
 }
 
 export function CnpjLookupDialog({
@@ -148,15 +149,12 @@ export function CnpjLookupDialog({
 }: {
   /** O CNPJ do formulário, já validado por quem abriu o diálogo. */
   cnpj: string;
-  /** O estado do FORMULÁRIO agora — não o registro salvo (§8 do handoff). */
+  /** Os campos do cadastro como estão no FORMULÁRIO agora — não o registro salvo. */
   valoresAtuais: ValoresDoFormulario;
-  /**
-   * Os dados cadastrais que o formulário tem para ESTE CNPJ — `null` quando
-   * não há, ou quando os que havia eram do CNPJ anterior e foram descartados.
-   */
-  dadosDoCnpjAtuais: CustomerCnpjRegistration | null;
+  /** Os dados cadastrais do CNPJ como estão no formulário agora. */
+  dadosDoCnpjAtuais: ValoresDosDadosDoCnpj;
   onClose: () => void;
-  /** Recebe os campos marcados e o bloco dos dados cadastrais. Quem hospeda escreve no formulário. */
+  /** Recebe o que foi marcado e a data da consulta. Quem hospeda escreve no formulário. */
   onApply: (aplicacao: AplicacaoDaConsultaDeCnpj) => void;
 }) {
   const idBase = useId();
@@ -194,40 +192,24 @@ export function CnpjLookupDialog({
     setLinhas(comparacao);
     setMarcados(selecaoInicial(comparacao));
     setLinhasDosDados(comparacaoDosDados);
-    setDadosMarcados(selecaoInicialDosDadosDoCnpj(comparacaoDosDados));
+    setDadosMarcados(selecaoInicial(comparacaoDosDados));
     setSituacao({ tipo: "parado" });
     setEtapa("resultado");
-  }
-
-  function alternar<T>(campo: T) {
-    return (atual: ReadonlySet<T>) => {
-      const proximo = new Set(atual);
-      if (proximo.has(campo)) proximo.delete(campo);
-      else proximo.add(campo);
-      return proximo;
-    };
   }
 
   function aplicar() {
     if (!resultado) return;
     onApply({
       valores: valoresParaAplicar(linhas, marcados),
-      dadosDoCnpj: dadosDoCnpjParaAplicar(
-        dadosDoCnpjAtuais,
-        resultado,
-        linhasDosDados,
-        dadosMarcados,
-      ),
+      dadosDoCnpj: dadosDoCnpjParaAplicar(linhasDosDados, dadosMarcados, resultado.company),
+      consultedAt: resultado.consultedAt,
       cnpj: resultado.cnpj,
     });
   }
 
-  const aplicaveis =
-    linhas.filter((linha) => linha.situacao === "aplicavel").length +
-    linhasDosDados.filter((linha) => linha.situacao === "aplicavel").length;
+  const todas: Linha[] = [...linhas, ...linhasDosDados];
+  const oferecidas = todas.filter((linha) => linha.situacao === "preencher" || linha.situacao === "substituir");
   const totalMarcado = marcados.size + dadosMarcados.size;
-  const nenhumaDiferenca = etapa === "resultado" && aplicaveis === 0;
-  const idDoMotivo = (campo: string) => `${idBase}-motivo-${campo}`;
 
   const rodape =
     etapa === "fonte" ? (
@@ -252,16 +234,16 @@ export function CnpjLookupDialog({
     ) : (
       <>
         <span className="modal-fullscreen__foot-meta">
-          {nenhumaDiferenca
-            ? "Nenhuma diferença. Aplicar registra a data desta consulta; depois, salve o cadastro."
-            : `${totalMarcado} de ${aplicaveis} ${aplicaveis === 1 ? "diferença marcada" : "diferenças marcadas"}. Depois de aplicar, salve o cadastro.`}
+          {totalMarcado === 0
+            ? "Nada marcado: aplicar registra só a data desta consulta. Depois, salve o cadastro."
+            : `${totalMarcado} ${totalMarcado === 1 ? "campo marcado" : "campos marcados"}. Depois de aplicar, salve o cadastro.`}
         </span>
         <div className="modal-fullscreen__actions">
           <button type="button" className="btn btn--ghost" onClick={onClose}>
             Cancelar
           </button>
-          {/* Sempre disponível no resultado: aplicar sem diferença nenhuma
-              ainda registra que os dados foram revistos nesta data. */}
+          {/* Sempre disponível no resultado: aplicar sem nada marcado ainda
+              registra que os dados foram conferidos nesta data. */}
           <button type="button" className="btn btn--accent" onClick={aplicar}>
             Aplicar consulta ao cadastro
           </button>
@@ -302,8 +284,8 @@ export function CnpjLookupDialog({
                 ))}
               </select>
               <p className="field__hint">
-                Base pública de dados empresariais. A consulta não valida a empresa
-                juridicamente e não classifica o perfil tributário.
+                Base pública de dados empresariais. A consulta sugere: só completa o que
+                estiver vazio, e troca o que já existe apenas se você marcar.
               </p>
             </div>
 
@@ -330,9 +312,9 @@ export function CnpjLookupDialog({
               <span>Consultado em: {formatDateTime(resultado.consultedAt)}</span>
             </p>
 
-            {nenhumaDiferenca ? (
+            {oferecidas.length === 0 ? (
               <p className="field__hint" role="status">
-                A fonte não trouxe nenhum dado diferente do que já está no formulário.
+                A fonte não trouxe nada que complete ou mude o formulário.
               </p>
             ) : null}
 
@@ -346,23 +328,19 @@ export function CnpjLookupDialog({
                       linha={linha}
                       marcada={marcados.has(linha.campo)}
                       onAlternar={() => setMarcados(alternar(linha.campo))}
-                      idDoMotivo={idDoMotivo(linha.campo)}
                     />
                   ))}
                 </tbody>
               </table>
             </div>
 
-            {/* Os dados cadastrais do CNPJ (§119) ficam guardados no Cliente
-                ao salvar, com a data desta consulta. Mesmas regras da tabela
-                de cima — e nenhum deles define o perfil tributário (§83). */}
+            {/* Os dados cadastrais do CNPJ (§119, §122): mesmas regras — e
+                nenhum deles define o perfil tributário (§83). */}
             <section className="cnpj-lookup__complemento">
               <h3 className="cnpj-lookup__complemento-titulo">Dados cadastrais do CNPJ</h3>
               <div className="table-container">
                 <table className="table table--cnpj-lookup">
-                  <CabecalhoDaComparacao
-                    fonte={CNPJ_LOOKUP_PROVIDER_LABELS[resultado.provider]}
-                  />
+                  <CabecalhoDaComparacao fonte={CNPJ_LOOKUP_PROVIDER_LABELS[resultado.provider]} />
                   <tbody>
                     {linhasDosDados.map((linha) => (
                       <LinhaDaTabela
@@ -370,15 +348,14 @@ export function CnpjLookupDialog({
                         linha={linha}
                         marcada={dadosMarcados.has(linha.campo)}
                         onAlternar={() => setDadosMarcados(alternar(linha.campo))}
-                        idDoMotivo={idDoMotivo(linha.campo)}
                       />
                     ))}
                   </tbody>
                 </table>
               </div>
               <p className="field__hint">
-                Ficam registrados no cadastro, com a data desta consulta, quando você salvar.
-                Não definem o perfil tributário.
+                Aplicados, ficam no formulário e só são registrados — no cadastro e no
+                histórico — quando você salvar. Não definem o perfil tributário.
               </p>
             </section>
           </>

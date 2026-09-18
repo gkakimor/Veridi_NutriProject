@@ -148,6 +148,10 @@ function linha(rotulo: string): HTMLElement {
 const caixa = (rotulo: string) =>
   screen.getByRole("checkbox", { name: `Aplicar ${rotulo}` }) as HTMLInputElement;
 
+/** A caixa de uma linha pelo verbo: "Aplicar", "Substituir" ou "Confirmar". */
+const escolha = (verbo: string, rotulo: string) =>
+  screen.getByRole("checkbox", { name: `${verbo} ${rotulo}` }) as HTMLInputElement;
+
 beforeEach(() => {
   window.sessionStorage.clear();
   vi.mocked(createCustomer).mockReset();
@@ -238,23 +242,26 @@ describe("C, D, L — a comparação e a seleção inicial", () => {
     expect(within(razao).getByText("VERIDI NUTRITION LTDA")).toBeTruthy();
   });
 
-  it("D — toda diferença começa marcada", async () => {
+  it("D — consulta ADITIVA: o que completa nasce marcado; o que troca é 'Substituir', desmarcado", async () => {
     renderEdicao();
     await consultar();
 
-    expect(caixa("Razão Social / Nome").checked).toBe(true);
+    // Nome fantasia vazio no cadastro: completar é o caso comum.
     expect(caixa("Nome Fantasia").checked).toBe(true);
-    expect(caixa("Logradouro").checked).toBe(true);
+    // Razão social e logradouro já preenchidos: a fonte sugere, a pessoa decide.
+    expect(escolha("Substituir", "Razão Social / Nome").checked).toBe(false);
+    expect(escolha("Substituir", "Logradouro").checked).toBe(false);
+    expect(within(linha("Logradouro")).getByText("Substituir")).toBeTruthy();
   });
 
-  it("L — valor equivalente aparece como 'Sem alteração' e não se aplica", async () => {
+  it("L — valor equivalente continua à vista e pode ser confirmado pela fonte", async () => {
     renderEdicao();
     await consultar();
 
-    // "Tatuí" no cadastro × "SAO PAULO" na fonte seria diferença; aqui o caso
-    // é a UF, igual dos dois lados.
+    // A UF é a mesma dos dois lados: a linha não some — oferece "Confirmar".
     const uf = linha("UF");
-    expect(within(uf).getByText("Sem alteração")).toBeTruthy();
+    expect(within(uf).getByText("Igual ao atual")).toBeTruthy();
+    expect(escolha("Confirmar", "UF").checked).toBe(false);
     expect(screen.queryByRole("checkbox", { name: "Aplicar UF" })).toBeNull();
   });
 
@@ -274,35 +281,39 @@ describe("C, D, L — a comparação e a seleção inicial", () => {
 });
 
 describe("E, F — aplicar só o escolhido", () => {
-  it("F — aplica os campos marcados e deixa o resto intacto", async () => {
+  it("F — aplicar completa o vazio e deixa intacto tudo o que já estava preenchido", async () => {
     renderEdicao();
     await consultar();
 
     fireEvent.click(screen.getByRole("button", { name: "Aplicar consulta ao cadastro" }));
 
-    await waitFor(() => expect(campo("Razão Social").value).toBe("VERIDI NUTRITION LTDA"));
-    expect(campo("Nome Fantasia").value).toBe("VERIDI NUTRITION");
-    expect(campo("Logradouro").value).toBe("AVENIDA PAULISTA");
-    expect(campo("CEP").value).toBe("01310-100");
-    expect(campo("Telefone").value).toBe("(11) 98765-4321");
+    // O que estava vazio foi completado.
+    await waitFor(() => expect(campo("Nome Fantasia").value).toBe("VERIDI NUTRITION"));
+    expect(campo("Complemento").value).toBe("CONJUNTO 12");
+    // O que já estava preenchido, sem "Substituir" marcado, ficou como estava.
+    expect(campo("Razão Social").value).toBe("VERIDI TESTE LTDA");
+    expect(campo("Logradouro").value).toBe("Rua Antiga");
+    expect(campo("CEP").value).toBe("18270-000");
+    expect(campo("Telefone").value).toBe("(11) 3333-4444");
     // A fonte não escreve nota interna, e nem poderia: o campo não é dela.
     expect((campo("Notas internas") as unknown as HTMLTextAreaElement).value).toBe(
       "Observação interna que ninguém de fora escreve.",
     );
   });
 
-  it("E — desmarcar um campo o deixa exatamente como estava", async () => {
+  it("E — substituir é escolha explícita: só a linha marcada troca", async () => {
     renderEdicao();
     await consultar();
 
-    // "Quero atualizar o endereço, mas não quero trocar o telefone."
-    fireEvent.click(caixa("Telefone"));
-    expect(caixa("Telefone").checked).toBe(false);
+    // "Quero trocar o logradouro pelo da fonte, mas não o telefone."
+    fireEvent.click(escolha("Substituir", "Logradouro"));
+    expect(escolha("Substituir", "Logradouro").checked).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Aplicar consulta ao cadastro" }));
 
     await waitFor(() => expect(campo("Logradouro").value).toBe("AVENIDA PAULISTA"));
     expect(campo("Telefone").value).toBe("(11) 3333-4444");
+    expect(campo("Razão Social").value).toBe("VERIDI TESTE LTDA");
   });
 
   it("aplicar NÃO grava: o cadastro continua esperando o Salvar", async () => {
@@ -311,7 +322,7 @@ describe("E, F — aplicar só o escolhido", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Aplicar consulta ao cadastro" }));
 
-    await waitFor(() => expect(campo("Razão Social").value).toBe("VERIDI NUTRITION LTDA"));
+    await waitFor(() => expect(campo("Nome Fantasia").value).toBe("VERIDI NUTRITION"));
     expect(updateCustomer).not.toHaveBeenCalled();
     expect(createCustomer).not.toHaveBeenCalled();
     // O botão que grava continua lá, e é ele quem persiste.
@@ -328,12 +339,15 @@ describe("G — valor vazio da fonte nunca apaga o que existe", () => {
     renderEdicao();
     await consultar();
 
-    expect(screen.queryByRole("checkbox", { name: "Aplicar Telefone" })).toBeNull();
-    expect(within(linha("Telefone")).getByText("Não informado pela fonte")).toBeTruthy();
+    // Nenhuma operação oferecida: nem aplicar, nem substituir, nem confirmar.
+    const telefone = linha("Telefone");
+    expect(within(telefone).queryByRole("checkbox")).toBeNull();
+    expect(within(telefone).getByText("Não informado pela fonte")).toBeTruthy();
+    expect(within(telefone).getByText("—")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Aplicar consulta ao cadastro" }));
 
-    await waitFor(() => expect(campo("Logradouro").value).toBe("AVENIDA PAULISTA"));
+    await waitFor(() => expect(campo("Nome Fantasia").value).toBe("VERIDI NUTRITION"));
     expect(campo("Telefone").value).toBe("(11) 3333-4444");
     expect(campo("Email").value).toBe("antigo@veridi.com.br");
   });
@@ -391,8 +405,9 @@ describe("J — a comparação enxerga o que foi digitado e ainda não foi salvo
     // O valor SALVO não aparece na comparação — ele só sobrou no título do
     // modal, que é o nome do registro aberto, não o campo em edição.
     expect(within(razao).queryByText("VERIDI TESTE LTDA")).toBeNull();
-    // A cidade digitada já é a da fonte: nada a aplicar nesta linha.
-    expect(within(linha("Cidade")).getByText("Sem alteração")).toBeTruthy();
+    // A cidade digitada já é a da fonte: a linha só oferece confirmar.
+    expect(within(linha("Cidade")).getByText("Igual ao atual")).toBeTruthy();
+    expect(escolha("Confirmar", "Cidade").checked).toBe(false);
   });
 });
 

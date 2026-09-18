@@ -87,6 +87,10 @@
   --sp-5: 20px;
   --sp-6: 24px;
   --sp-8: 32px;
+  /* Entre um bloco e o próximo — seções de cadastro, colunas de formulário e
+     corpo de documento. Nome para a regra, não valor novo: é o `--sp-5`,
+     cerca de uma linha de texto de respiro (§123). */
+  --block-gap: var(--sp-5);
 
   /* ===== Forma ===== */
   --radius: 10px;
