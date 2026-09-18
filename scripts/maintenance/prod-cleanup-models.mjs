@@ -148,6 +148,11 @@ export const ALVOS = [
   "Customer",
   "IndustrialResourceRate",
   "IndustrialResource",
+
+  // Rastro da exclusão física de cadastro mestre (MASTER-DATA-HARD-DELETE-01).
+  // Decisão do PO: é dado de negócio — sai no reset total autorizado junto com
+  // os cadastros que ele descreve. Só aponta para `users`, que fica.
+  "MasterDataDeletionHistory",
 ];
 
 /**

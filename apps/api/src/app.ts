@@ -62,6 +62,7 @@ import { finishedGoodsRoutes } from "./modules/finished-goods/finished-goods.rou
 import { reportsRoutes } from "./modules/reports/reports.routes.js";
 import { exportsRoutes } from "./modules/exports/exports.routes.js";
 import { bulkDocumentsRoutes } from "./modules/bulk-documents/bulk-documents.routes.js";
+import { masterDataDeletionRoutes } from "./modules/master-data-deletion/master-data-deletion.routes.js";
 import {
   DuplicateMasterDataNameError,
   responderNomeDuplicado,
@@ -173,6 +174,7 @@ export function buildApp() {
   app.register(reportsRoutes);
   app.register(exportsRoutes);
   app.register(bulkDocumentsRoutes);
+  app.register(masterDataDeletionRoutes);
 
   /**
    * Implantação de origem única: a API entrega o build do frontend.

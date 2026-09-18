@@ -36,6 +36,10 @@ import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
 import { TemplateDiffTable } from "../../components/TemplateDiffTable";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
+import {
+  ExclusaoDefinitivaDialog,
+  podeExcluirDefinitivamente,
+} from "../../components/ExclusaoDefinitivaDialog";
 import { formatDateTime } from "../../lib/dates";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal } from "../../lib/decimal-field";
@@ -160,6 +164,9 @@ export function CostTemplateDetailPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const canEdit = user?.role === "ADMIN" || user?.role === "PRODUCTION";
+  /* Excluir definitivamente o modelo criado por engano: só o Administrador. */
+  const podeExcluir = podeExcluirDefinitivamente(user?.role);
+  const [exclusaoAberta, setExclusaoAberta] = useState(false);
 
   const [template, setTemplate] = useState<CostTemplateDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -573,6 +580,16 @@ export function CostTemplateDetailPage() {
                 >
                   {template.archived ? "Desarquivar" : "Arquivar"}
                 </button>
+                {podeExcluir && (
+                  <button
+                    type="button"
+                    className="btn btn--danger btn--sm"
+                    disabled={saving}
+                    onClick={() => setExclusaoAberta(true)}
+                  >
+                    Excluir definitivamente
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -981,6 +998,21 @@ export function CostTemplateDetailPage() {
           )}
         </FormSection>
       </div>
+
+      {exclusaoAberta && (
+        <ExclusaoDefinitivaDialog
+          tipo="INDUSTRIAL_COST_TEMPLATE"
+          id={template.id}
+          rotulo="modelo de estrutura de custo"
+          /* Recusada, a saída é Arquivar: o modelo sai da biblioteca e a origem fica. */
+          onAlternativa={() => {
+            setExclusaoAberta(false);
+            void run("arquivar", () => setCostTemplateArchived(template.id, true));
+          }}
+          onCancelar={() => setExclusaoAberta(false)}
+          onExcluido={() => navigate("/gestao/templates-estrutura")}
+        />
+      )}
     </div>
   );
 }

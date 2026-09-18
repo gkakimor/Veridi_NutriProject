@@ -7911,3 +7911,85 @@ plano antigo recusa.
 (inclusive o Modelo excluído, com a V1 na observação), RENOMEADOS, RESUMO e REVISÃO NECESSÁRIA.
 
 **Sem migration.** O índice único de MASTER-DATA-NAME-UNIQUENESS-01 continua esperando os dois grupos em revisão.
+
+## §125 — Exclusão física de cadastro mestre: só o criado por engano, nunca usado, e com rastro
+
+MASTER-DATA-HARD-DELETE-01 (2026-09-18), Fatia 1 do
+[MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01](discovery/MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01.md), D1, D2, D3 e D6:
+Fornecedor, Cliente, Modelo de formulação, Modelo de custo industrial, Modelo de política de preço e Perfil de Produção
+(Roteiro de Produção na tela). Item, Produto e Recurso industrial ficam para MASTER-DATA-HARD-DELETE-02.
+
+> **Excluir definitivamente existe só para cadastro criado por engano, nunca utilizado e sem nenhuma referência real.**
+> Qualquer uso, referência ou histórico bloqueia, e a saída normal continua sendo Inativar ou Arquivar. Não é ferramenta
+> de saneamento nem de migração.
+
+**Quem.** Só o Administrador (D1) — não herda a permissão de criar nem de editar o cadastro. A prévia segue a mesma
+lista. O perfil é conferido antes do corpo e da existência: sem permissão, cadastro existente e inexistente recebem o
+mesmo 403.
+
+**O gesto.** `GET <cadastro>/:id/deletion-check` responde se pode (`canDelete`), as razões que impedem — fonte, contagem
+e porquê, em linguagem de negócio —, o que sai junto e a saída normal (`INACTIVATE` no Fornecedor e no Cliente, `ARCHIVE`
+nos Modelos e no Roteiro), numa transação somente leitura. `DELETE <cadastro>/:id` com `{ "reason" }` exclui. Motivo
+vazio ou só espaços é 400; cadastro em uso é 409 `master_data_in_use`, com as referências; o que não existe — inclusive a
+segunda exclusão e o clique duplo — é 404. Caminhos: `/suppliers`, `/customers`, `/formulation-templates`,
+`/cost-templates`, `/pricing-policies` e `/production-profiles`.
+
+**O que bloqueia (D2).** Toda referência ao cadastro, às versões e aos filhos dele:
+- chave estrangeira de qualquer ação — RESTRICT, CASCADE e SET NULL contam igual: um DELETE "bem-sucedido" que apaga
+  histórico por CASCADE ou desliga um Produto por SET NULL é exatamente o que a regra proíbe;
+- id sem chave estrangeira, código e nome copiados em documento, e coluna JSON que cite o id ou o código;
+- histórico: a situação do Cliente (bloqueio, desbloqueio, inativação, reativação), os dados cadastrais do CNPJ além do
+  registro da criação, e a proveniência das Formulações, Estruturas de custo e Precificações nascidas de um Modelo.
+
+Por cadastro: **Fornecedor** — relação Item × Fornecedor, Ordem de Compra (inclusive o código e o nome copiados nela),
+Recebimento e Lote. **Cliente** — Projeto, Pedido, Recebimento de material do cliente, Lote de propriedade, Produto
+private label, Ordem de Produção, posição de inventário, código e nome copiados em Orçamento, Pedido, OP, Faturamento,
+Estrutura de custo, Cálculo de custo e Amostra, escopo de contagem de estoque e os dois históricos. **Modelos** — o que
+nasceu deles. **Roteiro** — Produto com a versão como padrão (a referência é à VERSÃO) e a cópia na OP
+(`sourceProfileId`/`sourceVersionId`, sem chave, com código e nome copiados).
+
+**Falha fechada.** O catálogo de cada agregado é explícito e conferido contra o `pg_constraint` a CADA execução: chave
+estrangeira que chega ao agregado sem estar catalogada, que mudou de ação, ou entrada do catálogo que o banco não tem mais
+bloqueia a exclusão até o catálogo ser revisto. Coluna sem chave criada depois é pega por sufixo (id, código, nome), e
+toda coluna JSON do schema é varrida: o que o catálogo ainda não nomeia conta, em vez de passar.
+
+**Filhos técnicos.** Não contam isoladamente e saem junto, só com prova de que estão como a criação os deixou:
+- a **V1** dos Modelos e do Roteiro: a única versão, em rascunho, nunca ativada, sem versão de origem, sem filho nenhum
+  (componente, recurso, custo adicional, faixa, etapa) e com todo campo que a criação não preenche no padrão —
+  observação, premissas, energia, modelo de precificação, perfis tributários. O que a criação preenche (base, unidade,
+  modo de cálculo) vale como está. Toda coluna da tabela de versões é classificada; coluna nova sem classificação
+  bloqueia. Conteúdo lançado na V1 é rascunho trabalhado e bloqueia (seção 12 do discovery);
+- o **registro dos dados cadastrais do CNPJ** que a criação do Cliente gravou (§122): um evento só, que não é troca de
+  CNPJ, num Cliente nunca regravado depois de criado (`updatedAt` = `createdAt`). Qualquer outro caso é histórico real e
+  bloqueia. **Leitura aplicada nesta fatia**: o registro nasceu depois do discovery, e o PO pode revertê-la para
+  bloqueio sem mexer no resto.
+
+Arquivado ou inativo não bloqueia por si: o cadastro criado por engano, já arquivado e sem uso, pode sair.
+
+**A transação.** Retrato de `pg_stat_xact_user_tables`; `FOR UPDATE` na raiz e nas linhas internas (quem grava
+referência com chave espera, e quem muda o cadastro também); recontagem de tudo sob a trava; 409 se houver qualquer uso;
+rastro; `DELETE` da raiz, com as internas saindo por CASCADE; e conferência do efeito real contra o esperado — a raiz e as
+internas contadas saem, uma linha entra no rastro, e nada mais. Efeito fora disso (CASCADE ou SET NULL que o catálogo não
+previa, gatilho) desfaz tudo: 409 `master_data_delete_aborted`, nada excluído e nada no rastro. Uma OC gravada durante a
+exclusão faz a recontagem recusar.
+
+**O rastro (D3).** `master_data_deletion_history`, append-only: tipo, id original (sem chave — o registro não existe
+mais), código, nome, motivo, retrato, autor (id e nome) e data. Nenhuma rota, serviço ou script altera ou apaga linha
+dele, e não existe restaurar. O retrato é lista branca por cadastro — código, nome ou razão social, CNPJ, situação,
+autoria, a V1 técnica e o que saiu junto (tabela e quantidade); contato, endereço, observação, descrição, segredo e
+credencial nunca entram. O autor é RESTRICT: usuário nunca é excluído, e SET NULL seria alteração no rastro. Exclusão por
+LGPD é outra política. No `prod-cleanup` o rastro é ALVO (decisão do PO): dado de negócio, sai no reset total autorizado.
+
+**Nome liberado.** Excluído, o nome fica livre para cadastrar de novo — a razão de existir a exclusão (F4 do discovery).
+O código não volta: a sequence não retrocede.
+
+**Tela.** "Excluir definitivamente" — nunca só "Excluir" —, só para o Administrador: no menu da linha de Fornecedores e
+de Clientes, e ao lado do Arquivar nos Modelos e no Roteiro. O diálogo consulta a prévia antes de oferecer algo
+destrutivo. Liberado, diz "Esta ação remove definitivamente um cadastro criado por engano.", o que sai junto, e exige o
+Motivo da exclusão. Bloqueado, lista as referências que impedem e oferece a saída normal (Inativar ou Arquivar, pelo gesto
+de sempre), nunca o botão de excluir. Uso surgido entre a prévia e a confirmação vira a explicação.
+
+**FKs intocadas (D6).** CASCADE, SET NULL e RESTRICT ficam como estão; a segurança é da aplicação. Migration só aditiva:
+`20260925093038_master_data_deletion_history` (enum `MasterDataEntityType` e a tabela do rastro). O enum já reserva
+`ITEM`, `PRODUCT` e `INDUSTRIAL_RESOURCE`, sem rota que os aceite: a Fatia 2 fica sem migration, como o discovery
+planejou.

@@ -13,6 +13,10 @@ import { SupplierFormModal } from "./SupplierFormModal";
 import { podeMudarSituacaoDoFornecedor, usePodeEditarFornecedor } from "./supplier-permissions";
 import { useOptionalAuth } from "../../app/AuthProvider";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import {
+  ExclusaoDefinitivaDialog,
+  podeExcluirDefinitivamente,
+} from "../../components/ExclusaoDefinitivaDialog";
 import { RowActions } from "../../components/RowActions";
 import {
   RecordContextChip,
@@ -47,6 +51,8 @@ export function SuppliersPage() {
   const podeEditar = usePodeEditarFornecedor();
   const sessao = useOptionalAuth();
   const podeMudarSituacao = sessao === null || podeMudarSituacaoDoFornecedor(sessao.user?.role);
+  /* Excluir definitivamente é só do Administrador — e sem sessão, nunca. */
+  const podeExcluir = sessao !== null && podeExcluirDefinitivamente(sessao.user?.role);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
@@ -58,6 +64,8 @@ export function SuppliersPage() {
 
   const [modalState, setModalState] = useState<ModalState>({ mode: "closed" });
   const [confirmDeactivate, setConfirmDeactivate] = useState<SupplierDTO | null>(null);
+  const [exclusao, setExclusao] = useState<SupplierDTO | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
 
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput), 300);
@@ -170,6 +178,11 @@ export function SuppliersPage() {
       </div>
 
       {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
+      {aviso && (
+        <p className="form-status" role="status">
+          {aviso}
+        </p>
+      )}
 
       {contextIds && (
         <RecordContextChip
@@ -233,8 +246,8 @@ export function SuppliersPage() {
                 <td onClick={(event) => event.stopPropagation()}>
                   <RowActions
                     label={`Mais ações de ${supplier.code}`}
-                    actions={
-                      podeMudarSituacao
+                    actions={[
+                      ...(podeMudarSituacao
                         ? [
                             {
                               label: supplier.active ? "Inativar" : "Reativar",
@@ -242,8 +255,20 @@ export function SuppliersPage() {
                               onSelect: () => handleToggleActive(supplier),
                             },
                           ]
-                        : []
-                    }
+                        : []),
+                      ...(podeExcluir
+                        ? [
+                            {
+                              label: "Excluir definitivamente",
+                              destructive: true,
+                              onSelect: () => {
+                                setAviso(null);
+                                setExclusao(supplier);
+                              },
+                            },
+                          ]
+                        : []),
+                    ]}
                   >
                     <button
                       type="button"
@@ -335,6 +360,31 @@ export function SuppliersPage() {
           if (target) void applyActive(target, false);
         }}
       />
+
+      {exclusao && (
+        <ExclusaoDefinitivaDialog
+          key={exclusao.id}
+          tipo="SUPPLIER"
+          id={exclusao.id}
+          rotulo="fornecedor"
+          /* Recusada, a saída é Inativar — o mesmo diálogo da linha. */
+          onAlternativa={
+            podeMudarSituacao
+              ? () => {
+                  const alvo = exclusao;
+                  setExclusao(null);
+                  handleToggleActive(alvo);
+                }
+              : undefined
+          }
+          onCancelar={() => setExclusao(null)}
+          onExcluido={(resultado) => {
+            setExclusao(null);
+            setAviso(`${resultado.entityCode} — ${resultado.entityName} foi excluído definitivamente.`);
+            reload();
+          }}
+        />
+      )}
     </>
   );
 }

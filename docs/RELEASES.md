@@ -6,6 +6,10 @@ Registro de cada publicação no Railway (projeto `ideal-passion`, ambiente `pro
 aqui entram só identificadores, contagens e resultados. Nenhuma credencial, URL de banco, dado pessoal ou
 conteúdo de backup.
 
+**Toda publicação preserva o dado de PROD.** PROD é a fonte de verdade: release muda schema, comportamento e
+funcionalidades, e exceção destrutiva — limpeza, reset, carga, saneamento — só com aprovação explícita do PO, planejada e
+auditável. Política permanente em [`DEPLOY.md`](DEPLOY.md) §10.
+
 | Tag | SHA em `release/prod` | Data | Nota |
 |---|---|---|---|
 | `homologacao-inicial-2026-09-14` | `0d3f273` | 2026-09-14 | primeira release de homologação |

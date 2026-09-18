@@ -16,6 +16,7 @@ export * from "./period-range.js";
 export * from "./health.js";
 export * from "./items.js";
 export * from "./master-data-names.js";
+export * from "./master-data-deletion.js";
 export * from "./item-cost-reference.js";
 export * from "./ownership.js";
 export * from "./users.js";

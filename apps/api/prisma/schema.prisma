@@ -471,6 +471,7 @@ model User {
   decidedStockCountPositions  StockCountPosition[]               @relation("StockCountDecidedBy")
   stockCountEntries           StockCountEntry[]                  @relation("StockCountEntryCountedBy")
   stockCountFindings          StockCountFinding[]                @relation("StockCountFindingCreatedBy")
+  masterDataDeletions         MasterDataDeletionHistory[]        @relation("MasterDataDeletedBy")
 
   @@index([active])
   @@map("users")
@@ -2620,6 +2621,58 @@ model CustomerCnpjRegistrationHistory {
 
   @@index([customerId, changedAt])
   @@map("customer_cnpj_registration_history")
+}
+
+/// Cadastro mestre que pode ser excluido fisicamente
+/// (MASTER-DATA-HARD-DELETE-01). ITEM, PRODUCT e INDUSTRIAL_RESOURCE ficam
+/// RESERVADOS para MASTER-DATA-HARD-DELETE-02, que o discovery planejou sem
+/// migration: nenhuma rota os aceita ainda (`MASTER_DATA_ENTITY_TYPES`).
+enum MasterDataEntityType {
+  SUPPLIER
+  CUSTOMER
+  FORMULATION_TEMPLATE
+  INDUSTRIAL_COST_TEMPLATE
+  PRICING_POLICY_TEMPLATE
+  PRODUCTION_PROFILE
+  ITEM
+  PRODUCT
+  INDUSTRIAL_RESOURCE
+}
+
+/// RASTRO DA EXCLUSAO FISICA DE CADASTRO MESTRE — APPEND-ONLY
+/// (MASTER-DATA-HARD-DELETE-01, D3 do MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01).
+///
+/// Uma linha por exclusao, gravada na MESMA transacao que apaga o cadastro.
+/// Nenhuma rota, servico ou script altera nem apaga linha daqui, e nao existe
+/// "restaurar". `entityId` e o id original SEM chave estrangeira: o registro
+/// nao existe mais. `snapshot` e o retrato MINIMO para auditoria, montado por
+/// lista branca de campos por cadastro — codigo, nome, identificador fiscal,
+/// situacao e o que saiu junto; nunca contato, endereco, observacao, segredo
+/// nem credencial (exclusao por LGPD e outra politica).
+///
+/// O autor e RESTRICT de proposito: usuario nunca e excluido, e SET NULL
+/// seria um UPDATE nesta tabela. No `prod-cleanup` ela e ALVO (decisao do
+/// PO): dado de negocio, sai no reset total autorizado com os cadastros.
+model MasterDataDeletionHistory {
+  id String @id @default(uuid())
+
+  entityType MasterDataEntityType
+  entityId   String
+  entityCode String
+  entityName String
+
+  /// Obrigatorio; validado na API.
+  reason   String
+  snapshot Json
+
+  deletedByUserId   String
+  deletedByUser     User     @relation("MasterDataDeletedBy", fields: [deletedByUserId], references: [id], onDelete: Restrict)
+  deletedByUserName String
+  deletedAt         DateTime @default(now())
+
+  @@index([entityType, deletedAt])
+  @@index([entityId])
+  @@map("master_data_deletion_history")
 }
 
 /// Definicao comercial/industrial do produto fabricado pela Veridi.

@@ -47,6 +47,10 @@ import { formatMinutes, formatMinutesPlain } from "../../lib/duration";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { FormSection } from "../../components/FormSection";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
+import {
+  ExclusaoDefinitivaDialog,
+  podeExcluirDefinitivamente,
+} from "../../components/ExclusaoDefinitivaDialog";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { ContextHelp } from "../../components/help";
@@ -592,6 +596,9 @@ export function ProductionProfileDetailPage() {
   const [produtoEscolhido, setProdutoEscolhido] = useState("");
   /* Arquivar pede confirmação: tira o roteiro das ordens novas dos produtos que o usam. */
   const [confirmarArquivar, setConfirmarArquivar] = useState(false);
+  /* Excluir definitivamente o roteiro criado por engano: só o Administrador. */
+  const podeExcluir = podeExcluirDefinitivamente(user?.role);
+  const [exclusaoAberta, setExclusaoAberta] = useState(false);
 
   /*
    * A identificação que o servidor devolveu na última leitura — `null` antes
@@ -1107,6 +1114,16 @@ export function ProductionProfileDetailPage() {
                         ? "Desarquivar"
                         : "Arquivar"}
                 </button>
+                {podeExcluir && (
+                  <button
+                    type="button"
+                    className="btn btn--danger btn--sm"
+                    disabled={saving}
+                    onClick={() => setExclusaoAberta(true)}
+                  >
+                    Excluir definitivamente
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -1657,6 +1674,21 @@ export function ProductionProfileDetailPage() {
           });
         }}
       />
+
+      {exclusaoAberta && (
+        <ExclusaoDefinitivaDialog
+          tipo="PRODUCTION_PROFILE"
+          id={profile.id}
+          rotulo="roteiro de produção"
+          /* Recusada, a saída é Arquivar — com a confirmação de sempre, que diz o efeito nos produtos. */
+          onAlternativa={() => {
+            setExclusaoAberta(false);
+            setConfirmarArquivar(true);
+          }}
+          onCancelar={() => setExclusaoAberta(false)}
+          onExcluido={() => navigate("/planejamento/perfis-producao")}
+        />
+      )}
     </div>
   );
 }

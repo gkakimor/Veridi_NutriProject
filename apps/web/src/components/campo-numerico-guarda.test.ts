@@ -80,6 +80,8 @@ function inputsCrus(arquivo: string): InputCru[] {
 const TECLADO_NUMERICO_SEM_SER_NUMERO: Record<string, string> = {
   "pages/customers/customer-form.tsx#customer-zip":
     "CEP é identificador: zeros à esquerda e máscara 00000-000, não se soma.",
+  "pages/customers/customer-form.tsx#customer-cnae-code":
+    "CNAE é código de atividade: zeros à esquerda e máscara 0000-0/00, não se soma.",
   "pages/suppliers/supplier-form.tsx#supplier-zip":
     "CEP é identificador: zeros à esquerda e máscara 00000-000, não se soma.",
 };
