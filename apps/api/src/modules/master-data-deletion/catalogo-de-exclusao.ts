@@ -179,16 +179,16 @@ const CLIENTE: AgregadoExcluivel = {
   rotulo: "Cliente",
   tabela: "customers",
   colunasDeNome: ["legalName", "tradeName"],
-  // O evento dos dados do CNPJ gravado NA criação é filho técnico — só ele, e só
-  // com prova de nascimento (`filhos-tecnicos.ts`). Qualquer outro evento bloqueia.
-  internas: [
-    {
-      tabela: "customer_cnpj_registration_history",
-      coluna: "customerId",
-      pai: "customers",
-      rotulo: "Registro dos dados do CNPJ feito na criação",
-    },
-  ],
+  /*
+   * Decisão do PO (2026-09-18): o registro dos dados do CNPJ nascido na MESMA
+   * criação do Cliente é filho técnico; registro posterior é uso real. Mas só
+   * sai junto com PROVA ESTRUTURAL de nascimento, e o modelo atual não a tem:
+   * o evento não guarda nenhuma marca da criação, e carimbo de hora, "primeiro
+   * evento" ou `updatedAt` = `createdAt` são heurística (o MERGE do saneamento
+   * move eventos de outro Cliente sem tocar este). Até a marca existir, todo
+   * registro do CNPJ é referência e bloqueia — falha fechada.
+   */
+  internas: [],
   chavesInternas: [],
   referencias: [
     {
@@ -255,6 +255,17 @@ const CLIENTE: AgregadoExcluivel = {
         "Histórico de situação",
         "O cliente já foi bloqueado, desbloqueado, inativado ou reativado — o histórico é permanente.",
         "customer_status_history",
+        "customerId",
+      ),
+    },
+    {
+      tipo: "fk",
+      acao: "c",
+      alvo: "customers",
+      ...PARA_CLIENTE(
+        "Histórico dos dados cadastrais do CNPJ",
+        "O cliente tem registro dos dados cadastrais do CNPJ, e o sistema ainda não distingue o registro feito na criação dos posteriores: todo registro conta como histórico.",
+        "customer_cnpj_registration_history",
         "customerId",
       ),
     },

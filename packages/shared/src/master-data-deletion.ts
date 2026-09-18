@@ -101,7 +101,7 @@ export interface MasterDataDeletionCheckDTO {
   canDelete: boolean;
   /** Vazio quando pode excluir. */
   references: MasterDataDeletionReferenceDTO[];
-  /** Só quando pode excluir: a V1 em rascunho vazia, o evento de nascimento. */
+  /** Só quando pode excluir: os filhos técnicos que saem junto (a V1 em rascunho vazia). */
   removedTogether: MasterDataDeletionRemovedDTO[];
   alternative: MasterDataDeletionAlternative;
   /** Falso quando o cadastro já está inativo ou arquivado. */

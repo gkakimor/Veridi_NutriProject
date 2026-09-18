@@ -4,9 +4,14 @@ import type { MasterDataDeletionReferenceDTO, MasterDataEntityType } from "@veri
  * Filhos técnicos — a exceção da D2 (MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01).
  *
  * Linha que nasceu OBRIGATORIAMENTE no mesmo ato do cadastro e nunca foi usada
- * não conta como uso: a V1 em rascunho dos Modelos e do Roteiro, e o registro
- * dos dados do CNPJ que a criação do Cliente gravou. Ela sai junto, por
- * CASCADE. Sem prova de que está como a criação a deixou, ela bloqueia.
+ * não conta como uso: a V1 em rascunho dos Modelos e do Roteiro. Ela sai
+ * junto, por CASCADE. Sem prova de que está como a criação a deixou, ela
+ * bloqueia.
+ *
+ * O registro dos dados do CNPJ gravado na criação do Cliente também é filho
+ * técnico por decisão do PO (2026-09-18) — mas a prova tem de ser estrutural,
+ * e o modelo atual não a oferece; até ela existir, ele é referência comum no
+ * catálogo e bloqueia (`catalogo-de-exclusao.ts`).
  *
  * Funções puras sobre as linhas lidas (`to_jsonb`) — o serviço lê, trava e
  * decide; aqui só se julga.
@@ -227,44 +232,10 @@ export function julgarV1(regra: RegraDaV1, internos: Internos): MasterDataDeleti
   return bloqueios;
 }
 
-/**
- * O registro dos dados do CNPJ que a CRIAÇÃO do Cliente gravou é filho técnico
- * — e só ele. Prova: um evento só, que não é troca de CNPJ, e o Cliente nunca
- * regravado depois de criado (`updatedAt` = `createdAt`): sem gravação
- * posterior, o evento só pode ter vindo da criação. Qualquer outro caso é
- * histórico real e bloqueia (§122).
- */
-export function julgarEventoDoCnpj(cliente: Linha, eventos: readonly Linha[]): MasterDataDeletionReferenceDTO[] {
-  if (eventos.length === 0) return [];
-  const fonte = "Histórico dos dados cadastrais do CNPJ";
-  if (eventos.length > 1) {
-    return [bloqueio(fonte, `O cliente tem ${eventos.length} registros dos dados do CNPJ — o histórico é permanente.`, eventos.length)];
-  }
-  const evento = eventos[0]!;
-  if (evento["kind"] === "CNPJ_CHANGED") {
-    return [bloqueio(fonte, "O CNPJ do cliente já foi trocado — o histórico é permanente.")];
-  }
-  if (cliente["updatedAt"] !== cliente["createdAt"]) {
-    return [
-      bloqueio(
-        fonte,
-        "O cliente foi alterado depois de criado, e não há como provar que o registro dos dados do CNPJ é o da criação.",
-      ),
-    ];
-  }
-  return [];
-}
-
 /** Os filhos técnicos do agregado: o que bloqueia (vazio = todos provados). */
-export function julgarFilhosTecnicos(
-  tipo: MasterDataEntityType,
-  raiz: Linha,
-  internos: Internos,
-): MasterDataDeletionReferenceDTO[] {
+export function julgarFilhosTecnicos(tipo: MasterDataEntityType, internos: Internos): MasterDataDeletionReferenceDTO[] {
   const regra = REGRAS_DA_V1[tipo];
-  if (regra) return julgarV1(regra, internos);
-  if (tipo === "CUSTOMER") return julgarEventoDoCnpj(raiz, internos.get("customer_cnpj_registration_history") ?? []);
-  return [];
+  return regra ? julgarV1(regra, internos) : [];
 }
 
 function capitalizar(texto: string): string {
