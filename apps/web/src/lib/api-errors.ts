@@ -195,6 +195,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   inactive_product: "Produto inativo não inicia compromisso novo — reative o produto para continuar.",
   inactive_finished_item:
     "O item de produto acabado está inativo — reative o item para continuar.",
+  // §116: o backend nomeia a formulação e cada componente; este só cobre resposta sem mensagem.
+  inactive_component:
+    "A formulação usa item inativo — reative o item no cadastro para continuar.",
 };
 
 /** Mensagem por status quando a resposta não traz nada aproveitável. */

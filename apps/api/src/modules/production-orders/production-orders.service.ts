@@ -37,6 +37,7 @@ import {
 import { getPrisma } from "../../db/prisma.js";
 import { isPending, reconciliationStatus, unreconciledQuantity } from "./reconciliation.js";
 import { assertFinishedItemActive, assertProductsActive } from "../../lib/product-active-gate.js";
+import { assertComponentsActive } from "../../lib/component-active-gate.js";
 import { assertProductOperational } from "../../lib/product-lifecycle.js";
 import type { BulkSelectionInput } from "../../lib/bulk-selection.js";
 import { resolverSelecao } from "../../lib/bulk-selection.js";
@@ -464,6 +465,9 @@ async function attachRequirementAvailability(
       itemCode: requirement.itemCode,
       itemName: requirement.itemName,
       itemType: requirement.itemType,
+      // Situacao LIDA AGORA no cadastro (§116) — o congelado do Requirement
+      // nunca guarda isso, e a tela nunca deduz inatividade por ausencia.
+      itemActive: requirement.item.active,
       formulaQuantity: requirement.formulaQuantity.toString(),
       formulaUnitCode: requirement.formulaUnitCode,
       supplyResponsibility: requirement.supplyResponsibility,
@@ -1226,7 +1230,9 @@ export async function planProductionOrder(
       where: { id },
       include: {
         product: { include: { customer: true, finishedProductItem: true } },
-        formulationVersion: { include: { components: true } },
+        formulationVersion: {
+          include: { components: { include: { item: true }, orderBy: { position: "asc" } } },
+        },
       },
     });
 
@@ -1254,6 +1260,26 @@ export async function planProductionOrder(
     if (reasons.length > 0) {
       throw new PlanValidationError(`Não é possível planejar esta ordem: ${reasons.join("; ")}.`);
     }
+
+    /*
+     * Componente inativado depois que a formulação foi ativada (§116): planejar
+     * é o primeiro passo em que a ordem assume a composição, e é onde a recusa
+     * aparece — antes de qualquer gravação, inclusive a dos Requirements. A
+     * formulação continua ACTIVE e consultável; quem destrava é o cadastro do
+     * item.
+     */
+    assertComponentsActive(
+      {
+        productCode: order.product.code,
+        versionNumber: order.formulationVersion!.versionNumber,
+      },
+      order.formulationVersion!.components.map((component) => ({
+        itemCode: component.item.code,
+        itemName: component.item.name,
+        active: component.item.active,
+      })),
+      "planejar a ordem",
+    );
 
     const plannedCustomerId =
       order.customerId ??
@@ -1363,6 +1389,29 @@ export async function releaseProductionOrder(
         "Não é possível liberar esta ordem: nenhuma necessidade de material calculada.",
       );
     }
+
+    /*
+     * Componente inativado depois do planejamento (§116): liberar é onde o
+     * compromisso vira FÍSICO — reserva material, cria as partes e numera o
+     * documento —, e por isso a situação do item é relida agora, não herdada do
+     * planejamento. Os itens conferidos são os das necessidades CONGELADAS, que
+     * é o que a reserva vai tomar; a formulação atual não é consultada de novo.
+     * Ordem já liberada ou em execução não passa por aqui. Antes do lock dos
+     * itens e de qualquer gravação: recusar não deixa reserva parcial.
+     *
+     * Código e nome saem do CADASTRO, não do congelado da necessidade: a frase
+     * manda reativar o item, e quem procura precisa do nome que está lá hoje —
+     * a mesma escolha do PA em §108.
+     */
+    assertComponentsActive(
+      { productCode: order.product.code, versionNumber: order.formulationVersionNumber },
+      order.requirements.map((requirement) => ({
+        itemCode: requirement.item.code,
+        itemName: requirement.item.name,
+        active: requirement.item.active,
+      })),
+      "liberar a ordem",
+    );
 
     // Material do cliente exige saber INEQUIVOCAMENTE de qual cliente esta
     // OP e — sem isso nao existe estoque elegivel, e liberar seria operar

@@ -6138,6 +6138,43 @@ apagava o Produto e deixava o Item de produto acabado no banco, o que com nome �
 irrepetível. `projects.test.ts` e `project-products.test.ts` passaram a nomear os produtos de fixture com marca própria
 pelo mesmo motivo. Typecheck da API e dos scripts. Sem E2E, Playwright, mutação nem suíte do web completa.
 
+## Componente inativo não inicia compromisso novo de Produção (PRODUCTION-INACTIVE-COMPONENT-GATE-01, 2026-09-17)
+
+**Decisão do PO** (D5 de [MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01](discovery/MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01.md),
+Fatia 4): formulação ativa cujo componente foi inativado depois não começa compromisso físico novo de Produção; o que já
+foi assumido continua, e a formulação não é tocada. Regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §116. Na `main`, fora
+de PROD (`release/prod` segue `8e824e8f`). **Sem migration**; perfis intocados.
+
+**Onde a guarda ficou, e por quê.** O fluxo auditado é DRAFT → `/plan` → `/release` → picking → consumo → apontamento →
+conclusão. `/plan` congela produto, PA, versão e cliente; `/release` é onde o compromisso vira FÍSICO — reserva material,
+cria as partes e gasta a numeração oficial. A guarda entrou nos dois: a liberação é a autoridade (relê a situação do item
+em vez de herdar a do planejamento, pelo mesmo motivo do §108) e o planejamento recusa antes, para não deixar chegar
+planejada uma ordem que não vai liberar. Rascunho, criação e troca de produto/versão/quantidade seguem livres: travar a
+criação esconderia o problema de quem precisa vê-lo.
+
+**API.** `lib/component-active-gate.ts` (`assertComponentsActive` / `InactiveComponentError`) recusa com 400
+`inactive_component`. No `/plan` a leitura é dos componentes da versão (agora com `item`), antes até de regravar as
+necessidades; no `/release` são as necessidades CONGELADAS — o que a reserva vai tomar —, antes do lock dos itens e de
+qualquer gravação. Recusar não deixa efeito parcial: nenhuma `MaterialReservation`, nenhuma `ProductionOrderPart`,
+nenhuma numeração gasta, e o estoque do componente ativo continua todo disponível. A frase nomeia TODOS os inativos de
+uma vez, com código e nome lidos do CADASTRO (quem procura precisa do nome de hoje) e a formulação com a versão.
+`ProductionOrderRequirementDTO.itemActive` novo, lido a cada leitura da ordem. Picking, consumo, apontamento, conclusão,
+cancelamento, custos, CMV e a consulta da formulação não ganharam bloqueio nenhum.
+
+**Web.** `InactiveComponentNotice` avisa em rascunho e planejada, nomeando todos os componentes inativos e o passo que
+será recusado; a linha da necessidade ganha a marca "Item inativo". Liberada e em execução ficam só com a marca, e a
+Folha de Receita e o histórico seguem à mão. Nada desabilita botão — a API é a autoridade, e `inactive_component` entrou
+em `api-errors.ts` apenas como texto de reserva para resposta sem mensagem.
+
+**Validação.** API: `production-orders/production-inactive-component-gate` (7 casos: componentes ativos planejando e
+liberando; um inativo recusando o planejamento com código, nome e versão; inativado entre planejar e liberar recusando a
+liberação sem deixar reserva, parte nem numeração; dois inativos identificados juntos; reativação destravando planejar e
+liberar; OP liberada separando e consumindo com o componente inativo, formulação ainda ACTIVE e consultável; OP em
+execução apontando e concluindo). Pasta da Produção: 11 arquivos, 173 testes, mais o serial `gmp-execution` (18), em
+banco de teste exclusivo deste worktree. Web: `production-orders/componente-inativo-na-op` (6); vizinhos da tela tocada:
+15 arquivos, 133 testes; `pdf/documents/transactional-documents` (14), cuja fixture ganhou o campo novo. Typecheck de
+shared, API e web. Sem suíte completa, E2E, Playwright nem mutação; PROD e Railway intocados.
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a

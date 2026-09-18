@@ -347,6 +347,7 @@ function requisito(numero: number, tipo: "RAW_MATERIAL" | "PACKAGING"): Producti
     itemCode: materiaPrima ? `MP-${n}` : `EMB-${n}`,
     itemName: materiaPrima ? (numero === 5 ? NOME_LONGO_MP : `Matéria-prima de teste ${n}`) : `Embalagem de teste ${n}`,
     itemType: tipo,
+    itemActive: true,
     formulaQuantity: "1",
     formulaUnitCode: materiaPrima ? "kg" : "un",
     supplyResponsibility: doCliente ? "CUSTOMER" : "VERIDI",

@@ -5,7 +5,8 @@
 `EM_ANALISE` — **D1–D3 decididas pelo PO e implementadas** na Fatia 1 (INVENTORY-INACTIVE-ITEM-VISIBILITY-01,
 2026-09-17, [`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §107); **D6–D7 decididas e implementadas** na Fatia 2
 (PRODUCT-INACTIVE-COMMERCIAL-GATE-01, 2026-09-17, §108); **D4 e D8 decididas e implementadas** na Fatia 3
-(SUPPLIER-ITEM-INACTIVE-GATE-01, 2026-09-17, §112). **D5 e D9 têm recomendação e esperam o handoff** de cada fatia.
+(SUPPLIER-ITEM-INACTIVE-GATE-01, 2026-09-17, §112); **D5 decidida e implementada** na Fatia 4
+(PRODUCTION-INACTIVE-COMPONENT-GATE-01, 2026-09-17, §116). **D9 tem recomendação e espera o handoff** da fatia opcional.
 
 Discovery READ ONLY de 2026-09-17 sobre `a6fcbdd` (deltas `a2bce62` e `0fc49e4` conferidos), entregue só no chat e
 persistido na implementação da Fatia 1, a partir do resumo da sessão. As linhas de código citadas são as da época; a
@@ -94,7 +95,7 @@ Uma regra por lugar (D1–D9), em quatro fatias e uma opcional, sem migration.
 | D2 | Estoque, inativo SEM posição: fora por padrão; filtro "Incluir inativos sem saldo"; CSV igual à tela | **Decidida** (handoff da Fatia 1) |
 | D3 | Físico: Contagem rápida sim; saída e perda sim; entrada manual (`ADJUSTMENT_IN`) não — sobra entra pela contagem | **Decidida** (handoff da Fatia 1) |
 | D4 | Receber OC já confirmada com item/fornecedor inativo: sim, com marca; corrigir o texto do "Inativar" | **Decidida** (handoff da Fatia 3) |
-| D5 | OP nova com componente inativo: recusar no planejar nomeando o item; OP planejada/liberada segue | Recomendada |
+| D5 | OP nova com componente inativo: recusar no planejar nomeando o item; OP planejada/liberada segue | **Decidida** (handoff da Fatia 4, que estendeu a recusa à LIBERAÇÃO — é ela que reserva material) |
 | D6 | Produto inativo não inicia compromisso novo: recusar vincular, linha nova, enviar, aceitar, aprovar, gerar Pedido e criar Amostra; rascunho abre com aviso; versão nova e duplicar copiam a linha e não enviam nem aceitam até regularizar; OP planejada não libera; nada é cancelado; custos, preço, CMV e roteiro sem bloqueio | **Decidida** (handoff da Fatia 2) |
 | D7 | Produto × PA sem cascata (perfis diferentes no §100); PA existente e inativo com recusa própria, nunca "sem produto acabado"; cadastro do Produto avisa o PA inativo | **Decidida** (handoff da Fatia 2) |
 | D8 | Relação com item/fornecedor inativo: recusar reativar, homologar, preferencial e oferta; inativar fornecedor limpa o preferencial dele | **Decidida** (handoff da Fatia 3) |
@@ -102,7 +103,7 @@ Uma regra por lugar (D1–D9), em quatro fatias e uma opcional, sem migration.
 
 ## 12. Pendências PO
 
-D5 e D9, uma fatia por vez.
+D9 (fatia opcional).
 
 ## 13. Escopo recomendado
 
@@ -121,8 +122,7 @@ cancelar documento aberto por causa de inativação.
 
 ## 15. Próxima capability
 
-A próxima fatia que o PO emitir: 4 (PRODUCTION-INACTIVE-COMPONENT-GATE-01, D5) ou a opcional
-(INACTIVE-MARKERS-REPORTS-01, D9). Nenhuma depende da outra.
+Só resta a opcional (INACTIVE-MARKERS-REPORTS-01, D9), quando o PO emitir o handoff.
 
 ## 16. Implementação
 
@@ -167,7 +167,22 @@ verdadeira do recebimento são a mesma informação:
   só os botões que a API recusaria desabilitados; grade e seção do Item marcam a relação e não oferecem o preferencial;
   recebimento mostra as duas marcas sem barrar; o diálogo de inativar o Fornecedor deixou de prometer que o recebimento para.
 
-Fatia 4 e a opcional: NÃO IMPLEMENTADO.
+**Fatia 4 — IMPLEMENTADA em 2026-09-17** (PRODUCTION-INACTIVE-COMPONENT-GATE-01, na `main` e fora de PROD, sem
+migration, §116). O fluxo foi reauditado na `main` (`ce6502c6`) antes de agir: nem `/plan` nem `/release` olhavam a
+situação dos componentes, e §107 mantém o inativo com saldo — a OP reservava material de item inativo sem nenhuma recusa:
+
+- `lib/component-active-gate.ts` (`assertComponentsActive` / `InactiveComponentError`): 400 `inactive_component` em
+  `/production-orders/:id/plan` e `/production-orders/:id/release`. O handoff estendeu a D5: a LIBERAÇÃO é a autoridade,
+  porque é ela que reserva material, cria as partes e gasta a numeração, e por isso relê a situação em vez de herdar a do
+  planejamento; o planejamento recusa antes, para não deixar chegar planejada uma ordem que não vai liberar;
+- a recusa nomeia TODOS os componentes inativos de uma vez, com código e nome do CADASTRO e a formulação com a versão, e
+  não deixa efeito parcial: nenhuma reserva, nenhuma parte, nenhuma numeração gasta;
+- criar a ordem, editar o rascunho, picking, consumo, apontamento, conclusão, cancelamento, custos, CMV e a consulta da
+  formulação seguem sem bloqueio novo; a formulação não é inativada nem reescrita;
+- `ProductionOrderRequirementDTO.itemActive` lido a cada leitura; a Web avisa em rascunho e planejada nomeando todos, e
+  marca "Item inativo" na linha em qualquer estado, sem desabilitar botão.
+
+A fatia opcional: NÃO IMPLEMENTADO.
 
 ## 17. Histórico de decisões
 
@@ -178,3 +193,6 @@ Fatia 4 e a opcional: NÃO IMPLEMENTADO.
 - 2026-09-17 — D4 e D8 decididas pelo PO no handoff da Fatia 3 (SUPPLIER-ITEM-INACTIVE-GATE-01) e implementadas no mesmo dia;
   o handoff confirmou que inativação posterior não bloqueia recebimento já comprometido, e a fatia trouxe junto a marca
   verdadeira da OC (F6).
+- 2026-09-17 — D5 decidida pelo PO no handoff da Fatia 4 (PRODUCTION-INACTIVE-COMPONENT-GATE-01) e implementada no mesmo
+  dia; o handoff pediu a auditoria do fluxo real e a escolha entre planejar e liberar, e a entrega ficou nos dois, com a
+  liberação como autoridade por ser onde nasce o efeito físico.
