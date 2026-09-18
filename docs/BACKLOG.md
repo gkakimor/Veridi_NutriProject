@@ -980,16 +980,6 @@ consumo — o suficiente para rastrear, não para gerir. O relatório é outra p
 por destino, com valor, e provavelmente comparação entre períodos. Depende de
 INTERNAL-CONSUMPTION-COST-CENTER-01 para agrupar destino de forma confiável.
 
-### FILTER-CSS-640-GUARD-01 — as duas guardas de 640px leem só o último bloco do CSS — LOW, sem posição
-
-Visto em 2026-09-17 por INTERNAL-CONSUMPTION-01, **fora do escopo da rodada e sem mudança**. `filtros-390px.test.tsx`
-("os controles com largura mínima em pixel ocupam a linha inteira") e `billings/faturamento-filtros.test.tsx`
-("o CSS empilha os controles de filtro em tela estreita") falham na `main` desde `0c796a90`
-(CUSTOMER-CNPJ-LOOKUP-01), que acrescentou um `@media (max-width: 640px)` ao fim de `styles/components.css` para a
-tabela da consulta de CNPJ. As duas guardas procuram `.toolbar__search` no ÚLTIMO bloco de 640px do arquivo, e agora
-o último é o da tabela nova. A regra de tela estreita continua no CSS; quem está errado é o recorte da guarda, que
-deveria varrer todos os blocos de 640px em vez de assumir que só existe um.
-
 ---
 
 ## Backlog reservado para go-live

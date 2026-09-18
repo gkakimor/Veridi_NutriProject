@@ -34,6 +34,7 @@ vi.mock("../../app/AuthProvider", () => ({
 import { listAwaitingBilling, listBillings } from "../../lib/billings-api";
 import { listCustomers } from "../../lib/customers-api";
 import { clearStoredFilters } from "../../lib/stored-filters";
+import { declaracoesEmMedia } from "../../styles/testing/css-media";
 import { BillingsPage } from "./BillingsPage";
 
 /** 11/09/2026 às 12:00 em São Paulo. O mês comercial é setembro. */
@@ -325,12 +326,12 @@ describe("390px", () => {
       join(process.cwd(), "src", "styles", "components.css"),
       "utf8",
     );
-    const estreita = css.slice(css.lastIndexOf("@media (max-width: 640px)"));
-    expect(estreita.length).toBeLessThan(css.length);
-    for (const seletor of [".toolbar__search", ".toolbar__entity", ".filter-period__custom"]) {
-      expect(estreita).toContain(seletor);
+    // Todo bloco de 640px conta, não só o último: há um por componente.
+    const estreita = (seletor: string) => declaracoesEmMedia(css, "max-width: 640px", seletor);
+    for (const seletor of [".toolbar__search", ".toolbar__entity"]) {
+      expect(estreita(seletor), seletor).toContain("min-width: 100%");
     }
-    expect(estreita).toContain("min-width: 100%");
+    expect(estreita(".filter-period__custom")).toContain("width: 100%");
   });
 
   it("período e chips quebram linha em vez de esticar a página", () => {

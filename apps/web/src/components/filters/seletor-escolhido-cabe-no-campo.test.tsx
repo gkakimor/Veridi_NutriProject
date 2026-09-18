@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { declaracoesEmMedia } from "../../styles/testing/css-media";
 import type { EntityOption } from "../SearchableEntitySelect";
 import { EntityFilterSelect } from "./EntityFilterSelect";
 import type { EntityFilterSource } from "./EntityFilterSelect";
@@ -156,7 +157,7 @@ describe("a regra que tira o texto de baixo do ✕", () => {
 
   it("largura do controle intacta: 240px de filtro no desktop, linha inteira em tela estreita", () => {
     expect(propriedade(regra(".toolbar__entity"), "min-width")).toBe("240px");
-    const estreita = folha.slice(folha.lastIndexOf("@media (max-width: 640px)"));
-    expect(estreita).toMatch(/\.toolbar__search,\s*\.toolbar__entity \{\s*min-width: 100%;/);
+    // Todo bloco de 640px conta, não só o último: há um por componente.
+    expect(declaracoesEmMedia(folha, "max-width: 640px", ".toolbar__entity")).toContain("min-width: 100%");
   });
 });
