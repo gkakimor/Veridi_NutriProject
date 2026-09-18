@@ -115,6 +115,14 @@ ATIVO em produção e o ponto de recuperação compatível é o backup pós-rele
   comercial, a Ordem de Produção e o picking seguem intocados, e item já cadastrado nasce `false` — o comportamento
   anterior. **Marcar as cápsulas vazias existentes é gesto de cadastro**, não backfill: nenhum item foi alterado por
   nome ou código;
+- **Exclusão física de cadastro mestre:** discovery `DECIDIDO`
+  ([MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01](discovery/MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01.md), D1–D6 do PO em
+  2026-09-17). Hoje nenhum cadastro mestre sai por exclusão física pela API ou pela tela, e o banco não protege a exclusão
+  (CASCADE e SET NULL em Item, Produto, Cliente, Recurso e Modelos). Decidido: só ADMIN exclui; qualquer uso, referência
+  ou histórico real bloqueia, com falha fechada; rastro append-only; FKs mantidas, com a segurança na aplicação; Perfil de
+  Produção arquivável; nunca zero ADMIN ativo. Na fila viva: Fatia 0 (PRODUCTION-PROFILE-ARCHIVE-01,
+  USER-LAST-ADMIN-GUARD-01), Fatia 1 (MASTER-DATA-HARD-DELETE-01) e Fatia 2 (MASTER-DATA-HARD-DELETE-02). Nada
+  implementado;
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 
 Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
