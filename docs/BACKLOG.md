@@ -77,8 +77,8 @@ watchlist (E). A estabilização final (10) é o lugar natural para varrê-los.
 | **ASSISTED-ENTITY-SELECTOR-ROLLOUT-01** — consulta assistida nos demais seletores (Cliente, Fornecedor, Produto, Lote e outros) | Registrado em 2026-09-17 (ASSISTED-ENTITY-SELECTOR-FOUNDATION-01): expandir só depois de validar o piloto Item com a Veridi. A seleção múltipla já existe (ASSISTED-ENTITY-MULTISELECT-01). Espera o handoff do PO | G |
 | **COST-TEMPLATE-RESOURCE-LINE-WITHOUT-USAGE-01** — linha de recurso sem uso por lote não vai no "Salvar rascunho" do Modelo de Estrutura (LOW) | Registrado em 2026-09-17 (ASSISTED-ENTITY-MULTISELECT-01): anterior à rodada, mais visível com "+ Adicionar recursos". Pergunta de UX antes de mexer | G |
 | INACTIVE-MARKERS-REPORTS-01 (opcional) — última fatia do cadastro inativo | Registrada em 2026-09-17 com o discovery. As Fatias 1 a 4 fecharam no mesmo dia (INVENTORY-INACTIVE-ITEM-VISIBILITY-01 §107, PRODUCT-INACTIVE-COMMERCIAL-GATE-01 §108, SUPPLIER-ITEM-INACTIVE-GATE-01 §112 e PRODUCTION-INACTIVE-COMPONENT-GATE-01 §116). Só D9 (R-18 abre em "Todos", com a situação) tem recomendação e espera o handoff do PO | [discovery](discovery/MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01.md) |
-| **ITEM-DUPLICATE-SANITIZATION-01** — Ondas B e C (12 grupos, 27 Itens no DEV) | D1 (nutrientes do mesmo material), D3 (café verde) e D5 (potes e acento) do PO; V1–V7 com a Veridi. Registrado em 2026-09-17 com a Onda A | [discovery](discovery/ITEM-DUPLICATE-SANITIZATION-DISCOVERY-01.md) |
-| **ITEM-NAME-STANDARDIZATION-01** — nome do Item MP/ME em MAIÚSCULAS e único sem caixa | Parado em 2026-09-17 no passo de duplicidade: o índice único não nasce enquanto houver grupo repetido (12 no DEV; PROD não saneado). Retomar depois das ondas, recontando no DEV e em PROD | [discovery](discovery/ITEM-DUPLICATE-SANITIZATION-DISCOVERY-01.md) |
+| **ITEM-DUPLICATE-SANITIZATION-01** — grupos restantes (2 no DEV: G6 café verde e G11 fosfato de piridoxal) | Ondas 2 (§118) e 3 (§124) resolveram os demais no DEV. G6 e G11 esperam a Veridi: significado de `*`/`**` (V4), teor de clorogênico e as cotações FLORIEN (V1). Registrado em 2026-09-17 com a Onda A | [discovery](discovery/ITEM-DUPLICATE-SANITIZATION-DISCOVERY-01.md) |
+| **ITEM-NAME-STANDARDIZATION-01** — nome do Item MP/ME em MAIÚSCULAS e único sem caixa | Parado em 2026-09-17 no passo de duplicidade: o índice único não nasce enquanto houver grupo repetido (2 no DEV depois da Onda 3; PROD não saneado). Retomar depois das ondas, recontando no DEV e em PROD | [discovery](discovery/ITEM-DUPLICATE-SANITIZATION-DISCOVERY-01.md) |
 | **OPS-BACKUP-01** — backup agendado de PROD (HIGH) | Snapshot do Railway recusado e PITR desligado; o backup lógico JSON é restaurável e provado. Rotina agendada é decisão de infraestrutura | A |
 | COST-VAR-02 — variação de CMV e proteção de margem | Bloqueado: sete decisões do PO e dado real em produção | [`archive/COST-VAR-01…`](archive/COST-VAR-01_AUDITORIA_VARIACAO_CMV.md) |
 | #8E, #8F, #8G · PLAN-DATE-01 · UX-HELP-03 | Melhorias aguardando autorização | B, E |
@@ -856,7 +856,30 @@ consolidações, em duas naturezas:
 
 Fora desta onda, por decisão do PO: MP-000149/475, MP-000325/348, MP-000320/468, MP-000014/022 e MP-000393/486
 continuam em revisão (podem ser materiais diferentes), e o Modelo "X" (FT-000001 × FT-000002) segue bloqueado até se
-saber conteúdo, versões, referências, se algum é descartável e o impacto da colisão de `versionNumber`.
+saber conteúdo, versões, referências, se algum é descartável e o impacto da colisão de `versionNumber`. **Decididos na
+Onda 3** (seção abaixo, §124).
+
+### MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-3-01 — Onda 3: fundir, renomear, excluir o sem uso — P1 · SANEADO NO DEV, FORA DE PROD
+
+**Executada no `veridi_dev` em 2026-09-17** (§124; seção própria do `PROJECT_STATE.md`), depois da revisão READ ONLY
+MASTER-DATA-DUPLICATE-REVIEW-03: G4 maçã fundido em MP-000475 ("Açúcar de maçã · Carboidrato"); G7 oliva e G13 guaraná
+renomeados para nome técnico distinto (MP-000320 "… — Verbascosídeo", MP-000468 "… — Hidroxitirosol", MP-000393
+"Extrato de guaraná 22%"; MP-000486 mantém o nome); Modelos "X" FT-000001 e FT-000002 excluídos com a V1 DRAFT de cada
+um. Restam 2 grupos em revisão. PROD e Railway intocados.
+
+Pendente:
+
+- **A Veridi responde** (a resposta não se infere): o que `*` e `**` significam no nutriente (G6 e G11, a V4); o teor
+  real de ácido clorogênico do MP-000325 e do MP-000348; se as cotações FLORIEN R$160/kg (1 kg) e R$650/kg (100 g) são a
+  mesma especificação; e por que o código legado 349 aparece com 8%, 45% e 50% nas fórmulas antigas. Com a resposta, o
+  PO decide a ação de G6 e G11 numa onda seguinte.
+- **A mesma onda em PROD**, como a Onda 2: conferência READ ONLY, PLAN em PROD (o código do ERP sai de sequence por banco
+  e os Modelos "X" são dado do DEV — o que houver em PROD é outro registro), backup restaurável e aprovação do PO.
+- **A carga não reproduz renomeação nem consolidação**: o importador absorve o MP-000149, mas a base reconstruída pelo
+  pacote volta com os nomes e nutrientes da planilha (a Onda 2 já tinha essa lacuna). Resolver antes do índice de
+  MASTER-DATA-NAME-UNIQUENESS-01, que quebraria o rebuild.
+- O `family` "OTHER_RAW_MATERIAL" que só o MP-000149 tinha saiu com ele (a decisão só consolidou o nutriente; o canônico
+  segue sem família).
 
 ### MASTER-DATA-NAME-UNIQUENESS-01 — índice único de nome no banco — P1 · DEPOIS DO SANEAMENTO
 
@@ -872,8 +895,9 @@ saneamento, para que os três nunca discordem.
 O que precisa acontecer **antes**, e é o motivo de esta capability não ter data:
 
 1. **o saneamento tem de fechar.** O índice não nasce por cima de duplicata existente: o `CREATE UNIQUE INDEX` falha e a
-   migration não aplica. Depois da Onda 2 (§118), o `veridi_dev` tem 6 grupos bloqueados (5 de Item em revisão, 1 de
-   Modelo de formulação) — cada um é decisão de produto, e a ferramenta recusa escolher sozinha;
+   migration não aplica. Depois da Onda 3 (§124), o `veridi_dev` tem 2 grupos, ambos em revisão com a Veridi (G6 café
+   verde e G11 fosfato de piridoxal) — cada um é decisão de produto, e a ferramenta recusa escolher sozinha. A carga
+   também precisa reproduzir a renomeação e a consolidação das ondas antes do índice: hoje só não recria o absorvido;
 2. **PROD tem de ser medido**, em conferência READ ONLY: o estado do DEV não prova o de PROD, e os códigos do ERP saem
    de sequence por banco;
 3. **o escopo do Item já está decidido**: o PO fixou em 2026-09-17 que os quatro tipos (RAW_MATERIAL, PACKAGING,

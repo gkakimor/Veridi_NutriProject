@@ -7854,3 +7854,60 @@ Recurso industrial e toda tela que monta blocos com `FormSection`. O espaço ent
 **Proibido.** Margem vertical avulsa numa seção, por tela, em CSS ou `style`: quem quiser outro respiro muda o token. Um
 portão de teste confere o contrato — regra, token e exceções no CSS, nenhuma margem concorrente, e os blocos dos
 cadastros contíguos.
+
+## §124 — Onda 3 do saneamento: fundir, renomear, excluir o agregado sem uso ou manter em revisão
+
+MASTER-DATA-DUPLICATE-SANITIZATION-WAVE-3-01 (2026-09-17), decisão do PO. Estende a §110 (arquivo de decisão), a §114
+(nome de cadastro mestre) e a §118 (onda de decisão).
+
+> **Cada grupo repetido recebe UMA ação decidida por escrito: fundir, renomear, excluir o agregado sem uso ou esperar a
+> Veridi.** A ferramenta confere o estado, mostra a ação no PLAN e só executa o que a decisão escreveu.
+
+**As quatro ações** (o PLAN mostra uma por grupo):
+
+| Ação | Quando | O que muda | O que nunca muda |
+|---|---|---|---|
+| `MERGE` | duplicado verdadeiro (§110, §118) | o canônico absorve; referências passam a ele; o absorvido sai | nada é inventado no canônico além do que a decisão escreveu |
+| `RENAME` | mesmo nome, material diferente (§114) | só o nome, para um nome técnico distinto | código, fornecedores, ofertas, histórico, `declaredNutrient`, Formulações — nenhuma referência se move, nenhum registro sai |
+| `DELETE_UNUSED_AGGREGATE` | cadastro de teste nunca usado | sai o agregado: o registro e o que nasceu junto com ele | nenhuma linha de fora do agregado é apagada ou anulada |
+| `BLOCKED` | o PO mantém em revisão | nada | tudo: o VERIFY prova que os registros estão como no plano |
+
+**Decisões desta onda:**
+
+| Grupo | Ação | Registros | Resultado decidido |
+|---|---|---|---|
+| G4 Concentrado de maçã | MERGE | MP-000475 ← MP-000149 | `declaredNutrient` "Açúcar de maçã · Carboidrato"; nenhuma forma física inventada ("pó"/"líquido" não entram) |
+| G7 Extrato de polpa de oliva | RENAME | MP-000320, MP-000468 | "… (Olea europaea L.) — Verbascosídeo" e "… — Hidroxitirosol" |
+| G13 Guaraná em pó soluvel | RENAME | MP-000393; MP-000486 mantém | "Extrato de guaraná 22%"; o MP-000486 fica com o nome gravado, "Guaraná em pó soluvel" |
+| Modelo "X" | DELETE_UNUSED_AGGREGATE | FT-000001, FT-000002 | os dois saem com a V1 DRAFT de cada um |
+| G6 Extrato de café verde | BLOCKED | MP-000325, MP-000348 | espera a Veridi |
+| G11 Fosfato de piridoxal | BLOCKED | MP-000014, MP-000022 | espera a Veridi |
+
+**Renomear.** Só os códigos que a decisão nomeia. O nome de ANTES é exato e o APPLY grava por compare-and-set (só se o
+nome ainda é aquele); o nome destino tem de estar livre sem caixa em TODO o cadastro — ocupado, o grupo ABORTA; Item com
+o nome do grupo fora da decisão também aborta, porque a colisão não se resolveria. Resultado e planilha guardam antes,
+depois, motivo e hora. Renomear não é padronizar nome: só a colisão decidida muda.
+
+**Excluir o agregado sem uso.** Pré-condições, todas conferidas no PLAN e de novo no APPLY sob trava — qualquer uma
+falhando volta ao PO: só a V1; DRAFT; nunca ativada nem arquivada; criada junto com o Modelo; zero componentes; zero
+Formulações derivadas (nem pela FK, nem pelo código guardado em `originTemplateCode`); zero versões derivadas; zero
+referência externa (FK, id sem FK, código e JSON); sem alteração posterior (`updatedAt` = `createdAt`). O `CASCADE` da V1
+interna é o único efeito além do dono, conferido em `pg_stat_xact_user_tables`: qualquer outro `CASCADE` ou `SET NULL`
+desfaz o grupo. O buraco no código (FT-000001, FT-000002) é aceito e a sequence não volta.
+
+**Manter em revisão.** O grupo aparece no PLAN (`BLOCKED`) com o motivo e as perguntas; não impede a onda — ela aplica
+quando todos os grupos DECIDIDOS estão PRONTO —, e a aba "REVISÃO NECESSÁRIA" leva as perguntas. A resposta não se
+infere. Perguntas desta onda: o significado de `*` e `**` no nutriente (G6 e G11, a V4 do discovery); o teor real de
+ácido clorogênico de cada código de café verde; se as cotações FLORIEN R$160/kg (1 kg) e R$650/kg (100 g) são a mesma
+especificação; e por que o código legado 349 aparece nas fórmulas antigas com teor aplicado de 8%, 45% e 50%.
+
+**O arquivo de decisão continua um só** (`scripts/veridi-import/item-duplicate-decisions.ts`): a fusão entra na lista
+da §110, e as espécies novas em listas próprias. Um código está em UMA decisão só, e um grupo é de uma espécie só na
+onda. A impressão das Ondas A e 2 não muda; qualquer mudança numa decisão da Onda 3 muda a impressão dela, e o APPLY com
+plano antigo recusa.
+
+**Execução.** `master-data-duplicate-sanitization.ts --onda=3`, como a §118: PLAN somente leitura, backup com
+`RESTAURÁVEL: YES`, APPLY em uma transação por grupo, VERIFY e recontagem global. Planilha com as abas REMOVIDOS
+(inclusive o Modelo excluído, com a V1 na observação), RENOMEADOS, RESUMO e REVISÃO NECESSÁRIA.
+
+**Sem migration.** O índice único de MASTER-DATA-NAME-UNIQUENESS-01 continua esperando os dois grupos em revisão.
