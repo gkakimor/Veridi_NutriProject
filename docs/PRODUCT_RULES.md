@@ -7131,7 +7131,7 @@ salvar."
 
 **O fluxo, inteiro.** Cliente → **Consultar CNPJ** → escolher a fonte →
 consultar → comparar Atual × Retornado → marcar o que aplicar → **Aplicar
-selecionados** → **Salvar**. Vale igual na criação (sem id) e na edição.
+consulta ao cadastro** → **Salvar**. Vale igual na criação (sem id) e na edição.
 
 **Quando o botão consulta.** Só com CNPJ preenchido e aprovado pelo validador
 canônico do sistema (`isValidCnpj`, o mesmo do cadastro e do servidor — não
@@ -7154,7 +7154,9 @@ normalizado e dois erros tratados — "não encontrado" e "indisponível" —, n
 payload cru, stack ou detalhe do provedor. Não há proxy genérico.
 
 **Somente leitura.** A consulta não grava nada no domínio Veridi: nem cadastro,
-nem histórico, nem payload. Sem migration nesta versão.
+nem histórico, nem payload. O que o Cliente passou a guardar dela — os dados
+cadastrais do CNPJ (§119) — chega ao banco pelo "Salvar" do cadastro, nunca
+pela consulta.
 
 **Comparação.** Contra o **estado do formulário**, não contra o último valor
 salvo — quem editou um campo e ainda não salvou compara com o que está vendo.
@@ -7177,9 +7179,10 @@ logradouro, número, complemento, bairro, cidade, UF, telefone e e-mail.
 **Campos que ela NUNCA toca.** Perfil tributário (§83 — classificação
 informada pela Veridi, jamais deduzida de CNAE, porte ou natureza jurídica),
 forma e condição de pagamento (§99), notas internas, situação cadastral (§95),
-bloqueios e qualquer outro atributo comercial. Situação na fonte, data de
-abertura, CNAE, natureza jurídica e porte aparecem como informação
-complementar, e não viram campo do Cliente.
+bloqueios e qualquer outro atributo comercial. Situação na Receita, abertura,
+CNAE, natureza jurídica, porte, matriz/filial, Simples e MEI são os dados
+cadastrais do CNPJ (§119): guardados no Cliente, somente leitura, e nenhum
+define o perfil tributário.
 
 **Cancelar não muda nada.** Fechar, cancelar ou sair com Escape deixa o
 formulário exatamente como estava.
@@ -7598,3 +7601,69 @@ relações no canônico, nenhum resíduo e nenhum Item com o nome do par nomeado
 a partir do resultado gravado. A ferramenta de Item recusa onda com grupo de mais de dois, par nomeado ou consolidação.
 
 **Sem migration**, e sem índice único ainda: MASTER-DATA-NAME-UNIQUENESS-01 continua depois do saneamento completo.
+
+## §119 — Dados cadastrais do CNPJ: a consulta aplicada fica no Cliente, e pertence ao CNPJ
+
+CUSTOMER-CNPJ-PERSISTED-DATA-01 (2026-09-17), sobre o handoff do PO. Evolui a
+§111 sem integração nova: Web → API → `CnpjLookupService` → OpenCNPJ, como antes.
+
+> **O que a consulta aplicada disse sobre a empresa fica no cadastro — do CNPJ
+> que foi consultado, e só dele.**
+
+**O que o Cliente guarda.** CNAE principal e descrição, natureza jurídica,
+porte, data de abertura, matriz ou filial, optante pelo Simples, optante pelo
+MEI, situação na Receita, data da situação e a data da última consulta
+(`cnpjMainCnaeCode` … `cnpjLastConsultedAt`, onze colunas opcionais em
+`customers`). Abertura e data da situação são DATA CIVIL (a meia-noite UTC do
+dia); a última consulta é o instante `consultedAt` do resultado aplicado, não o
+do "Salvar".
+
+**Sim, Não e Não informado.** Simples e MEI guardam três estados: `true` (Sim),
+`false` (Não) e `null` (não informado pela fonte). **`null` nunca é "Não".**
+Matriz/Filial: `HEADQUARTERS`, `BRANCH` ou `null`.
+
+**Da fonte, sem palpite.** Chaves do OpenCNPJ conferidas no JSON Schema oficial
+em 2026-09-17: `matriz_filial` ("Matriz"/"Filial"), `opcao_simples` e
+`opcao_mei` ("S"/"N"/""), `situacao_cadastral`, `data_situacao_cadastral` e
+`data_inicio_atividade` (`YYYY-MM-DD` ou ""), `porte_empresa`,
+`cnae_principal` e `natureza_juridica`. O que não se interpreta com segurança
+vira `null`: letra fora de S/N, data que não existe, CNAE fora de sete dígitos,
+texto acima do teto do cadastro, porte "Não informado". Nenhuma chave crua chega
+à Web nem ao banco.
+
+**Bloco.** Os dados são gravados inteiros, a partir de uma consulta, e trocados
+inteiros pela seguinte — nunca uma coluna solta, que misturaria consultas sob
+uma data só. Sem consulta aplicada e salva, o bloco inteiro é nulo.
+
+**Fluxo.** Consultar → comparar → **Aplicar consulta ao cadastro** → formulário
+alterado → **Salvar**. Consultar não grava; aplicar não grava; sair sem salvar
+não grava (a guarda de alterações pergunta antes); Cancelar no diálogo não muda
+nada, nem a data. Vale na criação e na edição.
+
+**Comparação.** Os dados cadastrais entram no Atual × Retornado com as regras da
+§111: diferença útil nasce marcada, equivalente é "Sem alteração", ausente é
+"Não informado pela fonte" e **vazio da fonte não apaga** o que o cadastro tem.
+Aplicar leva da fonte o que foi marcado e mantém o resto como estava.
+
+**A data mesmo sem diferença.** Aplicar a consulta registra a data dela mesmo
+quando nada mudou: a consulta sem alteração ainda confirma que os dados foram
+revistos naquele dia. Por isso "Aplicar" fica disponível com zero diferenças.
+
+**Troca de CNPJ.** O bloco pertence ao CNPJ do Cliente. Trocar o número (mudança
+real do CNPJ normalizado — máscara não conta) faz os dados do anterior deixarem
+de valer: a tela os tira da seção, avisa, e o "Salvar" os descarta; voltar ao
+número os devolve; consultar e aplicar o CNPJ novo põe os dele. No servidor, o
+bloco cujo CNPJ não é o que o Cliente terá é recusado (400, no campo CNPJ), e o
+PATCH que troca o CNPJ sem bloco novo limpa o do número anterior, com a linha
+travada. Razão social, nome fantasia, endereço, contato, pagamento, perfil
+tributário e notas não pertencem ao CNPJ e ficam.
+
+**Na tela.** Seção "Dados cadastrais do CNPJ", logo abaixo da Identificação,
+somente leitura no formulário e na consulta, com datas em pt-BR; atualiza-se
+pela ação "Consultar CNPJ". Os campos comerciais continuam editáveis.
+
+**Não define nada.** Nenhum desses dados define o perfil tributário (§83),
+bloqueia fluxo ou calcula imposto. Pagamento (§99), situação cadastral (§95),
+bloqueios e notas continuam fora do alcance da consulta.
+
+**Quem grava.** Quem edita o cadastro do Cliente (`CUSTOMER_EDIT_ROLES`, §98).
