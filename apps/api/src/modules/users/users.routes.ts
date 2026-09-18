@@ -2,7 +2,13 @@ import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
 import { ForbiddenError } from "../auth/auth.errors.js";
 import { requireRole } from "../../lib/current-user.js";
-import { EmailAlreadyUsedError, UserNotFoundError } from "./users.errors.js";
+import {
+  EmailAlreadyUsedError,
+  LastActiveAdminError,
+  SelfDeactivationError,
+  SelfDemotionError,
+  UserNotFoundError,
+} from "./users.errors.js";
 import {
   createUserSchema,
   listUsersQuerySchema,
@@ -32,6 +38,17 @@ function mapDomainError(
   }
   if (error instanceof EmailAlreadyUsedError) {
     return { status: 409, body: { error: "email_already_used", message: error.message } };
+  }
+  // Guarda do administrador (§120): cada recusa com o próprio código, para a
+  // tela explicar o motivo em vez de mostrar um erro genérico.
+  if (error instanceof LastActiveAdminError) {
+    return { status: 409, body: { error: "last_active_admin", message: error.message } };
+  }
+  if (error instanceof SelfDeactivationError) {
+    return { status: 409, body: { error: "self_deactivation", message: error.message } };
+  }
+  if (error instanceof SelfDemotionError) {
+    return { status: 409, body: { error: "self_demotion", message: error.message } };
   }
   return null;
 }
@@ -96,7 +113,8 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
   app.patch("/users/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      requireRole(request, "ADMIN");
+      // Quem edita vem da sessão: é contra ele que a guarda confere "a si mesmo".
+      const actor = requireRole(request, "ADMIN");
 
       const parsed = updateUserSchema.safeParse(request.body);
       if (!parsed.success) {
@@ -105,7 +123,7 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: "validation_error", issues: formatZodError(parsed.error) });
       }
 
-      return reply.send(await updateUser(id, parsed.data));
+      return reply.send(await updateUser(id, parsed.data, actor.id));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);

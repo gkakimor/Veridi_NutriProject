@@ -22,8 +22,9 @@ export default defineConfig(({ mode }) => ({
     // falham por infraestrutura.
     maxWorkers: 3,
     minWorkers: 1,
-    // Agregado do banco inteiro não se mede com vizinho escrevendo ao lado, e
-    // revisão de documento controlado é ATIVA por tipo — uma só, global.
+    // Agregado do banco inteiro não se mede com vizinho escrevendo ao lado,
+    // revisão de documento controlado é ATIVA por tipo — uma só, global —, e
+    // "o último ADMIN ativo" também é do banco inteiro.
     // Esses arquivos rodam em seguida, sozinhos — ver `vitest.serial.config.ts`.
     exclude: [
       "node_modules/**",
@@ -36,6 +37,7 @@ export default defineConfig(({ mode }) => ({
       "src/modules/controlled-documents/controlled-documents.test.ts",
       "src/modules/production-calendar/production-calendar.test.ts",
       "src/modules/production-schedules/production-schedules.test.ts",
+      "src/modules/users/users-guarda-do-administrador.test.ts",
     ],
   },
 }));

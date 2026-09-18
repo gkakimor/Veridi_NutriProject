@@ -25,6 +25,7 @@ type Mode = { kind: "closed" } | { kind: "create" } | { kind: "edit"; user: User
 export function UsersPage() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<UserDTO[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>({ kind: "closed" });
@@ -41,7 +42,10 @@ export function UsersPage() {
     setLoading(true);
     setError(null);
     listUsers({ pageSize: 100 })
-      .then((result) => setUsers(result.users))
+      .then((result) => {
+        setUsers(result.users);
+        setTotal(result.total);
+      })
       .catch((err: unknown) =>
         setError(err instanceof Error ? err.message : "Falha ao carregar usuários"),
       )
@@ -71,6 +75,22 @@ export function UsersPage() {
     setFormError(null);
     setMode({ kind: "edit", user });
   }
+
+  /*
+   * Guarda do administrador (§120). A API é a autoridade e recusa sozinha; a
+   * tela só não oferece o que sabe que será recusado, e diz por quê. Quantos
+   * ADMIN ativos há só se conta com a lista inteira na mão — com mais usuários
+   * do que a página traz, a conta da tela mentiria, e aí fica só a da API.
+   */
+  const adminsAtivos =
+    total <= users.length ? users.filter((u) => u.role === "ADMIN" && u.active).length : null;
+  const editado = mode.kind === "edit" ? mode.user : null;
+  const ehProprio = editado !== null && editado.id === currentUser?.id;
+  const ehUltimoAdmin =
+    editado !== null && editado.role === "ADMIN" && editado.active && adminsAtivos === 1;
+  const travaSituacao = ehProprio || ehUltimoAdmin;
+  const travaPerfil = editado?.role === "ADMIN" && (ehProprio || ehUltimoAdmin);
+  const motivoDaTrava = travaSituacao || travaPerfil ? "user-admin-guard" : undefined;
 
   async function handleSave() {
     setSaving(true);
@@ -237,6 +257,8 @@ export function UsersPage() {
               <select
                 id="user-role"
                 value={role}
+                disabled={travaPerfil}
+                aria-describedby={travaPerfil ? motivoDaTrava : undefined}
                 onChange={(event) => setRole(event.target.value as UserRole)}
               >
                 {USER_ROLES.map((option) => (
@@ -251,10 +273,30 @@ export function UsersPage() {
                 <input
                   type="checkbox"
                   checked={active}
+                  disabled={travaSituacao}
+                  aria-describedby={travaSituacao ? motivoDaTrava : undefined}
                   onChange={(event) => setActive(event.target.checked)}
                 />
                 Usuário ativo
               </label>
+            )}
+            {motivoDaTrava && (
+              <div className="callout" id={motivoDaTrava}>
+                {ehUltimoAdmin && (
+                  <p>
+                    <strong>Único administrador ativo.</strong> O sistema precisa manter pelo menos
+                    um administrador ativo: para inativar este usuário ou tirar dele o perfil
+                    Administrador, primeiro cadastre ou promova outro administrador.
+                  </p>
+                )}
+                {ehProprio && (
+                  <p>
+                    <strong>Este é o seu usuário.</strong> Você não pode inativar o próprio
+                    usuário nem retirar de si o perfil Administrador — outro administrador faz
+                    isso.
+                  </p>
+                )}
+              </div>
             )}
           </FormSection>
 
