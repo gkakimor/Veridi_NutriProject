@@ -72,6 +72,14 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Uma instalação nova tem o catálogo de unidades (mg, g, kg, un, mL, L) sem seed nenhum | FAST-DEVELOPMENT-RESET-02 — o catálogo só existia onde alguém tinha rodado seed, e produção nunca roda seed | `scripts/validate-migrations-fresh.mjs` (banco novo), migration `20260925093012_reference_units_of_measure` |
 | O negócio private label atravessa de ponta a ponta numa base zerada, pela interface, com custo, estoque, rastreabilidade e faturamento conferidos contra conta independente | golden path do FAST-DEVELOPMENT-RESET-02 | `scripts/e2e/private-label-golden-path.mjs` |
 
+## Versão do sistema
+
+| Regra | Origem do risco | Proteção canônica |
+|---|---|---|
+| A versão tem uma fonte só: `VERIDI_VERSION` em `packages/shared/src/version.ts`; nenhum código de produção da web, da API ou do shared escreve o número, com ou sem o "v" | VERIDI-SYSTEM-VERSIONING-01: segunda cópia é a que fica para trás no próximo PATCH, com o cabeçalho dizendo uma versão e `GET /meta` outra — a guarda pegou os comentários do próprio componente na primeira execução | `web app/versao-fonte-unica.test.ts` |
+| `GET /meta` exige sessão e responde exatamente `version` (a fonte única), `environment` (nome do ambiente do Railway, senão `NODE_ENV`) e `commitHash` (`RAILWAY_GIT_COMMIT_SHA` validado, senão `null`); valor fora do formato vira o padrão, e nada mais do ambiente sai — URL de banco, credencial, id de projeto | VERIDI-SYSTEM-VERSIONING-01: o esquema do `env` descartaria as variáveis do Railway em silêncio, e PROD responderia "test"/`null` — mutação provada (sem as duas no esquema, o teste da rota cai) | `api modules/meta/meta.test.ts` |
+| Cabeçalho mostra só a versão, colada em "Nutrition", fora do link da marca e longe do usuário, sem consultar a API antes do clique; o clique abre "Sobre o sistema" com produto, versão, data, ambiente e build (commit abreviado) de `GET /meta` — "Consultando…" antes da resposta, nome sem tradução como veio, "Não informado" sem commit, erro com "Tentar novamente"; busca e usuário na mesma ordem e funcionando; versão menor que o nome e em tom secundário, busca com a mesma regra de flex | VERIDI-SYSTEM-VERSIONING-01: "Produção" escrito pela web, SHA ocupando o cabeçalho, versão competindo com a marca | `web app/sobre-o-sistema.test.tsx` |
+
 ## Propriedade do material (owner isolation)
 
 | Regra | Origem do risco | Proteção canônica |

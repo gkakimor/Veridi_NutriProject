@@ -1,6 +1,7 @@
 # Veridi Nutrition — Project State
 
-**Versão:** baseline v0.4 — post-benchmark · **Fase:** FAST MVP.
+**Versão do produto:** v1.0.0, a primeira versão comercial oficial (fonte única em `packages/shared/src/version.ts`,
+política em [`RELEASES.md`](RELEASES.md)) · **Baseline da documentação:** v0.4 — post-benchmark · **Fase:** FAST MVP.
 
 Este arquivo responde quatro perguntas: onde estamos, o que está aberto, qual é
 a próxima prioridade e como estão DEV e produção. **Não é changelog** — o log
@@ -6661,6 +6662,31 @@ nome livre, renome para o nome de outro (409 com o código dele) e criação do 
 Item, acento, par entre MP e ME sem abrir o nome para UC nem PA, e a prova de que a busca nem roda quando o nome se
 mantém. Vizinhos que exercem os nove PATCH (31 arquivos, 682 testes) em banco de teste exclusivo do worktree; typecheck
 da API. Sem suíte completa, E2E, Playwright nem mutação.
+
+## Versão oficial do sistema: v1.0.0 (VERIDI-SYSTEM-VERSIONING-01, 2026-09-19)
+
+Decisão do PO: o Veridi Nutrition passa a ter versão oficial, SemVer `vMAJOR.MINOR.PATCH`, e **v1.0.0 é a primeira
+versão comercial oficial**. A fonte é uma só, `packages/shared/src/version.ts` (`VERIDI_VERSION` e a data da versão),
+consumida pela API e pela web; uma guarda estrutural recusa o número escrito em qualquer outro código de produção, e o
+`version` dos `package.json` não é a versão do produto. Não havia metadata de build no código: o que existia era o
+`commitHash` do registro de cada deploy no Railway, e é ele que a API passa a ler, pelo `RAILWAY_GIT_COMMIT_SHA` que o
+Railway injeta no processo.
+
+`GET /meta` (sessão obrigatória, qualquer perfil) responde `version`, `environment` — o nome do ambiente do Railway,
+senão o `NODE_ENV` — e `commitHash` — o SHA do deploy, validado, senão `null` —, montados campo a campo: nenhuma URL,
+credencial ou id sai. O cabeçalho mostra a versão ao lado de "Nutrition", no tamanho e no tom dele e fora do link da
+marca; o clique abre "Sobre o sistema" com produto, versão, data da versão, ambiente e build (commit abreviado). Ambiente
+e build vêm de `GET /meta`, lido só quando o diálogo abre: a web nunca afirma "Produção" por conta própria, e no DEV
+diz "Desenvolvimento" com build "Não informado". Sem migration. Política de versão e de publicação em
+[`RELEASES.md`](RELEASES.md).
+
+**Validação.** API `modules/meta/meta.test.ts` (8: resposta exata, sessão, as variáveis do Railway atravessando o `env`,
+valor fora do formato virando o padrão, nada além dos três campos) — mutação provada: sem as duas variáveis no esquema do
+`env`, o teste da rota cai. Web `app/sobre-o-sistema.test.tsx` (10) e `app/versao-fonte-unica.test.ts` (2), com a pasta
+`src/app` e os 12 portões estruturais (23 arquivos, 331 testes); typecheck dos três pacotes; build completo. Extra:
+conferência em navegador real com a API simulada — em 1440, 1280 e 1024 a versão fica 4 px depois de "Nutrition", a
+busca mantém os 460 px, sem transbordo nem erro no console; em 390 px, fora do escopo do FAST MVP, o campo de busca cede
+cerca de 40 px e segue funcionando.
 
 ## Próxima prioridade
 
