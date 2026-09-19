@@ -23,6 +23,12 @@ import { getPrisma } from "../db/prisma.js";
  * migration de índice aqui). Fechar a janela é o trabalho de
  * MASTER-DATA-NAME-UNIQUENESS-01; até lá o guarda pega o caso real — a pessoa
  * recadastrando o que já existe — e não pega a corrida.
+ *
+ * **O guarda impede duplicidade NOVA; não prende a que já existe**
+ * (MASTER-DATA-DUPLICATE-GUARD-LEGACY-EDIT-01). O cadastro que nasceu
+ * duplicado antes do guarda — 21 grupos de Itens em PROD no preflight de
+ * 2026-09-18 — continua editável enquanto o nome efetivo não muda; ver
+ * `exigirNomeDeCadastroLivre`.
  */
 
 export class DuplicateMasterDataNameError extends Error {
@@ -114,17 +120,49 @@ export async function cadastroComOMesmoNome(
 }
 
 /**
- * Recusa o nome que já existe. `excluirId` é o próprio registro na edição —
- * renomear "Goma xantana" para "GOMA XANTANA" é trocar a caixa do mesmo
- * cadastro, não criar duplicata.
+ * O registro já tem este nome efetivo? `upper(btrim(<gravado>))` contra
+ * `upper(btrim(<pedido>))` — a MESMA expressão da busca, avaliada pelo banco,
+ * para que "igual ao próprio nome" e "igual ao nome de outro" nunca discordem
+ * em caractere nenhum. Registro que não existe responde `false`.
+ */
+export async function mantemONomeGravado(
+  cadastro: CadastroMestre,
+  id: string,
+  nome: string,
+  db: Executor = getPrisma(),
+): Promise<boolean> {
+  const colunas = COLUNAS[cadastro];
+  const linhas = await db.$queryRawUnsafe<{ mesmo: boolean | null }[]>(
+    `SELECT upper(btrim(${ident(colunas.colunaNome)})) = upper(btrim($1)) AS mesmo
+       FROM ${ident(colunas.tabela)}
+      WHERE ${ident(colunas.colunaId)}::text = $2`,
+    nome,
+    id,
+  );
+  return linhas[0]?.mesmo === true;
+}
+
+/**
+ * Recusa o nome que já existe em OUTRO cadastro.
+ *
+ * Sem `idEmEdicao` é criação, e a busca roda sempre.
+ *
+ * Com `idEmEdicao` (o próprio registro, na edição), o nome pedido é primeiro
+ * comparado com o gravado. Mesmo nome efetivo — caixa ou espaço nas pontas
+ * diferentes — não é renome, e a busca de conflito NÃO roda: o formulário
+ * manda o nome de volta a cada Salvar, e o cadastro que já nasceu duplicado
+ * de outro não pode ficar sem edição até o saneamento
+ * (MASTER-DATA-DUPLICATE-GUARD-LEGACY-EDIT-01). Nome efetivo diferente —
+ * acento diferente conta — é renome: procura, sem contar o próprio registro.
  */
 export async function exigirNomeDeCadastroLivre(
   cadastro: CadastroMestre,
   nome: string,
-  excluirId?: string | undefined,
-  db?: Executor,
+  idEmEdicao?: string | undefined,
+  db: Executor = getPrisma(),
 ): Promise<void> {
-  const existente = await cadastroComOMesmoNome(cadastro, nome, excluirId, db);
+  if (idEmEdicao && (await mantemONomeGravado(cadastro, idEmEdicao, nome, db))) return;
+  const existente = await cadastroComOMesmoNome(cadastro, nome, idEmEdicao, db);
   if (existente !== null) throw new DuplicateMasterDataNameError(cadastro, nome, existente);
 }
 
