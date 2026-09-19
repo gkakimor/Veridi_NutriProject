@@ -8248,3 +8248,32 @@ do Item bloqueia, como acima; e o PA "nascido com o Produto" é provado pela cha
 não por marca de nascimento — o modelo não guarda marca (PA vinculado por importação, ou trocado na edição do Produto,
 não se distingue do nascido junto), e criá-la exigiria migration, fora do escopo. Sem uso nenhum, o PA vinculado depois
 também sai com o Produto.
+
+## §129 — Transição de documento e o efeito físico dela não divergem por concorrência
+
+DOCUMENT-TRANSITION-CONCURRENCY-01 (2026-09-19), Fatia 1 do
+[DOCUMENT-TRANSITION-CONCURRENCY-DISCOVERY-01](discovery/DOCUMENT-TRANSITION-CONCURRENCY-DISCOVERY-01.md): os quatro
+riscos P0.
+
+> **Duas operações ao mesmo tempo sobre o mesmo documento nunca deixam o status contradizendo o que aconteceu no
+> estoque.** Cancelar ou editar decide sobre o estado do documento DEPOIS de a outra operação terminar — nunca sobre o
+> que ele era antes dela.
+
+**Onde vale nesta fatia.**
+
+- **Expedição.** Não cancela, não reescreve a separação e não confere lote depois de confirmada, nem quando os dois
+  pedidos chegam juntos. Expedição cancelada nunca tem saída de estoque; a confirmada nunca perde linha nem saída por uma
+  edição que chegou depois.
+- **Ordem de Produção.** Não cancela depois do primeiro consumo ou pesagem, nem quando chegam juntos. OP cancelada nunca
+  tem consumo; o cancelamento de uma OP liberada libera a reserva na mesma decisão.
+- **Ordem de Compra.** Não cancela depois do recebimento, nem quando chegam juntos. OC cancelada nunca tem recebimento.
+
+**Quem chega depois** espera a outra operação terminar e relê: se o documento mudou, a recusa é a de sempre ("somente
+rascunho…", "ordem em produção não pode ser cancelada…", "somente rascunhos ou pedidos confirmados…"); se não mudou,
+segue normalmente. Se o banco desfizer a operação por conflito com outra, ou a espera passar do prazo, a resposta é 409
+`concurrent_write` ("tente de novo"), com nada gravado — nunca 500 e nunca nova tentativa automática.
+
+**Fora desta fatia.** Pedido, Faturamento, Lote e confirmar × cancelar da OC (os P1 do discovery). "Encerrar OP sem
+produção" e "Encerrar saldo restante" da OC são de outra capability.
+
+**Migration.** Nenhuma. As chaves estrangeiras e o CASCADE do banco não mudam: a proteção é da aplicação.
