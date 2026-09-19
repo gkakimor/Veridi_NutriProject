@@ -714,7 +714,9 @@ export function CustomerOrderPage() {
   const showDeliverySchedule =
     !isNew && ["CONFIRMED", "IN_FULFILLMENT", "PARTIALLY_SHIPPED", "SHIPPED", "CANCELLED"].includes(status);
   const deliveryScheduleEditable = ["CONFIRMED", "IN_FULFILLMENT", "PARTIALLY_SHIPPED"].includes(status);
-  const showPurchaseSuggestion = !isNew && status === "IN_FULFILLMENT";
+  /* Expedir uma parte não encerra a OP do saldo nem a falta de material dela:
+     a sugestão segue enquanto o pedido é operacional (D5). */
+  const showPurchaseSuggestion = !isNew && (status === "IN_FULFILLMENT" || status === "PARTIALLY_SHIPPED");
 
   /**
    * O pedido como ele está na tela, em forma comparável.

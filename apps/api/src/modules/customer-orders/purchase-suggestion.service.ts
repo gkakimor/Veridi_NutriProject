@@ -455,13 +455,22 @@ export async function getPlanPurchaseSourcing(
   };
 }
 
+/**
+ * Pedido com suprimento em aberto: em atendimento ou parcialmente expedido —
+ * o mesmo conjunto em que a OP do saldo, a reserva e a realocação seguem
+ * aceitas. Expedir uma parte não encerra a OP que ainda produz o resto, nem a
+ * falta de material dela (VERIDI-AUDIT-QUICK-FIXES-01, D5). Pedido
+ * finalizado ou cancelado continua fora.
+ */
+const SUGGESTION_ORDER_STATUSES: readonly string[] = ["IN_FULFILLMENT", "PARTIALLY_SHIPPED"];
+
 export async function getPurchaseSuggestion(customerOrderId: string): Promise<PurchaseSuggestionDTO> {
   const prisma = getPrisma();
   const order = await prisma.customerOrder.findUnique({ where: { id: customerOrderId } });
   if (!order) throw new CustomerOrderNotFoundError(customerOrderId);
-  if (order.status !== "IN_FULFILLMENT") {
+  if (!SUGGESTION_ORDER_STATUSES.includes(order.status)) {
     throw new CustomerOrderNotInFulfillmentError(
-      "Sugestão de Compra só está disponível para pedidos em atendimento.",
+      "Sugestão de Compra só está disponível para pedidos em atendimento ou parcialmente expedidos.",
     );
   }
   return buildPurchaseSuggestion(prisma, customerOrderId);
@@ -554,9 +563,9 @@ export async function generatePurchaseDrafts(
 
     const order = await tx.customerOrder.findUnique({ where: { id: customerOrderId } });
     if (!order) throw new CustomerOrderNotFoundError(customerOrderId);
-    if (order.status !== "IN_FULFILLMENT") {
+    if (!SUGGESTION_ORDER_STATUSES.includes(order.status)) {
       throw new CustomerOrderNotInFulfillmentError(
-        "Só é possível gerar Ordens de Compra para um pedido em atendimento.",
+        "Só é possível gerar Ordens de Compra para um pedido em atendimento ou parcialmente expedido.",
       );
     }
 
