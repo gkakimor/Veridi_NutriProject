@@ -19,6 +19,7 @@ import {
   NothingToShipError,
   OrderNotShippableError,
   ReservationLineNotFoundError,
+  ShipmentConcurrentWriteError,
   ShipmentLineNotFoundError,
   ShipmentNotDraftError,
   ShipmentNotFoundError,
@@ -119,6 +120,10 @@ function mapDomainError(
   }
   if (error instanceof NothingToReallocateError) {
     return { status: 400, body: { error: "nothing_to_reallocate", message: error.message } };
+  }
+  // Outra operação na mesma Expedição venceu a corrida; nada foi gravado.
+  if (error instanceof ShipmentConcurrentWriteError) {
+    return { status: 409, body: { error: "concurrent_write", message: error.message } };
   }
   return null;
 }

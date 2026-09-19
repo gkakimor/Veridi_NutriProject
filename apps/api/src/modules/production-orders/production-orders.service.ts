@@ -46,6 +46,7 @@ import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { statusDoWhere } from "../../lib/status-list-schema.js";
 import { computeRequirementAvailability } from "../../lib/requirement-availability.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
+import { ehConflitoDeConcorrencia } from "../../lib/conflito-de-concorrencia.js";
 import {
   getConsumedByReservationLines,
   getOnHandByLots,
@@ -84,6 +85,7 @@ import {
   OrderLockedError,
   PlanValidationError,
   ProductNotFoundError,
+  ProductionOrderConcurrentWriteError,
   ProductionOrderNotFoundError,
   ProductionRouteChangedError,
   ReleaseValidationError,
@@ -1576,7 +1578,17 @@ export async function releaseProductionOrder(
 
 export async function cancelProductionOrder(id: string, reason: string): Promise<ProductionOrderDTO> {
   await getPrisma().$transaction(async (tx) => {
-    const current = await tx.productionOrder.findUnique({ where: { id } });
+    /*
+     * A decisão é tomada sobre a ordem TRAVADA (DOCUMENT-TRANSITION-CONCURRENCY-01).
+     * Consumo e pesagem travam esta mesma linha e, no primeiro consumo, levam a
+     * ordem de LIBERADA a EM PRODUÇÃO: com eles em curso, o cancelamento espera
+     * aqui e relê. Sem a trava, lia LIBERADA, liberava a reserva e gravava
+     * CANCELADA por cima de uma ordem com consumo real.
+     */
+    const travadas = await tx.$queryRaw<{ status: string }[]>`
+      SELECT status FROM production_orders WHERE id = ${id} FOR UPDATE
+    `;
+    const current = travadas[0];
     if (!current) throw new ProductionOrderNotFoundError(id);
     if (current.status === "IN_PRODUCTION") {
       throw new InvalidTransitionError(
@@ -1614,6 +1626,10 @@ export async function cancelProductionOrder(id: string, reason: string): Promise
         cancelReason: reason,
       },
     });
+  }).catch((erro: unknown) => {
+    // Perdeu a corrida (deadlock ou trava além do prazo): nada foi gravado.
+    if (ehConflitoDeConcorrencia(erro)) throw new ProductionOrderConcurrentWriteError();
+    throw erro;
   });
 
   return (await getProductionOrderById(id))!;

@@ -23,6 +23,7 @@ import { getPrisma } from "../../db/prisma.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
+import { ehConflitoDeConcorrencia } from "../../lib/conflito-de-concorrencia.js";
 import { getOnHand, isLotAvailableForUse } from "../../lib/inventory-ledger.js";
 import { diaDaColunaDeData } from "../../lib/business-day.js";
 import { CustomerOrderNotFoundError } from "../customer-orders/customer-orders.errors.js";
@@ -42,6 +43,7 @@ import {
   NothingToShipError,
   OrderNotShippableError,
   ReservationLineNotFoundError,
+  ShipmentConcurrentWriteError,
   ShipmentLineNotFoundError,
   ShipmentNotDraftError,
   ShipmentNotFoundError,
@@ -521,13 +523,41 @@ export async function createShipmentDraft(
 }
 
 /**
+ * Trava a Expedição e relê o estado JÁ travado (DOCUMENT-TRANSITION-CONCURRENCY-01).
+ *
+ * A confirmação trava esta mesma linha antes de gravar a saída física. Quem
+ * exige rascunho — cancelar, reescrever a separação, conferir lote — decide
+ * sobre esta leitura, nunca sobre um retrato de antes da trava: sem ela, a
+ * decisão esperava só na escrita e gravava por cima de uma Expedição já
+ * confirmada (CANCELLED com SHIPMENT_OUT; ou o DELETE das linhas levando o
+ * SHIPMENT_OUT pelo CASCADE do FK).
+ */
+async function travarExpedicao(tx: Prisma.TransactionClient, id: string): Promise<Shipment> {
+  await tx.$queryRaw`SELECT id FROM shipments WHERE id = ${id} FOR UPDATE`;
+  const shipment = await tx.shipment.findUnique({ where: { id } });
+  if (!shipment) throw new ShipmentNotFoundError(id);
+  return shipment;
+}
+
+/**
+ * Perdeu a corrida para outra operação na mesma Expedição — deadlock ou trava
+ * além do prazo da transação. Nada foi gravado: recusa de tentar de novo,
+ * nunca 500.
+ */
+function recusarConcorrencia(erro: unknown): never {
+  if (ehConflitoDeConcorrencia(erro)) throw new ShipmentConcurrentWriteError();
+  throw erro;
+}
+
+/**
  * Ajusta a separacao (quantidades por linha de reserva e observacoes).
  * Nunca altera Reserva nem estoque — DRAFT e so planejamento.
  */
 export async function updateShipment(id: string, input: UpdateShipmentInput): Promise<ShipmentDTO> {
   await getPrisma().$transaction(async (tx) => {
-    const shipment = await tx.shipment.findUnique({ where: { id } });
-    if (!shipment) throw new ShipmentNotFoundError(id);
+    // As linhas são apagadas e recriadas abaixo: o status que libera isso é o
+    // da Expedição travada.
+    const shipment = await travarExpedicao(tx, id);
     if (shipment.status !== "DRAFT") {
       throw new ShipmentNotDraftError("Somente expedições em rascunho podem ser editadas.");
     }
@@ -649,7 +679,7 @@ export async function updateShipment(id: string, input: UpdateShipmentInput): Pr
       where: { id },
       data: { ...(input.notes !== undefined ? { notes: input.notes } : {}) },
     });
-  });
+  }).catch(recusarConcorrencia);
 
   return (await getShipmentById(id))!;
 }
@@ -676,8 +706,9 @@ export async function verifyShipmentLine(
   const prisma = getPrisma();
 
   await prisma.$transaction(async (tx) => {
-    const shipment = await tx.shipment.findUnique({ where: { id: shipmentId } });
-    if (!shipment) throw new ShipmentNotFoundError(shipmentId);
+    // A conferência grava na linha: só vale sobre o rascunho travado, nunca
+    // na linha de uma Expedição que a confirmação acabou de fechar.
+    const shipment = await travarExpedicao(tx, shipmentId);
     if (shipment.status !== "DRAFT") {
       throw new ShipmentNotDraftError(
         "Somente expedições em rascunho permitem conferir lotes — uma expedição confirmada é histórico.",
@@ -741,7 +772,7 @@ export async function verifyShipmentLine(
       where: { id: line.id },
       data: { verifiedAt: new Date(), verifiedBy: actor?.name ?? SYSTEM_ACTOR },
     });
-  });
+  }).catch(recusarConcorrencia);
 
   return (await getShipmentById(shipmentId))!;
 }
@@ -978,7 +1009,7 @@ export async function confirmShipment(
         },
       });
     }
-  });
+  }).catch(recusarConcorrencia);
 
   return (await getShipmentById(id))!;
 }
@@ -990,8 +1021,9 @@ export async function cancelShipment(
   actor?: { id: string; name: string },
 ): Promise<ShipmentDTO> {
   await getPrisma().$transaction(async (tx) => {
-    const shipment = await tx.shipment.findUnique({ where: { id } });
-    if (!shipment) throw new ShipmentNotFoundError(id);
+    // Com a confirmação em curso, o cancelamento espera aqui e relê: se ela
+    // gravou a saída física, a Expedição já não é rascunho e a recusa vale.
+    const shipment = await travarExpedicao(tx, id);
     if (shipment.status !== "DRAFT") {
       throw new ShipmentNotDraftError(
         "Somente expedições em rascunho podem ser canceladas — uma expedição confirmada já saiu fisicamente.",
@@ -1007,7 +1039,7 @@ export async function cancelShipment(
         cancelReason: reason,
       },
     });
-  });
+  }).catch(recusarConcorrencia);
 
   return (await getShipmentById(id))!;
 }

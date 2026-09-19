@@ -141,3 +141,15 @@ export class NothingToReallocateError extends Error {
     this.name = "NothingToReallocateError";
   }
 }
+
+/**
+ * Outra operação na mesma Expedição terminou antes, e esta transação foi
+ * escolhida pelo banco num deadlock ou expirou esperando a trava. Nada foi
+ * gravado; recarregar e tentar de novo resolve.
+ */
+export class ShipmentConcurrentWriteError extends Error {
+  constructor() {
+    super("Outra operação nesta expedição terminou antes. Nada foi gravado; recarregue e tente de novo.");
+    this.name = "ShipmentConcurrentWriteError";
+  }
+}
