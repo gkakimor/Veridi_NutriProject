@@ -113,6 +113,61 @@
   margin-left: 2px;
 }
 
+/* Marca + versão: um bloco só, que não encolhe — quem cede espaço em tela
+   estreita continua sendo a busca. */
+.masthead__identity {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex-shrink: 0;
+}
+
+/* Versão ao lado de "Nutrition" (VERIDI-SYSTEM-VERSIONING-01): no tamanho e
+   no tom do "Nutrition", sem moldura — informa sem disputar com a marca. É
+   botão porque abre "Sobre o sistema". */
+.masthead__version {
+  flex-shrink: 0;
+  padding: 1px var(--sp-1);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--on-dark-3);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.masthead__version:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--on-dark-2);
+}
+
+/* "Sobre o sistema" — casca do `ModalDialog`, conteúdo em lista de fatos. */
+.system-about {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+/* Dentro da casca, `.confirm-dialog p` pinta todo parágrafo de `--ink-2`:
+   aqui é preciso vencê-lo. */
+.system-about .system-about__product {
+  color: var(--ink);
+  font-weight: var(--fw-semibold);
+}
+
+.system-about__commit {
+  font-family: var(--font-code);
+}
+
+.system-about .system-about__error {
+  color: var(--err-fg);
+  font-size: var(--fs-sm);
+}
+
 .masthead__search-wrap {
   position: relative;
   flex: 1;

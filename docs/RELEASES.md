@@ -19,6 +19,28 @@ auditável. Política permanente em [`DEPLOY.md`](DEPLOY.md) §10.
 | `prod-2026-09-17` | `8e824e8f` | 2026-09-17 | PROD-RELEASE-DEPLOY-01, abaixo; R2 ativo em PROD |
 | `prod-2026-09-19` | `ff861c90` | 2026-09-19 | PROD-RELEASE-DEPLOY-02, abaixo; sete migrations aditivas |
 
+## Versão do produto
+
+Desde VERIDI-SYSTEM-VERSIONING-01 (2026-09-19, decisão do PO) o Veridi Nutrition tem versão oficial no formato
+`vMAJOR.MINOR.PATCH` (SemVer). **v1.0.0 é a primeira versão comercial oficial.**
+
+| Nível | Exemplo | Quando |
+|---|---|---|
+| PATCH | `1.0.1` | correção compatível |
+| MINOR | `1.1.0` | funcionalidade nova compatível |
+| MAJOR | `2.0.0` | mudança incompatível ou evolução estrutural relevante |
+
+- **Fonte única:** `VERIDI_VERSION` e `VERIDI_VERSION_DATE` em `packages/shared/src/version.ts`. A API devolve a versão
+  em `GET /meta`, junto com o ambiente e o commit que o Railway injeta no deploy; o cabeçalho a mostra ao lado de
+  "Nutrition", e "Sobre o sistema" traz versão, data, ambiente e build. Nenhum outro código escreve o número (guarda
+  `apps/web/src/app/versao-fonte-unica.test.ts`), e o `version` dos `package.json` não é a versão do produto — são
+  pacotes privados do workspace.
+- **Subir a versão:** versão publicada não muda de conteúdo (regra do SemVer) — código novo em PROD sai com número novo,
+  e o nível é decisão do PO. Número e data mudam juntos, no commit que entra no SHA publicado; a data é a da publicação.
+- **Tags:** cada versão publicada ganha a tag anotada `vX.Y.Z` no SHA exato de `release/prod`, além da tag técnica da
+  publicação (`prod-AAAA-MM-DD`; com sufixo quando o dia já tem uma — tag existente nunca se move).
+- **Conferir no ar:** `GET /meta`, com sessão, responde `version` e `commitHash` igual ao SHA de `release/prod`.
+
 ## 2026-09-19 — PROD-RELEASE-DEPLOY-02
 
 **Autorização:** PO, no handoff "PROD RELEASE — AUTORIZADA PELO PO". Publicar o SHA exato

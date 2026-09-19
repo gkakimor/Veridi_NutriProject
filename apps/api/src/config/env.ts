@@ -62,6 +62,13 @@ const envSchema = z.object({
    * login "funciona" mas a próxima requisição volta 401.
    */
   VERIDI_WEB_DIST: z.string().default(""),
+  /**
+   * Injetadas pelo Railway em todo deploy, com o nome do ambiente e o commit
+   * publicado. `GET /meta` as lê (VERIDI-SYSTEM-VERSIONING-01); fora do
+   * Railway não existem, e o ambiente passa a ser o `NODE_ENV`.
+   */
+  RAILWAY_ENVIRONMENT_NAME: z.string().trim().optional(),
+  RAILWAY_GIT_COMMIT_SHA: z.string().trim().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
