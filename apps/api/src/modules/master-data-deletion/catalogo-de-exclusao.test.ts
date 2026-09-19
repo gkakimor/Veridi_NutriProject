@@ -2,11 +2,16 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { AGREGADOS } from "./catalogo-de-exclusao.js";
 import type { Linha } from "./filhos-tecnicos.js";
+import type { Dono } from "./filhos-tecnicos.js";
 import {
   FONTE_DO_HISTORICO_DO_CNPJ,
+  FONTE_DO_PRODUTO_ACABADO,
+  FONTE_DO_PROJETO_DE_ORIGEM,
+  FONTE_DO_TIPO_DO_ITEM,
   REGRAS_DA_V1,
   julgarFilhosTecnicos,
   julgarHistoricoDoCnpj,
+  julgarRaiz,
   julgarV1,
 } from "./filhos-tecnicos.js";
 import type { ChaveReal, ColunaReal } from "./master-data-deletion.service.js";
@@ -397,5 +402,154 @@ describe("agruparPorFonte e retrato", () => {
       },
       removidosJunto: [],
     });
+  });
+});
+
+/**
+ * MASTER-DATA-HARD-DELETE-02: Item, Produto + o Item de produto acabado (PA)
+ * que sai com ele, e Recurso industrial — as peças puras.
+ */
+describe("Fatia 2 — regras da raiz", () => {
+  const DONO: Dono = { tabela: "products", coluna: "finishedProductItemId", id: "prod-1" };
+
+  it("PA nunca sai sozinho — ligado a produto ou não", () => {
+    const [bloqueio] = julgarRaiz("ITEM", { id: "i1", type: "FINISHED_PRODUCT" }, null);
+    expect(bloqueio).toMatchObject({ source: FONTE_DO_PRODUTO_ACABADO, count: 1 });
+    expect(bloqueio!.reason).toContain("nunca sozinho");
+  });
+
+  it("PA como vinculado do Produto (com dono) não bloqueia por ser PA", () => {
+    expect(julgarRaiz("ITEM", { id: "i1", type: "FINISHED_PRODUCT" }, DONO)).toEqual([]);
+  });
+
+  it("item ligado ao Produto que não é PA não sai junto", () => {
+    const [bloqueio] = julgarRaiz("ITEM", { id: "i1", type: "RAW_MATERIAL" }, DONO);
+    expect(bloqueio).toMatchObject({ source: FONTE_DO_TIPO_DO_ITEM, count: 1 });
+    expect(bloqueio!.reason).toContain("não é de produto acabado");
+  });
+
+  it("MP, ME e Uso e consumo sozinhos: a raiz não bloqueia", () => {
+    for (const type of ["RAW_MATERIAL", "PACKAGING", "INTERNAL_CONSUMABLE"]) {
+      expect(julgarRaiz("ITEM", { id: "i1", type }, null), type).toEqual([]);
+    }
+  });
+
+  it("Produto nascido de Projeto é histórico do projeto; sem origem, a raiz não bloqueia", () => {
+    expect(julgarRaiz("PRODUCT", { id: "p1", originProjectId: "proj-1" }, null)).toEqual([
+      expect.objectContaining({ source: FONTE_DO_PROJETO_DE_ORIGEM, count: 1 }),
+    ]);
+    expect(julgarRaiz("PRODUCT", { id: "p1", originProjectId: null }, null)).toEqual([]);
+    expect(julgarRaiz("INDUSTRIAL_RESOURCE", { id: "r1" }, null)).toEqual([]);
+  });
+});
+
+describe("Fatia 2 — o vínculo Produto → PA", () => {
+  const PRODUTO = AGREGADOS.PRODUCT;
+  const chavesDoProduto = (): ChaveReal[] => [
+    ...PRODUTO.referencias
+      .filter((referencia) => referencia.tipo === "fk")
+      .map((referencia) => ({
+        tabela: referencia.tabela,
+        coluna: referencia.coluna,
+        alvo: (referencia as { alvo: string }).alvo,
+        acao: (referencia as { acao: string }).acao,
+      })),
+    { tabela: "products", coluna: "finishedProductItemId", alvo: "items", acao: "n" },
+  ];
+  const colunas: ColunaReal[] = PRODUTO.referencias.map((r) => ({ tabela: r.tabela, coluna: r.coluna, tipo: "text" }));
+
+  it("chave do vínculo presente e SET NULL: nada bloqueia", () => {
+    expect(conferirCatalogo(PRODUTO, chavesDoProduto(), colunas)).toEqual([]);
+  });
+
+  it("chave do vínculo sumiu ou mudou de ação: bloqueia — a prova do PA é a chave", () => {
+    const semVinculo = chavesDoProduto().filter((chave) => chave.coluna !== "finishedProductItemId");
+    expect(conferirCatalogo(PRODUTO, semVinculo, colunas).map((p) => p.reason)).toEqual([
+      "products.finishedProductItemId → items está no catálogo da exclusão e não existe mais no banco.",
+    ]);
+    const emCascata = chavesDoProduto().map((chave) =>
+      chave.coluna === "finishedProductItemId" ? { ...chave, acao: "c" } : chave,
+    );
+    expect(conferirCatalogo(PRODUTO, emCascata, colunas).map((p) => p.reason)).toEqual([
+      "products.finishedProductItemId → items é CASCADE no banco e SET NULL no catálogo.",
+    ]);
+  });
+
+  it("efeito esperado: o Produto, o PA e o rastro — mais nada", () => {
+    const esperado = efeitoEsperado(PRODUTO, new Map(), [{ agregado: AGREGADOS.ITEM, internos: new Map() }]);
+    expect(Object.fromEntries(esperado)).toEqual({
+      products: { ins: 0, upd: 0, del: 1 },
+      items: { ins: 0, upd: 0, del: 1 },
+      master_data_deletion_history: { ins: 1, upd: 0, del: 0 },
+    });
+    // Produto sem PA: só ele e o rastro.
+    expect(Object.fromEntries(efeitoEsperado(PRODUTO, new Map()))).toEqual({
+      products: { ins: 0, upd: 0, del: 1 },
+      master_data_deletion_history: { ins: 1, upd: 0, del: 0 },
+    });
+    // Um movimento de estoque levado pelo CASCADE do PA é efeito inesperado.
+    const depois = new Map([
+      ["products", { ins: 0, upd: 0, del: 1 }],
+      ["items", { ins: 0, upd: 0, del: 1 }],
+      ["inventory_movements", { ins: 0, upd: 0, del: 1 }],
+      ["master_data_deletion_history", { ins: 1, upd: 0, del: 0 }],
+    ]);
+    expect(efeitoInesperado(new Map(), depois, esperado)).toEqual({ inventory_movements: { ins: 0, upd: 0, del: 1 } });
+  });
+
+  it("o retrato do Produto leva a identidade do PA pela lista branca do Item — e o que saiu junto", () => {
+    const produto: Linha = {
+      id: "p1",
+      code: "PROD-000001",
+      name: "PRODUTO POR ENGANO",
+      lifecycle: "APPROVED",
+      active: true,
+      notes: "observação que não vai",
+      externalCode: null,
+      createdAt: "2026-09-19T10:00:00.000",
+    };
+    const pa: Linha = {
+      id: "i1",
+      code: "PA-000001",
+      name: "PRODUTO POR ENGANO",
+      type: "FINISHED_PRODUCT",
+      unitCode: "un",
+      family: null,
+      active: true,
+      externalCode: null,
+      sourceName: "fonte que não vai",
+      createdAt: "2026-09-19T10:00:00.000",
+    };
+    const retrato = retratoDaExclusao("PRODUCT", produto, new Map(), [
+      { tipo: "ITEM", tabela: "items", raiz: pa, internos: new Map() },
+    ]);
+    expect(retrato).toEqual({
+      formato: 1,
+      cadastro: {
+        code: "PROD-000001",
+        name: "PRODUTO POR ENGANO",
+        lifecycle: "APPROVED",
+        active: true,
+        externalCode: null,
+        createdAt: "2026-09-19T10:00:00.000",
+      },
+      vinculados: [
+        {
+          tipo: "ITEM",
+          cadastro: {
+            code: "PA-000001",
+            name: "PRODUTO POR ENGANO",
+            type: "FINISHED_PRODUCT",
+            unitCode: "un",
+            family: null,
+            active: true,
+            externalCode: null,
+            createdAt: "2026-09-19T10:00:00.000",
+          },
+        },
+      ],
+      removidosJunto: [{ tabela: "items", linhas: 1 }],
+    });
+    expect(JSON.stringify(retrato)).not.toMatch(/observação|fonte que não vai/);
   });
 });

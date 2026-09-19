@@ -13,9 +13,10 @@ import type { CadastroMestre } from "./master-data-names.js";
 import type { UserRole } from "./users.js";
 
 /**
- * Cadastros com exclusão física nesta fatia. Item, Produto e Recurso
- * industrial entram em MASTER-DATA-HARD-DELETE-02, sobre a mesma
- * infraestrutura.
+ * Cadastros com exclusão física. Fornecedor, Cliente, os três Modelos e o
+ * Roteiro vieram na Fatia 1; Item, Produto (com o Item de produto acabado que
+ * nasce com ele) e Recurso industrial, na Fatia 2 (MASTER-DATA-HARD-DELETE-02),
+ * sobre a mesma infraestrutura. A ordem é a do enum do rastro no banco.
  */
 export type MasterDataEntityType = Extract<
   CadastroMestre,
@@ -25,6 +26,9 @@ export type MasterDataEntityType = Extract<
   | "INDUSTRIAL_COST_TEMPLATE"
   | "PRICING_POLICY_TEMPLATE"
   | "PRODUCTION_PROFILE"
+  | "ITEM"
+  | "PRODUCT"
+  | "INDUSTRIAL_RESOURCE"
 >;
 
 export const MASTER_DATA_ENTITY_TYPES: readonly MasterDataEntityType[] = [
@@ -34,6 +38,9 @@ export const MASTER_DATA_ENTITY_TYPES: readonly MasterDataEntityType[] = [
   "INDUSTRIAL_COST_TEMPLATE",
   "PRICING_POLICY_TEMPLATE",
   "PRODUCTION_PROFILE",
+  "ITEM",
+  "PRODUCT",
+  "INDUSTRIAL_RESOURCE",
 ];
 
 /**
@@ -47,6 +54,9 @@ export const MASTER_DATA_DELETION_PATHS: Record<MasterDataEntityType, string> = 
   INDUSTRIAL_COST_TEMPLATE: "/cost-templates",
   PRICING_POLICY_TEMPLATE: "/pricing-policies",
   PRODUCTION_PROFILE: "/production-profiles",
+  ITEM: "/items",
+  PRODUCT: "/products",
+  INDUSTRIAL_RESOURCE: "/industrial-resources",
 };
 
 /**
@@ -86,7 +96,11 @@ export interface MasterDataDeletionReferenceDTO {
   reason: string;
 }
 
-/** O que sai junto com o cadastro: os filhos técnicos que nasceram com ele. */
+/**
+ * O que sai junto com o cadastro: os filhos técnicos que nasceram com ele — a
+ * V1 em rascunho vazia, o registro do CNPJ da criação, o Item de produto
+ * acabado (PA) do Produto, identificado pelo código e pelo nome.
+ */
 export interface MasterDataDeletionRemovedDTO {
   source: string;
   count: number;
@@ -101,7 +115,7 @@ export interface MasterDataDeletionCheckDTO {
   canDelete: boolean;
   /** Vazio quando pode excluir. */
   references: MasterDataDeletionReferenceDTO[];
-  /** Só quando pode excluir: os filhos técnicos que saem junto (a V1 em rascunho vazia). */
+  /** Só quando pode excluir: os filhos técnicos que saem junto (a V1 em rascunho vazia, o PA do Produto). */
   removedTogether: MasterDataDeletionRemovedDTO[];
   alternative: MasterDataDeletionAlternative;
   /** Falso quando o cadastro já está inativo ou arquivado. */

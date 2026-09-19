@@ -8,10 +8,10 @@ import type {
   MasterDataEntityType,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
-import type { AcaoDaChave, AgregadoExcluivel } from "./catalogo-de-exclusao.js";
+import type { AcaoDaChave, AgregadoExcluivel, Vinculado } from "./catalogo-de-exclusao.js";
 import { ACAO_POR_EXTENSO, AGREGADOS, tabelasDoAgregado } from "./catalogo-de-exclusao.js";
-import type { Internos, Linha } from "./filhos-tecnicos.js";
-import { julgarFilhosTecnicos } from "./filhos-tecnicos.js";
+import type { Dono, Internos, Linha } from "./filhos-tecnicos.js";
+import { julgarFilhosTecnicos, julgarRaiz } from "./filhos-tecnicos.js";
 import {
   MasterDataDeleteAbortedError,
   MasterDataInUseError,
@@ -32,16 +32,21 @@ import { retratoDaExclusao } from "./retrato-da-exclusao.js";
  *  2. confere o catálogo contra o `pg_constraint` — chave que chega sem estar
  *     no catálogo, ou que mudou de ação, bloqueia (falha fechada);
  *  3. julga os filhos técnicos — a V1 como a criação a deixou, e o registro do
- *     CNPJ gravado na criação do Cliente, pela marca `createdWithCustomerId`;
+ *     CNPJ gravado na criação do Cliente, pela marca `createdWithCustomerId` —
+ *     e as regras da raiz (`julgarRaiz`: PA não sai sozinho, Produto nascido
+ *     de Projeto é histórico dele);
  *  4. conta cada referência declarada e as redes: coluna sem chave com sufixo
  *     de id, código ou nome, e toda coluna JSON do schema. Linha de tabela
- *     interna que é deste agregado não é referência a ele — é parte dele.
+ *     interna que é deste agregado não é referência a ele — é parte dele;
+ *  5. julga cada VINCULADO (o Item de produto acabado do Produto) pelo
+ *     catálogo dele, inteiro e sob a mesma trava: cada uso dele bloqueia a
+ *     raiz, e só a chave da raiz para ele — o vínculo — não conta.
  *
  * A exclusão, numa transação: retrato de `pg_stat_xact_user_tables`, trava,
  * recontagem, 409 se houver qualquer uso, rastro append-only, DELETE da raiz
- * (as internas saem por CASCADE), e conferência do efeito REAL contra o
- * esperado — raiz e internas contadas, uma linha no rastro, nada mais. Efeito
- * fora disso desfaz tudo.
+ * (as internas saem por CASCADE) e depois dos vinculados, e conferência do
+ * efeito REAL contra o esperado — raiz, internas e vinculados contados, uma
+ * linha no rastro, nada mais. Efeito fora disso desfaz tudo.
  */
 
 type Banco = Prisma.TransactionClient;
@@ -173,6 +178,27 @@ export function conferirCatalogo(
       });
     }
   }
+  // O vínculo com o vinculado (Produto → PA) sai da raiz: a chave tem de
+  // existir, com a ação declarada — é ela que prova que o PA é deste Produto.
+  for (const vinculado of agregado.vinculados ?? []) {
+    const nome = chaveDe(agregado.tabela, vinculado.coluna, vinculado.tabela);
+    const real = chaves.find(
+      (chave) => chave.tabela === agregado.tabela && chave.coluna === vinculado.coluna && chave.alvo === vinculado.tabela,
+    );
+    if (!real) {
+      problemas.push({
+        source: "Catálogo da exclusão desatualizado",
+        count: 1,
+        reason: `${nome} está no catálogo da exclusão e não existe mais no banco.`,
+      });
+    } else if (real.acao !== vinculado.acao) {
+      problemas.push({
+        source: "Catálogo da exclusão desatualizado",
+        count: 1,
+        reason: `${nome} é ${acaoPorExtenso(real.acao)} no banco e ${ACAO_POR_EXTENSO[vinculado.acao]} no catálogo.`,
+      });
+    }
+  }
   return problemas;
 }
 
@@ -249,6 +275,7 @@ async function contarReferencias(
   lido: AgregadoLido,
   chaves: readonly ChaveReal[],
   colunas: readonly ColunaReal[],
+  dono: Dono | null,
 ): Promise<MasterDataDeletionReferenceDTO[]> {
   const id = String(lido.raiz["id"]);
   const codigo = String(lido.raiz["code"]);
@@ -259,19 +286,23 @@ async function contarReferencias(
     tabela === agregado.tabela ? [id] : (lido.internos.get(tabela) ?? []).map((linha) => String(linha["id"]));
   const idsInternos = [...lido.internos.values()].flat().map((linha) => String(linha["id"]));
 
-  // Referência declarada numa tabela interna (a marca da criação no histórico
-  // do CNPJ) conta só as linhas de FORA do agregado: as dele são julgadas
-  // pelos filhos técnicos.
+  // Linha que sai nesta mesma exclusão não é uso. Referência declarada numa
+  // tabela interna (a marca da criação no histórico do CNPJ) conta só as
+  // linhas de FORA do agregado: as dele são julgadas pelos filhos técnicos. E
+  // o vinculado não conta a raiz de quem o leva (o Produto do PA).
   const porId = (tabela: string, coluna: string, alvos: readonly string[]) => {
-    const doAgregado = (lido.internos.get(tabela) ?? []).map((linha) => String(linha["id"]));
-    return doAgregado.length === 0
+    const queSaem = [
+      ...(lido.internos.get(tabela) ?? []).map((linha) => String(linha["id"])),
+      ...(dono !== null && dono.tabela === tabela ? [dono.id] : []),
+    ];
+    return queSaem.length === 0
       ? contar(db, `SELECT count(*)::int AS n FROM ${ident(tabela)} WHERE ${ident(coluna)}::text = ANY($1::text[])`, alvos)
       : contar(
           db,
           `SELECT count(*)::int AS n FROM ${ident(tabela)}
            WHERE ${ident(coluna)}::text = ANY($1::text[]) AND id::text <> ALL($2::text[])`,
           alvos,
-          doAgregado,
+          queSaem,
         );
   };
   const porCodigo = (tabela: string, coluna: string) =>
@@ -369,12 +400,20 @@ export function agruparPorFonte(
 }
 
 interface Avaliacao {
+  agregado: AgregadoExcluivel;
   lido: AgregadoLido;
   codigo: string;
   nome: string;
   referencias: MasterDataDeletionReferenceDTO[];
   removidosJunto: MasterDataDeletionRemovedDTO[];
   alternativaDisponivel: boolean;
+  /** Os vinculados que saem com a raiz (o PA do Produto), cada um julgado pelo catálogo dele. */
+  vinculados: AvaliacaoDoVinculado[];
+}
+
+interface AvaliacaoDoVinculado {
+  vinculado: Vinculado;
+  avaliacao: Avaliacao;
 }
 
 async function avaliar(db: Banco, agregado: AgregadoExcluivel, id: string, travar: boolean): Promise<Avaliacao> {
@@ -384,23 +423,81 @@ async function avaliar(db: Banco, agregado: AgregadoExcluivel, id: string, trava
   // Uma conexão só na transação interativa: em sequência, nunca `Promise.all`.
   const chaves = await lerChavesReais(db);
   const colunas = await lerColunasReais(db);
+  return julgarAgregado(db, agregado, lido, chaves, colunas, travar, null);
+}
+
+/**
+ * O julgamento de um agregado já lido (e travado, na exclusão). Os vinculados
+ * são lidos e travados ANTES de qualquer contagem — a raiz primeiro, depois
+ * eles — e julgados pelo catálogo deles, com a raiz como dono: a linha dela
+ * não conta como uso do vinculado.
+ */
+async function julgarAgregado(
+  db: Banco,
+  agregado: AgregadoExcluivel,
+  lido: AgregadoLido,
+  chaves: readonly ChaveReal[],
+  colunas: readonly ColunaReal[],
+  travar: boolean,
+  dono: Dono | null,
+): Promise<Avaliacao> {
+  const id = String(lido.raiz["id"]);
+  const codigo = String(lido.raiz["code"]);
+
+  const vinculados: AvaliacaoDoVinculado[] = [];
+  const dosVinculados: MasterDataDeletionReferenceDTO[] = [];
+  for (const vinculado of agregado.vinculados ?? []) {
+    const idDoVinculado = lido.raiz[vinculado.coluna];
+    if (typeof idDoVinculado !== "string") continue;
+    const doVinculado = AGREGADOS[vinculado.tipo];
+    const lidoDoVinculado = await lerAgregado(db, doVinculado, idDoVinculado, travar);
+    if (!lidoDoVinculado) {
+      // A chave garante que ele existe; sem ele, não há o que provar — bloqueia.
+      dosVinculados.push({
+        source: vinculado.rotulo,
+        count: 1,
+        reason: `O ${vinculado.rotulo.toLowerCase()} ligado a este cadastro não foi encontrado.`,
+      });
+      continue;
+    }
+    const avaliacao = await julgarAgregado(db, doVinculado, lidoDoVinculado, chaves, colunas, travar, {
+      tabela: agregado.tabela,
+      coluna: vinculado.coluna,
+      id,
+    });
+    vinculados.push({ vinculado, avaliacao });
+    for (const referencia of avaliacao.referencias) {
+      dosVinculados.push({ ...referencia, source: `${vinculado.rotulo} ${avaliacao.codigo} — ${referencia.source}` });
+    }
+  }
+
   const referencias = agruparPorFonte([
-    ...(await contarReferencias(db, agregado, lido, chaves, colunas)),
+    ...(await contarReferencias(db, agregado, lido, chaves, colunas, dono)),
     ...julgarFilhosTecnicos(agregado.tipo, id, lido.internos),
+    ...julgarRaiz(agregado.tipo, lido.raiz, dono),
     ...conferirCatalogo(agregado, chaves, colunas),
+    ...dosVinculados,
   ]);
 
   const nome = agregado.colunasDeNome.map((coluna) => textoDe(lido.raiz, coluna)).find((valor) => valor !== null);
   return {
+    agregado,
     lido,
-    codigo: String(lido.raiz["code"]),
+    codigo,
     nome: nome ?? "",
     referencias,
-    removidosJunto: agregado.internas
-      .map((interna) => ({ source: interna.rotulo, count: lido.internos.get(interna.tabela)?.length ?? 0 }))
-      .filter((removido) => removido.count > 0),
+    removidosJunto: [
+      ...agregado.internas
+        .map((interna) => ({ source: interna.rotulo, count: lido.internos.get(interna.tabela)?.length ?? 0 }))
+        .filter((removido) => removido.count > 0),
+      ...vinculados.flatMap(({ vinculado, avaliacao }) => [
+        { source: `${vinculado.rotulo} ${avaliacao.codigo} — ${avaliacao.nome}`, count: 1 },
+        ...avaliacao.removidosJunto,
+      ]),
+    ],
     alternativaDisponivel:
       agregado.saida === "INACTIVATE" ? lido.raiz["active"] === true : lido.raiz["archivedAt"] === null,
+    vinculados,
   };
 }
 
@@ -453,16 +550,38 @@ async function contadoresDaConexao(tx: Banco): Promise<Map<string, EfeitoNaTabel
   return new Map(linhas.map(({ tabela, ins, upd, del }) => [tabela, { ins, upd, del }]));
 }
 
-/** O que a exclusão pode fazer: a raiz e as internas saem, uma linha entra no rastro. Só isso. */
-export function efeitoEsperado(agregado: AgregadoExcluivel, internos: Internos): Map<string, EfeitoNaTabela> {
-  const esperado = new Map<string, EfeitoNaTabela>([
-    [agregado.tabela, { ins: 0, upd: 0, del: 1 }],
-    [TABELA_DO_RASTRO, { ins: 1, upd: 0, del: 0 }],
-  ]);
-  for (const [tabela, linhas] of internos) {
-    if (linhas.length > 0) esperado.set(tabela, { ins: 0, upd: 0, del: linhas.length });
+/** O que sai além da raiz: cada vinculado (o PA do Produto), com as internas dele. */
+export interface SaidaDoVinculado {
+  agregado: AgregadoExcluivel;
+  internos: Internos;
+}
+
+/**
+ * O que a exclusão pode fazer: a raiz, as internas e os vinculados saem, uma
+ * linha entra no rastro. Só isso.
+ */
+export function efeitoEsperado(
+  agregado: AgregadoExcluivel,
+  internos: Internos,
+  vinculados: readonly SaidaDoVinculado[] = [],
+): Map<string, EfeitoNaTabela> {
+  const esperado = new Map<string, EfeitoNaTabela>([[TABELA_DO_RASTRO, { ins: 1, upd: 0, del: 0 }]]);
+  const sai = (tabela: string, linhas: number) => {
+    const anterior = esperado.get(tabela) ?? { ins: 0, upd: 0, del: 0 };
+    esperado.set(tabela, { ...anterior, del: anterior.del + linhas });
+  };
+  for (const saida of [{ agregado, internos }, ...vinculados]) {
+    sai(saida.agregado.tabela, 1);
+    for (const [tabela, linhas] of saida.internos) {
+      if (linhas.length > 0) sai(tabela, linhas.length);
+    }
   }
   return esperado;
+}
+
+/** Os vinculados da avaliação, na ordem de exclusão (os de um vinculado logo depois dele). */
+function vinculadosEmOrdem(avaliacao: Avaliacao): Avaliacao[] {
+  return avaliacao.vinculados.flatMap(({ avaliacao: dele }) => [dele, ...vinculadosEmOrdem(dele)]);
 }
 
 /** Tabelas em que o efeito real difere do esperado, com o efeito real. */
@@ -488,8 +607,9 @@ export function efeitoInesperado(
 
 /**
  * A exclusão física, numa transação: trava, reconta, recusa qualquer uso,
- * grava o rastro, apaga a raiz e confere o efeito real. Qualquer divergência
- * desfaz tudo — nada é excluído e nada fica no rastro.
+ * grava o rastro, apaga a raiz — e depois os vinculados, que ela apontava — e
+ * confere o efeito real. Qualquer divergência desfaz tudo: nada é excluído e
+ * nada fica no rastro.
  */
 export async function excluirCadastroMestre(
   tipo: MasterDataEntityType,
@@ -503,6 +623,7 @@ export async function excluirCadastroMestre(
 
     const avaliacao = await avaliar(tx, agregado, id, true);
     if (avaliacao.referencias.length > 0) throw new MasterDataInUseError(agregado.rotulo, avaliacao.referencias);
+    const vinculados = vinculadosEmOrdem(avaliacao);
 
     const rastro = await tx.masterDataDeletionHistory.create({
       data: {
@@ -511,19 +632,39 @@ export async function excluirCadastroMestre(
         entityCode: avaliacao.codigo,
         entityName: avaliacao.nome,
         reason,
-        snapshot: retratoDaExclusao(tipo, avaliacao.lido.raiz, avaliacao.lido.internos) as unknown as Prisma.InputJsonValue,
+        snapshot: retratoDaExclusao(
+          tipo,
+          avaliacao.lido.raiz,
+          avaliacao.lido.internos,
+          vinculados.map((vinculado) => ({
+            tipo: vinculado.agregado.tipo,
+            tabela: vinculado.agregado.tabela,
+            raiz: vinculado.lido.raiz,
+            internos: vinculado.lido.internos,
+          })),
+        ) as unknown as Prisma.InputJsonValue,
         deletedByUserId: actor.id,
         deletedByUserName: actor.name,
       },
     });
 
-    const removidos = await tx.$executeRawUnsafe(`DELETE FROM ${ident(agregado.tabela)} WHERE id = $1`, id);
-    if (removidos !== 1) throw new MasterDataDeleteAbortedError({ [agregado.tabela]: { ins: 0, upd: 0, del: removidos } });
+    // A raiz primeiro: ela aponta para os vinculados (SET NULL), e apagar o
+    // vinculado antes mexeria nela.
+    for (const saida of [avaliacao, ...vinculados]) {
+      const tabela = saida.agregado.tabela;
+      const idDaSaida = String(saida.lido.raiz["id"]);
+      const removidos = await tx.$executeRawUnsafe(`DELETE FROM ${ident(tabela)} WHERE id = $1`, idDaSaida);
+      if (removidos !== 1) throw new MasterDataDeleteAbortedError({ [tabela]: { ins: 0, upd: 0, del: removidos } });
+    }
 
     const inesperado = efeitoInesperado(
       antes,
       await contadoresDaConexao(tx),
-      efeitoEsperado(agregado, avaliacao.lido.internos),
+      efeitoEsperado(
+        agregado,
+        avaliacao.lido.internos,
+        vinculados.map((vinculado) => ({ agregado: vinculado.agregado, internos: vinculado.lido.internos })),
+      ),
     );
     if (Object.keys(inesperado).length > 0) throw new MasterDataDeleteAbortedError(inesperado);
 

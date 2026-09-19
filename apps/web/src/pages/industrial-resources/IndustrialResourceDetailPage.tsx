@@ -9,6 +9,10 @@ import {
 } from "@veridi/shared";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import {
+  ExclusaoDefinitivaDialog,
+  podeExcluirDefinitivamente,
+} from "../../components/ExclusaoDefinitivaDialog";
 import { useAuth } from "../../app/AuthProvider";
 import {
   createIndustrialResourceRate,
@@ -50,6 +54,9 @@ export function IndustrialResourceDetailPage() {
   const [capacidade, setCapacidade] = useState("");
 
   const canEdit = user?.role === "ADMIN";
+  /* Excluir definitivamente o recurso criado por engano: só o Administrador (MASTER-DATA-HARD-DELETE-02). */
+  const podeExcluir = podeExcluirDefinitivamente(user?.role);
+  const [exclusaoAberta, setExclusaoAberta] = useState(false);
 
   const load = useCallback(() => {
     if (!id) return;
@@ -131,6 +138,16 @@ export function IndustrialResourceDetailPage() {
               }}
             >
               {resource.active ? "Inativar recurso" : "Reativar recurso"}
+            </button>
+          )}
+          {podeExcluir && (
+            <button
+              type="button"
+              className="btn btn--danger"
+              disabled={saving}
+              onClick={() => setExclusaoAberta(true)}
+            >
+              Excluir definitivamente
             </button>
           )}
           <button
@@ -405,6 +422,25 @@ export function IndustrialResourceDetailPage() {
           void run(() => updateIndustrialResource(resource.id, { active: false }));
         }}
       />
+
+      {exclusaoAberta && (
+        <ExclusaoDefinitivaDialog
+          tipo="INDUSTRIAL_RESOURCE"
+          id={resource.id}
+          rotulo="recurso industrial"
+          /* Recusada, a saída é Inativar — a mesma confirmação do cabeçalho. */
+          onAlternativa={
+            canEdit
+              ? () => {
+                  setExclusaoAberta(false);
+                  setConfirmarInativacao(true);
+                }
+              : undefined
+          }
+          onCancelar={() => setExclusaoAberta(false)}
+          onExcluido={() => navigate("/gestao/recursos-industriais")}
+        />
+      )}
     </>
   );
 }
