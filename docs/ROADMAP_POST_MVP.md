@@ -276,7 +276,7 @@ operacional foi reduzido ao que continua aberto. Aprovado em desenho pelo PO,
 | **PREC-UI-07** | Totais documentais seguem o domínio, não o perfil |
 | **PREC-UI-08** | Preferência visual nunca grava nem recalcula |
 
-Desenho em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §11;
+Desenho em [`NUMERIC_PRECISION_AUDIT.md`](archive/NUMERIC_PRECISION_AUDIT.md) §11;
 invariantes duráveis em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §57.
 
 **PREC-UI-05 e PREC-UI-06 já são o comportamento atual.** Quem implementar o

@@ -40,7 +40,7 @@ Histórico do arquivo:
 - 4e4bdb6, 54a97e0, 40391d6 (2026-09-10): criação e ajustes.
 - **Último verde documentado:** FAST-DEVELOPMENT-RESET-02 (2026-09-11), numa base zerada no DEV (3333), sem nenhuma
   falha, com a cadeia `CLI-000001 · PROD-000001 · ORC-000001 → PED-000001 → OC-000001 + OC-000002 → OP-000001 (001/26) →
-  LT-20260911-000007 → EXP-000001 → FAT-000001` (`docs/PROJECT_STATE.md`, seção "Reset, golden path e dois
+  LT-20260911-000007 → EXP-000001 → FAT-000001` (`docs/archive/PROJECT_STATE_HISTORY.md`, seção "Reset, golden path e dois
   bloqueios").
 - 61573f5 (2026-09-12, PRODUCTION-ROUTE-ASSIGNMENT-01): roteiro mínimo aplicado por API na etapa `op`. Nunca rodou.
 - 0662812 (2026-09-14, WAVE-01-02): `--desde` passa a exigir `--run`.

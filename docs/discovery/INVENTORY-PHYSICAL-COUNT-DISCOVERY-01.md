@@ -40,9 +40,10 @@ perder a contagem pontual que já funciona.
 
 ## PO baseline
 
-Fonte: INVENTORY-PHYSICAL-COUNT-PO-BASELINE-01 ([`BACKLOG.md`](../BACKLOG.md), seção G; commit `04d97ad`, merge
-`9b011aa`). Tratada como **intenção aprovada**, não especificação final. Objetivos aprovados e o destino de cada um
-neste discovery:
+Fonte: INVENTORY-PHYSICAL-COUNT-PO-BASELINE-01 ([`BACKLOG.md`](../BACKLOG.md), seção G — texto integral em
+[`archive/BACKLOG_HISTORY.md`](../archive/BACKLOG_HISTORY.md) desde 2026-09-19; commit `04d97ad`, merge `9b011aa`).
+Tratada como **intenção aprovada**, não especificação final. Objetivos aprovados e o destino de cada um neste
+discovery:
 
 | Objetivo aprovado | Destino |
 |---|---|

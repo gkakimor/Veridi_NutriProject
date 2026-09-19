@@ -1,9 +1,15 @@
 # Auditoria de precisão numérica — PREC-01
 
+> **Arquivado em 2026-09-19** (DOCUMENTATION-HYGIENE-COMPACTION-01; antes em `docs/NUMERIC_PRECISION_AUDIT.md`).
+> A auditoria está concluída: as decisões são regra em [`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §57–§66, e a matriz
+> está aplicada ao schema inteiro (§58). O documento segue como evidência, como o desenho aprovado das preferências de
+> exibição (§11, PREC-UI no [`ROADMAP_POST_MVP.md`](../ROADMAP_POST_MVP.md)) e como a fonte do padrão de foco do campo
+> numérico (§11.5), citado pelo código e pelo [`UI_BRAND.md`](../UI_BRAND.md). A linha de status abaixo é a da época.
+
 **Status:** auditoria **aprovada pelo PO e publicada em 2026-09-05**, sem
 migration e sem mudança de regra. As decisões tomadas sobre ela viraram regra
-durável em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §57, §58 e §59, e trabalho
-nomeado na seção E de [`BACKLOG.md`](BACKLOG.md). Este documento continua sendo
+durável em [`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §57, §58 e §59, e trabalho
+nomeado na seção E de [`BACKLOG.md`](../BACKLOG.md). Este documento continua sendo
 a **evidência**: o inventário, as medições e o porquê de cada decisão.
 **Implementação:** a **Fundação A** (#20 + PREC-MIG-A) foi entregue em
 2026-09-05 — 43 colunas em `DECIMAL(24,12)` e o motor decimal em 40 dígitos. As
@@ -66,7 +72,7 @@ seis pontos de serialização inconsistentes.
 
 Quatro regras, derivadas do que a auditoria encontrou e **aprovadas pelo PO em
 2026-09-05**. P1 a P4 estão consolidadas em
-[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §57 e §58; aqui fica o raciocínio.
+[`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §57 e §58; aqui fica o raciocínio.
 
 **P1 — A coluna é a precisão. Não existe casa escondida além do scale.**
 Hoje o sistema não tem "precisão oculta" para preservar: `Decimal(18,6)` guarda
@@ -84,7 +90,7 @@ scale da sua categoria.
 **P3 — Arredondamento comercial é regra de domínio e vive no cálculo, não no
 formatter.** Já é assim: `calcularTotaisOrcamento`, `calcularTotaisFaturamento`
 e `calcularTotaisOrdemCompra` produzem strings de 2 casas porque o documento tem
-2 casas ([`PRODUCT_RULES.md`](PRODUCT_RULES.md) §55), não porque a tela mostra 2.
+2 casas ([`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §55), não porque a tela mostra 2.
 Preferência de exibição nunca alcança esses valores.
 
 **P4 — Aritmética de grandeza acontece em Decimal, dos dois lados.**
@@ -350,7 +356,7 @@ fecha com o total quando a divisão não é exata — num documento de execuçã
 **Resolvido em 2026-09-06 (#21).** `splitDecimal` subiu para `@veridi/shared`; a
 API delega e o impresso reusa a MESMA função. O papel passou a dizer
 `0,666666 × 2 + 0,666668` onde antes dizia `0,666667 × 3`. Regra durável em
-[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §67.
+[`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §67.
 
 ### 5.3 O que **não** perde precisão
 
@@ -486,7 +492,7 @@ serialização inconsistente de §5.1, não a matemática.
 ## 9. Tipos PostgreSQL — a evidência por trás da matriz
 
 **Aprovada pelo PO em 2026-09-05**; a matriz canônica vive em
-[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §58. A tabela abaixo é o raciocínio que a
+[`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §58. A tabela abaixo é o raciocínio que a
 sustenta — o range e a granularidade que cada categoria precisa, e por quê.
 
 `DECIMAL(30,12)` foi **recusado como baseline**, por dois motivos medidos:
@@ -527,7 +533,7 @@ margem que evita uma segunda migration.
 ## 10. Plano de migration — A, B, C e P entregues
 
 Os grupos abaixo viraram os itens **PREC-MIG-A a E** na seção E de
-[`BACKLOG.md`](BACKLOG.md): A ≙ Grupo A, e o Grupo B foi separado por categoria
+[`BACKLOG.md`](../BACKLOG.md): A ≙ Grupo A, e o Grupo B foi separado por categoria
 em B (custo), C (pureza/overage) e D (resultado técnico), com E para o que ainda
 exige decisão individual, e **P** para a família UNIT_PRICE. A auditoria em si
 não gerou migration nenhuma; as quatro que existem hoje saíram das capabilities
@@ -810,9 +816,9 @@ a coluna sem ampliar o motor cria coluna que o sistema não consegue preencher.
 ## 11. Preferências de exibição — desenho aprovado, nada implementado
 
 Aprovado como roadmap pelo PO em 2026-09-05, **depois da fundação**, e nomeado
-em PREC-UI-01 a 08 na seção E de [`BACKLOG.md`](BACKLOG.md). Os invariantes que
+em PREC-UI-01 a 08 na seção E de [`BACKLOG.md`](../BACKLOG.md). Os invariantes que
 a implementação não pode violar são regra durável em
-[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §57.
+[`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §57.
 
 ### 11.1 Arquitetura
 
@@ -888,7 +894,7 @@ A implementação futura precisa **preservar** isso, não construir.
 
 A auditoria abriu sete perguntas. **O PO respondeu seis em 2026-09-05**, na
 aprovação de PREC-01. As decisões duráveis estão em
-[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §57, §58 e §59; o que segue é o
+[`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §57, §58 e §59; o que segue é o
 fechamento de cada pergunta desta auditoria.
 
 | Pergunta | Decisão do PO |
@@ -917,7 +923,7 @@ PREC-MIG-P / PREC-P-01.
 técnico é grandeza técnica; `QuoteLine.unitPrice` **permanece** em `14,4`,
 porque é o preço do documento comercial, e a passagem entre os dois é uma
 fronteira deliberada de fechamento em quatro casas (§60 de
-[`PRODUCT_RULES.md`](PRODUCT_RULES.md)). As perguntas originais, e o que cada
+[`PRODUCT_RULES.md`](../PRODUCT_RULES.md)). As perguntas originais, e o que cada
 uma virou:
 
 - **`PricingTier.manualUnitPrice` (PREC-P-02)** — é entrada de operador. Oito
@@ -945,7 +951,7 @@ para `DECIMAL(24,12)` — são **resultado técnico derivado por unidade**, não
 preço acordado, e a categoria é o PAPEL do valor no domínio, não a sua unidade.
 Migration `20260925093006_numeric_precision_technical_results_24_12`, sem
 backfill. A regra durável que saiu daí é a **terceira fronteira de fechamento**
-([`PRODUCT_RULES.md`](PRODUCT_RULES.md) §62): resultado técnico persistido fecha
+([`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §62): resultado técnico persistido fecha
 em doze casas, com `ROUND_HALF_UP` declarado na chamada, antes do banco.
 
 ### 12.1 Inventário TECHNICAL_RESULT — classificação final (PREC-MIG-D)
@@ -1015,7 +1021,7 @@ PREC-MIG-D.
 **APROVADA E ENTREGUE pelo PO em 2026-09-06.** Uma migration —
 `20260925093007_numeric_precision_quote_industrial_cost_24_12`, uma coluna — e
 quinze MANTER, com a categoria **TECHNICAL_TOTAL** formalizada em
-[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §63 e os achados F-2 e F-3 virando §64.
+[`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §63 e os achados F-2 e F-3 virando §64.
 
 A classificação abaixo é o registro do que embasou a decisão. Cada campo foi classificado pelo PAPEL do
 valor: de onde ele nasce, quem o consome, se entra em soma, se entra em
@@ -1109,7 +1115,7 @@ recalcular `costPerUnit` a partir das colunas obterá um número diferente do
 gravado, a partir da terceira casa. Isso é correto por §57 — total fecha,
 operando não —, mas hoje não está escrito em lugar nenhum. Vale nota no
 documento e teste de trava, **não migration**. **Virou
-[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §64 em 2026-09-06**, com teste em
+[`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §64 em 2026-09-06**, com teste em
 `pricing-technical-precision.test.ts`.
 
 #### F-3 — assimetria nova entre por unidade e total, no `PricingTier`
@@ -1141,7 +1147,7 @@ Aberto, **medido** e fora do grupo D:
 `PREC-SER-01` está **RESOLVIDO** desde 2026-09-06. Varredura global: zero
 `.toFixed(6)` na API, nenhum `parseFloat`, e o único `toNumber()` é sobre uma
 coluna `Int`. A matriz completa por categoria — storage, API, display e helper
-canônico — está em [`BACKLOG.md`](BACKLOG.md), seção E.
+canônico — está em [`BACKLOG.md`](../BACKLOG.md), seção E.
 
 **Achado registrado sem ação, de outra categoria:**
 `cost-templates/pricing-policies.service.ts` compara quantidade de faixa por
@@ -1167,7 +1173,7 @@ o milhar e monta o texto. `formatBRL`, `formatUnitCost`, `formatUnitPriceBRL`,
 `formatPercent` e `formatQuantity` passaram a usá-lo. **O contrato visual não
 mudou** — cada caso foi medido contra o `Intl.NumberFormat` que estava no lugar,
 e os 826 testes de tela continuam passando sem alteração. Regra durável:
-[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §65, com a matriz final por categoria.
+[`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §65, com a matriz final por categoria.
 
 Varredura global do web: zero `Intl.NumberFormat`, zero `parseFloat`, e todo
 `toLocaleString` restante é sobre **data**. Os impressos usam os mesmos
@@ -1229,7 +1235,7 @@ Salvar PDF"). Três comparações de `Decimal` contra zero que ainda passavam po
 `Number` foram trocadas por `Decimal.greaterThan` (§66). Um teste de fonte trava
 a reintrodução.
 
-Regra durável em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §67.
+Regra durável em [`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §67.
 
 ---
 

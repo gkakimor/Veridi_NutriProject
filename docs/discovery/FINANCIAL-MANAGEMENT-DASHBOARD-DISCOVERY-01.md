@@ -69,7 +69,7 @@ genérico, não inventar domínio e não chamar a evolução de MVP.
 | Custo, margem, markup e comissão só para COMMERCIAL e ADMIN, em qualquer formato | `PRODUCT_RULES.md` §5.10; `PRICING_PROVENANCE_ROLES` |
 | "Lucro" e "margem líquida" nunca aparecem: contribuição não é lucro | `PRODUCT_RULES.md` §5.9 |
 | Perfil tributário é classificação informada, sem efeito em runtime; o ERP não vira motor fiscal | `PRODUCT_RULES.md` §83; BACKLOG PRICING-TEMPLATE-FLEX-01 |
-| Nenhum módulo é ocultado (decisão da Veridi, 2026-09-10) | `PROJECT_STATE.md` "Próxima prioridade" |
+| Nenhum módulo é ocultado (decisão da Veridi, 2026-09-10) | `PROJECT_STATE.md` "Decisões operacionais vigentes" |
 | COST-VAR-02 (comparação de CMV e proteção de margem) bloqueado nas 7 decisões do PO | [`COST-VAR-01`](../archive/COST-VAR-01_AUDITORIA_VARIACAO_CMV.md) §25 |
 
 ## 4. Estado atual
@@ -204,7 +204,7 @@ O único valor monetário do Painel é "Valor faturado". Presets: Hoje, 7 dias,
 
 `PRODUCT_RULES.md` §5.8, §5.9, §5.10, §5.12, "Invoicing", §30, §31 ("Material
 cost foundation"), §34, §55, §61, §75, §83, §84 · `ROADMAP_POST_MVP.md`
-"Relatórios analíticos" e "Fiscal / financeiro" · `PROJECT_STATE.md`
+"Relatórios analíticos" e "Fiscal / financeiro" · `archive/PROJECT_STATE_HISTORY.md`
 BILL-DISCOUNT-01b e DASHBOARD-* · COST-VAR-01 §25.
 
 ## 6. Findings

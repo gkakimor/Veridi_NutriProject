@@ -1,5 +1,8 @@
 # Veridi Nutrition — Product Rules v0.4
 
+> Narrativa de origem, notas de migration e apontadores de código que saíram deste arquivo em 2026-09-19 estão em
+> [`archive/PRODUCT_RULES_HISTORY.md`](archive/PRODUCT_RULES_HISTORY.md), por §. Nenhuma regra mudou e nenhum § foi renumerado.
+
 These are Product Ownership's proposed MVP rules for areas where the current Veridi process is manual or not formally defined.
 
 They should be implemented as the default MVP behavior and refined after operational validation.
@@ -1953,12 +1956,6 @@ These should not stop early development until their feature is reached:
 
 # 29. Customer Orders & Fulfillment Plan (Block D)
 
-Customer Order, Fulfillment Plan, Finished-Product Reservation and
-Suggested Production Orders (22-25) are implemented as of Delivery 16 —
-see "Durable rules confirmed at implementation" below. Purchase
-suggestion (26), Shipping (27) and Invoicing (28) remain future/not
-started.
-
 ## Customer Order
 Launched internally — there is no customer-facing portal in MVP. Will
 eventually hold: customer, products, requested quantities, relevant dates,
@@ -2897,10 +2894,6 @@ approved or blocked.
 
 ## §39 — Rules from the first end-to-end case (VAL-LEG-01)
 
-The first real order went from customer to invoice through the published UI.
-It passed, and it left three places where the domain was right but the system
-gave the operator no way to say so.
-
 ### Consuming beyond the reservation is explicit, never automatic
 
 Real consumption stays capped by what is reserved. That cap is what stops one
@@ -3243,14 +3236,6 @@ abre um modal. Ela responde, **nesta ordem**:
 Os três primeiros itens formam o **nível 1**, sempre visível e limitado a 80
 palavras: é o que responde "o que eu faço aqui?" em cinco segundos. Os itens 4
 a 6 ficam abertos logo abaixo. Do 7 em diante é consulta, recolhida.
-
-**Por que esta ordem, e o que ela substitui.** A versão anterior desta regra
-mandava começar pelo conceito e apresentar o glossário antes do caminho. Ela
-corrigiu um defeito real — uma versão ainda mais antiga explicava só onde a
-tela ficava numa cadeia maior ("Produto › Formulação › Custo › Preço") e não
-dizia o que a tela na frente da pessoa fazia. A correção, porém, produziu
-outro defeito: a auditoria UX-HELP-01 mediu 31 mil palavras de ajuda em que a
-resposta útil chegava depois de nove a treze termos de dicionário.
 
 A ordem acima preserva a lição — a **primeira frase** diz o que a tela **é** —
 e move o dicionário para onde ele é consultado em vez de lido. O termo difícil
@@ -3693,23 +3678,6 @@ aquele.
 Divergência conferida e atribuída a erro da referência é registrada como
 `EXTERNAL_DATA_FINDING`, separada de `BUG` no backlog. As duas classes exigem
 prova; só uma delas exige mudança de código.
-
-**Caso que originou a regra.** A rodada adversarial comparou o CMV da Coenzima
-Q10 — sistema ≈ R$ 11 mil por 1000 potes contra ≈ R$ 2,4 mil na planilha — e
-deixou aberta a hipótese de o motor estar errado por um fator de quatro.
-
-Medido depois: `cmv_precificacao.csv` repete `custo_por_1000_unid = 2431.872`
-nos **nove** produtos, inclusive na linha chamada `CMV modelo`. Valores
-distintos na planilha inteira: um. Creatina, de um componente, não custa o mesmo
-que Magnésio Treonato, de lote 20.000 — a aba de precificação nunca foi
-recalculada por produto.
-
-Somando os próprios componentes da planilha (`kg_lote × preço_brl_kg`), a
-Coenzima Q10 dá **R$ 9.708,23** de material por 1000 unidades. A planilha
-contradiz a si mesma, e o número que servia de referência era o do modelo.
-
-Ajustar o motor para R$ 2,4 mil teria quebrado o cálculo de todos os produtos
-para reproduzir um valor que a própria fonte não sustenta.
 
 **Como conferir uma divergência:** refazer a conta a partir dos dados brutos —
 quantidade, pureza, preço por quilo, tamanho de lote — e comparar os dois
@@ -4160,7 +4128,7 @@ erro interno continuam distintos, nunca mascarados como "estado vazio".
 ## §57 — Precisão de armazenamento não é precisão de apresentação
 
 Decisão de Product Ownership de 2026-09-05, sobre a auditoria
-[`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md).
+[`NUMERIC_PRECISION_AUDIT.md`](archive/NUMERIC_PRECISION_AUDIT.md).
 
 **O banco preserva a precisão que o domínio produz; a tela mostra a que a
 pessoa precisa ler.** São duas coisas distintas e nunca se determinam.
@@ -5093,12 +5061,6 @@ comercial do Pedido (§ BILL-DISCOUNT) continua fechando em
 
 ## §76 — A oferta do fornecedor só participa do custo com vigência, e só uma por item
 
-O degrau 4 de §53 — "oferta válida de fornecedor homologado" — existia na
-regra e não existia na operação: as 602 ofertas da base vieram da planilha
-sem data de cotação, e sem vigência uma oferta é observação histórica. Quem
-cadastrava cinco preços e abria o CMV via "sem custo conhecido", sem nada
-ligando as duas telas.
-
 **A hierarquia de §53 não muda.** Compra real continua vencendo oferta;
 oferta continua vencendo referência manual; ausência continua sendo `NO_COST`
 e nunca zero. O que passa a existir é a possibilidade de o degrau 4 acontecer,
@@ -5166,9 +5128,6 @@ plausível e errado — o pior tipo de erro de custo, porque ninguém confere o
 que parece certo. O filtro é parte da ESCOLHA da vigente, não um descarte
 posterior: uma referência em dólar mais recente não esconde uma em real mais
 antiga.
-
-Nenhum dado foi alterado por essa correção. As 293 referências existentes são
-todas BRL; a proteção vale para o que vier.
 
 ### MOQ não escolhe oferta e não muda custo
 
@@ -5275,10 +5234,6 @@ produto trazem a base ao lado do número que ela explica.
 **No papel a ressalva vem impressa.** Não há ⓘ para abrir num documento, e quem
 o recebe não estava na conversa em que a base foi escolhida.
 
-**Nada de domínio mudou.** Nenhum snapshot foi recalculado, nenhum campo
-renomeado (`costPer1000`, `costPer1000Snapshot` seguem com o nome técnico) e
-nenhuma migration nasceu disto: é copy e hierarquia.
-
 ## §79 — A vigência da tarifa industrial é dia civil, inclusiva nas duas bordas
 
 `IndustrialResourceRate.effectiveAt` e `.validUntil` são **datas civis**, como
@@ -5290,18 +5245,6 @@ dentro da vigência?".
 **Uma tarifa que passa a valer no dia D vale o dia D inteiro; uma que vale até
 o dia D ainda vale o dia D inteiro.** É a mesma semântica que §76 já dera à
 oferta do fornecedor, do outro lado do custo.
-
-**O que estava errado.** `isRateCurrent` comparava INSTANTES: o marcador de
-"válida até 09/09" é `00:00:00.000`, então qualquer relógio depois disso já a
-declarava histórica. A tarifa morria durante o próprio dia impresso nela — e
-`toRateDTO` decidia com `new Date()`, o relógio do processo, que em Railway é
-UTC. Um teste feito de manhã nunca veria o defeito.
-
-**A suspeita original era outra, e estava errada.** O walkthrough relatou
-"agosto deveria usar A e usa B". A auditoria não confirmou: com A vigente desde
-janeiro e B desde setembro, agosto sempre respondeu A e setembro sempre
-respondeu B, e os snapshots econômicos sempre ficaram congelados. O defeito real
-era a borda do dia, e só ela foi corrigida.
 
 **"Vigente agora" é pergunta sobre o DIA COMERCIAL.** Quem quer saber a
 situação de hoje traduz o relógio em dia comercial antes de perguntar
@@ -5337,9 +5280,6 @@ respostas divergentes seriam pior que nenhuma. As opções em aberto são encerr
 a anterior automaticamente, bloquear a sobreposição, alertar e permitir, ou
 permitir com prioridade explícita. Até lá, o sistema **não** edita, encerra nem
 apaga a vigência anterior por conta própria.
-
-Nenhuma migration nasceu disto: a semântica é de leitura, e a coluna já era a
-certa.
 
 ---
 
@@ -5477,22 +5417,6 @@ como o marcador do dia comercial — pelo mesmo motivo e com o mesmo helper que
 §79 aplicou à tarifa industrial. `effectiveFrom` explícito é preservado como
 data civil, sem releitura pelo relógio de quem gravou. A tela já mandava o dia
 certo; a API não pode depender disso.
-
-### O que NÃO mudou
-
-Hierarquia de fontes (§53), fórmula da média ponderada, filtro de moeda BRL,
-`referenceDate` explícita no motor (§5.8) e snapshots já persistidos. A mudança
-é de leitura e de padrão futuro: **nenhum dado gravado estava errado**, e a
-auditoria de produção confirmou — 295 referências, todas em marcador de
-meia-noite UTC, nenhuma na faixa problemática. Sem backfill e sem migration.
-
-### Onde a regra vive
-
-`limitesDaJanelaDeCusto` em `apps/api/src/lib/cost-reference.ts` — a definição
-da elegibilidade temporal, exportada porque é ela que os testes de borda
-interrogam. Os limites do dia vêm de `limitesDoDiaComercial`, e o deslocamento
-de calendário de `diaCivilDeslocado`, os dois na fundação de `@veridi/shared`.
-Nenhum helper novo de fuso nasceu aqui.
 
 ---
 
@@ -6939,8 +6863,6 @@ rascunho a prévia usa a base derivada das premissas que estão nos campos: troc
 fechada com base fora da regra explica a base gravada na ajuda do cálculo do "Por embalagem", somente leitura. A ajuda
 diz: "A base de cálculo é definida automaticamente pela configuração da formulação."
 
-**Sem migration.** A coluna `basis` continua no schema, com o mesmo enum.
-
 ## §107 — Item inativo não some do estoque físico
 
 INVENTORY-INACTIVE-ITEM-VISIBILITY-01 (2026-09-17), Fatia 1 de
@@ -7123,8 +7045,6 @@ dele resolve para o canônico (fórmula e oferta), o código do ERP é consumido
 base saneada, e o plano reprova se a base ainda tem o duplicado ou se o canônico não vem na carga. Saldo legado do código
 absorvido fica fora do template de abertura, com finding apontando o canônico.
 
-**Sem migration.** Nenhuma tela nova.
-
 ## §111 — Consulta de CNPJ: assistência ao preenchimento, nunca atualização automática
 
 CUSTOMER-CNPJ-LOOKUP-01 (2026-09-17), sobre o handoff do PO. Reconcilia e
@@ -7252,7 +7172,6 @@ inativo" / "Fornecedor inativo", e o detalhe explica o que volta com a reativaç
 O recebimento mostra as duas marcas e não impede a entrada. O diálogo de inativar o Fornecedor diz o que muda: sai de
 compra nova, OC confirmada segue recebível, o preferencial cai e nada é excluído.
 
-**Sem migration.** Nenhuma coluna nova: `active` já existe em Item, Fornecedor e na relação.
 ## §113 — Uso e consumo: material que se compra e se estoca, e não entra em receita
 
 INTERNAL-CONSUMABLE-ITEM-TYPE-01 (2026-09-17), decisão do PO no handoff.
@@ -7279,8 +7198,6 @@ família, pureza padrão, subtipo de embalagem e arquivo do rótulo não aparece
 `ITEM_TYPES_COMPRAVEIS`, `ITEM_TYPES_DA_SUGESTAO_DE_COMPRA` e `ITEM_TYPES_DA_AMOSTRA`. Enquanto a Formulação barrava
 "tudo menos produto acabado", um tipo novo entrava na receita sozinho e vazava dali para a OP e o CMV. Um tipo novo
 agora começa de fora de tudo e só entra onde alguém o escrever.
-
-**Migration.** `20260925093034_item_type_internal_consumable` — valor de enum e sequence, nada mais.
 
 ## §114 — Nome de cadastro mestre: a caixa não cria cadastro novo
 
@@ -7454,9 +7371,6 @@ observação e o disponível — lido do MESMO cálculo que a gravação confere
 recusa. Confirmado, mostra quantidade, custo unitário, custo total e origem do custo; sem custo, a frase. Abaixo, o
 histórico operacional com quem, quando, o quê, quanto, destino e custo.
 
-**Migration.** `20260925093035_internal_consumption` — enum `CostSource` (espelho do tipo do shared), os dois valores de
-enum do ledger, a tabela `internal_consumptions` e a sequence `internal_consumption_code_seq`.
-
 ## §116 — Componente inativo não inicia compromisso novo de Produção
 
 PRODUCTION-INACTIVE-COMPONENT-GATE-01 (2026-09-17), handoff do PO. Aplica à Produção a mesma família de §107 (o inativo
@@ -7502,8 +7416,6 @@ compromisso, e travar a criação esconderia o problema de quem precisa vê-lo. 
 ordem, nunca congelado na necessidade. Rascunho e planejada mostram um aviso que nomeia TODOS os componentes inativos e
 diz qual passo será recusado; liberada e em execução mostram só a marca "Item inativo" na linha. Nada desabilita botão: a
 API é a autoridade, e a mensagem dela aparece inteira.
-
-**Sem migration.** Nenhuma coluna nova: `active` já existe no Item.
 
 ## §117 — Relatório de Uso e consumo (R-21): a despesa como foi registrada, e o sem custo à vista
 
@@ -7569,8 +7481,6 @@ conhecido, sem custo) e o resumo por destino/uso, e só então a seção "Consum
 
 **Leitura.** Todo perfil autenticado, `VIEWER` incluído: o histórico da Fatia 2 já mostra a todos o custo de cada
 consumo, e esconder o total no relatório não protegeria nada.
-
-**Sem migration.**
 
 ## §118 — Onda 2 do saneamento: a decisão nomeia o grupo, e o canônico recebe só o que a decisão escreveu
 
@@ -7645,8 +7555,6 @@ antes do commit), com o resultado gravado em `--resultado`; VERIFY prova absorvi
 relações no canônico, nenhum resíduo e nenhum Item com o nome do par nomeado, e recontagem global. A planilha
 (`cadastros-duplicados-onda-<n>-<carimbo>.xlsx`, abas REMOVIDOS, RESUMO e REVISÃO NECESSÁRIA) sai do APPLY ou do VERIFY
 a partir do resultado gravado. A ferramenta de Item recusa onda com grupo de mais de dois, par nomeado ou consolidação.
-
-**Sem migration**, e sem índice único ainda: MASTER-DATA-NAME-UNIQUENESS-01 continua depois do saneamento completo.
 
 ## §119 — Dados cadastrais do CNPJ: a consulta aplicada fica no Cliente, e pertence ao CNPJ
 
@@ -7768,8 +7676,6 @@ cadastrar ou promover outro administrador antes. Essa conta só vale com a lista
 que a página traz, a tela não afirma nada e quem decide é a API. A recusa que chega mesmo assim (corrida) aparece com a
 frase da API. Lista, consulta e histórico de qualquer usuário seguem abertos.
 
-**Sem migration.**
-
 ## §121 — Roteiro de Produção arquivado: sai das escolhas, e o que já existe fica
 
 PRODUCTION-PROFILE-ARCHIVE-01 (2026-09-17), D4 do
@@ -7822,9 +7728,6 @@ aplicá-lo; o caminho é escolher um roteiro ativo, ou desarquivar.
 **Ordem que já tem a cópia.** Nada muda: a cópia é por valor (§89) e não é relida, reescrita nem apagada ao arquivar ou
 desarquivar. Planejar, programar, liberar, separar, consumir, apontar e concluir não consultam a situação do perfil.
 
-**Sem migration.** `archivedAt` e `archivedBy` já existiam em `production_profiles`, e a lista já escondia o
-arquivado — faltava a ação.
-
 ## §122 — Dados cadastrais do CNPJ: editáveis, consulta aditiva e histórico
 
 CUSTOMER-CNPJ-EDITABLE-HISTORY-01 (2026-09-18), handoff do PO. Revê a §119 (bloco somente leitura, trocado inteiro pela
@@ -7876,9 +7779,6 @@ histórico começa na primeira gravação depois desta capacidade.
 **Na tela.** "Ver histórico", no rodapé da seção (edição e consulta do Cliente), abre o diálogo com o mais recente
 primeiro: Data/hora, Usuário, Origem, Campo, Anterior, Novo. A troca de CNPJ mostra também a linha do número. Ler é
 aberto a quem lê o Cliente; gravar continua com `CUSTOMER_EDIT_ROLES` (§98).
-
-**Migration aditiva** (`20260925093037_customer_cnpj_registration_history`): enum e tabela novos, sem backfill; as
-colunas de `customers` e a migration da §119 ficam intocadas.
 
 ## §123 — Espaço vertical padrão entre os blocos de cadastro
 
@@ -7952,8 +7852,6 @@ plano antigo recusa.
 **Execução.** `master-data-duplicate-sanitization.ts --onda=3`, como a §118: PLAN somente leitura, backup com
 `RESTAURÁVEL: YES`, APPLY em uma transação por grupo, VERIFY e recontagem global. Planilha com as abas REMOVIDOS
 (inclusive o Modelo excluído, com a V1 na observação), RENOMEADOS, RESUMO e REVISÃO NECESSÁRIA.
-
-**Sem migration.** O índice único de MASTER-DATA-NAME-UNIQUENESS-01 continua esperando os dois grupos em revisão.
 
 ## §125 — Exclusão física de cadastro mestre: só o criado por engano, nunca usado, e com rastro
 
@@ -8185,8 +8083,6 @@ saldo estiver errado, fazer uma nova contagem — no aberto, tratar a diferença
 
 **Tela.** Uso e consumo avisa no campo Data quando a data é passada; na recusa, mostra a frase da API inteira e o link
 para o inventário. A ajuda do tópico diz a regra.
-
-**Migration.** Nenhuma.
 
 ## §128 — Exclusão física de Item, Produto + PA e Recurso industrial
 

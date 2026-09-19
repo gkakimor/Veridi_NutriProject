@@ -588,7 +588,7 @@ outros — o teclado certo no celular) e a leitura de `lib/numeric-ptbr.ts`.
   Borda (prévia, gravação): `parsePtBrNumber` → `vazio`, `valido` (string
   canônica, `"1234.5"`) ou `invalido` com motivo, e `numericInvalidMessage`
   diz o que escrever. Obrigatório é decisão do formulário (`required`).
-- **Foco** (`NUMERIC_PRECISION_AUDIT.md` §11.5): fora do foco, formatado
+- **Foco** (`archive/NUMERIC_PRECISION_AUDIT.md` §11.5): fora do foco, formatado
   (`1.234,56`); no foco, sem milhar; na saída, normalizado uma vez. Nada é
   reformatado a cada tecla. O símbolo fica no rótulo ("Preço (R$)",
   "Comissão (%)"); dentro do campo, só em `readOnly` (`R$ 1.234,56`, `12,50%`).

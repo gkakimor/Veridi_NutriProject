@@ -227,7 +227,7 @@ INTERNAL-CONSUMPTION-REVERSAL-01.
 ## 16. Implementação
 
 **IMPLEMENTADO em 2026-09-18** por INTERNAL-CONSUMPTION-REVERSAL-01 — regra em [`PRODUCT_RULES.md`](../PRODUCT_RULES.md)
-§126, seção própria no [`PROJECT_STATE.md`](../PROJECT_STATE.md). Na `main`, fora de PROD (`release/prod` segue
+§126, seção própria no histórico do PROJECT_STATE ([`archive/PROJECT_STATE_HISTORY.md`](../archive/PROJECT_STATE_HISTORY.md)). Na `main`, fora de PROD (`release/prod` segue
 `8e824e8f`).
 
 - Migration `20260925093039_internal_consumption_reversal`, só aditiva, como a seção 10 desenhou: os dois valores de

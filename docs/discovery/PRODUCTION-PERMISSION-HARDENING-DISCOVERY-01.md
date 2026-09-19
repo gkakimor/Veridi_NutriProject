@@ -33,7 +33,7 @@ endpoints de Produção exige ADMIN ou PRODUCTION, e parte exige apenas usuário
 - plano de testes de API/web e plano de E2E adversarial;
 - perguntas objetivas para o PO, com opções.
 
-Origem do achado: `docs/PROJECT_STATE.md`, seção "A OP sem roteiro existe, mas não segue
+Origem do achado: `docs/archive/PROJECT_STATE_HISTORY.md` (antes `docs/PROJECT_STATE.md`), seção "A OP sem roteiro existe, mas não segue
 (PRODUCTION-ROUTE-ASSIGNMENT-01)" — "picking, receita e apontamentos seguem sem `requireRole`; cancelar a OP ainda
 grava `SYSTEM_ACTOR`". O PO usava o ID PRODUCTION-PERMISSION-HARDENING-01 sem registro no repositório.
 

@@ -18,6 +18,11 @@ Onde está o que vale hoje:
 **Entra aqui:** relatório, auditoria, spike ou plano substituído que registra
 uma decisão útil, em texto.
 
+**Também entra aqui** o texto que uma compactação tira de um documento vivo: os históricos de `PROJECT_STATE`,
+`BACKLOG` e `PRODUCT_RULES` guardam, verbatim, o registro das entregas, a narrativa e a evidência que saíram de lá
+(DOCUMENTATION-HYGIENE-COMPACTION-01, 2026-09-19). Não é regra nova: o que eles registram de decisão continua valendo
+onde o documento vivo aponta.
+
 **Não entra aqui:** ZIP, PNG, PDF, DOCX, XLSX, dump, backup, log, cache, código
 morto, rascunho sem decisão ou cópia de documento vigente. Backup e dado real
 moram fora do repositório (`../.local-data/veridi/`); material de entrega mora
@@ -31,8 +36,11 @@ recuperar. Artefato gerado ou ignorado não é registrado.
 
 | Arquivo | Conteúdo |
 |---|---|
+| [`PROJECT_STATE_HISTORY.md`](PROJECT_STATE_HISTORY.md) | o PROJECT_STATE inteiro até 2026-09-19: o registro de cada entrega (com índice) e as seções de estado substituídas pela fotografia |
 | [`DELIVERY_HISTORY.md`](DELIVERY_HISTORY.md) | diário das deliveries 01 a 40+ |
-| [`BACKLOG_HISTORY.md`](BACKLOG_HISTORY.md) | findings auditados e itens fechados do backlog |
+| [`BACKLOG_HISTORY.md`](BACKLOG_HISTORY.md) | findings auditados, itens fechados do backlog e, desde 2026-09-19, o texto integral dos itens abertos que o BACKLOG passou a guardar em forma curta |
+| [`PRODUCT_RULES_HISTORY.md`](PRODUCT_RULES_HISTORY.md) | narrativa de origem, notas de migration e apontadores de código tirados do PRODUCT_RULES, por § |
+| [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) | auditoria de precisão numérica PREC-01: evidência, desenho do PREC-UI (§11) e o padrão de foco do campo numérico (§11.5) |
 | [`E2E_VALIDATION_HISTORY.md`](E2E_VALIDATION_HISTORY.md) | consolidação das rodadas E2E e adversariais |
 | [`E2E_AUDIT_2026-09-07.md`](E2E_AUDIT_2026-09-07.md) | auditoria E2E pela interface de 2026-09-07 e sua triagem |
 | [`AUDIT_UX_COMO_FUNCIONA.md`](AUDIT_UX_COMO_FUNCIONA.md) | auditoria UX-HELP-01 da ajuda contextual |
@@ -47,6 +55,7 @@ recuperar. Artefato gerado ou ignorado não é registrado.
 |---|---|---|---|---|
 | 2026-09-15 | `docs/archive/DEMO_SCRIPT.md` | `docs/DEMO_SCRIPT.md` | roteiro da demo de 2026-08-17; não é documentação vigente | este commit (REPO-HYGIENE-CLEANUP-01) |
 | 2026-09-15 | `docs/archive/E2E_AUDIT_2026-09-07.md` | `docs/E2E_AUDIT_CURRENT.md` | rodada de 2026-09-07, superada pelas waves E2E; renomeado pela data | este commit (REPO-HYGIENE-CLEANUP-01) |
+| 2026-09-19 | `docs/archive/NUMERIC_PRECISION_AUDIT.md` | `docs/NUMERIC_PRECISION_AUDIT.md` | auditoria concluída; decisões em `PRODUCT_RULES.md` §57–§66 e matriz aplicada ao schema inteiro. O código cita o arquivo pelo nome (§11.5), sem caminho | este commit (DOCUMENTATION-HYGIENE-COMPACTION-01) |
 
 ## Arquivos removidos
 
