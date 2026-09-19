@@ -111,15 +111,20 @@ export function buildApp() {
    * Uma recusa esquecida numa delas viraria 500 justamente no caminho que
    * ninguém testa.
    *
-   * Todo o resto segue exatamente como antes: `app.errorHandler` é o
-   * tratador padrão do Fastify, com o mesmo status, o mesmo corpo e o mesmo
-   * log de sempre.
+   * Todo o resto é RELANÇADO: erro lançado dentro de um tratador customizado
+   * vai ao tratador pai, e o pai deste é o padrão do Fastify — o mesmo status
+   * (o do erro, ou 500), o mesmo corpo e um log só, do erro original.
+   *
+   * Não chamar `app.errorHandler` daqui: depois do `setErrorHandler` ele
+   * devolve este mesmo tratador, e a chamada recursava até "Maximum call
+   * stack size exceeded" — todo erro não mapeado virava 500 com a mensagem e
+   * o log do estouro, até o 400 do JSON inválido (API-GLOBAL-ERROR-HANDLER-01).
    */
-  app.setErrorHandler((error, request, reply) => {
+  app.setErrorHandler((error, _request, reply) => {
     if (error instanceof DuplicateMasterDataNameError) {
       return responderNomeDuplicado(reply, error);
     }
-    return app.errorHandler(error, request, reply);
+    throw error;
   });
 
   app.register(healthRoutes);
