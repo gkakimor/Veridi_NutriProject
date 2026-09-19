@@ -2,8 +2,10 @@ import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import type { DashboardPurchasingStateDTO } from "@veridi/shared";
 import { venceuEm } from "../../lib/business-day.js";
-import { getAvailableByItems, getOnHandByLots, isLotAvailableForUse } from "../../lib/inventory-ledger.js";
+import { getOnHandByLots, isLotAvailableForUse } from "../../lib/inventory-ledger.js";
+import { computeRequirementAvailability } from "../../lib/requirement-availability.js";
 import { findProductionOrderMaterialCosts } from "../costs/costs.service.js";
+import { requirementOwnerScope } from "../production-orders/production-orders.service.js";
 
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -87,8 +89,13 @@ export async function getOrdersAwaitingProductionIds(prisma: PrismaOrTx): Promis
  * OPs `DRAFT`/`PLANNED` com falta real de material. Restrito de proposito
  * a esses dois status: uma OP `RELEASED` ja possui MaterialReservation
  * propria, e contar o proprio compromisso como falta geraria shortage
- * falso. Reutiliza `getAvailableByItems` — a MESMA semantica exibida na
- * tela da OP, nunca um calculo de shortage paralelo.
+ * falso.
+ *
+ * A falta e a do R-04 e do documento da OP — `computeRequirementAvailability`
+ * com o escopo de dono da necessidade (`requirementOwnerScope`), o mesmo
+ * que a liberacao usa para reservar. Somar o estoque de todos os donos
+ * deixava material do cliente "coberto" por lote da Veridi (e o inverso):
+ * o Painel calava e a liberacao recusava (VERIDI-AUDIT-QUICK-FIXES-01, D4).
  *
  * `now` decide quais lotes ja venceram (vencido nao e disponivel): e o
  * instante do retrato de quem chama, para o contador e a atencao concordarem.
@@ -102,30 +109,46 @@ export async function getProductionOrdersWithShortage(
     select: {
       id: true,
       code: true,
-      requirements: { select: { itemId: true, requiredQuantity: true, item: { select: { controlsLot: true } } } },
+      customerId: true,
+      requirements: {
+        select: {
+          id: true,
+          itemId: true,
+          requiredQuantity: true,
+          supplyResponsibility: true,
+          item: { select: { controlsLot: true } },
+        },
+      },
     },
   });
   if (orders.length === 0) return [];
 
-  // Uma unica resolucao de disponibilidade para todos os itens envolvidos
-  // — evita N+1 por OP.
-  const itemScopes = new Map<string, { id: string; controlsLot: boolean }>();
-  for (const order of orders) {
-    for (const requirement of order.requirements) {
-      itemScopes.set(requirement.itemId, {
-        id: requirement.itemId,
+  // Uma resolucao por escopo de dono para todas as necessidades — sem N+1
+  // por OP.
+  const availabilityByRequirement = await computeRequirementAvailability(
+    prisma,
+    orders.flatMap((order) =>
+      order.requirements.map((requirement) => ({
+        requirementId: requirement.id,
+        itemId: requirement.itemId,
         controlsLot: requirement.item.controlsLot,
-      });
-    }
-  }
-  const availableByItem = await getAvailableByItems(prisma, [...itemScopes.values()], undefined, now);
+        requiredQuantity: requirement.requiredQuantity,
+        ownerScope: requirementOwnerScope(requirement.supplyResponsibility, order.customerId),
+        // DRAFT/PLANNED ainda nao reservaram: nada proprio volta ao disponivel.
+        activeReservationLines: [],
+      })),
+    ),
+    new Map(),
+    now,
+  );
 
-  return orders.filter((order) =>
-    order.requirements.some((requirement) => {
-      const available = availableByItem.get(requirement.itemId) ?? new Prisma.Decimal(0);
-      return requirement.requiredQuantity.greaterThan(available);
-    }),
-  ).map((order) => ({ id: order.id, code: order.code }));
+  return orders
+    .filter((order) =>
+      order.requirements.some((requirement) =>
+        availabilityByRequirement.get(requirement.id)!.shortage.greaterThan(0),
+      ),
+    )
+    .map((order) => ({ id: order.id, code: order.code }));
 }
 
 /**

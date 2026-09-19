@@ -19,6 +19,7 @@ import {
   getReservedByLots,
   isLotAvailableForUse,
   isLotExpired,
+  lotStatusWhere,
 } from "../../lib/inventory-ledger.js";
 import { CoaNotApprovedError } from "../quality/quality.errors.js";
 import { InvalidLotTransitionError, LotNotFoundError } from "./lots.errors.js";
@@ -204,7 +205,8 @@ export async function listLots(
   if (query.ownerType) where["ownerType"] = query.ownerType;
   if (query.coaStatus) where["coaStatus"] = query.coaStatus;
   if (query.ownerCustomerId) where["ownerCustomerId"] = query.ownerCustomerId;
-  if (query.status) where["status"] = query.status;
+  // "Vencido" é derivado da validade, nunca status gravado (D1).
+  if (query.status) Object.assign(where, lotStatusWhere(query.status));
   if (query.search) {
     where["OR"] = [
       { code: { contains: query.search, mode: "insensitive" } },

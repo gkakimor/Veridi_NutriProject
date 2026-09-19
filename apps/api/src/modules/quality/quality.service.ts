@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { PrismaClient, User } from "@prisma/client";
 import type { CoaReviewResultDTO, QualityQueueResponse, QualityQueueRowDTO } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
-import { getOnHandByLots, isLotExpired, lotIdsComSaldoPositivo } from "../../lib/inventory-ledger.js";
+import { getOnHandByLots, isLotExpired, lotIdsComSaldoPositivo, lotStatusWhere } from "../../lib/inventory-ledger.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { ALL_ROWS, pageArgs, pageMeta } from "../../lib/pagination.js";
 import { LotNotFoundError } from "../lots/lots.errors.js";
@@ -146,7 +146,8 @@ function filaDaQualidadeWhere(query: ListQualityQueueQuery): Prisma.LotWhereInpu
     ...(query.itemId ? { itemId: query.itemId } : {}),
     ...(query.supplierId ? { supplierId: query.supplierId } : {}),
     ...(query.ownerCustomerId ? { ownerCustomerId: query.ownerCustomerId } : {}),
-    ...(query.lotStatus ? { status: query.lotStatus } : {}),
+    // "Vencido" é derivado da validade, nunca status gravado (D1).
+    ...(query.lotStatus ? lotStatusWhere(query.lotStatus) : {}),
     /*
      * `coaStatus` explícito manda; senão, `onlyPending` é o recorte "exige
      * ação da Qualidade". Sem nenhum dos dois a fila mostra TUDO — é o

@@ -1,8 +1,8 @@
 import { Prisma } from "@prisma/client";
-import type { PrismaClient } from "@prisma/client";
+import type { LotStatus, PrismaClient } from "@prisma/client";
 import { INVENTORY_MOVEMENT_DIRECTION } from "@veridi/shared";
 import type { InventoryMovementType } from "@veridi/shared";
-import { venceuEm } from "./business-day.js";
+import { marcadorDeHojeComercial, venceuEm } from "./business-day.js";
 
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -367,6 +367,21 @@ export async function getOnOrderByItems(
  */
 export function isLotExpired(lot: { expiryDate: Date | null }, agora: Date = new Date()): boolean {
   return venceuEm(lot.expiryDate, agora);
+}
+
+/**
+ * O `where` da situação de lote que uma listagem pede.
+ *
+ * `EXPIRED` nunca é gravado — "Vencido" é `isLotExpired`, e no banco isso é a
+ * validade antes do marcador do dia comercial de hoje, a mesma fronteira do
+ * R-02 e do Painel. Filtrar `status = EXPIRED` devolvia lista vazia com lote
+ * vencido no estoque (VERIDI-AUDIT-QUICK-FIXES-01, D1). Vencido vale para
+ * qualquer status gravado, como a lista o apresenta. As outras situações
+ * seguem o status gravado.
+ */
+export function lotStatusWhere(status: LotStatus, agora: Date = new Date()): Prisma.LotWhereInput {
+  if (status === "EXPIRED") return { expiryDate: { lt: marcadorDeHojeComercial(agora) } };
+  return { status };
 }
 
 /**

@@ -1516,8 +1516,10 @@ export function ProductionOrderPage() {
                                       ? `/comercial/pedidos/${productionOrder.customerOrderId}`
                                       : // Leva o item e o que falta: o atalho tem
                                         // que chegar com o contexto que a tela
-                                        // acabou de calcular.
-                                        `/compras/ordens/nova?itemId=${requirement.itemId}&quantidade=${formatQuantity(requirement.shortage)}`,
+                                        // acabou de calcular. Na URL vai o valor
+                                        // de MÁQUINA da API — o de leitura
+                                        // (`1.500`) a OC lia como 1,5 (D2).
+                                        `/compras/ordens/nova?itemId=${requirement.itemId}&quantidade=${encodeURIComponent(requirement.shortage)}`,
                                   )
                                 }
                               >
