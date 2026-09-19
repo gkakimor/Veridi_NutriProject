@@ -38,30 +38,33 @@ reconstruído do zero, DEV e produção são a mesma estrutura, campo a campo.
 
 ## O que está aberto
 
-[`BACKLOG.md`](BACKLOG.md) — **zero CRITICAL, zero BLOCKER**. A ordem vive só na fila viva de lá, reconciliada com o
-estado real em 2026-09-15 (BACKLOG-RECONCILIATION-01). **`main` estável** em `0d81aae` (MAIN-STABILITY-FAST-GATE-01,
-2026-09-15: MAIN_STABLE = YES); **PROD em `release/prod` = `ff861c90`** desde 2026-09-19
-(PROD-RELEASE-DEPLOY-02, tag `prod-2026-09-19`, [`RELEASES.md`](RELEASES.md)): as sete migrations aditivas
-`…093034`–`…093040` entraram sem drift, o dado de PROD ficou preservado e o ponto de recuperação compatível é o backup
-pós-release. O saneamento das duplicatas de PROD (21 grupos / 45 Itens; Ondas A, 2 e 3 — §110, §118, §124) e o
-`prod-cleanup --apply` continuam fora de PROD. As seções mais abaixo que dizem "na `main`, fora de PROD
-(`release/prod` segue `5b7c1a3`)" ou "segue `8e824e8f`" registram o estado **da época da entrega**: tudo o que está em
-`ff861c90` foi publicado.
+[`BACKLOG.md`](BACKLOG.md) — **zero CRITICAL, zero BLOCKER**. A ordem vive só na fila viva de lá, reorganizada em
+2026-09-19 com a ordem do PO (PRODUCT-BACKLOG-CONSOLIDATION-01, seção própria abaixo). **`main` estável** em `0d81aae`
+(MAIN-STABILITY-FAST-GATE-01, 2026-09-15: MAIN_STABLE = YES). **PROD em `release/prod` = `884a500d`, v1.0.0**, desde
+2026-09-19 (VERIDI-SYSTEM-VERSIONING-01, tags `v1.0.0` e `prod-2026-09-19-v1.0.0`, [`RELEASES.md`](RELEASES.md)), sem
+migration sobre `ff861c90` (PROD-RELEASE-DEPLOY-02, que levou as sete migrations aditivas `…093034`–`…093040` sem drift
+e com o dado de PROD preservado). **Nada integrado na `main` depois de `884a500d` foi publicado**: o pacote candidato da
+v1.1.0 está no BACKLOG, e `VERIDI_VERSION` segue `1.0.0`. O saneamento das duplicatas de PROD (21 grupos / 45 Itens;
+Ondas A, 2 e 3 — §110, §118, §124) e o `prod-cleanup --apply` continuam fora de PROD, como operação separada de
+qualquer publicação. As seções mais abaixo que dizem "na `main`, fora de PROD (`release/prod` segue `5b7c1a3`)" ou
+"segue `8e824e8f`" registram o estado **da época da entrega**: tudo o que está em `884a500d` foi publicado.
 
 - **E2E:** WAVE 1–2 e WAVE 3 fechadas (merges `9c60845` e `6256ca9`); a próxima é a WAVE 4 (grupo C) e depois a WAVE 5
   (golden path);
 - **discoveries persistidos** em [`discovery/`](discovery/README.md), `EM_ANALISE` e sem implementação: WAVE 4
   (E2E-BASELINE-REDESIGN-WAVE-04-DISCOVERY-01), golden path (WAVE-05-GOLDEN-PATH-DISCOVERY-01) e permissões da Produção
-  (PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01); o do Painel Gerencial (FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01) está
-  `IMPLEMENTADO`;
+  (PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01, desde 2026-09-19 só com o perfil final de quem executa a OP); o do
+  Painel Gerencial (FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01) está `IMPLEMENTADO`. `DECIDIDO` e sem implementação,
+  desde 2026-09-19: AUTHORIZATION-AUTHORSHIP-DISCOVERY-01, CLOSE-WITH-REASON-DISCOVERY-01,
+  OPERATIONAL-HANDOFF-NEXT-ACTIONS-DISCOVERY-01 e INTERNAL-CONSUMPTION-COST-CENTER-DISCOVERY-01;
 - **Inventário Físico:** discovery `DECIDIDO` (D1–D8 e P1–P7 fechadas pelo PO em 2026-09-15; DU-1 a DU-6 das telas em
   2026-09-16); Fatia 1 (domínio e API) entregue em 2026-09-15, Fatias 2A (telas até Em revisão) e 2B (revisão,
   recontagem, decisão e encerramento pela tela — o ciclo completo) em 2026-09-16, na `main` e fora de PROD
   (INVENTORY-PHYSICAL-COUNT-01); Fatia 3 (FO-01 de sessão e CSV) aberta, e INVENTORY-CONFIRMATION-AFTER-DECISION-01
   esperando o PO;
 - **Painel Gerencial:** entregue em 2026-09-15 — BILLED-VALUE-CANONICAL-01 (valor faturado = `Billing.totalAmount` em
-  Painel, R-14 e R-15) e MANAGEMENT-DASHBOARD-V1-01 (Gestão → Painel Gerencial, D1–D5); G2, G5 e o G4 residual seguem sem
-  posição;
+  Painel, R-14 e R-15) e MANAGEMENT-DASHBOARD-V1-01 (Gestão → Painel Gerencial, D1–D5); G2 e o G4 residual seguem sem
+  posição, e o G5 virou CLOSE-WITH-REASON-PO-01 em 2026-09-19;
 - **Formulação — bancada:** EM HOMOLOGAÇÃO (FORMULATION-WORKBENCH-01, não fechada). O motor entrou em 2026-09-15: a
   versão guarda as premissas da apresentação (forma, apresentação, cápsulas por dose, dose e conteúdo do pó) como
   SNAPSHOT, e doses por embalagem virou resultado delas — cápsulas por embalagem ÷ cápsulas por dose, conteúdo ÷ dose,
@@ -132,7 +135,7 @@ pós-release. O saneamento das duplicatas de PROD (21 grupos / 45 Itens; Ondas A
   motivo, só por ADMIN e QUALITY, e o R-21 passou a ser líquido na data do CI. Em 2026-09-19 fechou também o espelho
   na criação (INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01, §127, sem migration, na `main` e fora de PROD): consumo de
   data passada que uma contagem de inventário já viu é recusado. Abertos do assunto: DASHBOARD-INTERNAL-CONSUMPTION-01 e
-  INTERNAL-CONSUMPTION-COST-CENTER-01;
+  INTERNAL-CONSUMPTION-COST-CENTER-01 (decidido em 2026-09-19, P2 na fila);
 - **Correções da revisão funcional:** FECHADAS em 2026-09-19 (VERIDI-AUDIT-QUICK-FIXES-01, sem migration, na `main` e
   fora de PROD): os seis defeitos D1–D6 que VERIDI-NUTRITION-PRODUCT-FUNCTIONAL-REVIEW-01 achou por leitura
   reproduziram com teste vermelho e foram corrigidos — seção própria abaixo; os achados laterais estão no BACKLOG, seção A;
@@ -141,6 +144,12 @@ pós-release. O saneamento das duplicatas de PROD (21 grupos / 45 Itens; Ondas A
   [discovery](discovery/DOCUMENT-TRANSITION-CONCURRENCY-DISCOVERY-01.md) — Expedição, OP e OC não cancelam nem editam
   por cima de uma transição concorrente. Fatia 2 (os P1: Pedido, Faturamento, OC confirmar × cancelar e Lote) aberta —
   seção própria abaixo;
+- **Tratador global de erros:** FECHADO em 2026-09-19 (API-GLOBAL-ERROR-HANDLER-01, sem migration, na `main` e fora de
+  PROD): fecha API-ERROR-HANDLER-RECURSION-01, que não volta ao backlog; traduzir o 500 cru segue em
+  API-500-RAW-ERROR-01 — seção própria abaixo;
+- **Decisões do PO de 2026-09-19 e a fila nova:** permissões e autoria, encerrar com motivo, passagem de bastão no Painel
+  e Centro de Custo decididos, em quatro discoveries `DECIDIDO`; F-1 — produção em dobro no Plano misto — registrado como
+  defeito (P0/P1); fila viva reorganizada e v1.1.0 candidata planejada — seção própria abaixo;
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 
 Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
@@ -6876,16 +6885,50 @@ crua, como antes de `f3a4c666` — traduzi-la segue em API-500-RAW-ERROR-01.
 `nome-de-cadastro-mestre`, `planning-snapshot`, `duplicar-versao`, `single-origin` e `item-label-files`; typecheck da
 API. Sem suíte completa, E2E, Playwright nem mutação.
 
+## Consolidação do backlog e decisões do PO (PRODUCT-BACKLOG-CONSOLIDATION-01, 2026-09-19)
+
+Rodada só de documentação, sobre `main` `c860e190`: nenhum código, migration, banco, PROD ou versão mudou.
+
+**Integrado e reconhecido** (na `main`, fora de PROD, todos sem migration): MASTER-DATA-HARD-DELETE-02 (§128),
+INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01 (§127), VERIDI-AUDIT-QUICK-FIXES-01 (D1–D6),
+DOCUMENT-TRANSITION-CONCURRENCY-01 Fatia 1 (§129) e API-GLOBAL-ERROR-HANDLER-01 — este fechou
+API-ERROR-HANDLER-RECURSION-01, e o tratador recursivo não volta ao backlog.
+
+**Decisões do PO**, em quatro discoveries novos, todos `DECIDIDO` e sem implementação:
+
+- [AUTHORIZATION-AUTHORSHIP-DISCOVERY-01](discovery/AUTHORIZATION-AUTHORSHIP-DISCOVERY-01.md) — VIEWER é somente leitura
+  operacional; ADMIN explícito em toda lista; perfis por ato (Pedido e entregas, OC, rascunho de OC pelo Pedido, Plano,
+  OP do saldo e reserva de PA, preço de faturamento); provisório "todos menos VIEWER" onde a Veridi não definiu o perfil
+  final; autoria nova pela sessão, sem backfill; ator obrigatório no service. O relatório do discovery não estava
+  acessível: o documento guarda só as decisões e os fatos já documentados.
+- [CLOSE-WITH-REASON-DISCOVERY-01](discovery/CLOSE-WITH-REASON-DISCOVERY-01.md) — P1–P12: fato append-only por linha,
+  sem status novo (RECEIVED/SHIPPED com a marca "saldo encerrado"), OP concluída não prende o cancelamento do Pedido,
+  nenhuma cascata; persistido do relatório final recuperado da sessão do discovery.
+- [OPERATIONAL-HANDOFF-NEXT-ACTIONS-DISCOVERY-01](discovery/OPERATIONAL-HANDOFF-NEXT-ACTIONS-DISCOVERY-01.md) — o
+  defeito F-1 (produção em dobro no Plano misto) e as atenções de passagem de bastão; o Painel orienta e nunca executa.
+- [INTERNAL-CONSUMPTION-COST-CENTER-DISCOVERY-01](discovery/INTERNAL-CONSUMPTION-COST-CENTER-DISCOVERY-01.md) — cadastro
+  próprio, obrigatório em CI novo, só ADMIN escreve, sem backfill nem seed.
+
+**Backlog.** A fila viva ficou só com o aberto, na ordem do PO; as linhas fechadas e o texto anterior das abertas foram
+para o histórico. STORAGE-R2-ACTIVATION-01, aberto por engano — o R2 está ativo em PROD desde 2026-09-17 —, saiu; o G5
+do Painel Gerencial virou CLOSE-WITH-REASON-PO-01; o VIEWER e a autoria de PRODUCTION-PERMISSION-HARDENING-01 passaram
+para as capabilities novas. Os achados que o PO mandou preservar sem promover estão na seção C. O pacote candidato da
+v1.1.0 está planejado no BACKLOG: `VERIDI_VERSION` segue `1.0.0`, e nenhum deploy foi autorizado.
+
 ## Próxima prioridade
 
-**FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a
-homologação com a Veridi. **Publicado em PROD no mesmo dia** (HOMOLOGATION-RELEASE-RAILWAY-01, `5b7c1a3`, seção
-"Produção"), sem a Ficha Técnica do Modelo. Ela fechou na `main` logo depois
-(FORMULATION-TEMPLATE-TECHNICAL-SHEET-PDF-01) e espera a próxima decisão de publicação do PO.
+**A ordem vive na fila viva do [`BACKLOG.md`](BACKLOG.md)**, reorganizada em 2026-09-19 com a ordem do PO: P0
+AUTHZ-VIEWER-READONLY-01; P1 AUTHORSHIP-SESSION-ACTOR-01; P0/P1 PENDING-PRODUCTION-LOT-ATTRIBUTION-01 (F-1); P1
+DOCUMENT-TRANSITION-CONCURRENCY-01 Fatia 2, PURCHASE-SUGGESTION-OWNER-SCOPE-01 e as quatro fatias de CLOSE-WITH-REASON
+(OC, OP, reserva, Pedido); P1/P2 DASHBOARD-ORDER-NEXT-ACTION-01; P2 as outras atenções do Painel, os outros quatro
+laterais de VERIDI-AUDIT-QUICK-FIXES-01, API-500-RAW-ERROR-01, o Centro de Custo e o card de Uso e consumo. Depois: REVERSALS-02,
+PURCHASE-NEEDS-CONSOLIDATED, CONTEXT/CONSULTATION, SHOP-FLOOR-RECORDING, MASTER-DATA-NAME-UNIQUENESS-01 e o saneamento
+de PROD como operação separada. A WAVE 4, a Fatia 3 do Inventário Físico, o perfil final da Produção, a WAVE 5, a
+homologação da bancada (FORMULATION-WORKBENCH-01) e DEMO-DATASET-01 esperam decisão ou handoff, fora dessa ordem.
 
-**A ordem vive na fila viva do [`BACKLOG.md`](BACKLOG.md)**, reconciliada em 2026-09-15: WAVE 4; Inventário Físico em
-fatias (a próxima é a Fatia 3, FO-01 de sessão e CSV); decisões de permissões da Produção; WAVE 5; estabilização final. Os parágrafos
-abaixo registram como cada assunto chegou até aqui.
+**Próximo corte: v1.1.0, candidata** (seção própria no BACKLOG). PROD segue v1.0.0 até decisão do PO.
+
+Os parágrafos abaixo registram como cada assunto chegou até aqui.
 
 **BILLED-VALUE-CANONICAL-01 fechado em 2026-09-15** (§30), o primeiro da fila: com a decisão D1 do PO,
 `Billing.totalAmount` é a autoridade do valor faturado. Painel, R-14 e R-15 — tela, CSV e o PDF, que lê o CSV — leem
@@ -7006,7 +7049,9 @@ Nunca `db push`, nunca edição manual de `_prisma_migrations`. Runbook do impor
 ## Produção
 
 **No ar: Veridi Nutrition v1.0.0** desde 2026-09-19 — `release/prod` = `884a500d`, deploy `d55e03aa`, tags `v1.0.0` e
-`prod-2026-09-19-v1.0.0`; `GET /meta` responde versão, ambiente e commit ([`RELEASES.md`](RELEASES.md)).
+`prod-2026-09-19-v1.0.0`; `GET /meta` responde versão, ambiente e commit ([`RELEASES.md`](RELEASES.md)). Nada integrado
+na `main` depois de `884a500d` foi publicado — o candidato é a v1.1.0, planejada no [`BACKLOG.md`](BACKLOG.md) —, e
+nenhuma publicação está autorizada.
 
 Railway; desde 2026-09-14 18:04Z publica só a partir de `release/prod` — push na `main` não troca PROD.
 **Zerada de negócio em 2026-09-11** (FAST-DEVELOPMENT-RESET-02) e, **em 2026-09-14, carga inicial da Veridi**

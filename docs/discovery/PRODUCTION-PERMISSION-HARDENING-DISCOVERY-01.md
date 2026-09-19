@@ -937,3 +937,14 @@ resposta recomendada e não bloqueiam.
 ## Implementação
 
 **NÃO IMPLEMENTADO.**
+
+## Histórico de decisões
+
+- 2026-09-19 — decisões do PO em [AUTHORIZATION-AUTHORSHIP-DISCOVERY-01](AUTHORIZATION-AUTHORSHIP-DISCOVERY-01.md)
+  (registradas por PRODUCT-BACKLOG-CONSOLIDATION-01). **P3 respondida:** Plano de Atendimento, OP do saldo, reservar e
+  realocar PA com ADMIN + COMMERCIAL (decisão 6). **P4 respondida:** os cancelamentos antigos com "Ambiente local" ficam
+  como estão, sem backfill (decisão 8). **P8 absorvida** por AUTHZ-VIEWER-READONLY-01 e AUTHORSHIP-SESSION-ACTOR-01. O
+  VIEWER de I1 sai para AUTHZ-VIEWER-READONLY-01 (VIEWER é somente leitura operacional) e a autoria de I3 e I7 para
+  AUTHORSHIP-SESSION-ACTOR-01 (usuário da sessão; ator obrigatório no service dos módulos tocados). Seguem abertas P1 e
+  P6 — o perfil final de quem executa a OP, com a Veridi —, P2, P5 e P7; até o perfil final, vale o provisório "todos
+  menos VIEWER" (decisão 10). O status segue `EM_ANALISE`.

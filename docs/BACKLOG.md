@@ -8,68 +8,77 @@ protegida em [`TEST_COVERAGE_MAP.md`](TEST_COVERAGE_MAP.md) e o que já saiu des
 [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md). Escopo futuro vive só em
 [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md) e não entra aqui sem decisão explícita do PO.
 
-**Base:** `main` declarada estável em `0d81aae` (MAIN-STABILITY-FAST-GATE-01, 2026-09-15). PROD em
-`release/prod` = `884a500d`, **v1.0.0** desde 2026-09-19, tags `v1.0.0` e `prod-2026-09-19-v1.0.0`
-([`RELEASES.md`](RELEASES.md)). As 2 falhas conhecidas da suíte web completa, que existiam em `3159180` e
-`5b7c1a3`, fecharam na `main` em 2026-09-16, fora de PROD (WEB-SUITE-PREEXISTING-FAILURES-01: 3.657 testes, 0
-falhas; entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A). Reconciliado com o estado real em 2026-09-15
-(BACKLOG-RECONCILIATION-01). Zero CRITICAL,
+**Base:** reconciliado com o estado real em 2026-09-19 sobre `main` `c860e190` (PRODUCT-BACKLOG-CONSOLIDATION-01;
+antes, em 2026-09-15, BACKLOG-RECONCILIATION-01); `main` declarada estável em `0d81aae` (MAIN-STABILITY-FAST-GATE-01,
+2026-09-15). PROD em `release/prod` = `884a500d`, **v1.0.0** desde 2026-09-19, tags `v1.0.0` e
+`prod-2026-09-19-v1.0.0` ([`RELEASES.md`](RELEASES.md)): nada integrado depois foi publicado — o pacote candidato da
+v1.1.0 está [abaixo da fila](#veridi-nutrition-v110--candidata). As 2 falhas conhecidas da suíte web completa, que
+existiam em `3159180` e `5b7c1a3`, fecharam na `main` em 2026-09-16, fora de PROD (WEB-SUITE-PREEXISTING-FAILURES-01:
+3.657 testes, 0 falhas; entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A). Zero CRITICAL,
 zero BLOCKER. O MVP foi entregue; o que está aqui é evolução do produto.
 
 ---
 
 ## Fila viva — a ordem, num lugar só
 
+Reorganizada em 2026-09-19 (PRODUCT-BACKLOG-CONSOLIDATION-01) com a ordem dada pelo PO, sobre `main` `c860e190`. Só o
+que está aberto: as linhas fechadas da fila anterior, e o texto das abertas como estava, foram para
+[`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção "Saídos do BACKLOG em 2026-09-19". Um problema tem um
+ID só; o detalhe mora no discovery ou na seção indicada, e a fila só ordena.
+
 | Ordem | Prioridade | Item | Estado | Próxima ação | Dependência |
 |---|---|---|---|---|---|
-| 0 | P0 | ~~**HOMOLOGATION-RELEASE-RAILWAY-01**~~ — publicar o estado aprovado para a homologação da Veridi, sobre os dados existentes | **FECHADO em 2026-09-16** · `release/prod` `2400def` → `3159180` → `5b7c1a3`, tag `homologacao-veridi-2026-09-16-r1` · seis migrations aditivas · dois backups com `RESTAURÁVEL: YES` · dados preservados · smoke verde · sem reset, carga, importação ou restore · o achado do PO (Fornecimento coberto na base fixa) foi corrigido e publicado na mesma rodada | — (registro em [`RELEASES.md`](RELEASES.md)) | — |
-| 0b | P0 | ~~**VERIDI-SYSTEM-VERSIONING-01**~~ — versão oficial do sistema: v1.0.0, fonte única, `GET /meta` e "Sobre o sistema" | **FECHADO em 2026-09-19** · decisão do PO: SemVer `vMAJOR.MINOR.PATCH`, v1.0.0 = primeira versão comercial oficial · fonte única em `packages/shared/src/version.ts` com guarda estrutural · `GET /meta` com versão, ambiente e commit do deploy · versão ao lado de "Nutrition" e "Sobre o sistema" no cabeçalho · **sem migration** · **publicada em PROD em 2026-09-19**: `release/prod` `ff861c90` → `884a500d`, deploy `d55e03aa` SUCCESS, tags `v1.0.0` e `prod-2026-09-19-v1.0.0`, smoke 50/50, dados preservados | — (política em [`RELEASES.md`](RELEASES.md), estado em [`PROJECT_STATE.md`](PROJECT_STATE.md)) | — |
-| 1 | P0 | **FORMULATION-WORKBENCH-01** — Formulação como bancada interativa (forma × apresentação, física por dose e por cápsula, composição × embalagem) | **EM HOMOLOGAÇÃO** · motor e migration aditiva `20260925093028` entregues em 2026-09-15 · ajustes de UX da homologação entregues em 2026-09-15 (pureza e reserva de produção como colunas, painel de ajustes fora da Formulação, forma restrita a Pó/Cápsula, resumo de premissas no topo) · refinamento final de UX entregue em 2026-09-15 (rótulos Pureza (%) e Reserva de matéria-prima (%), premissa global Perda prevista de produção (%) com Rendimento esperado derivado, quantidade bruta no custo estimado interno sem tocar quantidade comercial, grade modernizada, Apresentação comercial condicionada à Forma, explicações em ⓘ) · migration aditiva `20260925093029` · **publicada em PROD em 2026-09-16** (HOMOLOGATION-RELEASE-RAILWAY-01); o achado da homologação em PROD — o seletor de Fornecimento coberto pela Reserva na receita por base fixa, na Formulação e no Modelo — foi corrigido em `5b7c1a3` sem mudar largura de coluna | Avaliação visual do PO nos dois produtos de homologação do `veridi_dev` e em PROD; o fechamento depende de aprovação explícita | — |
-| 1b | P1 | ~~**FORMULATION-TECHNICAL-SHEET-PDF-01**~~ — Ficha Técnica do Produto (Formulação) em PDF real | **FECHADO em 2026-09-15** · ação "Ficha técnica (PDF)" no cabeçalho da versão, documento sobre a fundação `apps/web/src/pdf`, read model neutro reaproveitável pelo Modelo · **sem migration** · absorve FORMULATION-PRINT-ADJUSTMENTS-01 no que toca à Formulação | — (detalhe em [`PROJECT_STATE.md`](PROJECT_STATE.md)) | — |
-| 2 | P0 | ~~**FORMULATION-TEMPLATE-WORKBENCH-01**~~ — levar a bancada para o Modelo de Formulação (catálogo, aplicação e promoção de Formulação para Modelo) | **FECHADO em 2026-09-16** (`FORMULATION_TEMPLATE_WORKBENCH_CLOSED = YES`), pronto para a homologação com a Veridi · fatia 1: premissas técnicas no Modelo (migration aditiva `20260925093031`) · fatia 2: bancada compartilhada e barra fixa · fatia 3: ativação do Modelo relê o cadastro do Item, `componentIssues` no Modelo, pré-checagem ao aplicar com rascunho gerado mesmo com pendência (D-6), salvar como Modelo numa escrita só, diff das premissas e da ordem, seletor só com elegíveis e item histórico marcado "Inativo", nomenclatura MODELO em toda tela (absorve NAV-TEMPLATE-WORDING-01) · fatias 2 e 3 **sem migration** | — (regras em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §96–§97, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 2b | P1 | ~~**FORMULATION-TEMPLATE-TECHNICAL-SHEET-PDF-01**~~ — Ficha Técnica do Modelo de Formulação em PDF real | **FECHADO em 2026-09-16, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · mesmo documento da ficha do Produto sobre read model neutro (moldura por fonte, corpo técnico compartilhado), adaptador do Modelo com os derivados do motor de `@veridi/shared` · "Matriz de biblioteca — não é documento de Produto", Rascunho/Ativo/Arquivado, legado sem forma · ação no cabeçalho e no histórico · **sem migration** · ficha do Produto com texto idêntico | Publicação quando o PO decidir (detalhe em [`PROJECT_STATE.md`](PROJECT_STATE.md)) | — |
-| 3 | P1 | ~~**BILLED-VALUE-CANONICAL-01**~~ — "Valor faturado" do Painel, R-15 e R-14 igual ao valor do documento | **FECHADO em 2026-09-15** · D1 decidida pelo PO: `Billing.totalAmount` · sem migration | — (entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 4 | P1 | **E2E-BASELINE-REDESIGN-WAVE-04** — grupo C das E2E com massa própria | Discovery `EM_ANALISE`; P1 e a espera da 4E resolvidas pelo estado posterior | PO fecha P2–P8 ([abaixo](#wave-4--decisões-ainda-reais)); 4A pode começar | — |
-| 5 | P1 | **INVENTORY-PHYSICAL-COUNT-01** — Inventário Físico em sessões de inventário | Discovery `DECIDIDO` · **Fatia 1 (domínio e API) entregue em 2026-09-15** · **Fatia 2A (telas até Em revisão: lista, novo com prévia, detalhe, contagem no desktop e em 390px, fila local, conflito, posições, ocorrências, cancelar, concluir a primeira contagem) entregue em 2026-09-16** · **Fatia 2B (revisão com recortes e seleção por id, recontagem, Ajustar/Não ajustar com confirmação de movimentação e movimentos da posição, encerramento com a consequência por unidade e recusa por posição, Contagem rápida pela prévia com retenção antes do saldo, aba Contagens rápidas, `INV-` em Movimentações, filtros de local, situação e validade) entregue em 2026-09-16** · na `main` e fora de PROD · sem migration · o ciclo pela tela está completo (contar → revisar → recontar → decidir → encerrar → ajustes) | Fatia 3 — FO-01 de sessão e CSV ([discovery](discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md)); sobras da 2B e o achado da confirmação na [lista](#inventário-físico--status) | — |
-| 6 | P1 | ~~Decisões de **FINANCIAL-MANAGEMENT-DASHBOARD-DISCOVERY-01** → MANAGEMENT-DASHBOARD-V1-01~~ (Painel Gerencial) | **FECHADO em 2026-09-15** · D2–D5 decididas pelo PO · versão 1 entregue · sem migration | — (entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 7 | P1 | Decisões de **PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01** → PRODUCTION-PERMISSION-HARDENING-01 | Discovery `EM_ANALISE` · P1 e P6 bloqueiam | PO fecha P1 e P6 (e confirma P2–P5, P7, P8); implementar | — |
-| 8 | P1 | Decisões de **WAVE-05-GOLDEN-PATH-DISCOVERY-01** → E2E-BASELINE-REDESIGN-WAVE-05 (golden path) | Discovery `EM_ANALISE` · Q3 bloqueia | PO fecha Q3 e as demais; passos 1–2 do plano não dependem de decisão | WAVE 4 entregue |
-| 9 | P1 | ~~**CUSTOMER-STATUS-LIFECYCLE-01**~~ — situação cadastral do Cliente (Ativo · Bloqueado · Inativo), histórico auditável e guardas de venda | **FECHADO em 2026-09-15** · feedback direto da Veridi · migration aditiva (`blocked` + `customer_status_history`) | — (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §95, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md)) | — |
-| 9b | P1 | ~~**CUSTOMER-STATUS-HARDENING-01**~~ — quem muda a situação cadastral e o aviso no documento em andamento (pré-homologação) | **FECHADO em 2026-09-16** · absorve CUSTOMER-STATUS-PERMISSIONS-01 (só ADMIN e COMMERCIAL alteram, 403 na API para os demais, que seguem consultando) e CUSTOMER-STATUS-DRAFT-WARNING-01 (aviso no Orçamento, Projeto e Pedido em andamento, pela situação atual que a leitura traz) · guardas de venda intactas · **sem migration** | — (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §95, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9c | P1 | ~~**CUSTOMER-EDIT-PERMISSIONS-01**~~ — quem cria e edita o cadastro do Cliente | **FECHADO em 2026-09-16, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · decisão do PO (opção A do [discovery](discovery/CUSTOMER-EDIT-PERMISSIONS-DISCOVERY-01.md)): só ADMIN e COMMERCIAL criam e editam (`CUSTOMER_EDIT_ROLES`, lista própria), 403 na API antes do corpo e da existência · os demais perfis consultam o Cliente no mesmo modal, sem campo editável · "+ Novo cliente" só para quem cadastra, com a ajuda de a quem pedir nos seletores · `UpdateCustomerInput` com o endereço que já trafegava · **sem migration** | Publicação quando o PO decidir (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §98, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9d | P1 | ~~**CUSTOMER-PAYMENT-DEFAULTS-01**~~ — forma e condição de pagamento padrão do Cliente como sugestão para novos orçamentos | **FECHADO em 2026-09-16, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · D1–D6 do PO ([discovery](discovery/CUSTOMER-PAYMENT-DEFAULTS-DISCOVERY-01.md)): forma (PIX, Boleto, Transferência, Cartão, Outro) e condição opcionais no Cliente, copiadas para a V1 (e para a primeira proposta depois de só legado); V2, recompra e duplicação partem da versão; "Aplicar padrão do cliente" só na tela; o Pedido congela a forma; "Forma de pagamento" passou a ser o meio e à vista/parcelado virou "Condição de pagamento"; parcelado sem parcelas recusado no Cliente e no Orçamento · **migration aditiva** `20260925093032` (sem backfill) | Publicação quando o PO decidir (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §99, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9e | P1 | ~~**MASTER-DATA-EDIT-PERMISSIONS-01**~~ — quem cria, edita, inativa e reativa Item, Fornecedor e Produto | **FECHADO em 2026-09-16, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · DE1–DE12 do PO ([discovery](discovery/MASTER-DATA-EDIT-PERMISSIONS-DISCOVERY-01.md)): Item com Compras, Qualidade, Produção e ADMIN, os quatro controles só Qualidade e ADMIN pela mudança de valor, "Consumido na produção" só Produção e ADMIN, custo de referência inicial só Comercial e ADMIN (recusado, nunca ignorado), inativar Compras/Qualidade/ADMIN e reativar Qualidade/ADMIN · Fornecedor com Compras e ADMIN · Produto com Comercial e ADMIN, inclusive a criação direta aprovada, e "Exige CoA" só para o PA que nasce junto · 403 antes do corpo e da existência (`exigirPerfil` compartilhado), 409 de situação · consulta no mesmo modal, criação contextual e "Nova relação" por perfil · **sem migration** | Publicação quando o PO decidir (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §100, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9f | P1 | ~~**ITEM-SUPPLIER-QUALIFICATION-PERMISSION-01**~~ — a relação Item × Fornecedor criada por Compras nasce pendente | **FECHADO em 2026-09-16, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · D3 do PO ([discovery](discovery/ITEM-SUPPLIER-UX-DISCOVERY-01.md), persistido nesta rodada): Compras cria a relação, os dados comerciais e a primeira oferta e administra o preferencial quando elegível, mas pedir `APPROVED` ou `BLOCKED` na criação é 403 com o motivo, sem gravar nada · homologar e bloquear, também na criação, só Qualidade e ADMIN (`SUPPLIER_ITEM_QUALIFICATION_ROLES`, a mesma lista da rota de homologação) · voltar para pendente com Compras, Qualidade e ADMIN · ADMIN mantém a criação com situação explícita · "Situação inicial: Pendente" na tela de Compras · **sem migration** | Publicação quando o PO decidir (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §101, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9g | P1 | ~~**ITEM-SUPPLIER-UX-01**~~ — fornecedores administráveis no cadastro do Item (Fatia 1) | **FECHADO em 2026-09-16, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · D1–D5 do PO ([discovery](discovery/ITEM-SUPPLIER-UX-DISCOVERY-01.md) `IMPLEMENTADO`): a seção Fornecedores do Item lista as relações reais e administra — Compras e ADMIN adicionam fornecedor com o Item fixo (Compras cria `PENDING`) e definem o preferencial com confirmação e troca atômica da API; Qualidade e ADMIN homologam e bloqueiam no detalhe aberto por cima do Item; os demais consultam · duplicidade leva à relação existente · tela geral mantida (D2) · Fornecedor → Itens para SUPPLIER-ITEMS-UX-01 (D4) · sem lead time (D5) · Escape da confirmação não fecha mais o modal de baixo · **sem migration e sem API nova** | Publicação quando o PO decidir (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §102, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9h | P1 | ~~**LABEL-ATTACHMENTS-01**~~ — arquivo versionado do Item Rótulo, com storage `LOCAL_FS` e Cloudflare R2 | **FECHADO em 2026-09-16, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · decisões do PO no handoff ([discovery](discovery/LABEL-ATTACHMENTS-ARCHITECTURE-DISCOVERY-01.md), persistido nesta rodada): Rótulo por tipo e subtipo; versões imutáveis com vigente derivada; PDF/PNG/JPEG até 25 MB por extensão, tipo e assinatura; anular com motivo sem apagar bytes; restaurar como versão nova; download autenticado em streaming; enviar e restaurar Compras, Qualidade, Comercial e ADMIN, anular Qualidade e ADMIN · `StorageAdapter` com `LOCAL_FS` e `R2` · **migration aditiva** `20260925093033` · **Railway não tocado**: R2 pronto e desligado | Publicação quando o PO decidir; ativação do R2 em STORAGE-R2-ACTIVATION-01 (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §103, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9i | P1 | ~~**SUPPLIER-QUALITY-REJECTION-REASON-01**~~ — bloquear a relação Item × Fornecedor exige motivo | **FECHADO em 2026-09-16, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · decisão do PO no handoff: `BLOCKED` exige motivo em texto livre, sem lista fechada, na rota de homologação e na criação já bloqueada — sem ele, 400 `validation_error` e nada gravado, com o 403 por perfil antes · homologar e voltar para pendente sem motivo · bloqueio antigo sem motivo continua válido, mostrado como "Motivo não registrado", sem backfill · diálogo "Bloquear fornecedor para este item" no detalhe que a tela geral e o cadastro do Item compartilham · **sem migration** (reutiliza `note` do histórico de homologação) | Publicação quando o PO decidir (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §104, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9j | P1 | ~~**ACQUISITION-COST-PERMISSION-01**~~ — custo efetivo de aquisição definido por qualquer sessão | **FECHADO em 2026-09-16, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · decisão do PO: Compras e ADMIN informam o custo efetivo (`ACQUISITION_COST_ROLES`) nas duas portas — `PUT /receipt-lines/:id/acquisition-cost` com 403 antes do corpo e da linha, e o recebimento de outro perfil que traz custo com 403 antes do corpo e da OC, sem gravar nada; receber sem custo segue aberto a todos · `costUpdatedBy` com o usuário da sessão (antes, "Ambiente local") · "Definir/Atualizar custo" no documento e o campo de custo de "Receber OC" só para quem informa, consulta igual para os demais · REAL, 30D e 90D seguem a mesma fonte · **sem migration** | Publicação quando o PO decidir (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §105, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9k | P1 | ~~**ASSISTED-ENTITY-SELECTOR-FOUNDATION-01**~~ — consulta assistida nos seletores de entidade, piloto Item | **FECHADO em 2026-09-17, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · fundação de UX: "Consultar itens" no topo da lista do seletor, opt-in (`onConsult`), sem trocar o autocomplete · `EntityConsultationDialog` por cima da tela, com o recorte do campo à vista, busca e paginação no servidor pelas peças das listagens, linha recusada desabilitada com motivo e cartões em 390px · piloto Item na bancada (Formulação e Modelo, matéria-prima e embalagem): tipo da seção e só ativos, item de outra linha desabilitado, selecionar põe o item na linha sem recarregar nem perder pendência · "+ Novo item de estoque" dentro da consulta é a criação no contexto de sempre, só para quem cadastra Item, agora com `?tipo=` da seção · **sem API alterada e sem migration** | Publicação quando o PO decidir; expansão em ASSISTED-ENTITY-SELECTOR-ROLLOUT-01 depois de validar o piloto (padrão em [`UI_BRAND.md`](UI_BRAND.md), estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9l | P1 | ~~**FORMULATION-COMPONENT-BASIS-AUTOMATION-01**~~ — base de cálculo da linha escolhida à mão na bancada | **FECHADO em 2026-09-17, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · decisão do PO: base é consequência da seção e do modo, não escolha · composição por dose na receita por dose (modo, cápsula ou pó) e base fixa senão; embalagem por unidade acabada · servidor deriva em toda gravação de rascunho (Formulação e Modelo, troca de modo, cópia de versão, aplicar e salvar como Modelo) e descarta `basis` do corpo · ativa, inativa e arquivada intactas · bancada sem Base, Fornecimento mantido, aviso de rascunho legado · DEV sem nenhuma linha fora da regra (1.330) · **sem migration** | Publicação quando o PO decidir, depois do gate READ ONLY `scripts/maintenance/prod-component-basis.ts` em PROD (Formulação e Modelo, todos os status; linha fora da regra vai ao PO) (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §106, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9m | P1 | ~~**INVENTORY-INACTIVE-ITEM-VISIBILITY-01**~~ — item inativo sumia do estoque físico | **FECHADO em 2026-09-17, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · Fatia 1 de MASTER-DATA-INACTIVE-VISIBILITY, D1–D3 do PO ([discovery](discovery/MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01.md), persistido nesta rodada): inativo com posição (saldo, reservado ou em compra) aparece no Estoque marcado "Item inativo"; sem posição só com "Incluir inativos sem saldo"; CSV com o mesmo recorte e a coluna "Item ativo"; detalhe com a situação e o histórico inteiro; Contagem rápida acha o inativo e conta a posição com saldo; saída e perda seguem; entrada manual recusada (400 `inactive_item`) · perfis intocados · **sem migration** | Publicação quando o PO decidir; fatias 2–4 esperam o handoff (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §107, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9n | P1 | ~~**ASSISTED-ENTITY-MULTISELECT-01**~~ — consulta assistida com várias escolhas onde a tela monta lista, e colunas que distinguem registros parecidos | **FECHADO em 2026-09-17, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · decisão do PO: seleção única no campo da linha, múltipla (até 10, explícita) na ação da seção · `EntityConsultationDialog` com `selectionMode`, marcação que atravessa busca, página e recarga, uma confirmação, presente travado com motivo, sem "+ Novo" na múltipla · pilotos: Formulação e Modelo ("+ Adicionar matérias-primas" / "+ Adicionar embalagens", uma linha por item pelo caminho da escolha na linha, base derivada) e recursos do Modelo de Estrutura de Custo ("+ Adicionar recursos") · adendo: matéria-prima com fonte/função e pureza cadastrada, embalagem com subtipo, recurso com tipo, capacidade e unidade de uso · **sem API alterada e sem migration** | Publicação quando o PO decidir; Roteiro de Produção fica para o rollout (mão de obra E equipamento pedem `types=` na API) — padrão em [`UI_BRAND.md`](UI_BRAND.md), estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A | — |
-| 9o | P1 | ~~**PRODUCT-INACTIVE-COMMERCIAL-GATE-01**~~ — Produto inativo iniciava compromisso comercial novo | **FECHADO em 2026-09-17, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · Fatia 2 de MASTER-DATA-INACTIVE-VISIBILITY, D6–D7 do PO ([discovery](discovery/MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01.md)): vincular ao Projeto, linha nova, envio e aceite de Orçamento, aprovação do Projeto, geração e confirmação de Pedido e Amostra nova recusam Produto inativo (400 `inactive_product`); liberação da OP planejada relê Produto e PA; PA existente e inativo tem recusa própria (400 `inactive_finished_item`), sem cascata Produto × PA; rascunho abre marcado, versão nova copia a linha, nada é cancelado; Web não oferece o inativo em escolha nova e marca o registro salvo com a situação do servidor · custos, preço, CMV e roteiro intocados · **sem migration** | Publicação quando o PO decidir; fatias 3–4 esperam o handoff (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §108, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9p | P1 | ~~**ITEM-FORM-BY-TYPE-01**~~ — cadastro do Item contextual ao Tipo, com o arquivo do Rótulo escolhido já na criação | **FECHADO em 2026-09-17, na `main` e fora de PROD** (`release/prod` segue `5b7c1a3`) · decisões do PO no handoff: `Item.type` decide o formulário, nunca a Família · matéria-prima com Classificação industrial, embalagem com Dados da embalagem (subtipo e consumido na produção), Rótulo com Arquivo do rótulo logo depois · troca de tipo e subtipo na criação limpa o que ficou escondido, e o envio só leva os campos do tipo · arquivo opcional, guardado na tela até existir o id e enviado pela rota de LABEL-ATTACHMENTS-01 · falha depois de criar não recria: "Item criado, mas o arquivo do rótulo não pôde ser enviado." e a seção oficial do Item criado para reenviar · **sem API, shared nem migration** · `INTERNAL_CONSUMABLE` fora | Publicação quando o PO decidir (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §109, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9q | P1 | **ITEM-DUPLICATE-SANITIZATION-01** — Itens de matéria-prima e embalagem com o mesmo nome, Onda A | **Onda A aplicada no `veridi_dev` em 2026-09-17; PROD não saneado** (`release/prod` segue `5b7c1a3`) · decisões do PO no handoff ([discovery](discovery/ITEM-DUPLICATE-SANITIZATION-DISCOVERY-01.md), persistido nesta rodada): G1, G12, G14, G16, G17 e G18; duplicado sem uso removido; de-para no arquivo de decisão da carga, sem alias · ferramenta PLAN/APPLY/VERIFY com trava consultiva, `SELECT FOR UPDATE`, impressão digital e falha fechada; APPLY só em banco local · importador não recria a duplicata absorvida · DEV: Itens −6, relações −2 e 1 movida, ofertas e eventos preservados; restam 12 grupos · **sem migration** | Onda A em PROD (conferência READ ONLY, PLAN em PROD, backup restaurável e APPLY liberado para produção, com aprovação do PO); Ondas B e C (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §110, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md)) | PO |
-| 9r | P1 | ~~**CUSTOMER-CNPJ-LOOKUP-01**~~ — consulta assistida de CNPJ no cadastro do Cliente | **FECHADO em 2026-09-17, na `main` e fora de PROD** (`release/prod` segue `8e824e8f`) · RECONCILIA e substitui CUSTOMER-CNPJ-AUTOFILL-01, aprovado pelo PO com OpenCNPJ como primeiro provedor (Serpro passa a ser provedor futuro) · assistência ao preenchimento: consultar não grava, comparação Atual × Retornado contra o ESTADO DO FORMULÁRIO, diferença aplicável marcada por padrão, vazio da fonte nunca apaga valor existente, Cancelar não muda nada, falha externa mantém o cadastro manual inteiro · `GET /cnpj-lookup/:cnpj?provider=` autenticado, somente leitura, com `CUSTOMER_EDIT_ROLES` (§98); chamada externa no servidor, com timeout, teto de resposta e parsing que não confia no payload · abstração `CnpjLookupProviderAdapter` + registro, pronta para o SERPRO sem reescrever tela, endpoint nem contrato · perfil tributário, pagamento, notas e situação intocados · **sem migration** | Publicação quando o PO decidir; SERPRO quando houver credencial e decisão (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §111, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9s | P1 | ~~**CUSTOMER-CNPJ-PERSISTED-DATA-01**~~ — dados cadastrais do CNPJ guardados no Cliente | **FECHADO em 2026-09-17, na `main` e fora de PROD** (`release/prod` segue `8e824e8f`) · evolui CUSTOMER-CNPJ-LOOKUP-01 sem integração nova · CNAE, natureza jurídica, porte, abertura, matriz/filial, Simples e MEI (Sim/Não/Não informado, `null` nunca é Não), situação na RFB, data da situação e última consulta · consultar não grava; "Aplicar consulta ao cadastro" leva o bloco com o `consultedAt` mesmo sem diferença; o Salvar persiste · trocar o CNPJ descarta o bloco do número anterior, na tela e no servidor · perfil tributário, pagamento, notas e situação intocados · **migration aditiva** `20260925093036` | Publicação quando o PO decidir — PROD precisa da migration (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §119, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9t | P1 | ~~**PRODUCTION-PROFILE-ARCHIVE-01**~~ — arquivar e desarquivar o Perfil de Produção | **FECHADO em 2026-09-17, na `main` e fora de PROD** (`release/prod` segue `8e824e8f`) · Fatia 0 de [MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01](discovery/MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01.md), D4 · `POST /production-profiles/:id/archive`, com ADMIN e Produção (403 antes do corpo para os demais) e 409 na transição repetida, sem re-carimbar · arquivado fora da lista padrão ("Mostrar arquivados") e dos seletores; 409 `profile_archived` no padrão novo de Produto e em toda aplicação à OP; a aplicação automática deixa a OP nova sem cópia, pendente, sem trocar de roteiro · o Produto que já apontava continua apontando, com aviso; versões e cópias nas OPs intocadas · **sem migration** | Publicação quando o PO decidir (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §121, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9u | P1 | ~~**USER-LAST-ADMIN-GUARD-01**~~ — nunca zero ADMIN ativo | **FECHADO em 2026-09-17, na `main` e fora de PROD** (`release/prod` segue `8e824e8f`) · Fatia 0 do [discovery](discovery/MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01.md), D5: `PATCH /users/:id` recusa inativar ou rebaixar o último ADMIN ativo (409 `last_active_admin`), inativar a si mesmo (`self_deactivation`) e retirar de si o perfil Administrador (`self_demotion`), mesmo havendo outro ADMIN — outro ADMIN executa · contagem e gravação na mesma transação, com as linhas de ADMIN ativo travadas (`FOR NO KEY UPDATE`) · a tela trava perfil e situação do próprio usuário e explica o último · **sem migration** | — (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §120, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9v | P1 | ~~**MASTER-DATA-HARD-DELETE-01**~~ — exclusão física do cadastro errado e nunca usado: infraestrutura, Fornecedor, Cliente, Modelos e Perfil de Produção | **FECHADO em 2026-09-18, na `main` e fora de PROD** (`release/prod` segue `8e824e8f`) · Fatia 1 do [discovery](discovery/MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01.md), D1–D3 e D6 · prévia `GET <cadastro>/:id/deletion-check` e `DELETE <cadastro>/:id` com motivo obrigatório, só ADMIN (403 antes do corpo e da existência); 409 `master_data_in_use` com as referências · catálogo explícito por agregado conferido contra o `pg_constraint` a cada execução, redes por sufixo e varredura de JSON, falha fechada · filhos técnicos: a V1 como a criação a deixou e o registro do CNPJ gravado na criação do Cliente, só pela marca estrutural `createdWithCustomerId` (9y, fechado em 2026-09-18 — a Fatia 1 fechou de vez) · transação com `FOR UPDATE`, recontagem e `pg_stat_xact_user_tables`, efeito inesperado desfaz tudo · rastro append-only `master_data_deletion_history` com retrato por lista branca, ALVO no `prod-cleanup` · "Excluir definitivamente" só para ADMIN nas seis telas · **migrations aditivas** `20260925093038` e `20260925093040` (9y) · FKs intocadas | Publicação quando o PO decidir — PROD precisa das migrations 093038 e 093040 (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §125, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9w | P1 | ~~**MASTER-DATA-HARD-DELETE-02**~~ — exclusão física de Item, Produto + PA e Recurso industrial | **FECHADO em 2026-09-19, na `main` e fora de PROD** (`release/prod` segue `884a500d`, v1.0.0) · Fatia 2 do [discovery](discovery/MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01.md), D1, D2 e D6 · §128 · **sem migration** (o enum do rastro já reservava os três tipos) · Item (MP, ME, PA e UC): qualquer uso bloqueia — movimento (inclusive o ajuste sem lote, só com o CASCADE do ledger no caminho), lote, fornecedor, referência de custo (mesmo a da criação), formulação, modelo, OP, consumo interno e estorno, amostra, inventário, pedido, expedição, faturamento, cópias e JSON; o PA nunca sai sozinho · Produto: o PA 1:1 é **vinculado** — lido e travado depois do Produto e julgado pelo catálogo do Item; sem uso dos dois lados sai o agregado inteiro com um rastro, qualquer uso do PA bloqueia o Produto e o PA nunca fica órfão; Produto nascido de Projeto bloqueia · Recurso: tarifa, roteiro, estrutura e modelo de custo, energia e a cópia do roteiro na OP bloqueiam · "Excluir definitivamente" só para ADMIN em Itens, Produtos e no Recurso, sempre pela prévia, com a saída Inativar | Publicação quando o PO decidir — entra na v1.1.0, sem migration; duas leituras para o PO confirmar: referência de custo da criação do Item bloqueia, e o PA é provado pela chave 1:1, sem marca de nascimento (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §128, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9x | P1 | ~~**CUSTOMER-CNPJ-EDITABLE-HISTORY-01**~~ — dados do CNPJ editáveis, consulta aditiva e histórico | **FECHADO em 2026-09-18, na `main` e fora de PROD** (`release/prod` segue `8e824e8f`) · revê 9s · os dez dados cadastrais do CNPJ viram campos editáveis, na seção logo antes de Observações · consulta ao OpenCNPJ aditiva em todos os campos: vazio nasce marcado, existente só muda com "Substituir", igual aparece para "Confirmar", fonte vazia nunca apaga · "Última consulta" é texto do sistema no rodapé · histórico só de acréscimo por gravação (Edição, Consulta sem diferença, Troca de CNPJ), com origem Manual/OpenCNPJ por campo e "Ver histórico"; sem histórico retroativo · regra global: mesmo espaço vertical entre blocos de todo cadastro (`--block-gap`) · **migration aditiva** `20260925093037` | Publicação quando o PO decidir — PROD precisa das migrations 093036 e 093037 (regras em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §122 e §123, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | 9s |
-| 9y | P2 | ~~**CUSTOMER-CNPJ-CREATION-HISTORY-MARKER-01**~~ (proposto como MASTER-DATA-HARD-DELETE-CNPJ-BIRTH-01) — marca estrutural do registro do CNPJ gravado na criação do Cliente | **FECHADO em 2026-09-18, na `main` e fora de PROD** (`release/prod` segue `8e824e8f`) · decisão do PO: coluna anulável `createdWithCustomerId` em `customer_cnpj_registration_history`, sem FK, sem default e sem backfill (registro antigo segue NULL e bloqueando) · só `createCustomer` a grava, com o id do Cliente que nasce — inclusive o OpenCNPJ aplicado antes do primeiro Salvar —; PATCH nunca marca · filho técnico = `customerId` e `createdWithCustomerId` iguais ao Cliente, um só: sai junto (`removedTogether`, CASCADE no efeito esperado); sem marca, marca de outro Cliente ou dois marcados bloqueiam; nenhuma hora, ordem ou `xmin` · saneamento: a coluna é `origensImoveis` do Cliente — fora do catálogo de referências móveis e do resíduo do VERIFY, e o APPLY recusa plano que a mova; o MERGE move `customerId` e nunca a marca, e o registro movido bloqueia a exclusão do canônico · **migration aditiva** `20260925093040`, nenhuma tela muda · fecha de vez a 9v | Publicação quando o PO decidir — PROD precisa das migrations 093038 e 093040 (regras em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §125 e §114, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | 9v |
-| 9z | P1 | ~~**INTERNAL-CONSUMPTION-REVERSAL-01**~~ — estorno próprio do consumo interno | **FECHADO em 2026-09-18, na `main` e fora de PROD** (`release/prod` segue `8e824e8f`) · P1–P10 decididas pelo PO no [discovery](discovery/INTERNAL-CONSUMPTION-REVERSAL-DISCOVERY-01.md) · §126 · migration aditiva `20260925093039` · estorno `ECI-` total ou parcial, só ADMIN e QUALITY, custo copiado, mesmo lote, recusa com inventário aberto ou contagem posterior · R-21 líquido na data do CI · extrato e R-03 reconhecem consumo e estorno | — (seção própria no [`PROJECT_STATE.md`](PROJECT_STATE.md)) | — |
-| 9za | P1 | ~~**INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01**~~ — consumo interno de data passada lançado depois de uma contagem baixava duas vezes | **FECHADO em 2026-09-19, na `main` e fora de PROD** (`release/prod` segue `884a500d`, v1.0.0) · decisão do PO no handoff: falhar fechado, sem ajuste compensatório · §127 · **sem migration** · só consumo de data ANTERIOR a hoje: recusa 409 quando a posição (item, ou item + lote) foi reconciliada por inventário encerrado — sessão ou Contagem rápida, ajustou ou conferiu — ou já contada num inventário aberto, com `countedAt` desde o início do dia do consumo · "Não ajustar", cancelado, posição retirada e outro lote não bloqueiam · posição aberta travada `FOR SHARE` · a recusa leva o inventário e a tela o link | Publicação quando o PO decidir — entra na v1.1.0 (regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §127, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | 9z |
-| 9zb | P1 | ~~**VERIDI-AUDIT-QUICK-FIXES-01**~~ — defeitos D1–D6 da revisão funcional ponta a ponta (VERIDI-NUTRITION-PRODUCT-FUNCTIONAL-REVIEW-01) | **FECHADO em 2026-09-19, na `main` e fora de PROD** (`release/prod` segue `884a500d`, v1.0.0) · os seis reproduziram com teste vermelho antes da correção · **sem migration** · D1 filtro "Vencido" pela validade derivada · D2 "Ir para compras" com o valor de máquina · D3 linha de reserva realocada fora do reservado efetivo · D4 Painel "OP com falta" pelo dono do estoque · D5 Sugestão de Compra também em PARTIALLY_SHIPPED · D6 prazo e observações travados depois do plano · achados laterais na seção A | Publicação quando o PO decidir — entra na v1.1.0 (estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), regras de D5 e D6 em [`PRODUCT_RULES.md`](PRODUCT_RULES.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9zc | P0 | ~~**DOCUMENT-TRANSITION-CONCURRENCY-01**~~ (Fatia 1) — transição de documento × efeito físico sob concorrência: os quatro P0 | **FECHADO em 2026-09-19, na `main` e fora de PROD** (`release/prod` segue `884a500d`, v1.0.0) · §129 · **sem migration**, FK e CASCADE intocados · R-S1 e R-S2 (Expedição: cancelar, reescrever a separação e conferir lote travam a Expedição e releem — nada de CANCELLED com saída nem SHIPMENT_OUT apagado pelo CASCADE), R-O1 (cancelar a OP relê EM PRODUÇÃO depois do consumo ou da pesagem) e R-P1 (cancelar a OC relê depois do recebimento), os quatro reproduzidos com teste vermelho antes da correção · conflito de concorrência nos fluxos tocados é 409 `concurrent_write`, sem retry | Publicação quando o PO decidir — entra na v1.1.0 (discovery [DOCUMENT-TRANSITION-CONCURRENCY-DISCOVERY-01](discovery/DOCUMENT-TRANSITION-CONCURRENCY-DISCOVERY-01.md), regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §129, estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 9zd | P1 | **DOCUMENT-TRANSITION-CONCURRENCY-01 (Fatia 2)** — os P1 do discovery | Aberta · Pedido (aplicar plano e reservar × cancelar deixam reserva ACTIVE presa; confirmar × cancelar ressuscita o cancelado), Faturamento (emitir × cancelar, editar × emitir), OC confirmar × cancelar e Lote liberar × bloquear · OP liberar × cancelar ficou coberto pela Fatia 1 (o cancelamento travado relê LIBERADA e libera a reserva criada), sem teste dedicado | Handoff do PO; o mesmo padrão da Fatia 1 ([discovery](discovery/DOCUMENT-TRANSITION-CONCURRENCY-DISCOVERY-01.md), seções 8 e 15) | 9zc |
-| 9ze | P1 | ~~**API-GLOBAL-ERROR-HANDLER-01**~~ — o tratador global de erros da API recursava até estourar a pilha | **FECHADO em 2026-09-19, na `main` e fora de PROD** (`release/prod` segue `884a500d`, v1.0.0, com o defeito desde `f3a4c666`) · fecha API-ERROR-HANDLER-RECURSION-01, achado lateral de DOCUMENT-TRANSITION-CONCURRENCY-01 · reproduzido com teste vermelho antes da correção · **sem migration** · o tratador relança ao padrão do Fastify: erro genérico 500 com a mensagem e o log originais, JSON malformado 400, `statusCode` do erro preservado, 409 `duplicate_name` igual | Publicação quando o PO decidir — entra na v1.1.0 (estado em [`PROJECT_STATE.md`](PROJECT_STATE.md), entrada em [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md), seção A) | — |
-| 10 | P2 | **Estabilização final ampla do produto** | Sem ID e sem escopo | Abrir ID e escopo quando 4–8 fecharem | WAVE 4, permissões e WAVE 5 |
-| 11 | — | **DEMO-DATASET-01** — ambiente DEMO com massa fictícia determinística | **AGUARDANDO DEFINIÇÃO DO PO** | Massa fictícia determinística + reset protegido para um futuro ambiente Railway DEMO, e o fluxo `main` → `release/demo` → aprovação → o MESMO SHA em `release/prod`. Nada criado: sem ambiente, sem `release/demo` | PO |
+| 1 | P0 | **AUTHZ-VIEWER-READONLY-01** — VIEWER somente leitura e os perfis decididos por ato | Decidido pelo PO em 2026-09-19 (decisões 1–7 e 10 de [AUTHORIZATION-AUTHORSHIP-DISCOVERY-01](discovery/AUTHORIZATION-AUTHORSHIP-DISCOVERY-01.md), [resumo abaixo](#permissões-e-autoria--decisões-do-po)) · o relatório do discovery não ficou registrado: o inventário de rotas se refaz na `main` atual | Handoff do PO | — |
+| 2 | P1 | **AUTHORSHIP-SESSION-ACTOR-01** — autoria nova pelo usuário da sessão e ator obrigatório no service | Decidido (decisões 8 e 9 do mesmo discovery) · sem backfill de "Ambiente local" · pode ir na mesma rodada do 1, se simples e seguro, como conceito separado | Handoff do PO | — |
+| 3 | P0/P1 | **PENDING-PRODUCTION-LOT-ATTRIBUTION-01** — defeito F-1: com Plano misto (estoque + produção), a OP do saldo oferece e aceita produzir em dobro | Por leitura, sem teste (F-1 de [OPERATIONAL-HANDOFF-NEXT-ACTIONS-DISCOVERY-01](discovery/OPERATIONAL-HANDOFF-NEXT-ACTIONS-DISCOVERY-01.md), [resumo abaixo](#passagem-de-bastão-no-painel--decisões-do-po)) · correção proposta: produção atribuída por lote e uma função única para o DTO e a OP do saldo · sem migration | Reproduzir com teste vermelho e corrigir | — |
+| 4 | P1 | **DOCUMENT-TRANSITION-CONCURRENCY-01 (Fatia 2)** — os P1 do discovery | Aberta · Pedido (aplicar plano e reservar × cancelar deixam reserva ACTIVE presa; confirmar × cancelar ressuscita o cancelado), Faturamento (emitir × cancelar, editar × emitir), confirmar e editar OC, Lote liberar × bloquear e os resíduos P1 confirmados — OP liberar × cancelar ficou coberto pela Fatia 1, sem teste dedicado ([discovery](discovery/DOCUMENT-TRANSITION-CONCURRENCY-DISCOVERY-01.md), seções 8 e 15) | Handoff do PO; o mesmo padrão da Fatia 1 | Fatia 1 (`ea5188e2`) |
+| 5 | P1 | **PURCHASE-SUGGESTION-OWNER-SCOPE-01** — a Sugestão de Compra mede o disponível sem escopo de dono | Por leitura, sem teste · lateral de VERIDI-AUDIT-QUICK-FIXES-01 (seção A) | Reproduzir com teste vermelho e corrigir | — |
+| 6 | P1 | **CLOSE-WITH-REASON-PO-01** — encerrar o saldo de OC com motivo | Decidido (fatia 1 de [CLOSE-WITH-REASON-DISCOVERY-01](discovery/CLOSE-WITH-REASON-DISCOVERY-01.md), [resumo abaixo](#encerrar-com-motivo--decisões-do-po)) · absorve o G5 do Painel Gerencial · **migration aditiva** | Handoff do PO | — |
+| 7 | P1 | **CLOSE-WITH-REASON-OP-01** — encerrar OP sem produção | Decidido (fatia 2) · sem migration · permissão provisória ADMIN + PRODUCTION · leva P3a e P3b: OP concluída, com ou sem produção, não prende o cancelamento do Pedido | Handoff do PO | — |
+| 8 | P1 | **CLOSE-WITH-REASON-RESERVATION-01** — liberar reserva de PA | Decidido (fatia 3) · sem migration · base da fatia do Pedido | Handoff do PO | — |
+| 9 | P1 | **CLOSE-WITH-REASON-CO-01** — encerrar o saldo de Pedido | Decidido (fatia 4) · **migration aditiva** · inclui a trava das entregas (L7) | Handoff do PO | 8 |
+| 10 | P1/P2 | **DASHBOARD-ORDER-NEXT-ACTION-01** — a próxima ação do Pedido no Painel: PA pronto para reservar, Pedido sem Plano, saldo sem produção | Decidido (F1 do discovery de passagem de bastão) · sem migration · suprime o "aguardando produção" redundante | Handoff do PO | 3 |
+| 11 | P2 | **DASHBOARD-OP-READY-TO-RELEASE-01** — OP pronta para liberar | Decidido (F2) · sempre INFO, ordenada pela programação | Handoff do PO | — |
+| 12 | P2 | **DASHBOARD-DELIVERY-DELAYS-01** — entrega atrasada e OP que termina depois da promessa | Decidido (F3) · comparação por dia civil; `requestedDeliveryDate` é a promessa implícita do Pedido sem entrega ativa | Handoff do PO | — |
+| 13 | P2 | **STOCK-COUNT-EXPIRED-STATUS-FILTER-01** — "Situação do lote: Vencido" deixa vazio o escopo do Novo inventário | Aberto (seção A) | Corrigir | — |
+| 14 | P2 | **PERIOD-GUARD-R21-MATRIX-01** — guarda `periodo-invertido` vermelha na `main` desde o R-21 | Aberto (seção A) | Corrigir | — |
+| 15 | P2 | **LOT-STATUS-FILTER-OVERLAP-01** — lote vencido gravado como Liberado aparece em "Vencido" e em "Liberado" | Pede decisão: situação filtrada efetiva × gravada (seção A) | PO decide; depois corrigir | — |
+| 16 | P2 | **DASHBOARD-EXPIRED-LIST-BALANCE-01** — o card de vencidos conta com saldo; o "ver todos" lista todos | Aberto (seção A) | Corrigir | — |
+| 17 | P2 | **API-500-RAW-ERROR-01** — erro não traduzido volta 500 com a mensagem crua do Prisma | Aberto (seção A) · o tratador global já não recursa (API-GLOBAL-ERROR-HANDLER-01) | Corrigir | — |
+| 18 | P2 | **INTERNAL-CONSUMPTION-COST-CENTER-01** — Centro de Custo do consumo interno | Decidido ([INTERNAL-CONSUMPTION-COST-CENTER-DISCOVERY-01](discovery/INTERNAL-CONSUMPTION-COST-CENTER-DISCOVERY-01.md); seção G) · **migration aditiva** · abaixo dos P0/P1 atuais | Handoff do PO | — |
+| 19 | P2 | **DASHBOARD-INTERNAL-CONSUMPTION-01** — o Painel não representa Uso e consumo | Falta decidir o card: próprio, líquido dos estornos como o R-21, ou num existente (seção G) | PO decide o card | — |
 
-**P3** — LOW e UX realmente abertos, sem posição: tabelas da seção A (a partir de "LOW e UX da triagem"), seção D e
-watchlist (E). A estabilização final (10) é o lugar natural para varrê-los.
+**Depois, nesta ordem:**
+
+1. **REVERSALS-02** — estorno rastreável no padrão do `ECI-` (§126) para as outras saídas, que seguem sem estorno ("vale
+   só para o consumo interno", [INTERNAL-CONSUMPTION-REVERSAL-DISCOVERY-01](discovery/INTERNAL-CONSUMPTION-REVERSAL-DISCOVERY-01.md)).
+2. **PURCHASE-NEEDS-CONSOLIDATED** — necessidade de compra consolidada por item, sem MRP.
+3. **CONTEXT/CONSULTATION** — Visão do Produto e do Cliente completas, e a cadeia de custo (`costing`) já calculada e
+   não exibida.
+4. **SHOP-FLOOR-RECORDING** — registro de produção fiel ao papel: data real, pré-preenchimento, número oficial.
+5. **MASTER-DATA-NAME-UNIQUENESS-01** — índice único de nome no banco, bloqueado pelo saneamento de PROD (seção G).
+6. **Saneamento das duplicatas em PROD** — operação separada, nunca junto de publicação: Ondas A, 2 e 3 (§110, §118,
+   §124) com conferência READ ONLY, PLAN, backup restaurável e APPLY aprovado pelo PO (ITEM-DUPLICATE-SANITIZATION-01 e
+   as ondas da seção G).
+
+Os itens 1 a 4 correspondem a quatro pontos do Top 8 da revisão funcional ponta a ponta
+(VERIDI-NUTRITION-PRODUCT-FUNCTIONAL-REVIEW-01, 2026-09-19, só no chat), com a descrição de lá; os outros quatro pontos
+do Top 8 estão nas linhas 1–2, 6–9 e 10–12 da fila.
+
+**Fora da ordem de 2026-09-19** — abertos com posição na fila anterior, que esperam decisão ou handoff:
+
+| Item | Estado | Próxima ação | Quem |
+|---|---|---|---|
+| **FORMULATION-WORKBENCH-01** — Formulação como bancada interativa | **EM HOMOLOGAÇÃO** · publicada em PROD em 2026-09-16 · histórico em [`PROJECT_STATE.md`](PROJECT_STATE.md) | Avaliação visual do PO; o fechamento depende de aprovação explícita | PO |
+| **E2E-BASELINE-REDESIGN-WAVE-04** — grupo C das E2E com massa própria | Discovery `EM_ANALISE`; a 4A pode começar | PO fecha P2–P8 ([abaixo](#wave-4--decisões-ainda-reais)) | PO |
+| **INVENTORY-PHYSICAL-COUNT-01** — Inventário Físico em sessões | Fatias 1, 2A e 2B entregues: o ciclo pela tela está completo | Fatia 3 — FO-01 de sessão e CSV; INVENTORY-CONFIRMATION-AFTER-DECISION-01 espera o PO ([abaixo](#inventário-físico--status)) | PO |
+| **PRODUCTION-PERMISSION-HARDENING-01** — perfil final de quem executa a OP | Discovery `EM_ANALISE` · o VIEWER, a autoria, P3, P4 e P8 saíram para as linhas 1 e 2 em 2026-09-19; até o perfil final, vale o provisório "todos menos VIEWER" | Veridi responde P1 e P6 ([abaixo](#permissões-da-produção--status)) | Veridi |
+| **E2E-BASELINE-REDESIGN-WAVE-05** — golden path | Discovery `EM_ANALISE`; vem depois da WAVE 4 | PO fecha Q3 e as demais ([abaixo](#golden-path-wave-5--status)) | PO |
+| **Estabilização final ampla do produto** | Sem ID e sem escopo | Abrir ID e escopo quando a WAVE 4, as permissões da Produção e a WAVE 5 fecharem | PO |
+| **DEMO-DATASET-01** — ambiente DEMO com massa fictícia determinística | **AGUARDANDO DEFINIÇÃO DO PO** · nada criado: sem ambiente, sem `release/demo` | Massa fictícia determinística + reset protegido para um futuro ambiente Railway DEMO, e o fluxo `main` → `release/demo` → aprovação → o MESMO SHA em `release/prod` | PO |
+
+**P3** — LOW e UX realmente abertos, sem posição: tabelas da seção A (a partir de "LOW e UX da triagem"), fora os que
+ganharam posição na fila acima; seção D e watchlist (E). A estabilização final é o lugar natural para varrê-los.
 
 **Abertos fora da fila**, cada um esperando decisão própria — nenhum sobe sem o PO:
 
@@ -79,7 +88,6 @@ watchlist (E). A estabilização final (10) é o lugar natural para varrê-los.
 | **MASTER-DATA-STRUCTURAL-LOCKS-01** — travas estruturais do cadastro mestre além de `operationallyUsed` | Registrado em 2026-09-16 (MASTER-DATA-EDIT-PERMISSIONS-01); pergunta de produto antes de construir | G |
 | **MASTER-DATA-STATUS-HISTORY-01** — motivo e histórico de Inativar/Reativar de Item, Fornecedor e Produto (P2) | Futuro, registrado em 2026-09-16 (MASTER-DATA-EDIT-PERMISSIONS-01); exigiria migration | G |
 | **SUPPLIER-ITEMS-UX-01** — Fornecedor → Itens fornecidos administrável no cadastro do Fornecedor (Fatia 2) | D4 do PO em 2026-09-16: capability separada, não implementar agora. A Fatia 1 (Item) fechou em ITEM-SUPPLIER-UX-01. Espera o handoff do PO | G |
-| **STORAGE-R2-ACTIVATION-01** — ligar o Cloudflare R2 no Railway para o arquivo do Item Rótulo (P1) | Registrado em 2026-09-16 (LABEL-ATTACHMENTS-01). Configurar secrets e rodar o smoke real exigem autorização explícita do PO; nada foi feito no Railway | G |
 | **ATTACHMENTS-R2-MIGRATION-01** — anexos genéricos (`Attachment`) no adaptador de storage e no R2 (P2) | Futuro, registrado em 2026-09-16 (LABEL-ATTACHMENTS-01); avaliar se ainda faz sentido | G |
 | **LABEL-FILE-SUBTYPE-CHANGE-01** — Item Rótulo com versões pode trocar de subtipo e a seção some (LOW) | Registrado em 2026-09-16 (LABEL-ATTACHMENTS-01), sem posição: é pergunta de cadastro mestre | G |
 | **ASSISTED-ENTITY-SELECTOR-ROLLOUT-01** — consulta assistida nos demais seletores (Cliente, Fornecedor, Produto, Lote e outros) | Registrado em 2026-09-17 (ASSISTED-ENTITY-SELECTOR-FOUNDATION-01): expandir só depois de validar o piloto Item com a Veridi. A seleção múltipla já existe (ASSISTED-ENTITY-MULTISELECT-01). Espera o handoff do PO | G |
@@ -87,16 +95,112 @@ watchlist (E). A estabilização final (10) é o lugar natural para varrê-los.
 | INACTIVE-MARKERS-REPORTS-01 (opcional) — última fatia do cadastro inativo | Registrada em 2026-09-17 com o discovery. As Fatias 1 a 4 fecharam no mesmo dia (INVENTORY-INACTIVE-ITEM-VISIBILITY-01 §107, PRODUCT-INACTIVE-COMMERCIAL-GATE-01 §108, SUPPLIER-ITEM-INACTIVE-GATE-01 §112 e PRODUCTION-INACTIVE-COMPONENT-GATE-01 §116). Só D9 (R-18 abre em "Todos", com a situação) tem recomendação e espera o handoff do PO | [discovery](discovery/MASTER-DATA-INACTIVE-VISIBILITY-DISCOVERY-01.md) |
 | **ITEM-DUPLICATE-SANITIZATION-01** — grupos restantes (2 no DEV: G6 café verde e G11 fosfato de piridoxal) | Ondas 2 (§118) e 3 (§124) resolveram os demais no DEV. G6 e G11 esperam a Veridi: significado de `*`/`**` (V4), teor de clorogênico e as cotações FLORIEN (V1). Registrado em 2026-09-17 com a Onda A | [discovery](discovery/ITEM-DUPLICATE-SANITIZATION-DISCOVERY-01.md) |
 | **ITEM-NAME-STANDARDIZATION-01** — nome do Item MP/ME em MAIÚSCULAS e único sem caixa | Parado em 2026-09-17 no passo de duplicidade: o índice único não nasce enquanto houver grupo repetido (2 no DEV depois da Onda 3; PROD não saneado). Retomar depois das ondas, recontando no DEV e em PROD | [discovery](discovery/ITEM-DUPLICATE-SANITIZATION-DISCOVERY-01.md) |
-| **DASHBOARD-INTERNAL-CONSUMPTION-01** — o Painel não representa Uso e consumo (P2) | Registrado em 2026-09-18 (INTERNAL-CONSUMPTION-REVERSAL-01): card novo ficou fora da fatia por decisão do PO | G |
 | **OPS-BACKUP-01** — backup agendado de PROD (HIGH) | Snapshot do Railway recusado e PITR desligado; o backup lógico JSON é restaurável e provado. Rotina agendada é decisão de infraestrutura | A |
 | COST-VAR-02 — variação de CMV e proteção de margem | Bloqueado: sete decisões do PO e dado real em produção | [`archive/COST-VAR-01…`](archive/COST-VAR-01_AUDITORIA_VARIACAO_CMV.md) |
 | #8E, #8F, #8G · PLAN-DATE-01 · UX-HELP-03 | Melhorias aguardando autorização | B, E |
 | #7, #11 | Gate com a Veridi | C |
 | SUPPLIER-OFFER-OVERLAP-01 · COM-CONTRACT-01 · SUPPLIER-MODE-01 · ASSET-01 | Discovery sem pergunta decidida | G |
+| **FINISHED-GOODS-OWN-LOT-PREFERENCE-01** — preferir o lote produzido para a própria linha do Pedido (opcional) | Pendente em 2026-09-19 e não decidido: muda a política de alocação (hoje FEFO, sem olhar o dono do lote de PA) | [discovery](discovery/OPERATIONAL-HANDOFF-NEXT-ACTIONS-DISCOVERY-01.md) |
+| Achados preservados na consolidação de 2026-09-19 — qualidade × lote reservado, custo histórico, perda esperada × operacional, OP com perda total, retorno de cliente e fornecedor, material equivalente, vida útil mínima por cliente, políticas definitivas por área | Sem posição; a maioria depende da Veridi | C |
+
+## VERIDI NUTRITION v1.1.0 — CANDIDATA
+
+Planejamento, não publicação. **PROD continua em `884a500d`, v1.0.0** ([`RELEASES.md`](RELEASES.md)): nada integrado
+depois foi publicado, e este planejamento não autoriza deploy — publicar é decisão do PO. `VERIDI_VERSION` segue
+`1.0.0`: o número só muda por decisão futura do PO, no commit que entra no SHA publicado.
+
+**Já integrado na `main`**, fora de PROD — de `884a500d` a `c860e190`, nenhuma migration e nenhuma troca de versão:
+
+- MASTER-DATA-HARD-DELETE-02 — exclusão física de Item, Produto + PA e Recurso industrial, Fatia 2 (§128, merge
+  `83fa171e`);
+- INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01 — consumo interno de data passada não atravessa contagem (§127, merge
+  `ef7ca1c9`);
+- VERIDI-AUDIT-QUICK-FIXES-01 — D1–D6 da revisão funcional (merge `f7ebb771`);
+- DOCUMENT-TRANSITION-CONCURRENCY-01, Fatia 1 — os quatro P0 de concorrência documental (§129, merge `ea5188e2`);
+- API-GLOBAL-ERROR-HANDLER-01 — tratador global de erros sem recursão (merge `c860e190`).
+
+**Alvo antes do corte**, se o pacote mantiver tamanho razoável:
+
+- AUTHZ-VIEWER-READONLY-01 — VIEWER somente leitura;
+- AUTHORSHIP-SESSION-ACTOR-01 — autoria real;
+- PENDING-PRODUCTION-LOT-ATTRIBUTION-01 — F-1, produção em dobro;
+- DOCUMENT-TRANSITION-CONCURRENCY-01 Fatia 2, no essencial;
+- correções pequenas de dono e status que afetem a verdade operacional — candidatas na fila, a confirmar no corte:
+  PURCHASE-SUGGESTION-OWNER-SCOPE-01 (dono) e STOCK-COUNT-EXPIRED-STATUS-FILTER-01 (status).
+
+**Entram se ficarem prontos a tempo** — e não seguram o corte quando o pacote de integridade já estiver sólido: as
+quatro fatias de CLOSE-WITH-REASON, as atenções de passagem de bastão (DASHBOARD-ORDER-NEXT-ACTION-01,
+DASHBOARD-OP-READY-TO-RELEASE-01, DASHBOARD-DELIVERY-DELAYS-01) e INTERNAL-CONSUMPTION-COST-CENTER-01.
+CLOSE-WITH-REASON-PO-01, CLOSE-WITH-REASON-CO-01 e o Centro de Custo trazem migration aditiva: com qualquer um deles, a
+publicação deixa de ser só código.
+
+**Fora do pacote:** o saneamento de duplicatas em PROD — operação separada, com PLAN, backup restaurável e aprovação
+próprios, nunca planejada junto de uma publicação.
+
+**Para o corte:** PERIOD-GUARD-R21-MATRIX-01 deixa uma guarda vermelha na `main` desde o R-21 (fila, P2).
 
 ---
 
 ## Decisões ainda reais, por item da fila
+
+### Permissões e autoria — decisões do PO
+
+[AUTHORIZATION-AUTHORSHIP-DISCOVERY-01](discovery/AUTHORIZATION-AUTHORSHIP-DISCOVERY-01.md), `DECIDIDO` em 2026-09-19.
+O relatório do discovery não ficou acessível — o documento guarda as decisões e os fatos já documentados —, então a
+implementação refaz o inventário de rotas e autores na `main` atual.
+
+- **AUTHZ-VIEWER-READONLY-01 (P0):** VIEWER é somente leitura operacional; ADMIN aparece explicitamente em toda lista;
+  Pedido e entregas com ADMIN + COMMERCIAL; OC com ADMIN + PURCHASING; rascunho de OC pelo Pedido com ADMIN +
+  PURCHASING + COMMERCIAL; Plano de Atendimento, OP do saldo, reservar e realocar PA com ADMIN + COMMERCIAL; preço de
+  faturamento com ADMIN + COMMERCIAL. Onde a Veridi ainda não definiu o perfil final — Formulação, Recebimento, chão de
+  fábrica, Expedição e Faturamento fora o preço —, provisoriamente **todos menos VIEWER**, a estreitar depois.
+- **AUTHORSHIP-SESSION-ACTOR-01 (P1):** autoria histórica nova com o usuário real da sessão, sem backfill dos registros
+  antigos "Ambiente local"; nos módulos tocados, ator obrigatório no service.
+- Armadilhas já sabidas ([PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01](discovery/PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01.md)):
+  `ForbiddenError` não mapeado em `picking`/`production`/`recipe` responde 500 (I6); ator opcional com fallback
+  silencioso (I7); corpo validado antes do perfil (I5); teste de autoria com `not.toBeNull()` passa com "Ambiente
+  local". Antes de publicar, conferir os perfis dos usuários reais de PROD.
+
+### Encerrar com motivo — decisões do PO
+
+[CLOSE-WITH-REASON-DISCOVERY-01](discovery/CLOSE-WITH-REASON-DISCOVERY-01.md), `DECIDIDO` em 2026-09-19 (P1–P12),
+`READY_TO_IMPLEMENT = YES` para as quatro fatias (linhas 6–9 da fila).
+
+- Um fato append-only por linha — quantidade, motivo, quem, quando —; o contratado fica intacto; nada é fabricado,
+  apagado ou reaberto. Sem status novo: RECEIVED e SHIPPED passam a "nada mais a receber/expedir" quando parte foi
+  realizada e o resto encerrado, com a marca "saldo encerrado" (P2).
+- Encerramento parcial, com o saldo inteiro pré-preenchido (P1). OP COMPLETED — com produção zero (P3a) ou com produção
+  física (P3b) — não prende o cancelamento do Pedido: a produção não se desfaz, o PA fica no estoque disponível sob as
+  regras normais de qualidade e reserva, e o diálogo diz isso.
+- Sem cascata: OP ou OC aberta ligada ao saldo encerrado só gera aviso (P4); material que chega depois pede OC nova
+  (P6); reserva maior que o novo saldo é recusada até a liberação (P7); Expedição DRAFT na linha bloqueia (P9); Pedido
+  liquidado encerra as entregas pendentes de forma auditável, e Pedido que segue aberto não aceita promessa acima do
+  novo saldo (P8).
+- OP sem produção: motivo obrigatório e reconciliação explícita (P10); o custo preserva a MP real consumida, sem PA
+  inventado (P11); permissão provisória ADMIN + PRODUCTION até a Veridi (P5).
+- Saldo encerrado do Pedido não fabrica documento de faturamento (P12).
+- Na implementação muda o texto do [`PRODUCT_RULES.md`](PRODUCT_RULES.md): o significado de SHIPPED ("physically
+  shipped") e a regra de §22-25 que prende o cancelamento do Pedido com OP gerada. Laterais L1–L8 com destino na
+  seção A.
+
+### Passagem de bastão no Painel — decisões do PO
+
+[OPERATIONAL-HANDOFF-NEXT-ACTIONS-DISCOVERY-01](discovery/OPERATIONAL-HANDOFF-NEXT-ACTIONS-DISCOVERY-01.md), `DECIDIDO`
+em 2026-09-19, sem migration.
+
+- **F-1 vem antes** (PENDING-PRODUCTION-LOT-ATTRIBUTION-01): `produzidoEmEspera` desconta do produzido também o que veio
+  do estoque; com Plano misto (reserva 60 + OP 40), a OP aponta 40 e o `pendingProductionQuantity` fica 40 — a tela
+  oferece "Gerar OP para saldo restante" e a rota aceita: produção em dobro, até alguém reservar os 40. Correção
+  proposta: atribuir por lote e uma função única para o DTO e a OP do saldo. Na mesma conta mora o L4 de CLOSE-WITH-REASON (PA de lote bloqueado ou perdido contando como produzido em
+  espera).
+- OP pronta para liberar: sempre INFO, ordenada pela programação. Prazo: comparar por dia civil, não por instante
+  arbitrário. Pedido sem entrega ativa: `requestedDeliveryDate` é a promessa implícita. O Painel pode agrupar por área
+  operacional, sem esconder informação por perfil nesta fase. "PA pronto para reservar" ou "saldo sem produção"
+  suprimem o "aguardando produção" redundante.
+- O Painel orienta e o módulo operacional executa: nunca reservar, liberar OP, gerar OP, faturar ou reprogramar
+  automaticamente.
+- **Pendente, opcional, não decidido:** FINISHED-GOODS-OWN-LOT-PREFERENCE-01 — preferir o lote produzido para a própria
+  linha do Pedido muda a política de alocação.
 
 ### WAVE 4 — decisões ainda reais
 
@@ -166,10 +270,11 @@ dedicado e localizações seguem FUTURO.
 ### Painel Gerencial — status
 
 **Versão 1 entregue em 2026-09-15** (MANAGEMENT-DASHBOARD-V1-01, Gestão → Painel Gerencial): D1–D5 decididas e
-aplicadas, e o faturado sai de `billings/billed-value.ts`, nunca de conta própria. Continuam abertos, sem posição e sem
-promoção: encerramento de saldo de OC parcialmente recebida (G5) — e com ele o "a receber de fornecedores" em R$ —;
-preço acordado em Pedido digitado direto (G2); lista de Pedidos por data de confirmação (G4 residual), sem a qual o
-cartão "Pedidos confirmados" fica sem link. Evolução do discovery (seção 10.3), só com pedido do PO: recebido a custo
+aplicadas, e o faturado sai de `billings/billed-value.ts`, nunca de conta própria. O encerramento de saldo de OC
+parcialmente recebida (G5) virou CLOSE-WITH-REASON-PO-01 em 2026-09-19 (fila, linha 6); o "a receber de fornecedores"
+em R$ fica viável depois dele, como opcional. Continuam abertos, sem posição e sem promoção: preço acordado em Pedido
+digitado direto (G2); lista de Pedidos por data de confirmação (G4 residual), sem a qual o cartão "Pedidos confirmados"
+fica sem link. Evolução do discovery (seção 10.3), só com pedido do PO: recebido a custo
 efetivo, compras por fornecedor, propostas em aberto, margem contratada, bloco de Compras para PURCHASING, atalho no
 Painel Operacional e PDF do painel. Fora do produto: contas a pagar, contas a receber, caixa e margem realizada.
 
@@ -178,14 +283,20 @@ Painel Operacional e PDF do painel. Fora do produto: contas a pagar, contas a re
 Capability própria, [PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01](discovery/PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01.md).
 **Não está resolvida porque as E2E rodam como ADMIN** (decisão G): isso só tira os perfis das E2E, não fecha a API.
 
-- **Bloqueiam:** P1 — quem executa a OP (picking, consumo, pesagem, parte, apontamento, variância, conclusão;
-  recomendado: só ADMIN + PRODUCTION); P6 — os operadores da Veridi entram com conta PRODUCTION própria.
-- **Com recomendação, sem bloquear:** P2 (variância), P3 (OP do Pedido e reserva de PA, recomendado capability
-  comercial própria), P4 (cancelamentos antigos), P5 (botões de estoque que já dão 403), P7 (autoria em texto), P8 (ID
-  próprio para Formulações sem gate).
-- **Blockers reais preservados:** I1 — 10 mutações da execução da OP só exigem sessão; I3 — cancelar OP grava
-  `SYSTEM_ACTOR`; I6 — `ForbiddenError` não mapeado em `picking`/`production`/`recipe` (um `requireRole` novo responde
-  500).
+**Desde 2026-09-19 o item ficou só com o perfil final de quem executa a OP.** As decisões de
+[AUTHORIZATION-AUTHORSHIP-DISCOVERY-01](discovery/AUTHORIZATION-AUTHORSHIP-DISCOVERY-01.md) levaram o resto: o VIEWER
+de I1 vai para AUTHZ-VIEWER-READONLY-01 (fila, linha 1); a autoria de I3 e I7 para AUTHORSHIP-SESSION-ACTOR-01 (linha
+2); P3 respondida (Plano, OP do saldo, reservar e realocar PA com ADMIN + COMMERCIAL); P4 respondida (os "Ambiente
+local" antigos ficam, sem backfill); P8 absorvida pelas duas. Até o perfil final, a execução da OP segue o provisório
+"todos menos VIEWER".
+
+- **Bloqueiam o perfil final (Veridi):** P1 — quem executa a OP (picking, consumo, pesagem, parte, apontamento,
+  variância, conclusão; recomendado: só ADMIN + PRODUCTION); P6 — os operadores da Veridi entram com conta PRODUCTION
+  própria.
+- **Com recomendação, sem bloquear:** P2 (variância), P5 (botões de estoque que já dão 403), P7 (autoria em texto ×
+  `userId`).
+- **Armadilha preservada:** I6 — `ForbiddenError` não mapeado em `picking`/`production`/`recipe` (um `requireRole` novo
+  responde 500); vale já para AUTHZ-VIEWER-READONLY-01.
 
 ### Golden path (WAVE 5) — status
 
@@ -209,8 +320,8 @@ Absorve CUSTOMER-LIST-DEFAULT-E2E-01: o que sobrava dele é o golden path procur
 
 ### Estabilização final — status
 
-P2, depois da WAVE 4, das permissões e da WAVE 5. Sem ID e sem escopo; nasce quando 1–6 fecharem. Entradas naturais:
-os LOW e UX da seção A, a seção D e a watchlist.
+Depois da WAVE 4, das permissões da Produção e da WAVE 5. Sem ID e sem escopo; nasce quando os três fecharem. Entradas
+naturais: os LOW e UX da seção A, a seção D e a watchlist.
 
 ---
 
@@ -273,7 +384,8 @@ mudou.
 
 ### Achados laterais de VERIDI-AUDIT-QUICK-FIXES-01 (2026-09-19)
 
-Vistos na rodada que corrigiu D1–D6, fora do escopo dela: registrados, não corrigidos.
+Vistos na rodada que corrigiu D1–D6, fora do escopo dela: registrados, não corrigidos. Desde 2026-09-19 os cinco têm
+posição na fila viva (linhas 5 e 13–16).
 
 | ID | Título | Sev. | Tam. |
 |---|---|---|---|
@@ -290,6 +402,23 @@ Vistos na rodada que corrigiu os P0 de concorrência, fora do escopo dela: regis
 | ID | Título | Sev. | Tam. |
 |---|---|---|---|
 | **CONCURRENCY-DEADLOCK-UNKNOWN-ERROR-01** | No Prisma 6.19 o deadlock (`40P01`) numa consulta de modelo chega como `PrismaClientUnknownRequestError`, sem P2034: os tradutores do Inventário (`traduzirConflito`) e do Consumo Interno e do estorno (`recusarConcorrencia`) só olham P2034/P2028 e deixam esse deadlock virar 500. `lib/conflito-de-concorrencia.ts` reconhece a forma real e pode ser reaproveitado | LOW | XS |
+
+### Achados laterais de CLOSE-WITH-REASON-DISCOVERY-01 (2026-09-19)
+
+Anteriores ao tema, vistos por leitura em `f7ebb771` e fora do escopo do discovery
+([documento](discovery/CLOSE-WITH-REASON-DISCOVERY-01.md), seção 14): registrados, não corrigidos. Cinco já têm dono;
+três ficam aqui, sem posição e sem severidade atribuída.
+
+| ID | Título | Sev. | Tam. |
+|---|---|---|---|
+| **CLOSE-WITH-REASON L3** | R-04 olha só `releasedAt`, não o status da `MaterialReservation` (`production-reports.service.ts:82-84`) | — | — |
+| **CLOSE-WITH-REASON L4** | "Produzido em espera" conta PA de lote bloqueado ou perdido e trava a OP para o saldo (`customer-orders.service.ts:489-492`; `fulfillment-plan.service.ts:544-547`). É a mesma conta do F-1 (PENDING-PRODUCTION-LOT-ATTRIBUTION-01, fila, linha 3) — vale olhar junto; o lote reprovado depois do apontamento espera a Veridi (P13 do discovery) | — | — |
+| **CLOSE-WITH-REASON L6** | `acceptMaterialVariance` grava sem trava na OP (`production.service.ts:231`). A classificar com a concorrência — candidato a resíduo da Fatia 2 de DOCUMENT-TRANSITION-CONCURRENCY-01 | — | — |
+
+Com dono: L1 e L2 (DTO da reserva e R-14 contam reserva liberada) em CLOSE-WITH-REASON-RESERVATION-01; L5 (CSV da OP
+com "Falta produzir" em OP concluída) em CLOSE-WITH-REASON-OP-01; L7 (criar, cancelar e reprogramar entrega sem trava do
+Pedido) em CLOSE-WITH-REASON-CO-01, como pré-requisito; L8 (Pedido com falta produzir e sem OP não gera atenção) em
+DASHBOARD-ORDER-NEXT-ACTION-01.
 
 ### Achados do FAST-DEVELOPMENT-RESET-02 (2026-09-11)
 
@@ -365,14 +494,18 @@ Veridi, quebrar em requirements independentes:
 - regra de geração automática do número de lote;
 - limiar/alerta de validade próxima;
 - permissões detalhadas por papel — o cadastro mestre já tem decisão do PO (Cliente §98; Item, Fornecedor e
-  Produto §100) e a execução da Produção tem discovery próprio (fila, posição 7);
+  Produto §100); em 2026-09-19 o PO decidiu Pedido e entregas, OC, rascunho de OC pelo Pedido, Plano, OP do saldo,
+  reserva de PA e preço de faturamento, com o provisório "todos menos VIEWER" onde a Veridi não definiu o perfil final
+  ([AUTHORIZATION-AUTHORSHIP-DISCOVERY-01](discovery/AUTHORIZATION-AUTHORSHIP-DISCOVERY-01.md)); a execução da Produção
+  tem discovery próprio (PRODUCTION-PERMISSION-HARDENING-01, perfil final com a Veridi);
 - regras de responsabilidade e liberação da Qualidade;
 - códigos de motivo de perda/rendimento;
 - conteúdo, formato e dimensões da etiqueta e impressora;
 - validade por classe/tipo de Item;
-- storage definitivo de arquivos/anexos em produção — Cloudflare R2 aprovado pelo PO em 2026-09-16 e pronto no
-  código para o arquivo do Item Rótulo (§103); ligar no Railway é STORAGE-R2-ACTIVATION-01 e levar os anexos
-  genéricos é ATTACHMENTS-R2-MIGRATION-01 (seção G).
+- storage definitivo de arquivos/anexos em produção — Cloudflare R2 aprovado pelo PO em 2026-09-16 e **ativo em PROD
+  desde 2026-09-17** para o arquivo do Item Rótulo (§103; STORAGE-R2-ACTIVATION-01, [`DEPLOY.md`](DEPLOY.md) §6.1).
+  PROD usa o bucket de homologação (`veridi-homologacao`): bucket próprio é decisão do PO. Levar os anexos genéricos é
+  ATTACHMENTS-R2-MIGRATION-01 (seção G).
 
 ### 11. Material do cliente — lote do fabricante e validade por configuração do Item — MEDIUM
 
@@ -386,6 +519,24 @@ rastreabilidade adicional.
 considera regra/configuração por tipo ou por Item — hipótese de modelagem:
 "exige lote do fabricante" e "exige validade" —, mas defaults e obrigatoriedade
 operacional precisam ser validados com a Veridi. Relacionado ao #7.
+
+### Achados preservados na consolidação de 2026-09-19 — sem posição
+
+Listados pelo PO em PRODUCT-BACKLOG-CONSOLIDATION-01 para continuar no backlog **sem promoção**: nenhum tem escopo nem
+posição, e a maioria depende de decisão da Veridi. O achado está com as palavras do PO; a coluna ao lado só aponta onde o
+assunto já aparece.
+
+| Achado | Onde já aparece |
+|---|---|
+| Qualidade bloqueando lote reservado — depende de decisão da Veridi | Hoje lote com reserva de PA não pode ser bloqueado ([CLOSE-WITH-REASON-DISCOVERY-01](discovery/CLOSE-WITH-REASON-DISCOVERY-01.md), seção 4); o lote reprovado depois do apontamento é a P13 de lá |
+| Item structural lock | MASTER-DATA-STRUCTURAL-LOCKS-01 (seção G) — um ID só |
+| Custo histórico e revisões | — |
+| Perda esperada × perda operacional | A perda prevista da Formulação é do processo ([`PRODUCT_RULES.md`](PRODUCT_RULES.md) §52); tolerâncias e códigos de perda estão no [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md) e no #7 acima |
+| OP com perda total | A OP que consome e não produz é CLOSE-WITH-REASON-OP-01 (P10 e P11 do discovery); a perda do PA já apontado segue a Qualidade (P13, Veridi) |
+| Retorno de cliente e de fornecedor | — |
+| Material equivalente e substituição | "Materiais substitutos" no [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md); a separação da OP já tem a ação de substituir ([PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01](discovery/PRODUCTION-PERMISSION-HARDENING-DISCOVERY-01.md), inventário das mutações) |
+| Vida útil mínima por cliente | Vizinho do limiar de validade próxima e da validade por classe de Item (#7 acima) |
+| Políticas definitivas de Formulação, Recebimento, chão de fábrica, Expedição e Faturamento | Perfil final por área com a Veridi; até lá, o provisório "todos menos VIEWER" ([AUTHORIZATION-AUTHORSHIP-DISCOVERY-01](discovery/AUTHORIZATION-AUTHORSHIP-DISCOVERY-01.md)); chão de fábrica em PRODUCTION-PERMISSION-HARDENING-01 |
 
 ### ~~FORMULATION-LOSS-SCOPE-01~~ — a cápsula vazia entra na perda prevista — FECHADO em 2026-09-15
 
@@ -418,7 +569,7 @@ invisível para quem confere o custo.
 As decisões D-1 a D-11 do PO e as três fatias estão em
 [`archive/BACKLOG_HISTORY.md`](archive/BACKLOG_HISTORY.md) (seção A); as regras duráveis, em
 [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §96–§97. O que ficou fora: a Ficha Técnica do Modelo
-(FORMULATION-TEMPLATE-TECHNICAL-SHEET-PDF-01, fechada em 2026-09-16, posição 2b da fila) e a tabela Forma ×
+(FORMULATION-TEMPLATE-TECHNICAL-SHEET-PDF-01, fechada em 2026-09-16; linha 2b da fila, hoje no histórico) e a tabela Forma ×
 Apresentação, logo abaixo.
 
 ### FORMULATION-PRESENTATION-BY-FORM-01 — a tabela Forma × Apresentação — aguardando a Veridi
@@ -445,7 +596,7 @@ nem a implementar agora.
 
 ### ~~CUSTOMER-CNPJ-AUTOFILL-01~~ — consulta de CNPJ no cadastro do Cliente — RECONCILIADO em 2026-09-17
 
-**Aprovado pela Veridi e entregue como CUSTOMER-CNPJ-LOOKUP-01** (fila 9r, regra em
+**Aprovado pela Veridi e entregue como CUSTOMER-CNPJ-LOOKUP-01** (linha 9r da fila, hoje no histórico; regra em
 [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §111). Este registro fica como histórico da decisão, não como item aberto — e
 não deve ser reaberto como capability separada.
 
@@ -609,10 +760,10 @@ Nenhum destes tem escopo definido. O trabalho de cada um é **responder uma
 pergunta**; desenhar solução antes da resposta é o que produz módulo que ninguém
 usa.
 
-O único com posição na fila viva é o Inventário Físico (posição 3): o discovery
-foi decidido e a implementação segue em fatias — a Fatia 1 saiu em 2026-09-15.
-Os outros esperam a pergunta virar decisão. SUPPLIER-ADDRESS-01, que
-tinha posição, foi entregue em 2026-09-11 (merge b8d744b).
+Com posição na fila viva desde 2026-09-19: INTERNAL-CONSUMPTION-COST-CENTER-01 (decidido) e
+DASHBOARD-INTERNAL-CONSUMPTION-01, os dois P2. O Inventário Físico foi decidido e segue em fatias (a Fatia 3 espera o
+handoff). Os outros esperam a pergunta virar decisão. SUPPLIER-ADDRESS-01, que tinha posição, foi entregue em
+2026-09-11 (merge b8d744b).
 
 ### SUPPLIER-OFFER-OVERLAP-01 — vigências sobrepostas de oferta E de tarifa industrial
 
@@ -732,8 +883,8 @@ APROVADA — não é especificação técnica final.** Diferente dos outros iten
 seção, os objetivos já foram aprovados pelo PO: o discovery responde o que está
 aberto e desenha a solução, e pode mudar detalhe, mas não pode perder objetivo
 aprovado. O discovery completo (INVENTORY-PHYSICAL-COUNT-DISCOVERY-01) está `DECIDIDO` desde 2026-09-15
-([documento](discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md)); a implementação é INVENTORY-PHYSICAL-COUNT-01, posição 3
-da fila viva, em fatias — a Fatia 1 (domínio e API) saiu em 2026-09-15.
+([documento](discovery/INVENTORY-PHYSICAL-COUNT-DISCOVERY-01.md)); a implementação é INVENTORY-PHYSICAL-COUNT-01, em
+fatias — 1, 2A e 2B entregues em 2026-09-15 e 2026-09-16; a Fatia 3 espera o handoff.
 
 **Ponto de partida.** O Inventário Físico de hoje (`StockCountPage`) conta UMA
 posição por vez — item, lote quando o item controla lote, contagem e motivo — e,
@@ -972,17 +1123,6 @@ passa a ser o de Item. Sem migration. Para decidir junto: levar à tela geral a 
 cadastro do Item já pede (hoje o "Marcar como preferencial" do detalhe na tela geral troca direto, D2; a E2E
 `oferta-de-fornecedor-vira-custo` passa por ele).
 
-### STORAGE-R2-ACTIVATION-01 — ligar o Cloudflare R2 no Railway — P1 · AGUARDANDO O PO
-
-Registrado em 2026-09-16 por LABEL-ATTACHMENTS-01, **sem nada feito no Railway**. O código está pronto e desligado: sem
-variáveis, o arquivo do Item Rótulo vai para o volume (`LOCAL_FS`). Ligar = cadastrar `VERIDI_STORAGE_PROVIDER=R2`,
-`VERIDI_R2_ENDPOINT`, `VERIDI_R2_BUCKET`, `VERIDI_R2_REGION=auto`, `VERIDI_R2_ACCESS_KEY_ID` e
-`VERIDI_R2_SECRET_ACCESS_KEY` no serviço, e provar antes com `pnpm storage:r2:smoke` na mesma credencial
-([`DEPLOY.md`](DEPLOY.md) §6.1). Infra já pronta pelo PO: bucket privado `veridi-homologacao` e token S3 restrito a
-ele; o smoke real com essa credencial, injetada fora do Git, passou em 2026-09-16 (upload, head, download com bytes
-iguais, sobrescrita recusada, objeto apagado). Decidir também se PROD usa o mesmo bucket de homologação ou um próprio —
-o bucket mora só na variável.
-
 ### ATTACHMENTS-R2-MIGRATION-01 — anexos genéricos no adaptador de storage — P2 · FUTURO
 
 Registrado em 2026-09-16 por LABEL-ATTACHMENTS-01, **sem posição**. `Attachment` (lote, recebimento, produto, projeto,
@@ -1026,35 +1166,23 @@ qual linha falta. Era assim com "+ Adicionar recurso"; com "+ Adicionar recursos
 branco para preencher) fica mais fácil cair nisso. A pergunta: recusar o salvar apontando a linha (como a bancada da
 Formulação faz com a quantidade), ou avisar quais linhas ficaram de fora.
 
-### ~~INTERNAL-CONSUMPTION-REVERSAL-01~~ — desfazer um consumo interno registrado — FECHADO em 2026-09-18
+### DASHBOARD-INTERNAL-CONSUMPTION-01 — o Painel não representa Uso e consumo — P2 · FILA VIVA
 
-**Fechado em 2026-09-18** por INTERNAL-CONSUMPTION-REVERSAL-01 (§126), com as decisões P1–P10 do PO no
-[discovery](discovery/INTERNAL-CONSUMPTION-REVERSAL-DISCOVERY-01.md): estorno próprio (`ECI-`), entrada
-`INTERNAL_CONSUMPTION_REVERSAL`, total ou parcial, só ADMIN e QUALITY, R-21 líquido na data do CI. Vale só para o
-consumo interno — as outras saídas continuam sem estorno e pedem discovery própria. O texto abaixo registra quando
-era pergunta.
-
-Registrado em 2026-09-17 por INTERNAL-CONSUMPTION-01 (Fatia 2), **sem implementação e por decisão consciente**. O
-consumo interno só CRIA: não há `DELETE`, não há estorno e o registro confirmado não é editado. Isso não é uma falta
-desta capacidade — é o padrão do sistema inteiro: nenhum movimento físico confirmado desfaz hoje (recebimento,
-consumo de produção, amostra e expedição também não). Inventar um estorno só aqui criaria um conceito que o resto do
-estoque não tem, e que o relatório da Fatia 3 teria de interpretar sozinho.
-
-O caminho que existe hoje para um consumo lançado errado é o Inventário Físico: conta o que realmente há e gera o
-ajuste rastreável pela diferença. A pergunta ao PO, quando houver posição: um consumo interno errado merece estorno
-próprio (movimento de entrada ligado ao `CI-` original, com motivo), ou a correção por inventário basta? Se a
-resposta for estorno, ela provavelmente vale para as outras saídas também, e aí é uma decisão de estoque, não de uso
-e consumo.
-
-### DASHBOARD-INTERNAL-CONSUMPTION-01 — o Painel não representa Uso e consumo — P2, sem posição
-
-Registrado em 2026-09-18 por INTERNAL-CONSUMPTION-REVERSAL-01, **fora da fatia** por decisão do PO (achado L1 do
-discovery). O Painel conta movimentos por tipo (`applyMovementCount`) sem caso para `INTERNAL_CONSUMPTION` nem
+**Posição na fila viva desde 2026-09-19** (linha 19, P2); falta a decisão do card, abaixo. Registrado em 2026-09-18 por
+INTERNAL-CONSUMPTION-REVERSAL-01, **fora da fatia** por decisão do PO (achado L1 do discovery). O Painel conta movimentos por tipo (`applyMovementCount`) sem caso para `INTERNAL_CONSUMPTION` nem
 `INTERNAL_CONSUMPTION_REVERSAL`: os dois não entram em card nenhum nem na atividade por dia, e na lista de
 movimentações recentes aparecem com o rótulo do tipo e sem documento de origem. Decidir se o consumo interno ganha
 card próprio (líquido dos estornos, como o R-21) ou entra num card existente.
 
-### INTERNAL-CONSUMPTION-COST-CENTER-01 — Centro de Custo do consumo interno — sem posição
+### INTERNAL-CONSUMPTION-COST-CENTER-01 — Centro de Custo do consumo interno — P2 · DECIDIDO
+
+**Decidido pelo PO em 2026-09-19**
+([INTERNAL-CONSUMPTION-COST-CENTER-DISCOVERY-01](discovery/INTERNAL-CONSUMPTION-COST-CENTER-DISCOVERY-01.md)); fila
+viva, linha 18, abaixo dos P0/P1. Centro de Custo é cadastro próprio, obrigatório em CI novo; criar, editar e inativar só
+ADMIN, e todo autenticado consulta; o destino livre sai do CI novo (`purpose` fica como legado de leitura) e
+"Observação/finalidade" segue livre; CI antigo sem backfill, mostrado "Sem centro de custo" com o destino antigo; sem
+seed; cadastro em Cadastros e Configurações › Centros de custo. Migration aditiva. O texto abaixo é o registro de quando
+era pergunta.
 
 Registrado em 2026-09-17 por INTERNAL-CONSUMPTION-01, **explicitamente fora da fatia** por decisão do PO. Hoje o
 destino/uso é texto livre e opcional ("Escritório", "Limpeza", "Expedição"). Texto livre agrupa mal: "Escritorio",

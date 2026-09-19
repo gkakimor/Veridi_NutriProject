@@ -123,9 +123,11 @@ Todas no handoff (§3). Divergências registradas, **sem ampliar permissão exis
 
 ## 12. Pendências PO
 
-- **Configurar o R2 no Railway** (STORAGE-R2-ACTIVATION-01) — nada foi configurado nesta capability. O smoke real
-  com a credencial de homologação passou (§16); no Railway, repetir com a credencial que o serviço usar.
-- Publicação em PROD, quando decidir.
+- ~~**Configurar o R2 no Railway** (STORAGE-R2-ACTIVATION-01) — nada foi configurado nesta capability. O smoke real
+  com a credencial de homologação passou (§16); no Railway, repetir com a credencial que o serviço usar.~~ Feito em
+  2026-09-17 (§17).
+- ~~Publicação em PROD, quando decidir.~~ Em PROD desde `8e824e8f` (2026-09-17).
+- Bucket próprio de PROD, se o PO quiser — hoje PROD usa o de homologação.
 
 ## 13. Escopo recomendado
 
@@ -168,3 +170,4 @@ LABEL-ATTACHMENTS-01 (2026-09-16):
 |---|---|
 | 2026-09-16 | Discovery decidido no chat; R2 aprovado; bucket `veridi-homologacao` criado pelo PO |
 | 2026-09-16 | Persistido na rodada de implementação (LABEL-ATTACHMENTS-01), com as escolhas de §9 |
+| 2026-09-17 | R2 ativo em PROD: as seis variáveis no serviço e o código na release `8e824e8f` (STORAGE-R2-ACTIVATION-01, [`DEPLOY.md`](../DEPLOY.md) §6.1). As pendências de §12 fecharam; o bucket de PROD segue o de homologação. Registrado em 2026-09-19 por PRODUCT-BACKLOG-CONSOLIDATION-01, que achou STORAGE-R2-ACTIVATION-01 ainda aberto no BACKLOG |

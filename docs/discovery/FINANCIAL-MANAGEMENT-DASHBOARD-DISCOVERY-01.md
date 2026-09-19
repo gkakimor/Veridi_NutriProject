@@ -899,8 +899,8 @@ Contra o desenho recomendado da versão 1.
 ## 12. Pendências PO
 
 - D1 a D5.
-- Encerramento de saldo de OC parcialmente recebida (G5): sem ID; o PO decide se
-  vira discovery próprio.
+- ~~Encerramento de saldo de OC parcialmente recebida (G5): sem ID; o PO decide se
+  vira discovery próprio.~~ Virou CLOSE-WITH-REASON-PO-01, decidido em 2026-09-19 (seção 17).
 - Preço acordado em Pedido digitado direto (G2): só se a carteira em R$ tiver de
   ser completa sem proposta.
 - Posição de BILLED-VALUE-CANONICAL-01 na fila viva.
@@ -970,3 +970,4 @@ respondida.
 | 2026-09-15 | Discovery aberto em `EM_ANALISE`, com recomendações e cinco decisões de PO pendentes | rodada inicial |
 | 2026-09-15 | **Addendum.** D1 decidida pelo PO: "Faturado" é `Billing.totalAmount` (a recomendação da seção 11). BILLED-VALUE-CANONICAL-01 implementada no mesmo dia: Painel, R-14 e R-15 (tela, CSV e PDF) leem `billings/billed-value.ts`; emitido legado sem total congelado vale a soma das linhas arredondadas; sem preço completo não há valor nem total. O resto do documento fica como foi escrito, e o discovery segue `EM_ANALISE` com D2–D5 abertas | handoff BILLED-VALUE-CANONICAL-01 |
 | 2026-09-15 | **Addendum.** D2–D5 decididas pelo PO, todas com a recomendação da seção 11: D2 — "Valores incompletos" e "N de M com valor", sem subtotal que pareça total; D3 — "Painel Gerencial", tela própria em Gestão, Painel Operacional intacto; D4 — ADMIN e COMMERCIAL, com a recusa no servidor; D5 — A expedir e A faturar pelo preço acordado, antes do desconto, sem antecipar a apropriação. MANAGEMENT-DASHBOARD-V1-01 implementada sobre BILLED-VALUE-CANONICAL-01, com as diferenças da seção 16; status `IMPLEMENTADO` | handoff MANAGEMENT-DASHBOARD-V1-01 |
+| 2026-09-19 | **Addendum.** G5 ganhou dono: o encerramento de saldo de OC parcialmente recebida é CLOSE-WITH-REASON-PO-01, decidido pelo PO em [CLOSE-WITH-REASON-DISCOVERY-01](CLOSE-WITH-REASON-DISCOVERY-01.md) — fato append-only por linha, OC liquidada fica RECEIVED com a marca "saldo encerrado", migration aditiva. O "a receber de fornecedores" em R$ fica viável depois dele (opcional) | PRODUCT-BACKLOG-CONSOLIDATION-01 |
