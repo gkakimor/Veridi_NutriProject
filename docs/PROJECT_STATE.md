@@ -6639,6 +6639,28 @@ Playwright nem mutação.
 lançado depois de um inventário encerrado baixa duas vezes; DASHBOARD-INTERNAL-CONSUMPTION-01 — o Painel não
 representa Uso e consumo.
 
+## Cadastro que já nasceu duplicado continua editável (MASTER-DATA-DUPLICATE-GUARD-LEGACY-EDIT-01, 2026-09-18)
+
+**Bloqueador da release seguinte**, achado pelo preflight de PROD: 21 grupos / 45 Itens com o mesmo nome, anteriores à
+guarda da §114. O formulário do Item manda `name` em todo Salvar, e o update chamava a guarda sempre que o nome vinha —
+a busca achava o outro registro do par e devolvia 409 `duplicate_name` numa edição que não renomeava nada. Faltava o
+teste "par duplicado + PATCH com o mesmo nome".
+
+**Correção, na função compartilhada.** `exigirNomeDeCadastroLivre` com o id em edição compara antes o nome pedido com o
+gravado (`mantemONomeGravado`, `upper(btrim())` dos dois lados, avaliado no banco): mesmo nome efetivo — caixa ou espaço
+nas pontas diferentes — não é renome, e a busca de conflito não roda. Nome efetivo diferente (acento conta) é renome e
+confere como antes; criar confere sempre; PATCH sem nome nem chega à guarda. Vale para os nove cadastros sem mexer nos
+services, e nenhum dado muda: as duplicatas seguem para a janela de saneamento, e o índice de
+MASTER-DATA-NAME-UNIQUENESS-01 continua bloqueado pelos grupos não resolvidos. Regra em §114. Sem migration; na `main`,
+**fora de PROD** (`release/prod` segue `8e824e8f`).
+
+**Validação.** `nome-de-cadastro-mestre.test.ts` (84, 69 novos): matriz dos nove cadastros com o par legado gravado por
+baixo da API — mesmo nome com outro campo, sem nome, outra caixa, espaço nas pontas no pedido e no gravado, renome para
+nome livre, renome para o nome de outro (409 com o código dele) e criação do terceiro (409) —, o caso do preflight no
+Item, acento, par entre MP e ME sem abrir o nome para UC nem PA, e a prova de que a busca nem roda quando o nome se
+mantém. Vizinhos que exercem os nove PATCH (31 arquivos, 682 testes) em banco de teste exclusivo do worktree; typecheck
+da API. Sem suíte completa, E2E, Playwright nem mutação.
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a

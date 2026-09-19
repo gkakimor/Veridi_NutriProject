@@ -7311,6 +7311,22 @@ acabado que nasce junto com o Produto, o produto nascido de Projeto e o modelo c
 é 409 `duplicate_name` com a frase pronta e o código do cadastro existente, mapeada uma vez no `setErrorHandler`.
 Trocar a caixa do próprio nome é permitido: é o mesmo cadastro.
 
+**Duplicidade nova, não a que já existe** (MASTER-DATA-DUPLICATE-GUARD-LEGACY-EDIT-01, 2026-09-18, decisão do PO). A
+guarda impede criar um cadastro com nome já usado e renomear um cadastro para o nome de outro; ela **não** torna
+impossível editar o registro que já nasceu duplicado antes dela — em PROD, 21 grupos / 45 Itens no preflight de
+2026-09-18, à espera da janela de saneamento. Na edição, o nome pedido é comparado primeiro com o gravado do próprio
+registro, pela mesma expressão `upper(btrim())`, avaliada no banco:
+
+| PATCH | O que acontece |
+|---|---|
+| sem `name` | o nome não é conferido |
+| `name` com o mesmo nome efetivo do gravado (caixa ou espaço nas pontas diferentes) | não é renome: a busca de conflito não roda, e o Salvar passa com o par ainda no catálogo |
+| `name` com nome efetivo diferente — acento diferente conta | é renome: procura como na criação, sem contar o próprio registro, e outro cadastro com o nome é 409 |
+
+Criar confere sempre. Vale para os nove cadastros, na função compartilhada (`exigirNomeDeCadastroLivre` com o id em
+edição). Nada disso funde, renomeia, exclui ou inativa o par, nem muda o índice único de MASTER-DATA-NAME-UNIQUENESS-01:
+ele continua bloqueado pelos grupos ainda não resolvidos.
+
 **Isto não é a constraint.** Entre o SELECT e o INSERT há uma janela em que duas requisições simultâneas passam as duas.
 Fechá-la é o índice único de MASTER-DATA-NAME-UNIQUENESS-01, que não nasce por cima de duplicata existente — por isso o
 saneamento vem antes, e por isso esta rodada não tem migration.

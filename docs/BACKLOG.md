@@ -914,6 +914,12 @@ O que precisa acontecer **antes**, e é o motivo de esta capability não ter dat
 Quando as três estiverem resolvidas, a migration é uma só, com um índice por cadastro, e o guarda da API continua —
 mensagem amigável é da aplicação, não do banco.
 
+**Edição do cadastro legado** (MASTER-DATA-DUPLICATE-GUARD-LEGACY-EDIT-01, 2026-09-18, §114): enquanto o índice não
+existe, o guarda impede duplicidade NOVA e deixa editar o cadastro que já nasceu duplicado quando o nome efetivo não
+muda — PROD tinha 21 grupos / 45 Itens no preflight de 2026-09-18, e cada Salvar deles dava 409. Isso não muda o índice
+nem o que vem antes dele: continua bloqueado pelos grupos não resolvidos — G6 e G11 no DEV e, em PROD, o que as ondas
+ainda não sanearam lá.
+
 ### MASTER-DATA-STRUCTURAL-LOCKS-01 — travas estruturais do cadastro mestre — sem posição
 
 Registrado em 2026-09-16 por MASTER-DATA-EDIT-PERMISSIONS-01 (DE11 do PO), **sem implementação**. Hoje a única trava
