@@ -568,6 +568,7 @@ export const suprimentosTopics = {
     notes: [
       "Quem registra: Administrador, Compras, Produção ou Qualidade. Quem estorna: Administrador ou Qualidade. O Comercial não registra, e o perfil de consulta só lê a lista.",
       "O estorno é recusado quando a posição está num inventário aberto, ou foi contada depois do consumo: a contagem já acertou o saldo, e estornar corrigiria duas vezes.",
+      "Consumo com data passada é recusado quando o item — ou o lote — já foi contado num inventário nesse dia ou depois, encerrado ou ainda aberto: a contagem já viu a saída, e lançar agora baixaria duas vezes. A recusa diz qual inventário. Consumo com a data de hoje nunca é barrado.",
       "O saldo sai do mesmo histórico de estoque de todo o resto. A saída aparece nas Movimentações, com o código do consumo na origem.",
       "Item de uso e consumo normalmente não controla lote. Quando controlar, o lote passa a ser obrigatório, e valem as mesmas regras de qualidade e validade do resto do estoque.",
       "Material de cliente nunca sai por aqui: gastar estoque de terceiro como despesa própria seria contabilizar o que não é seu.",

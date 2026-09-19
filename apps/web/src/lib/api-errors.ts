@@ -153,6 +153,27 @@ export class AlreadyExistsApiError extends Error {
   }
 }
 
+/**
+ * 409 do consumo interno de data passada que um inventário já contou
+ * (INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01): inventário encerrado que
+ * reconciliou a posição, ou aberto com a posição já contada.
+ *
+ * Mesma mensagem da API, então quem só mostra `err.message` não muda. Leva o
+ * inventário junto para a tela oferecer o caminho até ele.
+ */
+export class ConsumptionAlreadyCountedApiError extends Error {
+  constructor(
+    message: string,
+    readonly stockCountId: string,
+    readonly stockCountCode: string,
+  ) {
+    super(message);
+    this.name = "ConsumptionAlreadyCountedApiError";
+  }
+}
+
+const CONSUMO_JA_CONTADO = new Set(["backdated_consumption_after_count", "backdated_consumption_in_open_count"]);
+
 /** Falha do servidor: chegou lá, mas ele não conseguiu responder. */
 export class ApiServerError extends Error {
   status: number;
@@ -269,6 +290,16 @@ export async function parseJsonOrThrow(response: Response): Promise<unknown> {
       (body as { error?: string }).error === "schedule_removal_needs_confirmation"
     ) {
       throw new ScheduleRemovalNeedsConfirmationApiError((body as { message: string }).message);
+    }
+
+    if (
+      response.status === 409 &&
+      body !== null &&
+      typeof body === "object" &&
+      CONSUMO_JA_CONTADO.has(String((body as { error?: unknown }).error))
+    ) {
+      const typed = body as { message: string; stockCountId: string; stockCountCode: string };
+      throw new ConsumptionAlreadyCountedApiError(typed.message, typed.stockCountId, typed.stockCountCode);
     }
 
     const payload = (body ?? {}) as { message?: unknown; error?: unknown };

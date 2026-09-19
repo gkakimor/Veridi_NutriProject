@@ -36,6 +36,8 @@ vi.mock("../../lib/internal-consumption-api", () => ({
   createInternalConsumption: vi.fn(),
 }));
 
+import { diaCivilDeslocado, hojeComercial } from "@veridi/shared";
+import { ConsumptionAlreadyCountedApiError } from "../../lib/api-errors";
 import { listItems } from "../../lib/items-api";
 import {
   createInternalConsumption,
@@ -251,6 +253,59 @@ describe("Uso e consumo — registrar", () => {
     const alerta = await screen.findByRole("alert");
     expect(alerta).toHaveTextContent("Quantidade excede o saldo disponível (40): UC-000001");
     expect(screen.queryByText(/registrado:/)).toBeNull();
+    // Recusa que não é de inventário não oferece inventário nenhum.
+    expect(within(alerta).queryByRole("link")).toBeNull();
+  });
+});
+
+/*
+ * INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01: consumo de data passada que um
+ * inventário já contou é recusado pela API. A tela avisa antes, quando a data é
+ * passada, e na recusa mostra a frase inteira e leva ao inventário.
+ */
+describe("Uso e consumo — data passada e inventário", () => {
+  const MENSAGEM =
+    "Consumo com data de 15/09/2026 recusado: o saldo de UC-000001 já foi reconciliado pelo inventário " +
+    "INV-000012, encerrado em 17/09/2026 às 10:32.";
+
+  it("a recusa mostra a frase da API e leva ao inventário que já contou a saída", async () => {
+    vi.mocked(createInternalConsumption).mockRejectedValue(
+      new ConsumptionAlreadyCountedApiError(MENSAGEM, "inv-12", "INV-000012"),
+    );
+    abrir();
+    await escolher(LUVA);
+    await preencherQuantidade("3");
+    fireEvent.change(document.getElementById("consumo-data") as HTMLInputElement, {
+      target: { value: "2026-09-15" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar consumo" }));
+
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent(MENSAGEM);
+    expect(alerta).toHaveTextContent("Abrir o inventário INV-000012.");
+    expect(within(alerta).getByRole("link", { name: "INV-000012" })).toHaveAttribute(
+      "href",
+      "/estoque/inventario/inv-12",
+    );
+    expect(screen.queryByText(/registrado:/)).toBeNull();
+
+    // Trocar de item recomeça: a recusa e o caminho somem juntos.
+    await escolher(DETERGENTE);
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
+
+  it("o aviso aparece só com data passada — hoje nunca é barrado", async () => {
+    abrir();
+    await escolher(LUVA);
+    const aviso = /Data passada: se o item — ou o lote — já foi contado num inventário nesse dia ou depois/;
+    expect(screen.queryByText(aviso)).toBeNull();
+
+    const data = document.getElementById("consumo-data") as HTMLInputElement;
+    fireEvent.change(data, { target: { value: diaCivilDeslocado(hojeComercial(), -1) } });
+    expect(screen.getByText(aviso)).toBeInTheDocument();
+
+    fireEvent.change(data, { target: { value: hojeComercial() } });
+    expect(screen.queryByText(aviso)).toBeNull();
   });
 });
 

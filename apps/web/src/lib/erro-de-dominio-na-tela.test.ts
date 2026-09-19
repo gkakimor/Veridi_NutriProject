@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { AlreadyExistsApiError, apiErrorMessage, parseJsonOrThrow } from "./api-errors";
+import {
+  AlreadyExistsApiError,
+  ConsumptionAlreadyCountedApiError,
+  apiErrorMessage,
+  parseJsonOrThrow,
+} from "./api-errors";
 
 /**
  * Recusa de regra de negócio chega à tela com as palavras do domínio.
@@ -82,5 +87,37 @@ describe("409 `already_exists`", () => {
 
     expect(erro).toBeInstanceOf(Error);
     expect(erro).not.toBeInstanceOf(AlreadyExistsApiError);
+  });
+});
+
+/*
+ * Consumo interno de data passada que um inventário já contou
+ * (INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01): a tela mostra a frase da API
+ * e leva ao inventário — precisa do id sem comparar texto.
+ */
+describe("409 do consumo de data passada já contado", () => {
+  it.each(["backdated_consumption_after_count", "backdated_consumption_in_open_count"])(
+    "%s vira ConsumptionAlreadyCountedApiError com a mensagem e o inventário",
+    async (codigo) => {
+      const mensagem = `Consumo com data de 15/09/2026 recusado (${codigo}).`;
+      const erro = await parseJsonOrThrow(
+        resposta(409, { error: codigo, message: mensagem, stockCountId: "inv-12", stockCountCode: "INV-000012" }),
+      ).catch((e: unknown) => e);
+
+      expect(erro, codigo).toBeInstanceOf(ConsumptionAlreadyCountedApiError);
+      expect(apiErrorMessage(erro, "Falha ao registrar o consumo"), codigo).toBe(mensagem);
+      expect((erro as ConsumptionAlreadyCountedApiError).stockCountId, codigo).toBe("inv-12");
+      expect((erro as ConsumptionAlreadyCountedApiError).stockCountCode, codigo).toBe("INV-000012");
+    },
+  );
+
+  it("o 409 de estorno com inventário continua erro comum", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const erro = await parseJsonOrThrow(
+      resposta(409, { error: "position_in_open_count", message: "Posição em inventário aberto.", stockCountCode: "INV-1" }),
+    ).catch((e: unknown) => e);
+
+    expect(erro).toBeInstanceOf(Error);
+    expect(erro).not.toBeInstanceOf(ConsumptionAlreadyCountedApiError);
   });
 });

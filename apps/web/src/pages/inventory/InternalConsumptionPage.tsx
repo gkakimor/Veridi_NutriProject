@@ -19,7 +19,7 @@ import { ListStatusRow } from "../../components/ListStatusRow";
 import { DecimalField } from "../../components/NumericField";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
-import { apiErrorMessage } from "../../lib/api-errors";
+import { ConsumptionAlreadyCountedApiError, apiErrorMessage } from "../../lib/api-errors";
 import { formatDate, formatDateTime } from "../../lib/dates";
 import {
   createInternalConsumption,
@@ -79,6 +79,8 @@ export function InternalConsumptionPage() {
   const [carregandoSaldo, setCarregandoSaldo] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  /* O inventário que já contou a saída, quando a recusa é essa — a tela leva até ele. */
+  const [inventarioDaRecusa, setInventarioDaRecusa] = useState<{ id: string; code: string } | null>(null);
   const [registrado, setRegistrado] = useState<InternalConsumptionDTO | null>(null);
   /* Recarrega o histórico depois de cada registro, sem sair da tela. */
   const [recarga, setRecarga] = useState(0);
@@ -117,6 +119,7 @@ export function InternalConsumptionPage() {
   useEffect(() => {
     setLotId("");
     setErro(null);
+    setInventarioDaRecusa(null);
     setRegistrado(null);
   }, [itemId]);
 
@@ -180,6 +183,7 @@ export function InternalConsumptionPage() {
     }
     setSalvando(true);
     setErro(null);
+    setInventarioDaRecusa(null);
     try {
       const consumo = await createInternalConsumption({
         itemId,
@@ -198,6 +202,9 @@ export function InternalConsumptionPage() {
       consulta.reload();
     } catch (falha) {
       setErro(apiErrorMessage(falha, "Falha ao registrar o consumo"));
+      if (falha instanceof ConsumptionAlreadyCountedApiError) {
+        setInventarioDaRecusa({ id: falha.stockCountId, code: falha.stockCountCode });
+      }
     } finally {
       setSalvando(false);
     }
@@ -325,6 +332,13 @@ export function InternalConsumptionPage() {
               <span className="field__hint">
                 Consumo é registro do que já aconteceu — data futura não é aceita.
               </span>
+              {/* Aviso antes do confirmar: a recusa só vem se houver contagem. */}
+              {dia && dia < hojeComercial() && (
+                <span className="field__hint">
+                  Data passada: se o item — ou o lote — já foi contado num inventário nesse dia ou depois,
+                  o consumo é recusado: a contagem já acertou o saldo.
+                </span>
+              )}
             </div>
 
             <div className="field">
@@ -355,6 +369,13 @@ export function InternalConsumptionPage() {
           {erro && (
             <p className="form-alert" role="alert">
               {erro}
+              {inventarioDaRecusa && (
+                <>
+                  {" "}
+                  Abrir o inventário{" "}
+                  <EntityLink kind="stockCount" id={inventarioDaRecusa.id} code={inventarioDaRecusa.code} />.
+                </>
+              )}
             </p>
           )}
 

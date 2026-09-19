@@ -3,9 +3,12 @@ import type { ZodError } from "zod";
 import { INTERNAL_CONSUMPTION_REVERSAL_ROLES, INTERNAL_CONSUMPTION_WRITE_ROLES } from "@veridi/shared";
 import { exigirPerfil } from "../../lib/current-user.js";
 import {
+  BackdatedConsumptionAfterCountError,
+  BackdatedConsumptionInOpenCountError,
   CustomerOwnedLotNotAllowedError,
   FutureInternalConsumptionDateError,
   InsufficientInternalConsumptionStockError,
+  InternalConsumptionConcurrentWriteError,
   InternalConsumptionItemNotFoundError,
   InternalConsumptionLotNotFoundError,
   InternalConsumptionNotFoundError,
@@ -20,6 +23,7 @@ import {
   ReversalStateChangedError,
   UnexpectedInternalConsumptionLotError,
 } from "./internal-consumption.errors.js";
+import type { ContagemQueViuASaida } from "./internal-consumption.errors.js";
 import {
   createInternalConsumptionReversalSchema,
   createInternalConsumptionSchema,
@@ -91,7 +95,30 @@ export function mapInternalConsumptionError(
     return conflito("position_counted_after_consumption", error, { stockCountCode: error.stockCountCode });
   }
   if (error instanceof ReversalConcurrentWriteError) return conflito("concurrent_write", error);
+
+  // Consumo de data passada que uma contagem já viu
+  // (INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01): 409 com o inventário, para
+  // a tela levar até ele.
+  if (error instanceof BackdatedConsumptionAfterCountError) {
+    return conflito("backdated_consumption_after_count", error, {
+      ...contagemNoCorpo(error.contagem),
+      ...(error.completedAt ? { completedAt: error.completedAt.toISOString() } : {}),
+    });
+  }
+  if (error instanceof BackdatedConsumptionInOpenCountError) {
+    return conflito("backdated_consumption_in_open_count", error, contagemNoCorpo(error.contagem));
+  }
+  if (error instanceof InternalConsumptionConcurrentWriteError) return conflito("concurrent_write", error);
   return null;
+}
+
+function contagemNoCorpo(contagem: ContagemQueViuASaida): Record<string, string> {
+  return {
+    stockCountId: contagem.stockCountId,
+    stockCountCode: contagem.stockCountCode,
+    consumptionDate: contagem.consumptionDate,
+    countedAt: contagem.countedAt.toISOString(),
+  };
 }
 
 /**

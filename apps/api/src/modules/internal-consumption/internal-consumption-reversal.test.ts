@@ -808,7 +808,11 @@ describe("estorno — guardas de inventário", () => {
     const item = await criarItem();
     await entradaSemCusto(item.id, "10");
     const consumo = await consumir(app, { itemId: item.id, quantity: "5" });
-    const encerrado = await inventario({ item, status: "COMPLETED", contadoEm: new Date() });
+    // 1 ms depois do registro do CI, lido do próprio CI: o `new Date()` do Node
+    // no Windows anda 1–3 ms atrás do relógio do `createdAt`, e "agora" podia
+    // cair antes do registro (caía 2 em 6 na base cf8d353e).
+    const depoisDoRegistro = new Date(new Date(consumo.createdAt).getTime() + 1);
+    const encerrado = await inventario({ item, status: "COMPLETED", contadoEm: depoisDoRegistro });
 
     const resposta = await estornar(app, consumo.id, { quantity: "5", reason: "Erro", expectedReversedQuantity: "0" });
     expect(resposta.statusCode).toBe(409);
