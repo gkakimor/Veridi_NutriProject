@@ -6,6 +6,7 @@ import {
   getReservedByLots,
   isLotAvailableForUse,
   isLotExpired,
+  lotStatusWhere,
 } from "../../lib/inventory-ledger.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageMeta, slicePage } from "../../lib/pagination.js";
@@ -32,7 +33,8 @@ export async function listCustomerMaterials(
       ownerType: "CUSTOMER",
       ...(query.customerId ? { ownerCustomerId: query.customerId } : {}),
       ...(query.itemId ? { itemId: query.itemId } : {}),
-      ...(query.status ? { status: query.status } : {}),
+      // "Vencido" é derivado da validade, nunca status gravado (D1).
+      ...(query.status ? lotStatusWhere(query.status) : {}),
       ...(query.search
         ? {
             OR: [

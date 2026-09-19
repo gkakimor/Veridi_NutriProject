@@ -9,6 +9,7 @@ import {
   getReservedByLots,
   isLotAvailableForUse,
   isLotExpired,
+  lotStatusWhere,
 } from "../../lib/inventory-ledger.js";
 import { findProductionOrderMaterialCost } from "../costs/costs.service.js";
 import type { ListFinishedGoodsQuery } from "./finished-goods.schemas.js";
@@ -28,7 +29,8 @@ export async function listFinishedGoods(
   const prisma = getPrisma();
 
   const where: Record<string, unknown> = { origin: "PRODUCTION" };
-  if (query.status) where["status"] = query.status;
+  // "Vencido" é derivado da validade, nunca status gravado (D1).
+  if (query.status) Object.assign(where, lotStatusWhere(query.status));
   if (query.productionOrderId) where["productionOrderId"] = query.productionOrderId;
   if (query.productId) {
     where["productionOrder"] = { is: { productId: query.productId } };

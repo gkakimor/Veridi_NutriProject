@@ -13,6 +13,7 @@ import {
   getReservedByLots,
   isLotAvailableForUse,
   isLotExpired,
+  lotStatusWhere,
 } from "../../lib/inventory-ledger.js";
 import { diasCivisAte, marcadorDeHojeComercial } from "../../lib/business-day.js";
 import type { Pagination } from "../../lib/pagination.js";
@@ -57,7 +58,8 @@ export async function getInventoryPosition(
     include: {
       lots: {
         where: {
-          ...(query.status ? { status: query.status } : {}),
+          // "Vencido" é derivado da validade, nunca status gravado (D1).
+          ...(query.status ? lotStatusWhere(query.status) : {}),
           ...(query.location ? { location: { contains: query.location, mode: "insensitive" } } : {}),
           // Filtro de propriedade é escolha do usuário: por padrão a
           // posição continua mostrando o estoque físico inteiro.
