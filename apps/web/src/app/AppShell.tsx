@@ -7,6 +7,7 @@ import { lookupLot } from "../lib/lots-api";
 import { useAuth } from "./AuthProvider";
 import { navItems } from "./navigation";
 import { Sidebar } from "./Sidebar";
+import { SystemVersion } from "./SystemVersion";
 import { TituloDaTelaContext, tituloDaAba } from "./titulo-da-tela";
 import type { TituloDaTela } from "./titulo-da-tela";
 import { useMediaQuery } from "./use-media-query";
@@ -152,11 +153,17 @@ export function AppShell() {
           </button>
         )}
 
-        <Link to="/" className="masthead__brand">
-          <BrandLogo variant="symbol" className="masthead__mark" />
-          Veridi
-          <span className="masthead__sub">Nutrition</span>
-        </Link>
+        {/* A versão fica colada no nome, fora do link da marca: botão dentro
+            de link não é HTML válido, e o clique na marca continua levando ao
+            Painel. */}
+        <div className="masthead__identity">
+          <Link to="/" className="masthead__brand">
+            <BrandLogo variant="symbol" className="masthead__mark" />
+            Veridi
+            <span className="masthead__sub">Nutrition</span>
+          </Link>
+          <SystemVersion />
+        </div>
 
         <div className="masthead__search-wrap">
           <form className="masthead__search" onSubmit={handleSearchSubmit}>

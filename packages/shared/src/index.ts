@@ -14,6 +14,7 @@ export * from "./decimal-config.js";
 export * from "./business-timezone.js";
 export * from "./period-range.js";
 export * from "./health.js";
+export * from "./version.js";
 export * from "./items.js";
 export * from "./master-data-names.js";
 export * from "./master-data-deletion.js";

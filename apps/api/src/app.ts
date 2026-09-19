@@ -26,6 +26,7 @@ import { usersRoutes } from "./modules/users/users.routes.js";
 import { userPreferencesRoutes } from "./modules/user-preferences/user-preferences.routes.js";
 import { controlledDocumentsRoutes } from "./modules/controlled-documents/controlled-documents.routes.js";
 import { healthRoutes } from "./modules/health/health.routes.js";
+import { metaRoutes } from "./modules/meta/meta.routes.js";
 import { itemsRoutes } from "./modules/items/items.routes.js";
 import { itemCostReferencesRoutes } from "./modules/items/item-cost-references.routes.js";
 import { itemLabelFilesRoutes } from "./modules/items/item-label-files.routes.js";
@@ -122,6 +123,7 @@ export function buildApp() {
   });
 
   app.register(healthRoutes);
+  app.register(metaRoutes);
   app.register(authRoutes);
   app.register(usersRoutes);
   app.register(userPreferencesRoutes);
