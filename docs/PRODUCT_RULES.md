@@ -7435,6 +7435,9 @@ no `BACKLOG.md`.
 **Atualizado em 2026-09-18 (§126):** o estorno próprio passou a existir (INTERNAL-CONSUMPTION-REVERSAL-01). O
 parágrafo acima fica como registro da decisão da Fatia 2.
 
+**Atualizado em 2026-09-19 (§127):** consumo de dia passado que uma contagem de inventário já viu é recusado
+(INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01): a contagem já baixou a saída.
+
 **Tela.** Estoque › Uso e consumo (`/estoque/uso-e-consumo`): item, lote quando houver, quantidade, data, destino/uso,
 observação e o disponível — lido do MESMO cálculo que a gravação confere, para a tela não prometer o que o confirmar
 recusa. Confirmado, mostra quantidade, custo unitário, custo total e origem do custo; sem custo, a frase. Abaixo, o
@@ -8122,3 +8125,50 @@ mesmo arquivo), a tabela `internal_consumption_reversals` — FK RESTRICT para o
 `inventoryMovementId` NOT NULL `@unique` (a FK 1:1 mora no estorno; o id do estorno nasce antes, para o `sourceId`
 do movimento), autor RESTRICT — e a sequence `internal_consumption_reversal_code_seq`. Model e sequence são ALVO no
 `prod-cleanup`.
+
+## §127 — Consumo interno de data passada não atravessa uma contagem de inventário
+
+INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01 (2026-09-19), decisão do PO no handoff: falhar fechado. Fecha o achado L2
+do [INTERNAL-CONSUMPTION-REVERSAL-DISCOVERY-01](discovery/INTERNAL-CONSUMPTION-REVERSAL-DISCOVERY-01.md) — o espelho,
+na criação do consumo, da guarda de inventário do estorno (§126). Atualiza a §115.
+
+> **Consumo de dia passado que uma contagem já viu é recusado.** A contagem compara o físico com o saldo do ledger
+> naquele instante. Se o material saiu antes dela e o consumo só entra no ledger depois, a diferença da contagem é a
+> própria saída, e o ajuste do encerramento já a baixou: o consumo lançado depois baixaria o material duas vezes. O
+> sistema recusa, diz qual inventário e NÃO cria ajuste compensatório.
+
+**Quando.** Só o consumo com data ANTERIOR a hoje. O de hoje — sem data ou com a data de hoje — é registrado no
+instante em que é lançado, depois de toda contagem já feita, e não passa pela guarda.
+
+**Fronteira temporal.** O `createdAt` do consumo é agora: o esperado de nenhuma contagem existente tinha a baixa. A
+saída física é do DIA informado, sem hora — o `occurredAt` grava o fim do dia só para ordenar o extrato. Na dúvida,
+recusa: vale o `countedAt` do registro que vale da posição contra o INÍCIO do dia comercial do consumo. Contagem do
+mesmo dia recusa (a mensagem diz "pode já ter refletido"); contagem até o último milissegundo do dia anterior, não.
+
+**Inventário encerrado** — sessão ou Contagem rápida, as duas `COMPLETED` — bloqueia quando reconciliou a posição numa
+contagem do dia do consumo ou posterior: ajustou a diferença, ou conferiu sem diferença. 409
+`backdated_consumption_after_count`. Não bloqueiam: "Não ajustar" (o saldo ficou o do sistema, e o consumo lançado
+depois é a baixa única — é o caso "consumo ainda não lançado"), posição retirada, inventário cancelado e inventário de
+outro lote do mesmo item. A posição é a do consumo: item, ou item + lote (`chaveDaPosicao`).
+
+**Inventário aberto** bloqueia quando a posição já foi contada no dia do consumo ou depois: o encerramento aplicaria a
+diferença congelada, que já tem a saída. 409 `backdated_consumption_in_open_count`, citando o inventário. Posição
+aberta ainda não contada, ou contada antes do dia do consumo, passa: a contagem seguinte lê o consumo no esperado, e o
+movimento aparece como movimentação durante o inventário (§16).
+
+**Concorrência.** A guarda roda na transação do consumo, depois da trava do escopo (`lockStockScope`, a mesma da
+Contagem rápida), e trava `FOR SHARE` a posição aberta — registro de contagem, recontagem, decisão e encerramento da
+mesma posição esperam o consumo, ou ele espera por eles e relê. O aberto é conferido antes do encerrado: o encerramento
+que segurava a posição aparece encerrado na leitura seguinte. Espera longa demais ou conflito de escrita na gravação é
+409 `concurrent_write` ("tente de novo"), nunca 500.
+
+**Mensagem.** Diz o dia do consumo, a posição, o inventário, quando foi encerrado (ou que segue aberto), quando a
+posição foi contada, que o saldo já foi reconciliado e o caminho: revisar data e quantidade do lançamento ou, se o
+saldo estiver errado, fazer uma nova contagem — no aberto, tratar a diferença na revisão do inventário. O corpo leva
+`stockCountId`, `stockCountCode`, `consumptionDate`, `countedAt` e, no encerrado, `completedAt`. Nada é gravado: nem
+`CI-`, nem movimento, nem número de sequence — a recusa vem antes do código.
+
+**Tela.** Uso e consumo avisa no campo Data quando a data é passada; na recusa, mostra a frase da API inteira e o link
+para o inventário. A ajuda do tópico diz a regra.
+
+**Migration.** Nenhuma.

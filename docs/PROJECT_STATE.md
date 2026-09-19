@@ -130,8 +130,10 @@ pós-release. O saneamento das duplicatas de PROD (21 grupos / 45 Itens; Ondas A
   a Fatia 2 (MASTER-DATA-HARD-DELETE-02);
 - **Uso e consumo — estorno:** FECHADO em 2026-09-18 (INTERNAL-CONSUMPTION-REVERSAL-01, §126), migration aditiva
   `20260925093039`, na `main` e fora de PROD: o `CI-` lançado errado se estorna (`ECI-`), total ou parcial, com
-  motivo, só por ADMIN e QUALITY, e o R-21 passou a ser líquido na data do CI. Abertos do assunto:
-  INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01, DASHBOARD-INTERNAL-CONSUMPTION-01 e INTERNAL-CONSUMPTION-COST-CENTER-01;
+  motivo, só por ADMIN e QUALITY, e o R-21 passou a ser líquido na data do CI. Em 2026-09-19 fechou também o espelho
+  na criação (INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01, §127, sem migration, na `main` e fora de PROD): consumo de
+  data passada que uma contagem de inventário já viu é recusado. Abertos do assunto: DASHBOARD-INTERNAL-CONSUMPTION-01 e
+  INTERNAL-CONSUMPTION-COST-CENTER-01;
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 
 Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
@@ -6638,8 +6640,8 @@ Typecheck de shared, API e web; `pnpm validate:migrations:fresh` (88 migrations,
 Playwright nem mutação.
 
 **Backlog lateral** (registrado, não corrigido): INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01 — CI de data passada
-lançado depois de um inventário encerrado baixa duas vezes; DASHBOARD-INTERNAL-CONSUMPTION-01 — o Painel não
-representa Uso e consumo.
+lançado depois de um inventário encerrado baixa duas vezes (fechado em 2026-09-19, §127, seção própria abaixo);
+DASHBOARD-INTERNAL-CONSUMPTION-01 — o Painel não representa Uso e consumo.
 
 ## Cadastro que já nasceu duplicado continua editável (MASTER-DATA-DUPLICATE-GUARD-LEGACY-EDIT-01, 2026-09-18)
 
@@ -6692,6 +6694,44 @@ cerca de 40 px e segue funcionando.
 sem migration, backups T-0 e pós-release com `RESTAURÁVEL: YES`, dados preservados, smoke 50/50 (em PROD, "Sobre o
 sistema" diz Produção e build `884a500d`), tags `v1.0.0` e `prod-2026-09-19-v1.0.0`. Registro em
 [`RELEASES.md`](RELEASES.md).
+
+## Consumo interno de data passada não atravessa contagem (INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01, 2026-09-19)
+
+**Risco fechado** (achado L2 do estorno, [INTERNAL-CONSUMPTION-REVERSAL-DISCOVERY-01](discovery/INTERNAL-CONSUMPTION-REVERSAL-DISCOVERY-01.md)):
+material sai no dia 15 sem lançamento, o inventário do dia 17 encontra a falta e ajusta, e o consumo lançado no dia 19
+com data de 15 baixava de novo. Reproduzido na `main` `cf8d353e`: Contagem rápida −3 (saldo 7 = físico), CI de
+anteontem 201, saldo 4. Decisão do PO: falhar fechado, sem ajuste compensatório. Regra em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §127. Na `main`, fora de PROD (`release/prod` segue `884a500d`, v1.0.0), **sem
+migration**; entra no pacote da futura v1.1.0.
+
+**API.** `registerInternalConsumption` chama `recusarSeAContagemJaViuASaida` só para data ANTERIOR a hoje, na
+transação e depois de `lockStockScope`: posição (`chaveDaPosicao` do Inventário Físico) aberta num inventário e já
+contada no dia do consumo ou depois → 409 `backdated_consumption_in_open_count`, com a posição travada `FOR SHARE`;
+encerrada — sessão ou Contagem rápida — que reconciliou a posição (ajustou ou conferiu) numa contagem do dia do consumo
+ou posterior → 409 `backdated_consumption_after_count`. "Não ajustar", posição retirada, cancelado e outro lote não
+bloqueiam. Fronteira: `countedAt` do registro que vale contra o início do dia comercial do consumo. Corpo com
+`stockCountId`, `stockCountCode`, `consumptionDate`, `countedAt` e `completedAt`; P2034/P2028 da gravação viram 409
+`concurrent_write`. A recusa vem antes do código: nenhum `CI-` queimado.
+
+**Web.** Uso e consumo: aviso no campo Data quando a data é passada; a recusa mostra a frase da API e "Abrir o
+inventário INV-…" (`ConsumptionAlreadyCountedApiError` em `api-errors.ts`). Nota nova na ajuda `estoque.usoEConsumo`.
+
+**Relógio dos testes** (achado desta rodada): no Windows o `new Date()` do Node anda 1–3 ms atrás do relógio do
+sistema — o Postgres ficou à frente em 2.000 de 2.000 leituras —, e o `createdAt` sai do motor do Prisma. Isso explica o
+teste do estorno "contagem DEPOIS do registro do CI", que caía 2 em 6 na base (passou a contar 1 ms depois do
+`createdAt` lido do próprio CI, 6/6), e o W12 do BACKLOG, que ganhou a causa.
+
+**Validação.** API `internal-consumption-backdated-count.test.ts` (16: dupla baixa pela Contagem rápida real; consumo
+de hoje, sem data e com a de hoje; sessão real encerrada com ajuste; Contagem rápida que confere; mensagem exata do
+encerrado e do aberto; mesmo dia recusa e 1 ms antes do dia passa; lote contado × outro lote; cancelado e retirada;
+"Não ajustar"; aberto já contado, aberto sem contagem com a contagem seguinte lendo o consumo, aberto contado antes do
+dia; e concorrência com a trava provada por `pg_stat_activity` — Contagem rápida, registro de contagem e encerramento
+em curso), com a pasta de Uso e consumo, a de estoque (Inventário Físico incluso), o R-21 e a guarda de paginação
+(19 arquivos, 998 testes).
+Mutação por script (extra): 9 de 9 derrubadas — sem `FOR SHARE`, guarda antes da trava, `>` no lugar de `>=`, sem o
+filtro de reconciliação, retirada e cancelado contando, consumo de hoje na guarda, aberto sem data e sem o aberto. Web
+`uso-e-consumo-tela.test.tsx` e `erro-de-dominio-na-tela.test.ts`, com `pages/inventory`, a ajuda e os 13 portões que
+varrem o `src` (28 arquivos, 470 testes). Typecheck de shared, API e web. Sem suíte completa, E2E nem Playwright.
 
 ## Próxima prioridade
 

@@ -8,6 +8,7 @@ import type {
 import {
   INTERNAL_CONSUMPTION_CODE_PREFIX,
   hojeComercial,
+  inicioDoDiaComercial,
   intervaloDeDiasComerciais,
   limitesDoDiaComercial,
   podeSairPorConsumoInterno,
@@ -28,10 +29,14 @@ import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { fecharPrecoTecnicoPersistido } from "../../lib/technical-price.js";
 import { fecharTotalTecnicoPersistido } from "../../lib/technical-total.js";
 import { lockStockScope } from "../inventory/inventory.service.js";
+import { chaveDaPosicao } from "../inventory/stock-count.service.js";
 import {
+  BackdatedConsumptionAfterCountError,
+  BackdatedConsumptionInOpenCountError,
   CustomerOwnedLotNotAllowedError,
   FutureInternalConsumptionDateError,
   InsufficientInternalConsumptionStockError,
+  InternalConsumptionConcurrentWriteError,
   InternalConsumptionItemNotFoundError,
   InternalConsumptionLotNotFoundError,
   InvalidInternalConsumptionItemTypeError,
@@ -58,7 +63,9 @@ import type {
  *   consumo de produção (lote real → 30d → 90d → último real → `NO_COST`), e
  *   é CONGELADO no registro: uma compra posterior não reescreve a despesa que
  *   já aconteceu;
- * - só Item `INTERNAL_CONSUMABLE` (`ITEM_TYPES_DO_CONSUMO_INTERNO`).
+ * - só Item `INTERNAL_CONSUMABLE` (`ITEM_TYPES_DO_CONSUMO_INTERNO`);
+ * - consumo de DIA PASSADO que uma contagem de inventário já viu é recusado
+ *   (`recusarSeAContagemJaViuASaida`): a contagem já baixou a saída.
  *
  * Correção é o ESTORNO próprio (INTERNAL-CONSUMPTION-REVERSAL-01,
  * `internal-consumption-reversal.service.ts`): uma entrada nova, com motivo e
@@ -188,6 +195,97 @@ async function disponivelNoEscopo(
 }
 
 /**
+ * CONSUMO DE DATA PASSADA × INVENTÁRIO — INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01.
+ *
+ * Uma contagem compara o físico com o saldo do ledger NAQUELE instante. Se o
+ * material saiu antes dela e o consumo só entra no ledger depois, o físico já
+ * não tinha o material e o esperado ainda tinha: a diferença da contagem É a
+ * saída, e o ajuste do encerramento já a baixou. O consumo lançado depois
+ * baixaria de novo. É o espelho da guarda do estorno (§126).
+ *
+ * As duas pontas:
+ * - o registro (`createdAt`) é agora, depois de toda contagem existente — o
+ *   esperado de nenhuma delas tinha este consumo;
+ * - a saída física é do DIA informado, sem hora. `occurredAt` grava o fim do
+ *   dia só para ordenar o extrato; a saída pode ter sido antes de uma contagem
+ *   do mesmo dia. Na dúvida, recusa: a fronteira é o INÍCIO do dia comercial
+ *   do consumo, contra o `countedAt` do registro que vale.
+ *
+ * Recusa, na posição do consumo (item, ou item + lote — outro lote não conta):
+ * 1. inventário ABERTO que já contou a posição no dia do consumo ou depois: o
+ *    encerramento aplicaria a diferença congelada, que já tem a saída. Posição
+ *    ainda não contada, ou contada antes do dia, passa — a contagem vai ler o
+ *    consumo no esperado, e a marca de movimentação durante o inventário segue;
+ * 2. inventário ENCERRADO, sessão ou Contagem rápida, que reconciliou a posição
+ *    numa contagem do dia do consumo ou posterior: ajustou a diferença ou
+ *    conferiu sem diferença. "Não ajustar" não reconciliou — o saldo ficou o do
+ *    sistema, e o consumo lançado depois é a baixa única. Posição retirada e
+ *    inventário cancelado não contam.
+ *
+ * Consumo de hoje não passa por aqui: o instante dele é o do registro, depois
+ * de toda contagem já feita.
+ */
+async function recusarSeAContagemJaViuASaida(
+  tx: Prisma.TransactionClient,
+  consumo: { item: Item; lot: Lot | null; dia: string },
+): Promise<void> {
+  const positionKey = chaveDaPosicao(consumo.item.id, consumo.lot ? consumo.lot.id : null);
+  const inicioDoDia = inicioDoDiaComercial(consumo.dia);
+  const contagem = (stockCount: { id: string; code: string }, countedAt: Date) => ({
+    consumptionDate: consumo.dia,
+    itemCode: consumo.item.code,
+    lotCode: consumo.lot ? consumo.lot.code : null,
+    stockCountId: stockCount.id,
+    stockCountCode: stockCount.code,
+    countedAt,
+  });
+
+  /*
+   * 1. A posição aberta, TRAVADA: registro de contagem, recontagem, decisão e
+   * encerramento da mesma posição esperam este consumo terminar — ou ele
+   * espera por eles e relê. Sem a trava, uma contagem gravada entre a leitura
+   * e o commit teria o esperado sem este consumo.
+   */
+  const [travada] = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM stock_count_positions WHERE "openPositionKey" = ${positionKey} FOR SHARE`;
+  if (travada) {
+    const aberta = await tx.stockCountPosition.findUnique({
+      where: { id: travada.id },
+      select: {
+        validEntry: { select: { countedAt: true } },
+        stockCount: { select: { id: true, code: true } },
+      },
+    });
+    if (aberta?.validEntry && aberta.validEntry.countedAt >= inicioDoDia) {
+      throw new BackdatedConsumptionInOpenCountError(contagem(aberta.stockCount, aberta.validEntry.countedAt));
+    }
+  }
+
+  // 2. Depois do aberto, nunca antes: se um encerramento segurava a posição, a
+  // trava acima esperou o commit dele — e esta leitura, nova, já o vê encerrado.
+  const reconciliada = await tx.stockCountPosition.findFirst({
+    where: {
+      positionKey,
+      removedAt: null,
+      stockCount: { status: "COMPLETED" },
+      validEntry: { is: { countedAt: { gte: inicioDoDia } } },
+      OR: [{ decision: null }, { decision: "ADJUST" }],
+    },
+    orderBy: { validEntry: { countedAt: "desc" } },
+    select: {
+      validEntry: { select: { countedAt: true } },
+      stockCount: { select: { id: true, code: true, completedAt: true } },
+    },
+  });
+  if (reconciliada?.validEntry) {
+    throw new BackdatedConsumptionAfterCountError(
+      contagem(reconciliada.stockCount, reconciliada.validEntry.countedAt),
+      reconciliada.stockCount.completedAt,
+    );
+  }
+}
+
+/**
  * Registra o consumo interno: valida, baixa o ledger e congela o custo.
  *
  * Tudo numa transação só — um registro sem movimento seria despesa sem baixa,
@@ -199,6 +297,8 @@ export async function registerInternalConsumption(
   agora: Date = new Date(),
 ): Promise<InternalConsumptionDTO> {
   const occurredAt = instanteDoConsumo(input.occurredOn, agora);
+  // Só o consumo de DIA PASSADO pode ter saído antes de uma contagem já feita.
+  const diaRetroativo = input.occurredOn && input.occurredOn < hojeComercial(agora) ? input.occurredOn : null;
   const prisma = getPrisma();
 
   const consumptionId = await prisma.$transaction(async (tx) => {
@@ -234,6 +334,10 @@ export async function registerInternalConsumption(
     }
 
     await lockStockScope(tx, { itemId: item.id, lotId: lot ? lot.id : null });
+
+    // Depois da trava do escopo: a Contagem rápida da mesma posição trava o
+    // mesmo escopo, então a leitura abaixo já vê a que terminou antes.
+    if (diaRetroativo) await recusarSeAContagemJaViuASaida(tx, { item, lot, dia: diaRetroativo });
 
     const disponivel = await disponivelNoEscopo(tx, item, lot);
     if (quantity.greaterThan(disponivel)) {
@@ -298,9 +402,21 @@ export async function registerInternalConsumption(
     });
 
     return consumption.id;
-  });
+  }).catch(recusarConcorrencia);
 
   return (await getInternalConsumptionById(consumptionId))!;
+}
+
+/**
+ * P2034: conflito de escrita ou deadlock. P2028: a transação expirou esperando
+ * a trava do escopo ou da posição de inventário. Nada foi gravado — é recusa
+ * de tentar de novo, nunca 500.
+ */
+function recusarConcorrencia(erro: unknown): never {
+  if (erro instanceof Prisma.PrismaClientKnownRequestError && (erro.code === "P2034" || erro.code === "P2028")) {
+    throw new InternalConsumptionConcurrentWriteError();
+  }
+  throw erro;
 }
 
 export async function getInternalConsumptionById(
