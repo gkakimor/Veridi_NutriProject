@@ -17,7 +17,12 @@ import { useFilteredPage, useListQuery } from "../../lib/list-query";
 import { listUnits } from "../../lib/units-api";
 import { ItemFormModal } from "./ItemFormModal";
 import { useAutoridadeNoItem } from "./item-permissions";
+import { useOptionalAuth } from "../../app/AuthProvider";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import {
+  ExclusaoDefinitivaDialog,
+  podeExcluirDefinitivamente,
+} from "../../components/ExclusaoDefinitivaDialog";
 import { RowActions } from "../../components/RowActions";
 import {
   RecordContextChip,
@@ -53,6 +58,11 @@ export function ItemsPage() {
    * tela — e não recebe "+ Novo item de estoque".
    */
   const autoridade = useAutoridadeNoItem();
+  /* Excluir definitivamente é só do Administrador — e sem sessão, nunca (MASTER-DATA-HARD-DELETE-02). */
+  const sessao = useOptionalAuth();
+  const podeExcluir = sessao !== null && podeExcluirDefinitivamente(sessao.user?.role);
+  const [exclusao, setExclusao] = useState<ItemDTO | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<ItemType | "">("");
@@ -212,6 +222,11 @@ export function ItemsPage() {
       </div>
 
       {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
+      {aviso && (
+        <p className="form-status" role="status">
+          {aviso}
+        </p>
+      )}
 
       {contextIds && (
         <RecordContextChip
@@ -313,8 +328,8 @@ export function ItemsPage() {
                 <td onClick={(event) => event.stopPropagation()}>
                   <RowActions
                     label={`Mais ações de ${item.code}`}
-                    actions={
-                      (item.active ? autoridade.inativar : autoridade.reativar)
+                    actions={[
+                      ...((item.active ? autoridade.inativar : autoridade.reativar)
                         ? [
                             {
                               label: item.active ? "Inativar" : "Reativar",
@@ -322,8 +337,22 @@ export function ItemsPage() {
                               onSelect: () => handleToggleActive(item),
                             },
                           ]
-                        : []
-                    }
+                        : []),
+                      /* A prévia decide: PA, estoque, movimento, fornecedor, formulação,
+                         custo ou qualquer uso aparecem como motivo, com a saída Inativar. */
+                      ...(podeExcluir
+                        ? [
+                            {
+                              label: "Excluir definitivamente",
+                              destructive: true,
+                              onSelect: () => {
+                                setAviso(null);
+                                setExclusao(item);
+                              },
+                            },
+                          ]
+                        : []),
+                    ]}
                   >
                     <button
                       type="button"
@@ -408,6 +437,31 @@ export function ItemsPage() {
           if (target) void applyActive(target, false);
         }}
       />
+
+      {exclusao && (
+        <ExclusaoDefinitivaDialog
+          key={exclusao.id}
+          tipo="ITEM"
+          id={exclusao.id}
+          rotulo="item"
+          /* Recusada, a saída é Inativar — a mesma confirmação da linha. */
+          onAlternativa={
+            autoridade.inativar
+              ? () => {
+                  const alvo = exclusao;
+                  setExclusao(null);
+                  handleToggleActive(alvo);
+                }
+              : undefined
+          }
+          onCancelar={() => setExclusao(null)}
+          onExcluido={(resultado) => {
+            setExclusao(null);
+            setAviso(`${resultado.entityCode} — ${resultado.entityName} foi excluído definitivamente.`);
+            reload();
+          }}
+        />
+      )}
     </>
   );
 }

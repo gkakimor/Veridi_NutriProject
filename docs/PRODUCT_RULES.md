@@ -8036,6 +8036,10 @@ aditivas: `20260925093038_master_data_deletion_history` (enum `MasterDataEntityT
 sem backfill). O enum já reserva `ITEM`, `PRODUCT` e `INDUSTRIAL_RESOURCE`, sem rota que os aceite: a Fatia 2 fica sem
 migration, como o discovery planejou.
 
+**Atualizado em 2026-09-19 (§128):** Item, Produto + o Item de produto acabado e Recurso industrial entraram pela mesma
+infraestrutura (MASTER-DATA-HARD-DELETE-02), nos caminhos `/items`, `/products` e `/industrial-resources` — sem
+migration, como previsto.
+
 ## §126 — Estorno de consumo interno: uma entrada própria, com motivo, que nunca apaga o consumo
 
 INTERNAL-CONSUMPTION-REVERSAL-01 (2026-09-18), decisões P1–P10 do PO no
@@ -8172,3 +8176,64 @@ saldo estiver errado, fazer uma nova contagem — no aberto, tratar a diferença
 para o inventário. A ajuda do tópico diz a regra.
 
 **Migration.** Nenhuma.
+
+## §128 — Exclusão física de Item, Produto + PA e Recurso industrial
+
+MASTER-DATA-HARD-DELETE-02 (2026-09-19), Fatia 2 do
+[MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01](discovery/MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01.md), D1, D2 e D6, sobre a
+infraestrutura da §125 — mesmo gesto, mesma prévia, mesmo rastro, mesma transação. Caminhos novos: `/items`,
+`/products` e `/industrial-resources`. **Sem migration**: o enum do rastro já reservava `ITEM`, `PRODUCT` e
+`INDUSTRIAL_RESOURCE`.
+
+> **Item, Produto e Recurso industrial com qualquer realidade operacional se inativam — não se excluem.** A exclusão
+> física é só do cadastro criado por engano e nunca usado.
+
+**Item — matéria-prima, embalagem, produto acabado e uso e consumo, um namespace só.** Bloqueia: movimento de estoque
+(inclusive o ajuste manual sem lote, que só tem o CASCADE do ledger no caminho), lote, relação Item × Fornecedor (com a
+homologação e as ofertas dela), referência de custo — **mesmo a gravada na própria criação do Item**: é histórico de
+custo (D2), e a referência inicial é opcional, não filho técnico —, arquivo do rótulo, Ordem de Compra, Recebimento,
+componente de Formulação e de Modelo de formulação, item produzido por Formulação e por OP, necessidade, reserva e
+consumo de OP, consumo interno (o estorno não apaga o consumo), amostra, reserva de pedido, expedição, faturamento,
+posição e achado de inventário físico, o Produto de quem ele é o PA, o id solto na linha do pedido
+(`customer_order_lines.finishedItemId`), código e nome copiados em nove documentos e JSON que cite o id ou o código.
+Saída: Inativar.
+
+**Produto + Item de produto acabado (PA).** O PA ligado ao Produto 1:1 (`finishedProductItemId`, único) é filho técnico
+do Produto: nasce com ele e só sai com ele. Na exclusão do Produto ele é **vinculado**: lido e travado na mesma
+transação, depois do Produto, e julgado pelo catálogo do Item inteiro — qualquer uso dele (estoque, movimento, lote,
+formulação, OP, pedido, expedição, faturamento, contagem, cópia, JSON) bloqueia o Produto, com o código do PA na fonte
+("Item de produto acabado PA-000123 — Lotes"). Só a chave do Produto para ele — o vínculo — não conta como uso. Sem uso
+nenhum, dos dois lados, sai o agregado inteiro: o Produto, depois o PA, conferidos no efeito real, com **um** rastro (o
+do Produto), o PA em "sai junto" e a identidade dele (código, nome, tipo, unidade, situação) no retrato. **O PA nunca
+fica órfão:** ou sai com o Produto, ou nada sai. Do próprio Produto bloqueiam: projeto (produto do projeto, projeto que
+aponta para ele, e o produto nascido de Projeto — `originProjectId` é histórico do projeto), orçamento, formulação
+(mesmo em rascunho), estrutura de custo, cálculo de custo, precificação, OP, pedido, reserva, expedição, faturamento,
+anexo, e o código e o nome copiados. Produto legado sem PA sai sozinho; item de outro tipo ligado ao Produto não é PA e
+bloqueia. Saída: Inativar.
+
+**O PA não sai sozinho.** Pela rota do Item, o Item de produto acabado — ligado a Produto ou órfão — é sempre recusado:
+ele nasce com o Produto e só sai pela exclusão do Produto (seção 13 do discovery).
+
+**Recurso industrial.** Bloqueia: tarifa (histórico: explica o custo das estruturas, D2), etapa de roteiro em qualquer
+versão, estrutura de custo e modelo de custo (como recurso e como energia — o SET NULL tiraria a energia sem aviso), o
+nome copiado na estrutura de custo, e o roteiro copiado para a OP e a agenda (JSON, sem chave por decisão da §89).
+Saída: Inativar.
+
+**Concorrência.** A transação da §125 vale para os três: `FOR UPDATE` na raiz — e, no Produto, depois no PA —,
+recontagem sob a trava, rastro, DELETE e `pg_stat_xact_user_tables`. Referência gravada durante a exclusão (relação com
+fornecedor para o Item, lote para o PA do Produto) faz a recontagem recusar; efeito fora do agregado — inclusive o
+disparado pela saída do PA — desfaz tudo.
+
+**Tela.** "Excluir definitivamente", só para o Administrador, sempre pela prévia: no menu da linha de Itens e de
+Produtos e no cabeçalho do Recurso industrial. Recusada, a saída é o Inativar de cada tela. No Produto liberado, o
+diálogo lista o PA em "sai junto" e explica que ele foi criado com o produto, nunca foi usado e sai junto para não ficar
+item órfão no estoque.
+
+**Nome liberado.** Excluído, o nome fica livre — no Produto, o do Produto e o do PA: o mesmo nome nasce de novo, com PA
+novo. O código não volta.
+
+**Leituras aplicadas** (valem pela falha fechada até o PO dizer o contrário): a referência de custo gravada na criação
+do Item bloqueia, como acima; e o PA "nascido com o Produto" é provado pela chave 1:1 da raiz e por nenhum uso próprio,
+não por marca de nascimento — o modelo não guarda marca (PA vinculado por importação, ou trocado na edição do Produto,
+não se distingue do nascido junto), e criá-la exigiria migration, fora do escopo. Sem uso nenhum, o PA vinculado depois
+também sai com o Produto.

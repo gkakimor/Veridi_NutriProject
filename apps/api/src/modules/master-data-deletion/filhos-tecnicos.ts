@@ -12,6 +12,10 @@ import type { MasterDataDeletionReferenceDTO, MasterDataEntityType } from "@veri
  * técnico por decisão do PO (2026-09-18), com prova ESTRUTURAL: a marca
  * `createdWithCustomerId`, que só a criação grava (`julgarHistoricoDoCnpj`).
  *
+ * O Item de produto acabado do Produto não passa por aqui: é outro cadastro,
+ * julgado pelo catálogo do Item como vinculado do Produto; `julgarRaiz` só
+ * garante que ele nunca sai sozinho.
+ *
  * Funções puras sobre as linhas lidas (`to_jsonb`) — o serviço lê, trava e
  * decide; aqui só se julga.
  */
@@ -277,6 +281,60 @@ export function julgarHistoricoDoCnpj(customerId: string, internos: Internos): M
   }
   if (razoes.length === 0) return [];
   return [bloqueio(FONTE_DO_HISTORICO_DO_CNPJ, razoes.join(" "), semMarca.length + deOutro.length + marcadosDemais)];
+}
+
+/**
+ * Quem leva este cadastro junto na exclusão: a raiz do agregado maior (o
+ * Produto, para o seu Item de produto acabado). A linha dela não conta como
+ * uso — sai na mesma transação.
+ */
+export interface Dono {
+  tabela: string;
+  /** A coluna da raiz do dono que aponta para este cadastro. */
+  coluna: string;
+  id: string;
+}
+
+export const FONTE_DO_PRODUTO_ACABADO = "Item de produto acabado";
+export const FONTE_DO_TIPO_DO_ITEM = "Tipo do item";
+export const FONTE_DO_PROJETO_DE_ORIGEM = "Projeto de origem";
+
+/**
+ * Regras da própria raiz — MASTER-DATA-HARD-DELETE-02.
+ *
+ *  - Item de produto acabado (PA) nunca sai sozinho: ele nasce com o Produto
+ *    e só sai com ele, como vinculado — ligado a um Produto ou não;
+ *  - o vinculado do Produto só sai junto se for, de fato, um PA;
+ *  - Produto nascido de Projeto (`originProjectId`) é histórico do projeto.
+ */
+export function julgarRaiz(
+  tipo: MasterDataEntityType,
+  raiz: Linha,
+  dono: Dono | null,
+): MasterDataDeletionReferenceDTO[] {
+  if (tipo === "ITEM") {
+    const produtoAcabado = raiz["type"] === "FINISHED_PRODUCT";
+    if (dono === null && produtoAcabado) {
+      return [
+        bloqueio(
+          FONTE_DO_PRODUTO_ACABADO,
+          "Item de produto acabado (PA) nasce com o produto e só sai junto com ele, pela exclusão do produto — nunca sozinho.",
+        ),
+      ];
+    }
+    if (dono !== null && !produtoAcabado) {
+      return [
+        bloqueio(
+          FONTE_DO_TIPO_DO_ITEM,
+          "O item ligado ao produto não é de produto acabado: só o PA do produto sai junto com ele.",
+        ),
+      ];
+    }
+  }
+  if (tipo === "PRODUCT" && raiz["originProjectId"] !== null && raiz["originProjectId"] !== undefined) {
+    return [bloqueio(FONTE_DO_PROJETO_DE_ORIGEM, "O produto nasceu de um projeto — é parte do histórico do projeto.")];
+  }
+  return [];
 }
 
 /** Os filhos técnicos do agregado: o que bloqueia (vazio = todos provados). */

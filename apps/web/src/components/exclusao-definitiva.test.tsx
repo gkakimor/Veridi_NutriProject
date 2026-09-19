@@ -186,3 +186,63 @@ describe("quem vê a ação", () => {
     }
   });
 });
+
+/**
+ * MASTER-DATA-HARD-DELETE-02: a tela que conhece o cadastro explica o que sai
+ * junto — o Produto diz que o Item de produto acabado dele sai também.
+ */
+describe("nota do que sai junto", () => {
+  const NOTA = "O item de produto acabado sai junto, para não ficar órfão.";
+  const PRODUTO = previa({
+    entityType: "PRODUCT",
+    entityCode: "PROD-000009",
+    entityName: "PRODUTO ERRADO",
+    alternative: "INACTIVATE",
+    removedTogether: [{ source: "Item de produto acabado PA-000009 — PRODUTO ERRADO", count: 1 }],
+  });
+
+  function abrirProduto() {
+    render(
+      <ExclusaoDefinitivaDialog
+        tipo="PRODUCT"
+        id="prod-1"
+        rotulo="produto"
+        notaDoQueSaiJunto={NOTA}
+        onAlternativa={onAlternativa}
+        onCancelar={onCancelar}
+        onExcluido={onExcluido}
+      />,
+    );
+    return screen.getByRole("alertdialog");
+  }
+
+  it("liberado com o PA em 'sai junto': lista o PA pelo código e mostra a nota", async () => {
+    vi.mocked(consultarExclusaoDefinitiva).mockResolvedValue(PRODUTO);
+    const dialogo = abrirProduto();
+    expect(await within(dialogo).findByText("Item de produto acabado PA-000009 — PRODUTO ERRADO")).toBeInTheDocument();
+    expect(within(dialogo).getByText(NOTA)).toBeInTheDocument();
+  });
+
+  it("nada em 'sai junto' (produto sem PA): sem a nota", async () => {
+    vi.mocked(consultarExclusaoDefinitiva).mockResolvedValue({ ...PRODUTO, removedTogether: [] });
+    const dialogo = abrirProduto();
+    expect(await within(dialogo).findByText(FRASE_DA_EXCLUSAO)).toBeInTheDocument();
+    expect(within(dialogo).queryByText(NOTA)).toBeNull();
+  });
+
+  it("bloqueado pelo uso do PA: o motivo aparece com o código dele, e nem a nota nem o excluir", async () => {
+    vi.mocked(consultarExclusaoDefinitiva).mockResolvedValue({
+      ...PRODUTO,
+      canDelete: false,
+      removedTogether: [],
+      references: [
+        { source: "Item de produto acabado PA-000009 — Lotes", count: 1, reason: "Há lote deste item — rastreabilidade." },
+      ],
+    });
+    const dialogo = abrirProduto();
+    expect(await within(dialogo).findByText("Item de produto acabado PA-000009 — Lotes")).toBeInTheDocument();
+    expect(within(dialogo).queryByText(NOTA)).toBeNull();
+    expect(within(dialogo).queryByRole("button", { name: "Excluir definitivamente" })).toBeNull();
+    expect(within(dialogo).getByRole("button", { name: "Inativar" })).toBeInTheDocument();
+  });
+});

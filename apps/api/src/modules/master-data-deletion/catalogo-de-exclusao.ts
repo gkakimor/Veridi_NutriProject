@@ -81,6 +81,26 @@ export interface Sufixos {
   nome: readonly string[];
 }
 
+/**
+ * Cadastro que a RAIZ aponta e que sai com ela — o Item de produto acabado
+ * (PA) do Produto (MASTER-DATA-HARD-DELETE-02). Não é tabela interna: é outro
+ * cadastro mestre, julgado pelo catálogo DELE, inteiro — cada uso dele bloqueia
+ * a raiz. Só a chave da raiz para ele (`coluna`) não conta como uso: é o
+ * vínculo 1:1 que o faz filho técnico da raiz.
+ */
+export interface Vinculado {
+  /** Coluna da RAIZ que aponta para ele (`products.finishedProductItemId`). */
+  coluna: string;
+  /** O cadastro do vinculado, com o catálogo que o julga. */
+  tipo: MasterDataEntityType;
+  /** A tabela dele — conferida contra `AGREGADOS[tipo].tabela` no teste de contrato. */
+  tabela: string;
+  /** Ação da chave `raiz.coluna → tabela` no banco. */
+  acao: AcaoDaChave;
+  /** Como aparece em "sai junto" e na frente de cada uso dele que bloqueia. */
+  rotulo: string;
+}
+
 export interface AgregadoExcluivel {
   tipo: MasterDataEntityType;
   rotulo: string;
@@ -93,6 +113,8 @@ export interface AgregadoExcluivel {
   sufixos: Sufixos;
   /** A saída normal quando a exclusão é recusada. */
   saida: MasterDataDeletionAlternative;
+  /** Cadastros que a raiz aponta e que saem com ela (o PA do Produto). */
+  vinculados?: readonly Vinculado[];
 }
 
 /* ------------------------------------------------------------------ *
@@ -571,6 +593,194 @@ const PERFIL_DE_PRODUCAO: AgregadoExcluivel = {
   saida: "ARCHIVE",
 };
 
+/* ------------------------------------------------------------------ *
+ * Fatia 2 (MASTER-DATA-HARD-DELETE-02): Item, Produto + PA e Recurso.
+ * ------------------------------------------------------------------ */
+
+/** Chave estrangeira que chega à raiz: tabela, coluna, ação no banco, fonte e motivo. */
+type ChaveQueChega = readonly [tabela: string, coluna: string, acao: AcaoDaChave, fonte: string, motivo: string];
+
+/** Documento que copia o código e o nome da raiz, sem chave: tabela, coluna do código, coluna do nome, fonte. */
+type CopiaDeIdentidade = readonly [tabela: string, codigo: string | null, nome: string | null, fonte: string];
+
+function referenciasPorChave(alvo: string, chaves: readonly ChaveQueChega[]): ReferenciaDeclarada[] {
+  return chaves.map(([tabela, coluna, acao, fonte, motivo]) => ({ tipo: "fk", tabela, coluna, alvo, acao, fonte, motivo }));
+}
+
+/** "cópia do item", "cópia do produto": a mesma frase para o código e para o nome. */
+function referenciasPorCopia(deQuem: string, copias: readonly CopiaDeIdentidade[]): ReferenciaDeclarada[] {
+  const referencias: ReferenciaDeclarada[] = [];
+  for (const [tabela, codigo, , fonte] of copias) {
+    if (codigo) {
+      referencias.push({
+        tipo: "codigo",
+        tabela,
+        coluna: codigo,
+        fonte: `${fonte} (cópia do ${deQuem})`,
+        motivo: `Documento guarda o código deste ${deQuem}.`,
+      });
+    }
+  }
+  for (const [tabela, , nome, fonte] of copias) {
+    if (nome) {
+      referencias.push({
+        tipo: "nome",
+        tabela,
+        coluna: nome,
+        fonte: `${fonte} (cópia do ${deQuem})`,
+        motivo: `Documento guarda o nome deste ${deQuem}.`,
+      });
+    }
+  }
+  return referencias;
+}
+
+/*
+ * Item — matéria-prima, embalagem, produto acabado e uso e consumo: um
+ * namespace só. O banco tem CASCADE no ledger, na referência de custo e na
+ * contagem, e SET NULL no Produto e no achado da contagem — tudo isso é uso e
+ * bloqueia. O Item de produto acabado nunca sai sozinho: `julgarRaiz` o recusa
+ * aqui, e ele só sai como vinculado do Produto.
+ */
+const ITEM: AgregadoExcluivel = {
+  tipo: "ITEM",
+  rotulo: "Item",
+  tabela: "items",
+  colunasDeNome: ["name"],
+  internas: [],
+  chavesInternas: [],
+  referencias: [
+    ...referenciasPorChave("items", [
+      ["inventory_movements", "itemId", "c", "Movimentos de estoque", "O item já teve movimento de estoque — o histórico do estoque é permanente."],
+      ["lots", "itemId", "r", "Lotes", "Há lote deste item — rastreabilidade."],
+      ["supplier_items", "itemId", "r", "Relações Item × Fornecedor", "O item já foi relacionado a fornecedor — a relação guarda homologação e ofertas."],
+      ["item_cost_references", "itemId", "c", "Referências de custo", "O item tem referência de custo registrada — é histórico de custo."],
+      ["item_label_file_versions", "itemId", "r", "Arquivo do rótulo", "O item tem arquivo de rótulo registrado."],
+      ["purchase_order_lines", "itemId", "r", "Ordens de compra", "O item já foi comprado em ordem de compra."],
+      ["receipt_lines", "itemId", "r", "Recebimentos", "O item já foi recebido."],
+      ["formulation_components", "itemId", "r", "Formulações", "O item é componente de formulação."],
+      ["formulation_versions", "outputItemId", "r", "Formulações (item produzido)", "Formulação produz este item."],
+      ["formulation_template_components", "itemId", "r", "Modelos de formulação", "O item é componente de modelo de formulação."],
+      ["production_orders", "finishedItemId", "r", "Ordens de produção (item produzido)", "Ordem de produção produz este item."],
+      ["production_order_requirements", "itemId", "r", "Ordens de produção (necessidades)", "Ordem de produção precisa deste item."],
+      ["material_reservation_lines", "itemId", "r", "Reservas de material de ordem de produção", "Há reserva deste item para ordem de produção."],
+      ["production_consumptions", "itemId", "r", "Consumos de produção", "O item já foi consumido em ordem de produção."],
+      ["internal_consumptions", "itemId", "r", "Consumo interno", "Já houve consumo interno deste item — o estorno não apaga o consumo."],
+      ["sample_consumptions", "itemId", "r", "Amostras", "O item já foi consumido em amostra."],
+      ["customer_order_reservation_lines", "itemId", "r", "Reservas de pedido de venda", "Há reserva de estoque deste item para pedido de venda."],
+      ["shipment_lines", "itemId", "r", "Expedições", "O item já foi expedido."],
+      ["billing_lines", "itemId", "r", "Faturamentos", "O item já foi faturado."],
+      ["stock_count_positions", "itemId", "c", "Inventário físico", "Contagem de estoque registrou posição deste item."],
+      ["stock_count_findings", "itemId", "n", "Inventário físico (achados)", "Contagem de estoque registrou achado deste item."],
+      [
+        "products",
+        "finishedProductItemId",
+        "n",
+        "Produto dono deste item",
+        "Este é o item de produto acabado (PA) de um produto: ele sai só junto com o produto, pela exclusão do produto.",
+      ],
+    ]),
+    {
+      tipo: "id",
+      tabela: "customer_order_lines",
+      coluna: "finishedItemId",
+      alvo: "items",
+      fonte: "Pedidos de venda",
+      motivo: "Pedido de venda guarda este item como o produto acabado da linha.",
+    },
+    ...referenciasPorCopia("item", [
+      ["purchase_order_lines", "itemCode", "itemName", "Ordens de compra"],
+      ["receipt_lines", "itemCode", "itemName", "Recebimentos"],
+      ["formulation_versions", "outputItemCode", "outputItemName", "Formulações"],
+      ["production_orders", "finishedItemCode", "finishedItemName", "Ordens de produção"],
+      ["production_order_requirements", "itemCode", "itemName", "Necessidades de ordens de produção"],
+      ["customer_order_lines", "finishedItemCode", "finishedItemName", "Pedidos de venda"],
+      ["shipment_lines", "finishedItemCode", "finishedItemName", "Expedições"],
+      ["billing_lines", "itemCode", "itemName", "Faturamentos"],
+      ["stock_count_positions", "itemCode", "itemName", "Inventário físico"],
+    ]),
+  ],
+  sufixos: { id: ["itemid"], idInterno: [], codigo: ["itemcode"], nome: ["itemname"] },
+  saida: "INACTIVATE",
+};
+
+/*
+ * Produto — sai com o Item de produto acabado (PA) ligado a ele 1:1
+ * (`finishedProductItemId`, único). O PA é julgado pelo catálogo do Item,
+ * inteiro: qualquer uso dele bloqueia o Produto, e ele nunca fica para trás.
+ */
+const PRODUTO: AgregadoExcluivel = {
+  tipo: "PRODUCT",
+  rotulo: "Produto",
+  tabela: "products",
+  colunasDeNome: ["name"],
+  internas: [],
+  chavesInternas: [],
+  referencias: [
+    ...referenciasPorChave("products", [
+      ["project_products", "productId", "r", "Projetos (produtos do projeto)", "O produto participa de projeto."],
+      ["projects", "productId", "n", "Projetos", "Projeto aponta para este produto; excluir o desligaria sem aviso."],
+      ["quote_lines", "productId", "r", "Orçamentos", "O produto já foi orçado."],
+      ["formulation_versions", "productId", "r", "Formulações", "O produto tem formulação — mesmo em rascunho, é engenharia do produto."],
+      ["industrial_cost_versions", "productId", "c", "Estruturas de custo", "O produto tem estrutura de custo."],
+      ["industrial_cost_calculations", "productId", "c", "Cálculos de custo industrial", "O produto tem cálculo de custo industrial."],
+      ["pricing_versions", "productId", "c", "Precificações", "O produto tem precificação."],
+      ["production_orders", "productId", "r", "Ordens de produção", "O produto já tem ordem de produção."],
+      ["customer_order_lines", "productId", "r", "Pedidos de venda", "O produto já está em pedido de venda."],
+      ["customer_order_reservation_lines", "productId", "r", "Reservas de pedido de venda", "Há reserva de estoque para pedido deste produto."],
+      ["shipment_lines", "productId", "r", "Expedições", "O produto já foi expedido."],
+      ["billing_lines", "productId", "r", "Faturamentos", "O produto já foi faturado."],
+      ["attachments", "productId", "r", "Anexos do produto", "O produto tem documento anexado."],
+    ]),
+    ...referenciasPorCopia("produto", [
+      ["quote_lines", "productCodeSnapshot", "productNameSnapshot", "Orçamentos"],
+      ["industrial_cost_versions", "productCodeSnapshot", "productNameSnapshot", "Estruturas de custo"],
+      ["industrial_cost_calculations", "productCodeSnapshot", "productNameSnapshot", "Cálculos de custo industrial"],
+      ["production_orders", "productCode", "productName", "Ordens de produção"],
+      ["customer_order_lines", "productCode", "productName", "Pedidos de venda"],
+      ["shipment_lines", "productCode", "productName", "Expedições"],
+      ["billing_lines", "productCode", "productName", "Faturamentos"],
+    ]),
+  ],
+  sufixos: {
+    id: ["productid"],
+    idInterno: [],
+    codigo: ["productcode", "productcodesnapshot"],
+    nome: ["productname", "productnamesnapshot"],
+  },
+  saida: "INACTIVATE",
+  vinculados: [
+    { coluna: "finishedProductItemId", tipo: "ITEM", tabela: "items", acao: "n", rotulo: "Item de produto acabado" },
+  ],
+};
+
+/*
+ * Recurso industrial — tarifa é histórico (D2): explica o custo das estruturas.
+ * Roteiro, estrutura e modelo de custo, energia e a cópia do roteiro na OP
+ * (JSON, sem chave por decisão da §89) são uso.
+ */
+const RECURSO_INDUSTRIAL: AgregadoExcluivel = {
+  tipo: "INDUSTRIAL_RESOURCE",
+  rotulo: "Recurso industrial",
+  tabela: "industrial_resources",
+  colunasDeNome: ["name"],
+  internas: [],
+  chavesInternas: [],
+  referencias: [
+    ...referenciasPorChave("industrial_resources", [
+      ["industrial_resource_rates", "industrialResourceId", "c", "Tarifas", "O recurso tem tarifa registrada — tarifa é histórico e explica o custo das estruturas."],
+      ["production_profile_step_resources", "industrialResourceId", "r", "Roteiros de produção (etapas)", "O recurso está em etapa de roteiro de produção, em alguma versão."],
+      ["industrial_cost_resource_usages", "industrialResourceId", "r", "Estruturas de custo (recursos)", "O recurso é usado em estrutura de custo."],
+      ["industrial_cost_versions", "energyResourceId", "n", "Estruturas de custo (energia)", "Estrutura de custo usa este recurso como energia."],
+      ["industrial_cost_template_resource_usages", "industrialResourceId", "r", "Modelos de custo industrial (recursos)", "O recurso é usado em modelo de custo industrial."],
+      ["industrial_cost_template_versions", "energyResourceId", "n", "Modelos de custo industrial (energia)", "Modelo de custo industrial usa este recurso como energia."],
+    ]),
+    ...referenciasPorCopia("recurso", [["industrial_cost_resource_usages", null, "resourceNameSnapshot", "Estruturas de custo"]]),
+  ],
+  sufixos: { id: ["resourceid"], idInterno: [], codigo: ["resourcecode"], nome: ["resourcename", "resourcenamesnapshot"] },
+  saida: "INACTIVATE",
+};
+
 export const AGREGADOS: Record<MasterDataEntityType, AgregadoExcluivel> = {
   SUPPLIER: FORNECEDOR,
   CUSTOMER: CLIENTE,
@@ -578,6 +788,9 @@ export const AGREGADOS: Record<MasterDataEntityType, AgregadoExcluivel> = {
   INDUSTRIAL_COST_TEMPLATE: MODELO_DE_CUSTO,
   PRICING_POLICY_TEMPLATE: MODELO_DE_POLITICA,
   PRODUCTION_PROFILE: PERFIL_DE_PRODUCAO,
+  ITEM,
+  PRODUCT: PRODUTO,
+  INDUSTRIAL_RESOURCE: RECURSO_INDUSTRIAL,
 };
 
 /** Tabelas do agregado, a raiz primeiro. */

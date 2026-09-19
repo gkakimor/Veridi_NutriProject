@@ -59,6 +59,12 @@ interface ExclusaoDefinitivaDialogProps {
    * Arquivar da própria tela). Ausente: a tela não oferece o botão, só a frase.
    */
   onAlternativa?: (() => void) | undefined;
+  /**
+   * Explicação do que sai junto, dita pela tela que conhece o cadastro — o
+   * Produto diz que o Item de produto acabado dele sai também. Só aparece
+   * quando a prévia libera e lista algo em "sai junto".
+   */
+  notaDoQueSaiJunto?: string | undefined;
   onCancelar: () => void;
   onExcluido: (resultado: MasterDataDeletionResultDTO) => void;
 }
@@ -68,6 +74,7 @@ export function ExclusaoDefinitivaDialog({
   id,
   rotulo,
   onAlternativa,
+  notaDoQueSaiJunto,
   onCancelar,
   onExcluido,
 }: ExclusaoDefinitivaDialogProps) {
@@ -164,6 +171,7 @@ export function ExclusaoDefinitivaDialog({
                       <li key={removido.source}>{removido.source}</li>
                     ))}
                   </ul>
+                  {notaDoQueSaiJunto && <p>{notaDoQueSaiJunto}</p>}
                 </>
               )}
               <div className="field">

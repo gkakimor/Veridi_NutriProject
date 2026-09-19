@@ -19,6 +19,10 @@ import {
 } from "./product-permissions";
 import { useOptionalAuth } from "../../app/AuthProvider";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import {
+  ExclusaoDefinitivaDialog,
+  podeExcluirDefinitivamente,
+} from "../../components/ExclusaoDefinitivaDialog";
 import { EntityLink } from "../../components/EntityLink";
 import { RetornoDoContexto } from "../../components/RecordContext";
 import { RowActions } from "../../components/RowActions";
@@ -40,6 +44,15 @@ type ModalState =
 
 const PAGE_SIZE = 20;
 
+/**
+ * O Produto sai com o Item de produto acabado (PA) que nasceu com ele — a
+ * prévia lista o PA em "sai junto"; aqui a tela diz por quê, e que nenhum item
+ * fica para trás no estoque (MASTER-DATA-HARD-DELETE-02).
+ */
+const NOTA_DO_PA_QUE_SAI_JUNTO =
+  "O item de produto acabado (PA) foi criado junto com este produto e nunca foi usado — nem estoque, lote, " +
+  "movimento, ordem de produção, pedido ou faturamento. Ele é excluído junto, para não ficar um item órfão no estoque.";
+
 /** Cadastros → Produtos Acabados. Mesmo padrao de tabela densa + modal de Items. */
 export function ProductsPage() {
   const navigate = useNavigate();
@@ -53,6 +66,10 @@ export function ProductsPage() {
   const podeEditar = usePodeEditarProduto();
   const sessao = useOptionalAuth();
   const podeMudarSituacao = sessao === null || podeMudarSituacaoDoProduto(sessao.user?.role);
+  /* Excluir definitivamente é só do Administrador — e sem sessão, nunca (MASTER-DATA-HARD-DELETE-02). */
+  const podeExcluir = sessao !== null && podeExcluirDefinitivamente(sessao.user?.role);
+  const [exclusao, setExclusao] = useState<ProductDTO | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
 
   /**
    * Link contextual conhece o produto: vem `productId`, não texto. Busca
@@ -241,6 +258,11 @@ export function ProductsPage() {
       </div>
 
       {consulta.error && <p className="form-alert" role="alert">{consulta.error}</p>}
+      {aviso && (
+        <p className="form-status" role="status">
+          {aviso}
+        </p>
+      )}
 
       {contextProductId && (
         <p className="context-chip">
@@ -370,6 +392,18 @@ export function ProductsPage() {
                             },
                           ]
                         : []),
+                      ...(podeExcluir
+                        ? [
+                            {
+                              label: "Excluir definitivamente",
+                              destructive: true,
+                              onSelect: () => {
+                                setAviso(null);
+                                setExclusao(product);
+                              },
+                            },
+                          ]
+                        : []),
                     ]}
                   >
                     <button
@@ -470,6 +504,32 @@ export function ProductsPage() {
           if (target) void applyActive(target, false);
         }}
       />
+
+      {exclusao && (
+        <ExclusaoDefinitivaDialog
+          key={exclusao.id}
+          tipo="PRODUCT"
+          id={exclusao.id}
+          rotulo="produto"
+          notaDoQueSaiJunto={NOTA_DO_PA_QUE_SAI_JUNTO}
+          /* Recusada, a saída é Inativar — a mesma confirmação da linha. */
+          onAlternativa={
+            podeMudarSituacao
+              ? () => {
+                  const alvo = exclusao;
+                  setExclusao(null);
+                  handleToggleActive(alvo);
+                }
+              : undefined
+          }
+          onCancelar={() => setExclusao(null)}
+          onExcluido={(resultado) => {
+            setExclusao(null);
+            setAviso(`${resultado.entityCode} — ${resultado.entityName} foi excluído definitivamente.`);
+            reload();
+          }}
+        />
+      )}
     </>
   );
 }

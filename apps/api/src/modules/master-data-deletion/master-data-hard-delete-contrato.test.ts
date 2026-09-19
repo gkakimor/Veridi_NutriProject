@@ -14,11 +14,12 @@ import type { ChaveReal, ColunaReal } from "./master-data-deletion.service.js";
 import { CAMPOS_DA_RAIZ, CAMPOS_DA_V1 } from "./retrato-da-exclusao.js";
 
 /**
- * Contrato da exclusão física de cadastro mestre (MASTER-DATA-HARD-DELETE-01).
+ * Contrato da exclusão física de cadastro mestre (MASTER-DATA-HARD-DELETE-01 e
+ * -02).
  *
  *  - as ÚNICAS rotas de exclusão física de cadastro mestre são as do módulo
- *    `master-data-deletion`, com a guarda; Item, Produto, Recurso industrial
- *    e Usuário continuam sem exclusão (Fatia 2 e "Usuário nunca");
+ *    `master-data-deletion`, com a guarda — Item, Produto e Recurso industrial
+ *    entraram na Fatia 2 pela mesma porta; Usuário nunca;
  *  - o catálogo explícito bate com o banco REAL (o `_test`, com a cadeia de
  *    migrations inteira): migration que acrescentar chave estrangeira para um
  *    agregado sem catalogá-la derruba este teste antes de chegar à tela;
@@ -51,7 +52,7 @@ afterAll(async () => {
 const metodos = (rota: RouteOptions): string[] => (Array.isArray(rota.method) ? rota.method : [rota.method]);
 
 describe("rotas", () => {
-  it("toda rota DELETE da API está na lista conhecida — as de cadastro mestre são só as seis guardadas", () => {
+  it("toda rota DELETE da API está na lista conhecida — as de cadastro mestre são só as nove guardadas", () => {
     const deletes = rotas
       .filter((rota) => metodos(rota).includes("DELETE"))
       .map((rota) => rota.url)
@@ -71,27 +72,29 @@ describe("rotas", () => {
     expect(deletes).toEqual([...guardadas, ...deRascunho].sort());
   });
 
-  it("o enum do rastro cobre os seis da fatia e já reserva Item, Produto e Recurso — a Fatia 2 não pede migration", () => {
-    expect(Object.values(TipoNoBanco)).toEqual([...MASTER_DATA_ENTITY_TYPES, "ITEM", "PRODUCT", "INDUSTRIAL_RESOURCE"]);
+  it("o enum do rastro é exatamente a lista dos nove — a Fatia 2 usou os valores reservados, sem migration", () => {
+    expect(Object.values(TipoNoBanco)).toEqual([...MASTER_DATA_ENTITY_TYPES]);
+    expect(MASTER_DATA_ENTITY_TYPES.slice(-3)).toEqual(["ITEM", "PRODUCT", "INDUSTRIAL_RESOURCE"]);
   });
 
-  it("Item, Produto, Recurso industrial e Usuário não têm exclusão física", () => {
+  it("Usuário nunca tem exclusão física", () => {
     const deletes = new Set(rotas.filter((rota) => metodos(rota).includes("DELETE")).map((rota) => rota.url));
-    for (const url of ["/items/:id", "/products/:id", "/industrial-resources/:id", "/users/:id"]) {
-      expect(deletes.has(url), url).toBe(false);
-    }
+    expect(deletes.has("/users/:id")).toBe(false);
   });
 
-  it("cada cadastro da fatia tem prévia e exclusão", () => {
+  it("cada cadastro tem prévia e exclusão — Item, Produto e Recurso industrial inclusive", () => {
     for (const tipo of MASTER_DATA_ENTITY_TYPES) {
       const base = MASTER_DATA_DELETION_PATHS[tipo];
       expect(app.hasRoute({ method: "GET", url: `${base}/:id/deletion-check` }), tipo).toBe(true);
       expect(app.hasRoute({ method: "DELETE", url: `${base}/:id` }), tipo).toBe(true);
     }
+    expect(MASTER_DATA_DELETION_PATHS.ITEM).toBe("/items");
+    expect(MASTER_DATA_DELETION_PATHS.PRODUCT).toBe("/products");
+    expect(MASTER_DATA_DELETION_PATHS.INDUSTRIAL_RESOURCE).toBe("/industrial-resources");
   });
 
   it("o rastro não tem rota — nem de leitura, nem de alteração, nem de restauração", () => {
-    // Tudo que fala de exclusão na API é a prévia das seis — e só GET.
+    // Tudo que fala de exclusão na API é a prévia dos nove — e só GET.
     const daExclusao = rotas
       .filter((rota) => /deletion|master-data/i.test(rota.url))
       .flatMap((rota) => metodos(rota).map((metodo) => `${metodo} ${rota.url}`))
@@ -108,6 +111,20 @@ describe("catálogo × banco real", () => {
     expect(conferirCatalogo(AGREGADOS[tipo], chaves, colunas)).toEqual([]);
   });
 
+  it("o Produto leva o Item de produto acabado como vinculado — pela chave 1:1 real, SET NULL, julgado pelo catálogo do Item", () => {
+    expect(AGREGADOS.PRODUCT.vinculados).toEqual([
+      expect.objectContaining({ coluna: "finishedProductItemId", tipo: "ITEM", tabela: AGREGADOS.ITEM.tabela, acao: "n" }),
+    ]);
+    expect(chaves).toContainEqual({ tabela: "products", coluna: "finishedProductItemId", alvo: "items", acao: "n" });
+    // A mesma chave é USO para o Item sozinho: o PA nunca sai pela tela de Itens.
+    expect(AGREGADOS.ITEM.referencias).toContainEqual(
+      expect.objectContaining({ tipo: "fk", tabela: "products", coluna: "finishedProductItemId", alvo: "items" }),
+    );
+    // Nenhum outro agregado tem vinculado.
+    for (const tipo of MASTER_DATA_ENTITY_TYPES.filter((t) => t !== "PRODUCT")) {
+      expect(AGREGADOS[tipo].vinculados ?? [], tipo).toEqual([]);
+    }
+  });
   it("toda chave estrangeira que chega a uma tabela de agregado está no catálogo dele", () => {
     const deAgregado = new Map<string, string>();
     for (const tipo of MASTER_DATA_ENTITY_TYPES) {
@@ -144,6 +161,13 @@ describe("catálogo × banco real", () => {
       const daVersao = new Set(colunas.filter((c) => c.tabela === regra.tabelaDeVersoes).map((c) => c.coluna));
       for (const campo of CAMPOS_DA_V1[tipo] ?? []) expect(daVersao.has(campo), `${regra.tabelaDeVersoes}.${campo}`).toBe(true);
     }
+  });
+
+  it("as regras da raiz (PA nunca sozinho, Produto nascido de Projeto) leem colunas que existem", () => {
+    const existe = (tabela: string, coluna: string) => colunas.some((c) => c.tabela === tabela && c.coluna === coluna);
+    expect(existe("items", "type")).toBe(true);
+    expect(existe("products", "originProjectId")).toBe(true);
+    expect(existe("products", "finishedProductItemId")).toBe(true);
   });
 
   it("o retrato nunca leva contato, endereço, observação nem descrição", () => {

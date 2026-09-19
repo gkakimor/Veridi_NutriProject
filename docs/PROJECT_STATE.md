@@ -117,17 +117,16 @@ pós-release. O saneamento das duplicatas de PROD (21 grupos / 45 Itens; Ondas A
   comercial, a Ordem de Produção e o picking seguem intocados, e item já cadastrado nasce `false` — o comportamento
   anterior. **Marcar as cápsulas vazias existentes é gesto de cadastro**, não backfill: nenhum item foi alterado por
   nome ou código;
-- **Exclusão física de cadastro mestre:** discovery `DECIDIDO`
-  ([MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01](discovery/MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01.md), D1–D6 do PO em
-  2026-09-17): só ADMIN exclui; qualquer uso, referência ou histórico real bloqueia, com falha fechada; rastro
-  append-only; FKs mantidas, com a segurança na aplicação; Perfil de Produção arquivável; nunca zero ADMIN ativo. A Fatia 0
-  fechou em 2026-09-17 — USER-LAST-ADMIN-GUARD-01 (§120) e PRODUCTION-PROFILE-ARCHIVE-01 (§121) — e a Fatia 1 em
-  2026-09-18 — MASTER-DATA-HARD-DELETE-01 (§125): Fornecedor, Cliente, os três Modelos e o Roteiro de Produção, com o
-  rastro append-only e a migration aditiva `20260925093038` —, na `main` e fora de PROD, com seções próprias abaixo. A
-  Fatia 1 fechou de vez com CUSTOMER-CNPJ-CREATION-HISTORY-MARKER-01 (migration aditiva `20260925093040`): o registro
-  do CNPJ gravado na criação do Cliente sai junto pela marca estrutural `createdWithCustomerId`. Item,
-  Produto e Recurso industrial continuam sem exclusão física (o banco não protege: CASCADE e SET NULL); na fila viva segue
-  a Fatia 2 (MASTER-DATA-HARD-DELETE-02);
+- **Exclusão física de cadastro mestre:** FECHADA em 2026-09-19 — discovery
+  [MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01](discovery/MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01.md) (D1–D6 do PO em
+  2026-09-17, agora `IMPLEMENTADO`): só ADMIN exclui; qualquer uso, referência ou histórico real bloqueia, com falha
+  fechada; rastro append-only; FKs mantidas, com a segurança na aplicação. Fatia 0 em 2026-09-17 — USER-LAST-ADMIN-GUARD-01
+  (§120) e PRODUCTION-PROFILE-ARCHIVE-01 (§121); Fatia 1 em 2026-09-18 — MASTER-DATA-HARD-DELETE-01 (§125: Fornecedor,
+  Cliente, os três Modelos e o Roteiro, com as migrations aditivas `20260925093038` e `20260925093040`, em PROD desde a
+  v1.0.0); Fatia 2 em 2026-09-19 — MASTER-DATA-HARD-DELETE-02 (§128, **sem migration**, na `main` e fora de PROD): Item,
+  Produto + o PA técnico, que sai só junto do Produto, e Recurso industrial. Duas leituras aplicadas esperam confirmação
+  do PO (referência de custo da criação do Item bloqueia; PA provado pela chave 1:1, sem marca de nascimento) — seção
+  própria abaixo;
 - **Uso e consumo — estorno:** FECHADO em 2026-09-18 (INTERNAL-CONSUMPTION-REVERSAL-01, §126), migration aditiva
   `20260925093039`, na `main` e fora de PROD: o `CI-` lançado errado se estorna (`ECI-`), total ou parcial, com
   motivo, só por ADMIN e QUALITY, e o R-21 passou a ser líquido na data do CI. Em 2026-09-19 fechou também o espelho
@@ -6732,6 +6731,51 @@ Mutação por script (extra): 9 de 9 derrubadas — sem `FOR SHARE`, guarda ante
 filtro de reconciliação, retirada e cancelado contando, consumo de hoje na guarda, aberto sem data e sem o aberto. Web
 `uso-e-consumo-tela.test.tsx` e `erro-de-dominio-na-tela.test.ts`, com `pages/inventory`, a ajuda e os 13 portões que
 varrem o `src` (28 arquivos, 470 testes). Typecheck de shared, API e web. Sem suíte completa, E2E nem Playwright.
+
+## Exclusão física de cadastro mestre, Fatia 2 (MASTER-DATA-HARD-DELETE-02, 2026-09-19)
+
+**Decisão do PO** (D1, D2 e D6 de [MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01](discovery/MASTER-DATA-DELETE-ARCHIVE-DISCOVERY-01.md),
+Fatia 2): Item (MP, ME, PA e UC), Produto + o PA técnico e Recurso industrial criados por engano e nunca usados saem por
+exclusão física, só pelo Administrador, sobre a infraestrutura da Fatia 1; qualquer realidade operacional → Inativar.
+Regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §128. Na `main`, fora de PROD (`release/prod` segue `884a500d`,
+v1.0.0), **sem migration**; entra no pacote da futura v1.1.0. `VERIDI_VERSION` intocado. Com ela, as três fatias do
+discovery estão implementadas.
+
+**API.** Três agregados novos no catálogo (`catalogo-de-exclusao.ts`), conferidos contra o `pg_constraint` real: Item
+(22 FKs — CASCADE do ledger, da referência de custo e da posição de contagem, SET NULL do Produto e do achado, RESTRICT
+no resto —, o id solto `customer_order_lines.finishedItemId` e código e nome copiados em nove documentos), Produto (13
+FKs — CASCADE de estrutura de custo, cálculo e precificação, SET NULL do Projeto — e as cópias) e Recurso (6 FKs —
+tarifa em CASCADE, energia em SET NULL — e o nome copiado); o JSON e as redes por sufixo seguem varrendo o resto.
+Conceito novo, **vinculado**: o Produto aponta o PA (`finishedProductItemId`, 1:1) e o leva junto — lido e travado
+depois do Produto, julgado pelo catálogo do Item com o Produto como dono (a linha dele não conta como uso), apagado
+depois do Produto, com o efeito esperado somando os dois e um rastro só (o PA em `removedTogether` e no retrato, pela
+lista branca do Item). `julgarRaiz` (`filhos-tecnicos.ts`): PA nunca sai sozinho pela rota do Item; o vinculado precisa
+ser PA; Produto nascido de Projeto (`originProjectId`) bloqueia. Rotas geradas pelos caminhos novos de
+`MASTER_DATA_DELETION_PATHS`.
+
+**Web.** "Excluir definitivamente" só para ADMIN, sempre pela prévia: menu da linha de Itens e de Produtos (a saída é o
+Inativar de cada lista) e botão no cabeçalho do Recurso industrial (a saída abre o "Inativar este recurso?").
+`ExclusaoDefinitivaDialog` ganhou `notaDoQueSaiJunto`: o Produto explica que o PA sai junto para não ficar item órfão.
+
+**Leituras aplicadas** (valem pela falha fechada até o PO dizer o contrário; seção 12 do discovery): referência de custo
+gravada na própria criação do Item bloqueia — D2 cita referência de custo, e a inicial é opcional, não filho técnico; o
+PA do Produto é provado pela chave 1:1 e por nenhum uso próprio, sem marca de nascimento — marca exigiria migration.
+
+**Dados.** Nenhum cadastro real excluído: toda exclusão dos testes é de fixture sintética no banco de teste do worktree.
+PROD, Railway e `release/prod` intocados.
+
+**Validação.** API `modules/master-data-deletion` (4 arquivos, 150 testes; da Fatia 2, 31 de integração — Item sem uso
+sai com rastro e nome livre; estoque, movimento sem lote, fornecedor, formulação, modelo de formulação, referência de
+custo da criação, CI/ECI do UC, inventário, código copiado e JSON bloqueiam; PA ligado e PA órfão recusados pela rota do
+Item; Produto + PA sai inteiro com um rastro e os nomes livres; PA com lote, movimento ou OP bloqueia o Produto e nada
+sai; formulação do Produto bloqueia; Produto legado sem PA sai; item de outro tipo ligado bloqueia; Recurso sem uso sai;
+tarifa, etapa de roteiro, energia de modelo e roteiro copiado na OP bloqueiam; relação com fornecedor e lote do PA
+gravados durante a exclusão fazem a recontagem sob trava recusar; clique duplo no Produto; gatilho na saída do PA desfaz
+tudo), e o teste da faixa de scripts que chama `consultarExclusao` (1 arquivo, 3). Web: os três testes de página novos,
+`components/exclusao-definitiva.test.tsx` e as pastas de Itens, Produtos e Recurso, com quem renderiza essas telas e os
+13 portões que varrem o `src` (46 arquivos, 693 testes). Typecheck de shared, API e web. Mutação por script (extra): 4 de
+4 derrubadas — o vínculo contando a linha do dono, a exclusão sem apagar o PA, o PA sozinho aceito e o PA lido sem
+trava. Sem suíte completa, E2E nem Playwright.
 
 ## Próxima prioridade
 
