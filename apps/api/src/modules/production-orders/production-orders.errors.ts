@@ -133,6 +133,17 @@ export class ScheduleRemovalNeedsConfirmationError extends Error {
   }
 }
 
+/**
+ * Outra operação na mesma ordem terminou antes, e esta transação foi escolhida
+ * pelo banco num deadlock ou expirou esperando a trava. Nada foi gravado.
+ */
+export class ProductionOrderConcurrentWriteError extends Error {
+  constructor() {
+    super("Outra operação nesta ordem de produção terminou antes. Nada foi gravado; recarregue e tente de novo.");
+    this.name = "ProductionOrderConcurrentWriteError";
+  }
+}
+
 /** Outra pessoa mudou o roteiro desta ordem enquanto a tela estava aberta. */
 export class ProductionRouteChangedError extends Error {
   constructor(orderCode: string) {

@@ -13,6 +13,7 @@ import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { intervaloDeDiasCivis } from "../../lib/business-day.js";
 import { statusDoWhere } from "../../lib/status-list-schema.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
+import { ehConflitoDeConcorrencia } from "../../lib/conflito-de-concorrencia.js";
 import { STATUS_QUE_RECEBEM } from "./purchase-order-receivable.js";
 import {
   DuplicateLineItemError,
@@ -23,6 +24,7 @@ import {
   InvalidTransitionError,
   LineItemNotFoundError,
   OrderLockedError,
+  PurchaseOrderConcurrentWriteError,
   PurchaseOrderNotFoundError,
   SupplierNotFoundError,
 } from "./purchase-orders.errors.js";
@@ -492,7 +494,16 @@ export async function confirmPurchaseOrder(id: string): Promise<PurchaseOrderDTO
 
 export async function cancelPurchaseOrder(id: string, reason: string): Promise<PurchaseOrderDTO> {
   await getPrisma().$transaction(async (tx) => {
-    const current = await tx.purchaseOrder.findUnique({ where: { id } });
+    /*
+     * A decisão é tomada sobre a OC TRAVADA (DOCUMENT-TRANSITION-CONCURRENCY-01).
+     * O recebimento trava esta mesma linha antes de gravar Receipt e RECEIPT_IN:
+     * com ele em curso, o cancelamento espera aqui e relê. Sem a trava, lia
+     * CONFIRMADA e gravava CANCELADA por cima de uma OC já recebida.
+     */
+    const travadas = await tx.$queryRaw<{ status: string }[]>`
+      SELECT status FROM purchase_orders WHERE id = ${id} FOR UPDATE
+    `;
+    const current = travadas[0];
     if (!current) throw new PurchaseOrderNotFoundError(id);
     if (current.status !== "DRAFT" && current.status !== "ORDERED") {
       throw new InvalidTransitionError(
@@ -509,6 +520,10 @@ export async function cancelPurchaseOrder(id: string, reason: string): Promise<P
         cancelReason: reason,
       },
     });
+  }).catch((erro: unknown) => {
+    // Perdeu a corrida (deadlock ou trava além do prazo): nada foi gravado.
+    if (ehConflitoDeConcorrencia(erro)) throw new PurchaseOrderConcurrentWriteError();
+    throw erro;
   });
 
   return (await getPurchaseOrderById(id))!;

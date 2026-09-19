@@ -17,6 +17,7 @@ import {
   InvalidTransitionError,
   LineItemNotFoundError,
   OrderLockedError,
+  PurchaseOrderConcurrentWriteError,
   PurchaseOrderNotFoundError,
   SupplierNotFoundError,
 } from "./purchase-orders.errors.js";
@@ -60,6 +61,10 @@ function mapDomainError(
   }
   if (error instanceof InvalidTransitionError) {
     return { status: 400, body: { error: "invalid_transition", message: error.message } };
+  }
+  // Outra operação na mesma OC venceu a corrida; nada foi gravado.
+  if (error instanceof PurchaseOrderConcurrentWriteError) {
+    return { status: 409, body: { error: "concurrent_write", message: error.message } };
   }
   if (error instanceof OrderLockedError) {
     return { status: 400, body: { error: "order_locked", message: error.message } };

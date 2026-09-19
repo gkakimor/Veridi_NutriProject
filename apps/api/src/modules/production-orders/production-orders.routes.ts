@@ -35,6 +35,7 @@ import {
   OrderLockedError,
   PlanValidationError,
   ProductNotFoundError,
+  ProductionOrderConcurrentWriteError,
   ProductionOrderNotFoundError,
   ProductionRouteChangedError,
   ReleaseValidationError,
@@ -154,6 +155,10 @@ function mapDomainError(
   }
   if (error instanceof InvalidTransitionError) {
     return { status: 400, body: { error: "invalid_transition", message: error.message } };
+  }
+  // Outra operação na mesma ordem venceu a corrida; nada foi gravado.
+  if (error instanceof ProductionOrderConcurrentWriteError) {
+    return { status: 409, body: { error: "concurrent_write", message: error.message } };
   }
   if (error instanceof OrderLockedError) {
     return { status: 400, body: { error: "order_locked", message: error.message } };

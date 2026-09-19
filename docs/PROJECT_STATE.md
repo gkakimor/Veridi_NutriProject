@@ -136,6 +136,11 @@ pós-release. O saneamento das duplicatas de PROD (21 grupos / 45 Itens; Ondas A
 - **Correções da revisão funcional:** FECHADAS em 2026-09-19 (VERIDI-AUDIT-QUICK-FIXES-01, sem migration, na `main` e
   fora de PROD): os seis defeitos D1–D6 que VERIDI-NUTRITION-PRODUCT-FUNCTIONAL-REVIEW-01 achou por leitura
   reproduziram com teste vermelho e foram corrigidos — seção própria abaixo; os achados laterais estão no BACKLOG, seção A;
+- **Transições de documento sob concorrência:** Fatia 1 FECHADA em 2026-09-19 (DOCUMENT-TRANSITION-CONCURRENCY-01, §129,
+  sem migration, na `main` e fora de PROD): os quatro P0 do
+  [discovery](discovery/DOCUMENT-TRANSITION-CONCURRENCY-DISCOVERY-01.md) — Expedição, OP e OC não cancelam nem editam
+  por cima de uma transição concorrente. Fatia 2 (os P1: Pedido, Faturamento, OC confirmar × cancelar e Lote) aberta —
+  seção própria abaixo;
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 
 Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
@@ -6814,6 +6819,44 @@ vermelho na `main` `83fa171e` antes da correção. Na `main`, fora de PROD (`rel
 testes) e o Painel na faixa serial; web das pastas tocadas com os 13 portões que varrem o `src` (52 arquivos, 576
 testes); typecheck de shared, API e web. A única queda, `lib/periodo-invertido.test.ts`, cai igual na base
 (PERIOD-GUARD-R21-MATRIX-01 no BACKLOG). Sem suíte completa, E2E, Playwright nem mutação.
+
+## Transições de documento sob concorrência, Fatia 1 (DOCUMENT-TRANSITION-CONCURRENCY-01, 2026-09-19)
+
+Os quatro P0 de [DOCUMENT-TRANSITION-CONCURRENCY-DISCOVERY-01](discovery/DOCUMENT-TRANSITION-CONCURRENCY-DISCOVERY-01.md),
+persistido nesta rodada. Regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §129. Na `main`, fora de PROD (`release/prod`
+segue `884a500d`, v1.0.0), **sem migration**, `VERIDI_VERSION` intocado; entra no pacote da futura v1.1.0.
+
+Cancelar e editar liam o status sem trava e esperavam só no UPDATE final — em READ COMMITTED, ele gravava por cima da
+transição concorrente e o efeito físico dela ficava. Os quatro reproduziram com teste vermelho na `main` `f7ebb771`:
+
+- **R-S1 — Expedição confirmar × cancelar:** ficava CANCELLED com o SHIPMENT_OUT. `cancelShipment` agora trava a
+  Expedição (`travarExpedicao`, a mesma trava da confirmação) e relê.
+- **R-S2 — Expedição editar ou conferir × confirmar:** a edição que lera o rascunho apagava as linhas já confirmadas, e o
+  CASCADE do FK levava o SHIPMENT_OUT (o saldo físico voltava); com a confirmação primeiro, a edição entrava em deadlock
+  e a conferência regravava `verifiedAt` numa Expedição confirmada. `updateShipment` e `verifyShipmentLine` travam e
+  releem antes de tocar nas linhas. FK e CASCADE intocados: a proteção é da aplicação.
+- **R-O1 — OP consumo ou pesagem × cancelar:** ficava CANCELADA com consumo real e reserva liberada.
+  `cancelProductionOrder` trava a OP, relê e decide; a liberação da reserva da OP LIBERADA segue na mesma transação.
+  Efeito colateral sem código a mais: OP liberar × cancelar (P1) passa a liberar a reserva criada pela liberação — sem
+  teste dedicado, fica aberto na Fatia 2.
+- **R-P1 — OC receber × cancelar:** ficava CANCELADA com Receipt e RECEIPT_IN. `cancelPurchaseOrder` trava a OC e relê
+  — o recebimento já fazia o mesmo.
+
+**Conflito.** `lib/conflito-de-concorrencia.ts` reconhece P2034, P2028 e o deadlock que o Prisma 6.19 entrega sem código
+(`PrismaClientUnknownRequestError` com `40P01` no texto — o precedente do Inventário e do CI só olhava P2034). Expedição
+(cancelar, editar, conferir e confirmar), cancelamento de OP e de OC respondem 409 `concurrent_write`, nada gravado, sem
+retry.
+
+**Testes de corrida** (`shipments-concorrencia`, `cancelar-op-concorrencia`, `cancelar-oc-concorrencia`): uma transação
+do próprio teste segura a trava que a primeira operação toma depois da raiz; quem parou em quem é lido de
+`pg_blocking_pids` (`test-support/corrida-sob-trava.ts`), nunca de espera por tempo. Cobrem as quatro corridas, a
+pesagem, a ordem inversa (cancelamento primeiro) e os conflitos reais — deadlock com o cancelamento de OP como vítima e
+transação expirada na trava (a espera de 5,5 s ali é o gatilho do P2028, não prova de ordem).
+
+**Validação.** Os três arquivos novos (13 testes) vermelhos na base e verdes depois, três rodadas seguidas; focados da API
+nas pastas tocadas e vizinhas — Expedição, OP, OC, Faturamento, Recebimento, cronograma de entregas — e os portões que
+varrem o código (31 arquivos, 1.195 testes), mais `gmp-execution` na faixa serial (18); typecheck de shared, API e web.
+Sem suíte completa, E2E, Playwright nem mutação — o vermelho da base é a prova de cada teste.
 
 ## Próxima prioridade
 
