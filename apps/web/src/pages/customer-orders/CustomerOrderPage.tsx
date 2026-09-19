@@ -696,10 +696,14 @@ export function CustomerOrderPage() {
    */
   const rotuloDeSalvar = isDraft ? "Salvar rascunho" : "Salvar prazo e observações";
   /**
-   * Existe botão de salvar no rodapé? Pedido cancelado não tem, e apontar
-   * para um botão que não está na tela é pior que não dizer nada.
+   * Existe botão de salvar no rodapé? Só onde o servidor aceita gravar: o
+   * rascunho, e o confirmado para previsão de entrega e observações. Aplicado
+   * o plano o pedido está em execução e é somente leitura — o servidor recusa
+   * o prazo E a observação (`order_locked`), e oferecer o botão era colher a
+   * recusa (D6). Cancelado também não tem. Apontar para um botão que não está
+   * na tela é pior que não dizer nada.
    */
-  const temBotaoDeSalvar = isDraft || status !== "CANCELLED";
+  const temBotaoDeSalvar = isDraft || status === "CONFIRMED";
   /** Data no campo diferente da data que está no pedido salvo. */
   const prazoNaoSalvo =
     !isNew &&
@@ -1643,7 +1647,9 @@ export function CustomerOrderPage() {
           subtitle={
             isDraft
               ? "Enquanto rascunho, cliente e datas podem ser alterados livremente."
-              : "Após confirmado, cliente e produtos ficam congelados."
+              : temBotaoDeSalvar
+                ? "Após confirmado, cliente e produtos ficam congelados."
+                : "Pedido em execução ou cancelado: somente leitura, inclusive previsão de entrega e observações."
           }
         >
           <div className="field-grid-2">
@@ -1718,6 +1724,7 @@ options={customerOptions.map((customer) => ({
                 type="date"
                 value={requestedDeliveryDate}
                 onChange={(event) => setRequestedDeliveryDate(event.target.value)}
+                disabled={!temBotaoDeSalvar}
                 {...(temBotaoDeSalvar ? { "aria-describedby": "co-delivery-date-hint" } : {})}
               />
               {/* `role="status"` para que quem usa leitor de tela ouça a
@@ -3002,7 +3009,13 @@ options={customerOptions.map((customer) => ({
         <FormSection title="Observações">
           <div className="field">
             <label htmlFor="co-notes">Notas internas</label>
-            <textarea id="co-notes" rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
+            <textarea
+              id="co-notes"
+              rows={3}
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              disabled={!temBotaoDeSalvar}
+            />
           </div>
         </FormSection>
       </div>
@@ -3041,7 +3054,7 @@ options={customerOptions.map((customer) => ({
               {acaoEmCurso === "rascunho" ? "Salvando…" : "Salvar rascunho"}
             </button>
           )}
-          {!isDraft && status !== "CANCELLED" && !isNew && (
+          {!isDraft && temBotaoDeSalvar && (
             <button
               type="button"
               className="btn btn--secondary"
