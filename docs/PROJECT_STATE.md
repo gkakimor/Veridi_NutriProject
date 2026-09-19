@@ -6858,6 +6858,24 @@ nas pastas tocadas e vizinhas — Expedição, OP, OC, Faturamento, Recebimento,
 varrem o código (31 arquivos, 1.195 testes), mais `gmp-execution` na faixa serial (18); typecheck de shared, API e web.
 Sem suíte completa, E2E, Playwright nem mutação — o vermelho da base é a prova de cada teste.
 
+## Tratador global de erros sem recursão (API-GLOBAL-ERROR-HANDLER-01, 2026-09-19)
+
+Correção de integridade da infraestrutura, sem regra de negócio nova; fecha API-ERROR-HANDLER-RECURSION-01, achado
+lateral de DOCUMENT-TRANSITION-CONCURRENCY-01. O `setErrorHandler` de `app.ts` (409 `duplicate_name`, `f3a4c666`)
+devolvia o resto por `app.errorHandler(...)`, e depois do `setErrorHandler` esse getter do Fastify 5 devolve o próprio
+tratador instalado: a chamada recursava até `RangeError: Maximum call stack size exceeded`. Todo erro não mapeado saía
+500 com a mensagem e o log do estouro — o erro original sumia —, e os 4xx do Fastify (JSON malformado 400, `statusCode`
+do erro, como 413) viravam 500. Reproduzido na `main` `f7ebb771`; PROD tem o defeito desde a v1.0.0 (`884a500d`).
+
+O tratador agora **relança**: erro lançado num tratador customizado vai ao pai, aqui o padrão do Fastify — status do
+erro (ou 500), mensagem original e um log só, do erro original. O 409 `duplicate_name` segue igual. Na `main`, fora de
+PROD, **sem migration** e sem mudar `VERIDI_VERSION`; entra no pacote da futura v1.1.0. O 500 volta a trazer a mensagem
+crua, como antes de `f3a4c666` — traduzi-la segue em API-500-RAW-ERROR-01.
+
+**Validação.** `app-tratador-de-erros.test.ts`, vermelho na base em três dos quatro casos (o 409 já passava); focados
+`nome-de-cadastro-mestre`, `planning-snapshot`, `duplicar-versao`, `single-origin` e `item-label-files`; typecheck da
+API. Sem suíte completa, E2E, Playwright nem mutação.
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a
