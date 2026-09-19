@@ -241,7 +241,7 @@ INTERNAL-CONSUMPTION-REVERSAL-01.
   o arredondamento para cima de cada um deixaria o último negativo.
 - R-21 líquido (R21-a), extrato e R-03 com tipo, sentido, origem e documento; o R-03 ganhou a coluna Entrada/Saída para
   todos os tipos (tela, CSV e PDF). Painel fora (DASHBOARD-INTERNAL-CONSUMPTION-01); L2 registrado como
-  INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01.
+  INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01 — fechado em 2026-09-19 (§127), a guarda espelho na criação do CI.
 - Web: colunas Estornado e Situação, ação Estornar e o diálogo em Uso e consumo; ajuda atualizada.
 
 ## 17. Histórico de decisões
@@ -250,3 +250,6 @@ INTERNAL-CONSUMPTION-REVERSAL-01.
 - 2026-09-18 — PO decide P1–P4 com as recomendações (A, E1, R21-a, recusar nos dois casos) no handoff de
   INTERNAL-CONSUMPTION-REVERSAL-01; P5–P10 como recomendadas; R-03 incluído na fatia; Painel fica como pendência separada.
 - 2026-09-18 — implementado por INTERNAL-CONSUMPTION-REVERSAL-01 (§126); nenhuma decisão mudou.
+- 2026-09-19 — L2 fechado por INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01 (§127), decisão do PO no handoff: falhar
+  fechado. Consumo de data passada recusa quando um inventário encerrado reconciliou a posição, ou um aberto já a
+  contou, desde o início do dia do consumo; "Não ajustar" não bloqueia. Sem migration.
