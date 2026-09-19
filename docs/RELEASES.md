@@ -17,6 +17,149 @@ auditável. Política permanente em [`DEPLOY.md`](DEPLOY.md) §10.
 | `homologacao-inicial-2026-09-14-r3` | `2400def` | 2026-09-14 | NAVIGATION-INFORMATION-ARCHITECTURE-01 |
 | `homologacao-veridi-2026-09-16-r1` | `5b7c1a3` | 2026-09-16 | HOMOLOGATION-RELEASE-RAILWAY-01, abaixo |
 | `prod-2026-09-17` | `8e824e8f` | 2026-09-17 | PROD-RELEASE-DEPLOY-01, abaixo; R2 ativo em PROD |
+| `prod-2026-09-19` | `ff861c90` | 2026-09-19 | PROD-RELEASE-DEPLOY-02, abaixo; sete migrations aditivas |
+
+## 2026-09-19 — PROD-RELEASE-DEPLOY-02
+
+**Autorização:** PO, no handoff "PROD RELEASE — AUTORIZADA PELO PO". Publicar o SHA exato
+`ff861c90512232bb5a168c304a186747150576d0` sobre `release/prod` = `8e824e8f` — nenhuma outra `main`, nenhum commit
+novo. O saneamento dos 21 grupos / 45 Itens duplicados de PROD (Ondas A, 2 e 3) ficou **fora** por decisão do handoff:
+deploy de software não se mistura com saneamento de dados. O PO está ciente do M-1 — 34 Formulações ACTIVE usam 9
+embalagens inativas e passam a não planejar/liberar OP (§116) —, que não bloqueou a release; nada foi reativado.
+
+**Escopo:** `release/prod` de `8e824e8f` para `ff861c90` — 68 commits (26 first-parent), 271 arquivos, sete migrations
+aditivas. Entram o tipo de Item Uso e consumo, o consumo interno com custo congelado (`CI-`), o estorno (`ECI-`) e o
+R-21; os dados cadastrais do CNPJ no Cliente, a consulta OpenCNPJ e o histórico do registro, com a marca da criação;
+a exclusão física de cadastro mestre (Fatia 1) com o rastro; a guarda de nome único sem caixa com a correção H-1 (o
+cadastro que já nasceu duplicado continua editável); a guarda do último ADMIN ativo; os portões de cadastro inativo em
+Item × Fornecedor e na Produção; o roteiro arquivável; o resumo da tela no PDF dos relatórios; e o ferramental das
+Ondas 2 e 3 — que **não rodou** em PROD. Sem `package.json`, lockfile, `railway.json` ou variável nova.
+
+### Gates antes do push (T-0)
+
+| Gate | Como | Resultado |
+|---|---|---|
+| SHAs | `git fetch origin --tags` | `origin/main` = `ff861c90` (igual ao aprovado); `origin/release/prod` = `8e824e8f`, ancestral de `ff861c90` (fast-forward) |
+| Railway | `deployment` + `meta` + `deploymentTriggers`, só leitura | deploy ativo `4edfd622` SUCCESS, commit `8e824e8f`, branch `release/prod`, `canRollback: true`; gatilho `release/prod`; `/health` 200 com `database: up` |
+| Migrations | `_prisma_migrations` em transação READ ONLY + `migrate status` | 83 linhas, **0 falha, 0 revertida**; pendentes exatamente `…093034` a `…093040` |
+| Drift | `migrate diff` PROD × `schema.prisma` de `8e824e8f` | **No difference detected** |
+| Tipos novos | leitura READ ONLY | 0 Item `INTERNAL_CONSUMABLE`, 0 código `UC-`/`CI-`/`ECI-`; as tabelas de CI e ECI ainda não existiam |
+| Baseline | retrato × preflight de 2026-09-18 13:23Z; backup T-0 × backup pós-release de 2026-09-17 | contagens das 83 tabelas, sequences e migrations iguais ao preflight; T-0 = backup de 09-17 linha a linha em 81/82 models, mais 1 `UserSession` (login de 09-17 19:19Z). Negócio sem mudança: o ensaio de PROD-RELEASE-READINESS-01 sobre o backup de 09-17 continuou valendo |
+| Backup | `prod-backup-json.mjs` de um worktree em `8e824e8f` (client de 82 models) | 6.769 linhas, 82 models, 0 falha |
+| Prova do backup | `restore-json-backup-check.mjs` com as 82 migrations de `8e824e8f` | **RESTAURÁVEL: YES** |
+| Retrato pré-release | transação REPEATABLE READ, READ ONLY, às 06:05:04Z | 83 tabelas, 6.852 linhas, md5 por tabela e impressão da estrutura; idêntico ao retrato de confirmação das 06:02Z |
+
+Todas as leituras de PROD usaram sessão com `default_transaction_read_only=on`, conferida antes de ler, e
+`pg_current_xact_id_if_assigned()` nulo no fim de cada retrato — prova de que nenhuma transação escreveu. A linha legada
+`20260904093000_template_component_quantity_mode` segue tolerada, como nas publicações anteriores.
+
+### Sequência
+
+| Passo | `release/prod` | Deploy | Resultado |
+|---|---|---|---|
+| antes | `8e824e8f` | `4edfd622-f531-42d4-9e64-effec2500f57` | ativo desde 2026-09-17 18:12:49Z |
+| push 06:05:46Z | `8e824e8f` → `ff861c90` | `0d1ad066-0c36-44d8-81b2-cb0c27ea2174` | criado às 06:05:49Z, **SUCCESS às 06:08:16Z** |
+
+Push fast-forward do SHA exato (`git push origin ff861c90…:refs/heads/release/prod`), sem force. O manifesto do
+deploy confirma o pipeline de `/railway.json`: NIXPACKS com `pnpm build`, pré-deploy `pnpm deploy:prod`, início
+`pnpm start:prod`, healthcheck `/health`. Enquanto o deploy estava em BUILDING, o `meta.serviceManifest` ainda
+mostrava os campos do service instance (RAILPACK, sem pré-deploy); o log do build usava a imagem do Nixpacks e o
+manifesto se corrigiu no SUCCESS. Nenhuma migration rodou à mão. `/health` respondeu 200 durante toda a troca.
+
+### Migrations aplicadas
+
+| Migration | Aplicada em | O que cria |
+|---|---|---|
+| `20260925093034_item_type_internal_consumable` | 06:08:02.582Z | valor `INTERNAL_CONSUMABLE` em `ItemType` e a sequence do código `UC-` |
+| `20260925093035_internal_consumption` | 06:08:02.610Z | enum `CostSource`, valor `INTERNAL_CONSUMPTION` em dois enums de movimento, tabela `internal_consumptions` e a sequence do `CI-` |
+| `20260925093036_customer_cnpj_registration_data` | 06:08:02.630Z | enum `CnpjEstablishmentType` e 11 colunas anuláveis em `customers` |
+| `20260925093037_customer_cnpj_registration_history` | 06:08:02.657Z | enum `CustomerCnpjRegistrationEventKind` e a tabela `customer_cnpj_registration_history` |
+| `20260925093038_master_data_deletion_history` | 06:08:02.677Z | enum `MasterDataEntityType` e a tabela `master_data_deletion_history` |
+| `20260925093039_internal_consumption_reversal` | 06:08:02.703Z | valor `INTERNAL_CONSUMPTION_REVERSAL` em dois enums de movimento, tabela `internal_consumption_reversals` e a sequence do `ECI-` |
+| `20260925093040_customer_cnpj_history_creation_marker` | 06:08:02.721Z | coluna anulável `createdWithCustomerId` no histórico do CNPJ |
+
+Depois: 90 linhas em `_prisma_migrations`, **0 falha e 0 revertida**; `migrate status` com as 89 pastas da release
+responde "Database schema is up to date!" (90 = 89 + a linha legada); `migrate diff` PROD × `schema.prisma` de
+`ff861c90`: **No difference detected**.
+
+Conferido em transação READ ONLY: as quatro tabelas novas com 0 linha; as 11 colunas novas de `customers` NULL nos 76
+clientes; os quatro enums e os cinco valores novos presentes; as três sequences novas sem uso (`last_value` nulo); 0
+Item `INTERNAL_CONSUMABLE`, 0 CI, 0 ECI.
+
+### Dado preservado
+
+Duas provas independentes, as duas sobre o que existia antes da release:
+
+- **Retratos** (md5 por tabela sobre as colunas que já existiam), pré-release 06:05:04Z × depois do smoke 06:16:00Z:
+  81 das 83 tabelas idênticas. Mudaram só `_prisma_migrations` (+7, as da release) e `user_sessions` (+2, os logins do
+  smoke). Nenhuma sequence antiga se moveu.
+- **Backups**, T-0 × pós-release, linha a linha nos campos que já existiam: 81 de 82 models idênticos. `UserSession`
+  +2 linhas (06:13:28Z e 06:15:29Z, os logins do smoke), 0 alterada e 0 removida; os 4 models novos vazios; nenhum
+  campo novo preenchido.
+
+Clientes 76, fornecedores 113, itens 871 (510 matérias-primas, 188 embalagens — 76 ativas e 112 inativas —, 173
+acabados), produtos 173, Item × Fornecedor 778, ofertas 828, versões de Formulação 164, usuários 6 (1 ADMIN ativo).
+Pedido, OC, lote, movimento e OP seguem em 0. O M-1 ficou como estava: 34 versões ACTIVE, 9 embalagens inativas, 42
+linhas. **DATA_PRESERVED = YES.**
+
+### Backups
+
+| Quando | Arquivo (em `../.local-data/veridi/backups/`) | Bytes | sha256 | Schema | Prova |
+|---|---|---|---|---|---|
+| T-0, 06:04:10Z | `prod-t0-deploy-20260919T060357Z-schema-8e824e8f.json` | 4.305.116 | `ebef0df8fb91e7d9b437577daa5db9b69f82665f5bd03f66aab9742e4f921c2e` | `8e824e8f` | RESTAURÁVEL: YES — 82 models, 6.769 linhas, 26 sequences |
+| pós, 06:17:07Z | `prod-pos-release-20260919T061652Z-schema-ff861c90.json` | 4.336.452 | `aa8c7a9c94b73a868fd370e456dff0412d05c6b27d757de99656629574a373b0` | `ff861c90` | RESTAURÁVEL: YES — 86 models, 6.771 linhas, 29 sequences |
+
+O segundo é o ponto de recuperação compatível com o schema publicado; o T-0 só restaura no schema anterior. As duas
+provas rodaram em banco local descartável, removido no fim. Os retratos (só contagens, md5, estrutura e migrations —
+nenhum conteúdo de linha) ficam em `../.local-data/veridi/releases/prod-release-ff861c90/`.
+
+### Smoke
+
+Somente leitura, com a sessão do `prod-demo` (ADMIN). Os únicos verbos fora de GET foram `POST /auth/login` e
+`POST /auth/logout`, duas vezes cada. No navegador, todo pedido não-GET ao domínio seria abortado — e nenhum foi
+tentado. Console limpo e nenhuma resposta 4xx/5xx.
+
+- casca e sessão: `/health` 200 com `database: up`, `/` 200, login, `/auth/me` e `/auth/session`, logout com `/auth/me`
+  401 depois;
+- menus: os 9 grupos do trilho abrem e trazem 39 telas, entre elas as 13 do roteiro; o clique leva a Uso e consumo;
+- Cliente: lista, detalhe (bloco `cnpjRegistration` presente, nulo nos clientes existentes), tela com o registro
+  aberto mostrando o CNPJ e o histórico; histórico do CNPJ com 0 evento e histórico de situação;
+- OpenCNPJ: `GET /cnpj-lookup/:cnpj` **200**, com um CNPJ público de referência — nenhum CNPJ de cliente saiu;
+- deletion-check de Fornecedor e de Cliente: 200, `canDelete: false` (em uso), transação somente leitura no servidor;
+- Fornecedor, Item (o filtro aceita o tipo novo e devolve 0), Produto, Item × Fornecedor, Compras, Estoque (posição,
+  movimentações, contagens, lotes), Uso e consumo (0 CI, opções de filtro), Formulação (lista e versão ACTIVE), OP e
+  Pedido — API e tela;
+- R-03 e R-21: API e tela; CSV do R-21 `text/csv` com o cabeçalho e nenhuma linha;
+- PDF real, gerado no navegador: Ficha Técnica (`ficha-tecnica-PROD-000001-v1.pdf`, 61.188 bytes) e os relatórios
+  R-21 (55.006 bytes) e R-03 (54.897 bytes), todos começando por `%PDF-`;
+- Rótulo: a seção "Arquivo do rótulo" abre num Item LABEL e `/items/:id/label-file` responde 200 com 0 versões;
+- Usuários: lista com 6.
+
+A primeira passada teve 62 verificações, 61 OK. A que falhou era do roteiro, não do produto: procurou os nomes dos
+grupos como texto no Painel, e o menu é um trilho de ícones que abre cada grupo no clique — as palavras encontradas
+vinham dos cartões do Painel. A segunda passada abriu os grupos pelo trilho: 8/8 OK.
+
+**R2:** `VERIDI_STORAGE_PROVIDER=R2`, bucket `veridi-homologacao` e região `auto` no serviço, com endpoint, chave e
+segredo preenchidos (lidos sem imprimir valor). A API subiu com essa configuração, que é validada na partida. PROD
+tem 0 versão de arquivo de rótulo, então não há objeto a ler; `storage:r2:smoke` não rodou (exige nova autorização do
+PO).
+
+As capturas do smoke mostravam dado real de cliente e foram apagadas depois da conferência (§9 do
+[`DEPLOY.md`](DEPLOY.md)).
+
+### O que não rodou
+
+O saneamento de duplicatas (Ondas A, 2 e 3), `prod-cleanup --apply`, seed, import, carga inicial, reset de sequences,
+restore em PROD, `pnpm db:migrate` à mão, SQL à mão e `storage:r2:smoke`. Não houve rollback nem incidente. O deploy
+anterior (`4edfd622`, `8e824e8f`) segue com `canRollback: true` na janela do Railway, mas o rollback de código só é
+limpo enquanto não existir Item `INTERNAL_CONSUMABLE`, CI ou ECI — o client antigo cai ao ler o enum novo. Com
+qualquer um deles, o caminho é forward-fix.
+
+### Tag
+
+Tag anotada **`prod-2026-09-19`** ("PROD-RELEASE-DEPLOY-02"), apontando para `ff861c90`, empurrada sozinha
+(`git push origin refs/tags/prod-2026-09-19`). `prod-2026-09-17` não se moveu. A tag não publicou nada: a lista de
+deployments seguiu com `0d1ad066` no topo.
 
 ## 2026-09-17 — PROD-RELEASE-DEPLOY-01
 
