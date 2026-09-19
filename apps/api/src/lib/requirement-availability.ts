@@ -49,11 +49,15 @@ export interface RequirementAvailability {
  *
  * Resolve estoque uma única vez para todos os itens envolvidos — sem N+1
  * por linha.
+ *
+ * `agora` decide o vencimento dos lotes (vencido não é disponível); quem
+ * monta um retrato maior (o Painel) passa o dele.
  */
 export async function computeRequirementAvailability(
   prisma: PrismaOrTx,
   requirements: RequirementScope[],
   consumedByReservationLine: Map<string, Prisma.Decimal>,
+  agora: Date = new Date(),
 ): Promise<Map<string, RequirementAvailability>> {
   const result = new Map<string, RequirementAvailability>();
   if (requirements.length === 0) return result;
@@ -92,7 +96,7 @@ export async function computeRequirementAvailability(
   }
 
   for (const group of groups.values()) {
-    await computeForScope(prisma, group.requirements, consumedByReservationLine, result, group.scope);
+    await computeForScope(prisma, group.requirements, consumedByReservationLine, result, group.scope, agora);
   }
 
   return result;
@@ -120,6 +124,7 @@ async function computeForScope(
   consumedByReservationLine: Map<string, Prisma.Decimal>,
   result: Map<string, RequirementAvailability>,
   scope: InventoryOwnerScope | undefined,
+  agora: Date,
 ): Promise<void> {
   const itemScopes = [
     ...new Map(
@@ -133,7 +138,7 @@ async function computeForScope(
 
   const [onHandByItem, availableByItem, onOrderByItem, reservedByItem] = await Promise.all([
     getOnHandByItems(prisma, itemIds, scope),
-    getAvailableByItems(prisma, itemScopes, scope),
+    getAvailableByItems(prisma, itemScopes, scope, agora),
     // Ordem de Compra e compromisso da Veridi: nunca cobre necessidade de
     // material do cliente.
     scope?.ownerType === "CUSTOMER"
