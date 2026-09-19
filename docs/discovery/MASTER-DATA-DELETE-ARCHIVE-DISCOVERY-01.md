@@ -2,9 +2,10 @@
 
 ## 1. Status
 
-`DECIDIDO` — **D1–D6 decididas pelo PO em 2026-09-17**; **D4 e D5 implementadas** em PRODUCTION-PROFILE-ARCHIVE-01
+`IMPLEMENTADO` — **D1–D6 decididas pelo PO em 2026-09-17**; **D4 e D5 implementadas** em PRODUCTION-PROFILE-ARCHIVE-01
 (§121) e USER-LAST-ADMIN-GUARD-01 (§120), 2026-09-17, e **D1, D2, D3 e D6 na Fatia 1** — MASTER-DATA-HARD-DELETE-01
-(§125), 2026-09-18 —, seção 16; a Fatia 2 não. Capabilities liberadas na fila viva do
+(§125), 2026-09-18 —, e **D1, D2 e D6 na Fatia 2** — MASTER-DATA-HARD-DELETE-02 (§128), 2026-09-19, sem migration —,
+seção 16: as três fatias estão implementadas. Capabilities liberadas na fila viva do
 [`BACKLOG.md`](../BACKLOG.md): Fatia 0 — PRODUCTION-PROFILE-ARCHIVE-01 e USER-LAST-ADMIN-GUARD-01; Fatia 1 —
 MASTER-DATA-HARD-DELETE-01; Fatia 2 — MASTER-DATA-HARD-DELETE-02.
 
@@ -280,6 +281,12 @@ Nenhuma bloqueante. Pontos de leitura que os handoffs podem confirmar — até l
    criação da OP trata o perfil arquivado como padrão fora de ACTIVE — OP sem cópia, pendência sem erro.
 4. **Tabela do rastro no `prod-cleanup`**: model novo entra numa lista da classificação no mesmo commit, e classificar é
    decisão do PO; recomendado ALVO, como `CustomerStatusHistory`.
+5. **Referência de custo gravada na criação do Item** (MASTER-DATA-HARD-DELETE-02): bloqueia a exclusão física — a D2
+   cita referência de custo, e a referência inicial é opcional, não filho técnico obrigatório do mesmo ato.
+6. **O PA "nascido com o Produto"** (MASTER-DATA-HARD-DELETE-02): provado pela chave 1:1 do Produto
+   (`finishedProductItemId`, única) e por nenhum uso próprio. O modelo não guarda marca de nascimento — PA vinculado por
+   importação, ou trocado na edição do Produto, não se distingue do nascido junto — e criá-la exigiria migration. Sem uso
+   nenhum, o PA vinculado depois também sai com o Produto.
 
 ## 13. Escopo recomendado
 
@@ -368,7 +375,15 @@ MASTER-DATA-HARD-DELETE-01 e, sobre ela, MASTER-DATA-HARD-DELETE-02.
   histórico virou tabela interna do Cliente, e só o registro marcado com o próprio Cliente, e um só, sai junto — o
   resto bloqueia, e o saneamento nunca move a marca (§114). O Perfil recusado oferece o Arquivar da Fatia 0. **Fatia 1
   fechada.**
-- Fatia 2: `NÃO IMPLEMENTADO`.
+- **Fatia 2 — MASTER-DATA-HARD-DELETE-02** (2026-09-19, [`PRODUCT_RULES.md`](../PRODUCT_RULES.md) §128), na `main` e
+  fora de PROD, **sem migration** (o enum do rastro já reservava os três tipos), código `f3b78060`: Item (MP, ME, PA e
+  UC), Produto + o Item de produto acabado e Recurso industrial, com os adversariais da seção 13 — movimento de estoque de
+  Item sem lote, referência de custo, contagem, custo e precificação do Produto, tarifa do Recurso — todos bloqueando.
+  O PA entrou como **vinculado** do Produto: a raiz o aponta (`finishedProductItemId`, 1:1), e ele é lido e travado
+  depois dela, julgado pelo catálogo do Item inteiro (a linha do Produto não conta como uso), apagado depois dela e
+  conferido no efeito real, num rastro só; qualquer uso dele bloqueia o Produto, e ele nunca sai sozinho pela rota do
+  Item. Produto nascido de Projeto bloqueia pela origem. Os pontos de leitura 5 e 6 da seção 12 foram aplicados nesta
+  fatia. **As três fatias estão implementadas.**
 
 ## 17. Histórico de decisões
 
@@ -389,3 +404,6 @@ MASTER-DATA-HARD-DELETE-01 e, sobre ela, MASTER-DATA-HARD-DELETE-02.
 - 2026-09-18 — marca aprovada e implementada por CUSTOMER-CNPJ-CREATION-HISTORY-MARKER-01 (§125 e §114, migration
   aditiva `20260925093040`, sem FK, sem default e sem backfill): o registro da criação marcado sai junto, o resto
   bloqueia, e o MERGE do saneamento move `customerId` e nunca a marca. MASTER-DATA-HARD-DELETE-01 fechada de vez.
+- 2026-09-19 — Fatia 2 implementada por MASTER-DATA-HARD-DELETE-02 (§128), sem migration: Item, Produto + PA (o PA como
+  vinculado do Produto) e Recurso industrial; pontos de leitura 5 e 6 da seção 12 aplicados. Status do discovery passou a
+  `IMPLEMENTADO`.
