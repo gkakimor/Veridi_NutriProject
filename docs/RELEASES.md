@@ -18,6 +18,7 @@ auditável. Política permanente em [`DEPLOY.md`](DEPLOY.md) §10.
 | `homologacao-veridi-2026-09-16-r1` | `5b7c1a3` | 2026-09-16 | HOMOLOGATION-RELEASE-RAILWAY-01, abaixo |
 | `prod-2026-09-17` | `8e824e8f` | 2026-09-17 | PROD-RELEASE-DEPLOY-01, abaixo; R2 ativo em PROD |
 | `prod-2026-09-19` | `ff861c90` | 2026-09-19 | PROD-RELEASE-DEPLOY-02, abaixo; sete migrations aditivas |
+| `v1.0.0` · `prod-2026-09-19-v1.0.0` | `884a500d` | 2026-09-19 | **Veridi Nutrition v1.0.0**, primeira versão comercial oficial (VERIDI-SYSTEM-VERSIONING-01), abaixo; sem migration |
 
 ## Versão do produto
 
@@ -40,6 +41,105 @@ Desde VERIDI-SYSTEM-VERSIONING-01 (2026-09-19, decisão do PO) o Veridi Nutritio
 - **Tags:** cada versão publicada ganha a tag anotada `vX.Y.Z` no SHA exato de `release/prod`, além da tag técnica da
   publicação (`prod-AAAA-MM-DD`; com sufixo quando o dia já tem uma — tag existente nunca se move).
 - **Conferir no ar:** `GET /meta`, com sessão, responde `version` e `commitHash` igual ao SHA de `release/prod`.
+
+## 2026-09-19 — Veridi Nutrition v1.0.0 (VERIDI-SYSTEM-VERSIONING-01)
+
+**Autorização:** PO, no handoff VERIDI-SYSTEM-VERSIONING-01 — oficializar a versão v1.0.0 como a única demanda antes
+da publicação e, depois de implementar, validar e integrar, publicar em PROD o SHA exato congelado. Nenhuma outra
+feature entrou.
+
+**Escopo:** `release/prod` de `ff861c90` para `884a500d` — o registro da publicação anterior (`2e54d12d`, só docs) e a
+capability (`44622013` código, `9aa16b12` docs, `884a500d` merge): 17 arquivos. Versão oficial com fonte única em
+`packages/shared/src/version.ts`, `GET /meta` com versão, ambiente e commit do deploy, e a versão no cabeçalho ao lado
+de "Nutrition", abrindo "Sobre o sistema". **Sem migration**, sem `package.json`, lockfile, `railway.json` ou variável
+nova: ambiente e commit saem de `RAILWAY_ENVIRONMENT_NAME` e `RAILWAY_GIT_COMMIT_SHA`, que o próprio Railway injeta em
+todo deploy.
+
+**Capacidades já disponíveis no produto na v1.0.0:** cadastros mestres (clientes com dados do CNPJ e histórico,
+fornecedores, itens dos quatro tipos, produtos, recursos industriais) com guarda de nome único, inativação e exclusão
+física do cadastro errado; projetos, amostras, orçamentos versionados e precificação; pedidos, programação de entregas,
+expedição e faturamento; compras, recebimento e Item × Fornecedor; qualidade com laudo/CoA e liberação de lote; estoque
+por lote interno com ledger auditável, inventário físico em sessões e uso e consumo com estorno; Formulação e Modelo de
+Formulação como bancada, com Ficha Técnica em PDF; ordens de produção com picking, pesagem e consumo rastreados;
+perfis e roteiros, calendário e quadro de capacidade; custo industrial, CMV e Painel Gerencial; relatórios com CSV e
+PDF; perfis de acesso com a guarda do último ADMIN; arquivo do Rótulo no Cloudflare R2.
+
+### Gates antes do push (T-0)
+
+| Gate | Como | Resultado |
+|---|---|---|
+| Código | worktree da capability sobre `origin/main` = `2e54d12d` | typecheck de shared, API e web; `pnpm build` completo; API `meta` e `health` (3 arquivos, 13 testes); web `src/app` e os 12 portões estruturais (23 arquivos, 331 testes) — tudo verde, retestado no HEAD final antes do merge |
+| SHAs | `git fetch origin --tags` | `origin/main` = `884a500d`, congelado como v1.0.0; `origin/release/prod` = `ff861c90`, ancestral (fast-forward) |
+| Railway | `deployment` + `meta` + `deploymentTriggers`, só leitura | deploy ativo `0d1ad066` SUCCESS, commit `ff861c90`, branch `release/prod`, `canRollback: true`; gatilho único `release/prod`; `/health` 200 com `database: up`; `/meta` 404, a rota ainda não publicada |
+| Migrations | `migrate status` em sessão READ ONLY | 89 pastas, "Database schema is up to date!"; `apps/api/prisma` sem diff entre `ff861c90` e `884a500d` |
+| Drift | `migrate diff` PROD × `schema.prisma` de `884a500d` (= `ff861c90`) | **No difference detected** |
+| Baseline | T-0 × backup pós-release das 06:17Z | 84 de 86 models com a mesma contagem; +1 `Attachment` e +1 `UserSession` entre 06:17Z e 07:36Z — uso real da Veridi, anterior à rodada |
+| Backup | `prod-backup-json.mjs` do checkout principal, com o client do schema de `ff861c90` (conferido estrutura a estrutura) | 6.773 linhas, 86 models, 0 falha |
+| Prova do backup | `restore-json-backup-check.mjs` | **RESTAURÁVEL: YES** |
+
+### Sequência
+
+| Passo | `release/prod` | Deploy | Resultado |
+|---|---|---|---|
+| antes | `ff861c90` | `0d1ad066-0c36-44d8-81b2-cb0c27ea2174` | ativo desde 2026-09-19 06:08:16Z |
+| push 07:37:33Z | `ff861c90` → `884a500d` | `d55e03aa-1bd9-435f-a24c-79aad3734d04` | criado às 07:37:36Z, **SUCCESS às 07:40:05Z** |
+
+Push fast-forward do SHA exato (`git push origin 884a500d…:refs/heads/release/prod`), sem force. Manifesto do deploy:
+NIXPACKS com `pnpm build`, pré-deploy `pnpm deploy:prod` — "89 migrations found", "No pending migrations to apply." —,
+início `pnpm start:prod`, healthcheck `/health`; servidor ouvindo às 07:40:02Z. `0d1ad066` virou REMOVED com
+`canRollback: true`. Nenhuma migration rodou à mão; depois do deploy, `migrate status` segue "up to date".
+
+### Dado preservado
+
+**Backups T-0 × pós-release, linha a linha:** 85 de 86 models idênticos. `UserSession` +1 — a sessão do smoke, criada às
+07:40:43Z e revogada às 07:41:02Z pelo "Sair" —, 0 alterada e 0 removida; nenhuma sequence se moveu. Nenhum dado de
+negócio foi criado, alterado ou removido. **DATA_PRESERVED = YES.**
+
+### Backups
+
+| Quando | Arquivo (em `../.local-data/veridi/backups/`) | Bytes | sha256 | Schema | Prova |
+|---|---|---|---|---|---|
+| T-0, 07:36:41Z | `prod-t0-deploy-20260919T073627Z-schema-ff861c90.json` | 4.337.628 | `68263f7507bd97856b401c9b421e90e8ed3e598d46c54e0333f8afb1a44cabb0` | `ff861c90` | RESTAURÁVEL: YES — 86 models, 6.773 linhas, 29 sequences |
+| pós, 07:41:47Z | `prod-pos-release-20260919T074133Z-schema-884a500d.json` | 4.337.992 | `b77342799d5a07efdb84f8dc5971b50aea40ada38f24c17d33fac5769117470c` | `884a500d` | RESTAURÁVEL: YES — 86 models, 6.774 linhas, 29 sequences |
+
+Sem migration, os dois restauram no mesmo schema; o pós-release é o ponto de recuperação vigente. As provas rodaram em
+banco local descartável, removido no fim.
+
+### Smoke
+
+Somente leitura, com a sessão do `prod-demo` (ADMIN): **50/50 OK**. Os únicos verbos fora de GET foram `POST /auth/login`
+e `POST /auth/logout` — este pelo botão "Sair" do cabeçalho, único não-GET liberado no navegador; nenhum outro foi
+tentado.
+
+- versão: `/meta` sem sessão 401; com sessão 200 e exatamente `version: "1.0.0"`, `environment: "production"` e
+  `commitHash` = `884a500d4aaf9299a2acb07b07779e6d4d8caaaf`, sem URL nem host interno; `/health` 200 com `database: up`;
+- cabeçalho: "Veridi Nutrition v1.0.0" — a versão 4 px depois de "Nutrition", em 12 px contra 16 px da marca, sem SHA;
+  busca com os mesmos 460 px e o usuário no lugar, sem transbordo;
+- busca global: consulta `/lots/lookup` e avisa "Nenhum lote encontrado" (lote inexistente: 404 por desenho — é a única
+  resposta 4xx, e a linha que o Chromium escreve por ela, a única no console);
+- menu: pelo trilho até Cadastros › Clientes; usuário "Admin (demo) · Administrador" com "Sair", que encerrou a sessão
+  (depois, `/auth/session` sem usuário);
+- "Sobre o sistema": abre no clique da versão com Veridi Nutrition, Versão v1.0.0, Data da versão 19/09/2026, Ambiente
+  **Produção** e Build `884a500d`; Escape fecha;
+- smoke normal: 11 endpoints de lista 200, oito telas autenticadas (Painel, Clientes, Produtos, Itens, Projetos, Pedidos,
+  Estoque, OP) e a ajuda contextual.
+
+As capturas mostravam dado real de cliente e foram apagadas depois da conferência (§9 do [`DEPLOY.md`](DEPLOY.md)).
+
+### O que não rodou
+
+Saneamento de duplicatas, `prod-cleanup --apply`, hard-delete, seed, import do DEV, carga inicial, reset, restore em
+PROD, `pnpm db:migrate` à mão, SQL à mão e `storage:r2:smoke`; nenhum CI/ECI nem cadastro criado ou alterado. Não houve
+rollback nem incidente. Sem migration, o rollback desta versão é só de código — `0d1ad066` (`ff861c90`) segue com
+`canRollback: true` na janela do Railway — e, pela regra da rodada, não se executa sem o PO.
+
+### Tags
+
+Tags anotadas **`v1.0.0`** ("Veridi Nutrition v1.0.0", objeto `e04aa8b6`) e **`prod-2026-09-19-v1.0.0`** (objeto
+`86c34788`), as duas em `884a500d`, empurradas sozinhas (`git push origin refs/tags/v1.0.0
+refs/tags/prod-2026-09-19-v1.0.0`). `prod-2026-09-19` segue em `ff861c90`, sem se mover. As tags não publicaram nada: a vigia das 07:42:49Z às
+07:45:34Z (push às 07:42:35Z) viu a lista de deployments parada em 20, com `d55e03aa` no topo. Este registro entrou na
+`main` depois da publicação e não foi publicado: `release/prod` segue no SHA da v1.0.0.
 
 ## 2026-09-19 — PROD-RELEASE-DEPLOY-02
 

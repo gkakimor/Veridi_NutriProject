@@ -6688,6 +6688,11 @@ conferência em navegador real com a API simulada — em 1440, 1280 e 1024 a ver
 busca mantém os 460 px, sem transbordo nem erro no console; em 390 px, fora do escopo do FAST MVP, o campo de busca cede
 cerca de 40 px e segue funcionando.
 
+**Publicada em PROD no mesmo dia**: `release/prod` `ff861c90` → `884a500d`, deploy `d55e03aa` SUCCESS às 07:40:05Z,
+sem migration, backups T-0 e pós-release com `RESTAURÁVEL: YES`, dados preservados, smoke 50/50 (em PROD, "Sobre o
+sistema" diz Produção e build `884a500d`), tags `v1.0.0` e `prod-2026-09-19-v1.0.0`. Registro em
+[`RELEASES.md`](RELEASES.md).
+
 ## Próxima prioridade
 
 **FORMULATION-TEMPLATE-WORKBENCH-01 fechado em 2026-09-16** (§96–§97, seções próprias acima), pronto para a
@@ -6816,6 +6821,9 @@ Nunca `db push`, nunca edição manual de `_prisma_migrations`. Runbook do impor
 (`pnpm e2e:baseline:rebuild`), ainda não adotada pelas suítes.
 
 ## Produção
+
+**No ar: Veridi Nutrition v1.0.0** desde 2026-09-19 — `release/prod` = `884a500d`, deploy `d55e03aa`, tags `v1.0.0` e
+`prod-2026-09-19-v1.0.0`; `GET /meta` responde versão, ambiente e commit ([`RELEASES.md`](RELEASES.md)).
 
 Railway; desde 2026-09-14 18:04Z publica só a partir de `release/prod` — push na `main` não troca PROD.
 **Zerada de negócio em 2026-09-11** (FAST-DEVELOPMENT-RESET-02) e, **em 2026-09-14, carga inicial da Veridi**
