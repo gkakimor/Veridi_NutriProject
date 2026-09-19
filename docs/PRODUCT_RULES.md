@@ -2060,6 +2060,12 @@ available for production release (consistent with section 14/20).
   and must be resolved first; nothing is auto-released or auto-cancelled
   in cascade. A full operational cancellation/replanning flow is future
   work.
+- Editing after confirmation: `CONFIRMED` still accepts the delivery forecast
+  (`requestedDeliveryDate`) and `notes`; once the Plan is applied
+  (`IN_FULFILLMENT`, `PARTIALLY_SHIPPED`, `SHIPPED`) the order is read-only,
+  those two included (`order_locked`), and so is `CANCELLED`. The screen
+  mirrors the server — locked fields, no save action
+  (VERIDI-AUDIT-QUICK-FIXES-01, D6).
 
 ## Purchase suggestion (implemented, Delivery 17)
 When raw material/packaging is short, the system generates a purchase
@@ -2103,6 +2109,11 @@ later through the normal Purchase Order flow.
   purchasing module (`SuggestedPurchaseOrder`/`ProcurementOrder` etc.).
   The generated PO carries `origin: CUSTOMER_ORDER` and a link back to
   the order, navigable in both directions (Order ↔ PO).
+- Available while the Customer Order is operational — `IN_FULFILLMENT` or
+  `PARTIALLY_SHIPPED`, the same statuses that accept the remainder OP,
+  finished-goods reservation and reallocation. A partial shipment does not end
+  the OP still producing the rest, nor its shortage. `SHIPPED` and
+  `CANCELLED` stay out (VERIDI-AUDIT-QUICK-FIXES-01, D5).
 
 ## Shipping (implemented, Delivery 18)
 When finished product is available: Order → separation (Shipment DRAFT) →

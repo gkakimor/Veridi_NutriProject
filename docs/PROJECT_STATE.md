@@ -133,6 +133,9 @@ pós-release. O saneamento das duplicatas de PROD (21 grupos / 45 Itens; Ondas A
   na criação (INTERNAL-CONSUMPTION-BACKDATED-AFTER-COUNT-01, §127, sem migration, na `main` e fora de PROD): consumo de
   data passada que uma contagem de inventário já viu é recusado. Abertos do assunto: DASHBOARD-INTERNAL-CONSUMPTION-01 e
   INTERNAL-CONSUMPTION-COST-CENTER-01;
+- **Correções da revisão funcional:** FECHADAS em 2026-09-19 (VERIDI-AUDIT-QUICK-FIXES-01, sem migration, na `main` e
+  fora de PROD): os seis defeitos D1–D6 que VERIDI-NUTRITION-PRODUCT-FUNCTIONAL-REVIEW-01 achou por leitura
+  reproduziram com teste vermelho e foram corrigidos — seção própria abaixo; os achados laterais estão no BACKLOG, seção A;
 - **LOW, UX, gates com a Veridi, melhorias aguardando o PO e watchlist:** seções A a E do BACKLOG, fora da fila.
 
 Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
@@ -6776,6 +6779,41 @@ tudo), e o teste da faixa de scripts que chama `consultarExclusao` (1 arquivo, 3
 13 portões que varrem o `src` (46 arquivos, 693 testes). Typecheck de shared, API e web. Mutação por script (extra): 4 de
 4 derrubadas — o vínculo contando a linha do dono, a exclusão sem apagar o PA, o PA sozinho aceito e o PA lido sem
 trava. Sem suíte completa, E2E nem Playwright.
+
+## Correções da revisão funcional D1–D6 (VERIDI-AUDIT-QUICK-FIXES-01, 2026-09-19)
+
+Os seis defeitos que VERIDI-NUTRITION-PRODUCT-FUNCTIONAL-REVIEW-01 achou por leitura **reproduziram todos** com teste
+vermelho na `main` `83fa171e` antes da correção. Na `main`, fora de PROD (`release/prod` segue `884a500d`, v1.0.0),
+**sem migration** e sem mudar `VERIDI_VERSION`; entram no pacote da futura v1.1.0.
+
+- **D1 — filtro "Vencido" vazio.** `EXPIRED` nunca é gravado, e Lotes (destino do "ver todos" de LOT_EXPIRED do
+  Painel), Produto Acabado, R-01, Materiais de Clientes e a fila da Qualidade filtravam `status = EXPIRED`.
+  `lotStatusWhere` (`lib/inventory-ledger.ts`) responde EXPIRED com a régua do R-02 e do Painel — validade antes do
+  dia comercial de hoje, qualquer status gravado; as outras situações seguem o gravado. Nada passou a gravar `EXPIRED`.
+- **D2 — "Ir para compras" 1000× menor.** A OP sem Pedido mandava `formatQuantity(shortage)` na URL (1500 viajava
+  `1.500`) e a OC nova lia 1,5. A URL leva o decimal canônico da API.
+- **D3 — reserva realocada em dobro.** O "falta produzir" do Pedido e a OP do saldo somavam a linha liberada na
+  realocação e a nova: pedido de 100 com 60 reservados zerava a falta dos 40 e recusava a OP do saldo. As duas somas
+  leem só `releasedAt: null`, a régua da Expedição e do ledger; o histórico fica.
+- **D4 — Painel "OP com falta" sem dono.** O Painel somava o estoque de todos os donos. Passou a
+  `computeRequirementAvailability` + `requirementOwnerScope` — a conta da OP, do R-04 e da liberação —, com o `now` do
+  retrato (parâmetro `agora`, novo e opcional).
+- **D5 — Sugestão de Compra só em atendimento.** Pedido PARTIALLY_SHIPPED com OP de saldo em falta caía num beco (o "Ver
+  sugestão de compra" da OP levava a um Pedido sem a seção). Análise e geração de OC aceitam IN_FULFILLMENT e
+  PARTIALLY_SHIPPED, o conjunto da OP do saldo e da reserva; SHIPPED e CANCELLED seguem fora. Regra em
+  [`PRODUCT_RULES.md`](PRODUCT_RULES.md), "Purchase suggestion".
+- **D6 — "Salvar prazo e observações" depois do plano.** O servidor recusa prazo E observação depois do plano
+  (`order_locked`); a tela seguia oferecendo campos, guarda de alteração e botão. Fora do rascunho e do confirmado os
+  dois campos travam e o botão sai. Regra escrita em [`PRODUCT_RULES.md`](PRODUCT_RULES.md), §22-25.
+
+**Validação.** Testes novos, vermelhos na base: API `lots/filtro-vencido`, `customer-orders/reserva-realocada-falta-produzir`,
+`dashboard/painel-falta-por-dono` e `customer-orders/sugestao-compra-parcialmente-expedido`; web
+`production-orders/ir-para-compras-quantidade` (999, 1000, 1500, 10000, decimal, COUNT, MASS),
+`customer-orders/sugestao-de-compra-parcialmente-expedido` e `customer-orders/prazo-apos-plano`; API
+`customer-orders/prazo-apos-plano` ancora a regra do servidor (verde na base). Focados da API em 45 arquivos (1.514
+testes) e o Painel na faixa serial; web das pastas tocadas com os 13 portões que varrem o `src` (52 arquivos, 576
+testes); typecheck de shared, API e web. A única queda, `lib/periodo-invertido.test.ts`, cai igual na base
+(PERIOD-GUARD-R21-MATRIX-01 no BACKLOG). Sem suíte completa, E2E, Playwright nem mutação.
 
 ## Próxima prioridade
 
