@@ -518,7 +518,8 @@ export async function createRemainderProductionOrder(
     const reservadoRestante = order.reservations
       .filter((reservation) => reservation.status === "ACTIVE")
       .flatMap((reservation) => reservation.lines)
-      .filter((line) => line.customerOrderLineId === orderLine.id)
+      // Linha liberada (realocada) é histórico, não reserva efetiva (D3).
+      .filter((line) => line.customerOrderLineId === orderLine.id && line.releasedAt === null)
       .reduce((sum, line) => {
         const enviado = enviadoPorLinhaDeReserva.get(line.id) ?? new Prisma.Decimal(0);
         return sum.plus(Prisma.Decimal.max(line.quantity.minus(enviado), 0));

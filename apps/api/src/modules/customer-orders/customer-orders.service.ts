@@ -464,8 +464,10 @@ function toCustomerOrderDTO(order: OrderWithRelations): CustomerOrderDTO {
   for (const line of order.lines) {
     const expedido = shippedByLine.get(line.id) ?? new Prisma.Decimal(0);
 
+    // Linha liberada (realocada) é histórico: o remanescente dela já vive
+    // na linha nova. Somar as duas contava a reserva em dobro (D3).
     const reservadoRestante = (reservation?.lines ?? [])
-      .filter((row) => row.customerOrderLineId === line.id)
+      .filter((row) => row.customerOrderLineId === line.id && row.releasedAt === null)
       .reduce((sum, row) => {
         const enviado = shippedByResLine.get(row.id) ?? new Prisma.Decimal(0);
         return sum.plus(Prisma.Decimal.max(row.quantity.minus(enviado), 0));
